@@ -45,16 +45,16 @@ use crate::execution::agent_runtime::control::{
     PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
     SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
-    OrchestrationSessionPosture, StartupPromptStreamState,
+    HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
-    exact_backend_selection_error_exit_code, validate_exact_backend_selection,
+    exact_backend_selection_error_exit_code, materialize_runtime_descriptor,
+    validate_exact_backend_selection,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::{
@@ -63,14 +63,21 @@ use crate::execution::agent_runtime::validator::{
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding;
 use crate::execution::agent_runtime::{
-    backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
-    validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeParticipantRecord,
-    AgentRuntimeSessionManifest, AgentRuntimeSessionState, AgentRuntimeStateStore,
-    OrchestrationSessionRecord, OrchestrationSessionState, MEMBER_ROLE, ORCHESTRATOR_ROLE,
-    PURE_AGENT_PROTOCOL, SESSION_HANDLE_SCHEMA_V1,
+    backend_allowed, build_gateway_for_descriptor, resolve_inventory_contract_for_exact_backend,
+    runtime_realizability_error_exit_code, validate_orchestrator_selection,
+    AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest, AgentRuntimeSessionState,
+    AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
+    DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
+    HostExecutionClientStart, OrchestrationSessionRecord, OrchestrationSessionState,
+    ResolvedLaunchContract, MEMBER_ROLE, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
+    SESSION_HANDLE_SCHEMA_V1,
 };
+use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
+use crate::execution::prompt_fulfillment::{
+    PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
+};
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1621,7 +1628,8 @@ struct TargetedTurn<'a> {
 
 enum TargetedTurnRoute {
     Host,
-    World(RuntimeSelectionDescriptor),
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    World(MemberDispatchParitySubset),
 }
 
 enum TargetedTurnDispatchStatus {
@@ -1669,20 +1677,83 @@ impl RuntimeOrchestrationContext {
 
 struct PreparedAgentRuntime {
     descriptor: RuntimeSelectionDescriptor,
-    gateway: agent_api::AgentWrapperGateway,
-    agent_kind: agent_api::AgentWrapperKind,
+    member_dispatch_parity: Option<MemberDispatchParitySubset>,
+    prompt_fulfillment: Option<PromptFulfillmentBridge>,
     startup_context: RuntimeOrchestrationContext,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     run_id: String,
     startup_extensions: BTreeMap<String, serde_json::Value>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MemberDispatchParitySubset {
+    agent_id: String,
+    backend_id: String,
+    backend_kind: AgentRuntimeBackendKind,
+    protocol: String,
+    execution_scope: crate::execution::config_model::AgentExecutionScope,
+    binary_path: PathBuf,
+}
+
+impl MemberDispatchParitySubset {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn from_descriptor(descriptor: &RuntimeSelectionDescriptor) -> Self {
+        Self {
+            agent_id: descriptor.agent_id.clone(),
+            backend_id: descriptor.backend_id.clone(),
+            backend_kind: descriptor.backend_kind,
+            protocol: descriptor.protocol.clone(),
+            execution_scope: descriptor.execution_scope,
+            binary_path: descriptor.binary_path.clone(),
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn from_participant(
+        participant: &AgentRuntimeParticipantRecord,
+    ) -> std::result::Result<Self, RuntimeBootstrapFailure> {
+        let backend_kind = match participant.internal.resolved_agent_kind.as_str() {
+            "codex" => AgentRuntimeBackendKind::Codex,
+            "claude_code" => AgentRuntimeBackendKind::ClaudeCode,
+            other => {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "retained world member has unsupported resolved_agent_kind '{}'",
+                        other
+                    ),
+                });
+            }
+        };
+        Ok(Self {
+            agent_id: participant.handle.agent_id.clone(),
+            backend_id: participant.handle.backend_id.clone(),
+            backend_kind,
+            protocol: participant.handle.protocol.clone(),
+            execution_scope: participant.handle.execution.scope,
+            binary_path: PathBuf::from(&participant.internal.resolved_binary_path),
+        })
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn to_runtime_selection_descriptor(&self) -> RuntimeSelectionDescriptor {
+        RuntimeSelectionDescriptor {
+            agent_id: self.agent_id.clone(),
+            backend_id: self.backend_id.clone(),
+            backend_kind: self.backend_kind,
+            protocol: self.protocol.clone(),
+            execution_scope: self.execution_scope,
+            binary_path: self.binary_path.clone(),
+        }
+    }
+}
+
 struct ResolvedHostOrchestratorBootstrap {
     cwd: PathBuf,
     shell_session_id: String,
+    resolved_contract: ResolvedLaunchContract,
     descriptor: RuntimeSelectionDescriptor,
-    gateway: agent_api::AgentWrapperGateway,
-    agent_kind: agent_api::AgentWrapperKind,
+    prompt_fulfillment: PromptFulfillmentBridge,
     state_store: AgentRuntimeStateStore,
     effective_config: crate::execution::config_model::SubstrateConfig,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1738,7 +1809,7 @@ impl StartupPromptBackchannel {
 // long-lived tasks that own the non-clonable `run_control.handle` facets. A manifest
 // may only advertise a live orchestrator session while all three remain retained.
 struct LocalRetainedRunControl {
-    cancel: agent_api::AgentWrapperCancelHandle,
+    cancel: PromptFulfillmentCancelHandle,
     event_task: Option<tokio::task::JoinHandle<()>>,
     completion_task: Option<tokio::task::JoinHandle<()>>,
 }
@@ -1757,6 +1828,7 @@ enum RetainedRunControl {
 }
 
 const LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCAL_RETAINED_AUTO_PARK_GRACE_TIMEOUT: Duration = Duration::from_millis(250);
 
 struct AsyncReplAgentRuntime {
     descriptor: RuntimeSelectionDescriptor,
@@ -1792,14 +1864,6 @@ fn runtime_task_start_message(role: &str) -> &'static str {
         "starting long-lived world-scoped member control turn"
     } else {
         "starting long-lived shell-owned orchestrator control turn"
-    }
-}
-
-fn runtime_bootstrap_prompt(role: &str) -> &'static str {
-    if role == MEMBER_ROLE {
-        "Enter persistent Substrate world-scoped member mode. Keep this control session attached for the lifetime of the parent REPL session and do not exit until the client cancels the run."
-    } else {
-        "Enter persistent Substrate host orchestrator mode. Keep this control session attached for the lifetime of the host REPL and do not exit until the client cancels the run."
     }
 }
 
@@ -2091,7 +2155,19 @@ async fn start_host_orchestrator_runtime(
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
     let prepared = prepare_host_orchestrator_runtime_startup(config)?;
-    start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
+    start_host_orchestrator_runtime_with_prepared_prompt(
+        prepared,
+        None,
+        Some(InitialExecPromptPlan::Replace(
+            "test retained host startup".to_string(),
+        )),
+        false,
+        false,
+        false,
+        agent_printer,
+        telemetry,
+    )
+    .await
 }
 
 fn prepare_host_orchestrator_runtime_startup(
@@ -2111,9 +2187,9 @@ fn prepare_host_orchestrator_runtime_from_resolved(
     let ResolvedHostOrchestratorBootstrap {
         cwd,
         shell_session_id,
+        resolved_contract,
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment,
         state_store,
         effective_config,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2137,6 +2213,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
         shell_session_id,
         cwd.display().to_string(),
         &manifest,
+        HostAttachContract::from_resolved_contract(&resolved_contract, None),
     )));
     state_store
         .persist_orchestration_session(
@@ -2151,8 +2228,8 @@ fn prepare_host_orchestrator_runtime_from_resolved(
 
     Ok(PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        member_dispatch_parity: None,
+        prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
             store: state_store,
             orchestration_session,
@@ -2219,34 +2296,61 @@ fn resolve_host_orchestrator_bootstrap(
         });
     }
 
-    let descriptor =
-        validate_runtime_realizability(orchestrator, &effective_config).map_err(|err| {
-            RuntimeBootstrapFailure {
-                exit_code: runtime_realizability_error_exit_code(&err),
-                message: err.reason,
-            }
-        })?;
+    let envelope = DispatchRequestEnvelope {
+        caller_kind: DispatchCallerKind::HumanStart,
+        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+        backend_id: Some(orchestrator.derived_backend_id()),
+        orchestration_session_id: None,
+        requested_execution_scope_override: None,
+        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: AgentExecutionScope::Host,
+            host_execution_client_start: HostExecutionClientStart::StartNow,
+            attach_mode_preference: AttachModePreference::ContinuityRequired,
+        },
+        has_prompt_payload: false,
+    };
+    let resolved_contract = resolve_inventory_contract_for_exact_backend(
+        &cwd,
+        &effective_config,
+        &inventory,
+        &base_policy,
+        &envelope,
+        AgentExecutionScope::Host,
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 2,
+        message: format!("runtime_start_failed: {err}"),
+    })?
+    .ok_or_else(|| RuntimeBootstrapFailure {
+        exit_code: 2,
+        message: format!(
+            "runtime_start_failed: baseline truth rejected field 'backend_id': no exact host-scoped backend match found for '{}'",
+            orchestrator.derived_backend_id()
+        ),
+    })?;
+    let descriptor = materialize_runtime_descriptor(&resolved_contract).map_err(|err| {
+        RuntimeBootstrapFailure {
+            exit_code: runtime_realizability_error_exit_code(&err),
+            message: err.reason,
+        }
+    })?;
     let state_store = AgentRuntimeStateStore::new().map_err(|err| RuntimeBootstrapFailure {
         exit_code: 1,
         message: format!("failed to initialize shell runtime state store: {err:#}"),
     })?;
-    let gateway =
+    let prompt_fulfillment =
         build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!("failed to build shell-owned UAA runtime registry: {err:#}"),
-        })?;
-    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
-        .map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 2,
-            message: format!("failed to resolve runtime backend kind: {err}"),
         })?;
 
     Ok(Some(ResolvedHostOrchestratorBootstrap {
         cwd,
         shell_session_id: config.session_id.clone(),
+        resolved_contract,
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment,
         state_store,
         effective_config,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2312,7 +2416,7 @@ fn owner_helper_startup_extensions(
 ) -> std::result::Result<BTreeMap<String, serde_json::Value>, RuntimeBootstrapFailure> {
     match plan.mode {
         OwnerHelperMode::Start => Ok(BTreeMap::new()),
-        OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork => {
+        OwnerHelperMode::Attach | OwnerHelperMode::ResumeOneTurn => {
             let session_id = plan
                 .participant
                 .internal_uaa_session_id
@@ -2345,7 +2449,7 @@ fn owner_helper_manifest(
             participant_id,
             lease_token,
         ),
-        OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork => {
+        OwnerHelperMode::Attach | OwnerHelperMode::ResumeOneTurn => {
             let resumed_from_participant_id = plan
                 .participant
                 .resumed_from_participant_id
@@ -2391,6 +2495,7 @@ fn owner_helper_orchestration_session(
         plan.session.shell_trace_session_id.clone(),
         plan.session.workspace_root.clone(),
         manifest,
+        plan.host_attach_contract.clone(),
     );
     session.latest_run_id = Some(plan.participant.run_id.clone());
     session.active_session_handle_id = None;
@@ -2420,9 +2525,9 @@ fn prepare_hidden_owner_helper_runtime(
     let ResolvedHostOrchestratorBootstrap {
         cwd: _cwd,
         shell_session_id: _shell_session_id,
+        resolved_contract: _resolved_contract,
         descriptor: validated_descriptor,
-        gateway: _validated_gateway,
-        agent_kind: _validated_agent_kind,
+        prompt_fulfillment: _validated_prompt_fulfillment,
         state_store,
         effective_config,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2455,20 +2560,15 @@ fn prepare_hidden_owner_helper_runtime(
             message: format!("failed to persist hidden owner-helper session record: {err:#}"),
         })?;
 
-    let gateway =
+    let prompt_fulfillment =
         build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!("failed to build hidden owner-helper gateway: {err:#}"),
         })?;
-    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
-        .map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 2,
-            message: format!("failed to resolve hidden owner-helper backend kind: {err}"),
-        })?;
     Ok(PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        member_dispatch_parity: None,
+        prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
             store: state_store,
             orchestration_session,
@@ -2689,7 +2789,40 @@ async fn wait_for_hidden_owner_helper_local_runtime(
     let outcome = tokio::select! {
         result = &mut completion_task => {
             join_failed |= result.is_err();
-            HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
+            if !join_failed
+                && completed_hidden_owner_helper_should_auto_park(auto_park_rx).await
+            {
+                shutdown_host_orchestrator_runtime_with_mode(
+                    AsyncReplAgentRuntime {
+                        descriptor,
+                        orchestration_session: Arc::clone(orchestration_session),
+                        manifest: Arc::clone(manifest),
+                        store: store.clone(),
+                        uaa_session_handle_id: uaa_session_handle_id.to_string(),
+                        retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
+                            cancel: retained_control.cancel.clone(),
+                            event_task: retained_control.event_task.take(),
+                            completion_task: None,
+                        }),
+                        shutdown_requested: Arc::clone(shutdown_requested),
+                        auto_park_rx: auto_park_rx.take(),
+                        private_stop_rx: private_stop_rx.take(),
+                        stop_transport: stop_transport.take(),
+                        stop_owner_task: stop_owner_task.take(),
+                        prompt_transport: prompt_transport.take(),
+                        prompt_owner_task: prompt_owner_task.take(),
+                        heartbeat_stop_tx: heartbeat_stop_tx.take(),
+                        heartbeat_task: heartbeat_task.take(),
+                    },
+                    HostRuntimeShutdownMode::ParkIfResumable,
+                    agent_printer,
+                    telemetry,
+                )
+                .await;
+                HiddenOwnerHelperLocalRuntimeOutcome::AutoParked
+            } else {
+                HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
+            }
         }
         maybe_request = async {
             match private_stop_rx.as_mut() {
@@ -2829,6 +2962,25 @@ async fn wait_for_hidden_owner_helper_local_runtime(
     outcome
 }
 
+async fn completed_hidden_owner_helper_should_auto_park(
+    auto_park_rx: &mut Option<UnboundedReceiver<()>>,
+) -> bool {
+    let Some(requests) = auto_park_rx.as_mut() else {
+        return false;
+    };
+
+    match requests.try_recv() {
+        Ok(_) => true,
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+            matches!(
+                tokio::time::timeout(LOCAL_RETAINED_AUTO_PARK_GRACE_TIMEOUT, requests.recv()).await,
+                Ok(Some(_))
+            )
+        }
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => false,
+    }
+}
+
 fn persist_hidden_owner_helper_stop_failure(
     store: &AgentRuntimeStateStore,
     orchestration_session: &Arc<Mutex<OrchestrationSessionRecord>>,
@@ -2889,6 +3041,7 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
             Some(prepared),
             None,
             initial_prompt,
+            matches!(plan.mode, OwnerHelperMode::Attach),
             true,
             matches!(plan.mode, OwnerHelperMode::ResumeOneTurn),
             &ReplPrinter::Stdout,
@@ -2915,16 +3068,19 @@ async fn start_host_orchestrator_runtime_with_prepared(
         None,
         false,
         false,
+        false,
         agent_printer,
         telemetry,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_host_orchestrator_runtime_with_prepared_prompt(
     prepared: Option<PreparedAgentRuntime>,
     initial_world_binding: Option<&PersistedWorldBinding>,
     initial_prompt: Option<InitialExecPromptPlan>,
+    control_only_attach: bool,
     runtime_owns_private_stop: bool,
     auto_park_after_public_turn: bool,
     agent_printer: &ReplPrinter,
@@ -2935,13 +3091,19 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     };
     let PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        member_dispatch_parity: _member_dispatch_parity,
+        prompt_fulfillment,
         startup_context,
         manifest,
         run_id,
         startup_extensions,
     } = prepared;
+    let Some(prompt_fulfillment) = prompt_fulfillment else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "missing host prompt-fulfillment bridge for retained startup".to_string(),
+        });
+    };
     let runtime_role = {
         manifest
             .lock()
@@ -3013,17 +3175,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         agent_printer,
     );
 
-    let request = agent_api::AgentWrapperRunRequest {
-        prompt: match initial_prompt.as_ref() {
-            Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
-            Some(InitialExecPromptPlan::StartupPrompt { prompt, .. }) => prompt.clone(),
-            None => runtime_bootstrap_prompt(&runtime_role).to_string(),
-        },
-        working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
-        timeout: None,
-        env: BTreeMap::new(),
-        extensions: startup_extensions,
-    };
     let startup_backchannel = match initial_prompt.as_ref() {
         Some(InitialExecPromptPlan::StartupPrompt { stream_path, .. }) => {
             Some(connect_startup_prompt_backchannel(stream_path).await?)
@@ -3059,7 +3210,47 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             scope: "host".to_string(),
         });
     }
-    let control = match gateway.run_control(&agent_kind, request).await {
+    let control = match if control_only_attach {
+        let continuity_session_id = startup_extensions
+            .get(AGENT_API_SESSION_RESUME_V1)
+            .and_then(|value| value.as_object())
+            .filter(|value| value.get("selector").and_then(serde_json::Value::as_str) == Some("id"))
+            .and_then(|value| value.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!(
+                    "missing {} id selector for control-only attach startup: {}",
+                    AGENT_API_SESSION_RESUME_V1, runtime_role
+                ),
+            })?;
+        prompt_fulfillment
+            .run_attach_control(&continuity_session_id)
+            .await
+    } else {
+        let request = agent_api::AgentWrapperRunRequest {
+            prompt: match initial_prompt.as_ref() {
+                Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
+                Some(InitialExecPromptPlan::StartupPrompt { prompt, .. }) => prompt.clone(),
+                None => {
+                    return Err(RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "missing explicit initial prompt plan for retained {} startup",
+                            runtime_role
+                        ),
+                    });
+                }
+            },
+            working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
+            timeout: None,
+            env: BTreeMap::new(),
+            extensions: startup_extensions,
+        };
+        prompt_fulfillment.run_control(request).await
+    } {
         Ok(control) => control,
         Err(err) => {
             let failure = runtime_bootstrap_failure_from_wrapper_error(err);
@@ -3092,11 +3283,17 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             return Err(failure);
         }
     };
-    let agent_api::AgentWrapperRunControl { handle, cancel } = control;
-    let agent_api::AgentWrapperRunHandle { events, completion } = handle;
+    let agent_api::AgentWrapperRunHandle { events, completion } = control.handle;
+    let cancel = control.cancel;
     let shutdown_requested = Arc::new(AtomicBool::new(false));
     let (startup_tx, startup_rx) = tokio::sync::oneshot::channel::<RuntimeStartupSignal>();
     let startup_signal = Arc::new(Mutex::new(Some(startup_tx)));
+    let (auto_park_tx, auto_park_rx) = if auto_park_after_public_turn {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Some(tx), Some(rx))
+    } else {
+        (None, None)
+    };
     let agent_id = {
         manifest
             .lock()
@@ -3113,6 +3310,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let startup_backchannel_for_events = startup_backchannel.clone();
     let shutdown_for_events = Arc::clone(&shutdown_requested);
     let runtime_role_for_events = runtime_role.clone();
+    let auto_park_tx_for_events = auto_park_tx.clone();
     let mut events = events;
     let event_task = tokio::spawn(async move {
         let controls_parent_session = runtime_controls_parent_session(&runtime_role_for_events);
@@ -3226,6 +3424,11 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         )),
                         _ => {}
                     }
+                }
+            }
+            if matches!(startup_turn_phase.as_deref(), Some("completed" | "failed")) {
+                if let Some(park_after_turn_tx) = auto_park_tx_for_events.as_ref() {
+                    let _ = park_after_turn_tx.send(());
                 }
             }
             let _ = publish_agent_event(event);
@@ -3679,6 +3882,52 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         exit_code: 1,
         message: format!("failed to persist retained runtime ownership: {err:#}"),
     })?;
+    let reconciled_ready_after_early_handle = {
+        let mut orchestration_guard = startup_context
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating
+            && manifest_guard.can_advertise_live()
+        {
+            manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+            manifest_guard.touch_heartbeat();
+            if controls_parent_session {
+                orchestration_guard
+                    .bind_active_session_handle(manifest_guard.handle.participant_id.clone());
+                orchestration_guard.transition_state(OrchestrationSessionState::Active);
+            } else if orchestration_guard.state == OrchestrationSessionState::Active {
+                orchestration_guard.touch_active();
+            }
+            Some((orchestration_guard.clone(), manifest_guard.clone()))
+        } else {
+            None
+        }
+    };
+    if let Some((orchestration_snapshot, manifest_snapshot)) = reconciled_ready_after_early_handle {
+        persist_runtime_snapshots(
+            &startup_context.store,
+            &orchestration_snapshot,
+            &manifest_snapshot,
+        )
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist reconciled runtime ownership: {err:#}"),
+        })?;
+        emit_runtime_event(
+            build_runtime_message_event(
+                &manifest_snapshot,
+                &orchestration_snapshot,
+                run_id.clone(),
+                MessageEventKind::Status,
+                runtime_ready_message(&runtime_role),
+            ),
+            telemetry,
+            agent_printer,
+        );
+        signal_runtime_startup(&startup_signal, RuntimeStartupSignal::Running);
+    }
     let mut retained_control = LocalRetainedRunControl {
         cancel,
         event_task: Some(event_task),
@@ -3830,12 +4079,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         )
     };
     let (prompt_tx, prompt_rx) = private_prompt_request_channel();
-    let (auto_park_tx, auto_park_rx) = if auto_park_after_public_turn {
-        let (tx, rx) = mpsc::unbounded_channel();
-        (Some(tx), Some(rx))
-    } else {
-        (None, None)
-    };
     let prompt_transport = match register_private_prompt_transport(
         &startup_context.store,
         &stop_orchestration_session_id,
@@ -3959,6 +4202,7 @@ fn select_exact_runtime_descriptor(
     })
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn select_member_runtime_descriptor_for_backend(
     startup_context: &RuntimeOrchestrationContext,
     backend_id: &str,
@@ -3981,6 +4225,47 @@ fn select_host_runtime_descriptor_for_backend(
     )
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn retained_member_dispatch_parity_subset(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    member_runtimes: &RetainedMemberRuntimeMap,
+    pending_member_replacements: &PendingMemberReplacementMap,
+    backend_id: &str,
+) -> std::result::Result<Option<MemberDispatchParitySubset>, RuntimeBootstrapFailure> {
+    if let Some(runtime) = member_runtimes.get(backend_id) {
+        let manifest_snapshot = runtime_manifest_snapshot(runtime);
+        if manifest_snapshot.handle.role == MEMBER_ROLE
+            && manifest_snapshot.handle.backend_id == backend_id
+            && manifest_snapshot.handle.execution.scope
+                == crate::execution::config_model::AgentExecutionScope::World
+        {
+            return MemberDispatchParitySubset::from_participant(&manifest_snapshot).map(Some);
+        }
+    }
+
+    let Some(startup_context) = startup_context else {
+        return Ok(None);
+    };
+    let orchestration_session_id = startup_context.orchestration_session_id();
+
+    if let Some(participant) = pending_member_replacements
+        .get(backend_id)
+        .filter(|participant| {
+            participant.handle.orchestration_session_id == orchestration_session_id
+                && participant.handle.backend_id == backend_id
+                && participant.handle.role == MEMBER_ROLE
+                && participant.handle.execution.scope
+                    == crate::execution::config_model::AgentExecutionScope::World
+        })
+    {
+        return MemberDispatchParitySubset::from_participant(participant).map(Some);
+    }
+
+    select_member_runtime_descriptor_for_backend(startup_context, backend_id).map(|descriptor| {
+        descriptor.map(|descriptor| MemberDispatchParitySubset::from_descriptor(&descriptor))
+    })
+}
+
 fn active_orchestrator_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
     runtime_backend_id(runtime)
 }
@@ -3989,6 +4274,10 @@ fn resolve_targeted_turn_route(
     startup_context: Option<&RuntimeOrchestrationContext>,
     dormant_host_bootstrap: Option<&ResolvedHostOrchestratorBootstrap>,
     agent_runtime: Option<&AsyncReplAgentRuntime>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    member_runtimes: &RetainedMemberRuntimeMap,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pending_member_replacements: &PendingMemberReplacementMap,
     backend_id: &str,
 ) -> std::result::Result<TargetedTurnRoute, RuntimeBootstrapFailure> {
     if let Some(runtime) = agent_runtime {
@@ -4021,10 +4310,14 @@ fn resolve_targeted_turn_route(
             });
         }
 
-        if let Some(descriptor) =
-            select_member_runtime_descriptor_for_backend(startup_context, backend_id)?
-        {
-            return Ok(TargetedTurnRoute::World(descriptor));
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if let Some(parity) = retained_member_dispatch_parity_subset(
+            Some(startup_context),
+            member_runtimes,
+            pending_member_replacements,
+            backend_id,
+        )? {
+            return Ok(TargetedTurnRoute::World(parity));
         }
     }
 
@@ -4048,11 +4341,17 @@ async fn dispatch_targeted_follow_up_turn(
         agent_printer,
         telemetry,
     } = context;
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let _ = (&member_runtimes, &pending_member_replacements);
 
     let route = match resolve_targeted_turn_route(
         startup_context.as_ref(),
         dormant_host_bootstrap.as_ref(),
         agent_runtime.as_ref(),
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        member_runtimes,
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        pending_member_replacements,
         targeted_turn.backend_id,
     ) {
         Ok(route) => route,
@@ -4081,6 +4380,7 @@ async fn dispatch_targeted_follow_up_turn(
                     Some(InitialExecPromptPlan::Replace(
                         targeted_turn.prompt.to_string(),
                     )),
+                    false,
                     false,
                     false,
                     agent_printer,
@@ -4116,7 +4416,8 @@ async fn dispatch_targeted_follow_up_turn(
                     .await?;
             }
         }
-        TargetedTurnRoute::World(descriptor) => {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        TargetedTurnRoute::World(parity) => {
             ensure_no_policy_drift(
                 world_session,
                 startup_context.as_ref(),
@@ -4139,7 +4440,7 @@ async fn dispatch_targeted_follow_up_turn(
                     agent_printer,
                     telemetry,
                 },
-                &descriptor,
+                &parity,
                 Some(targeted_turn.prompt),
                 member_runtimes,
                 pending_member_replacements,
@@ -4356,22 +4657,12 @@ fn prepare_member_runtime_startup_for_descriptor(
     })?;
     let mut manifest = manifest;
     manifest.internal.latest_run_id = Some(run_id.clone());
-
-    let gateway =
-        build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: format!("failed to build world-scoped member UAA runtime registry: {err:#}"),
-        })?;
-    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
-        .map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 2,
-            message: format!("failed to resolve member runtime backend kind: {err}"),
-        })?;
+    let member_dispatch_parity = MemberDispatchParitySubset::from_descriptor(&descriptor);
 
     Ok(PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        member_dispatch_parity: Some(member_dispatch_parity),
+        prompt_fulfillment: None,
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
@@ -4381,18 +4672,45 @@ fn prepare_member_runtime_startup_for_descriptor(
 
 #[cfg(all(test, unix))]
 async fn start_member_runtime_with_prepared(
-    prepared: Option<PreparedAgentRuntime>,
+    mut prepared: Option<PreparedAgentRuntime>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
-    start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
+    if let Some(prepared) = prepared.as_mut() {
+        if prepared.prompt_fulfillment.is_none() {
+            prepared.prompt_fulfillment = Some(
+                crate::execution::prompt_fulfillment::PromptFulfillmentBridge::for_descriptor(
+                    &prepared.descriptor,
+                )
+                .map_err(|err| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "failed to build test member prompt-fulfillment bridge: {err:#}"
+                    ),
+                })?,
+            );
+        }
+    }
+    start_host_orchestrator_runtime_with_prepared_prompt(
+        prepared,
+        None,
+        Some(InitialExecPromptPlan::Replace(
+            "test retained member startup".to_string(),
+        )),
+        false,
+        false,
+        false,
+        agent_printer,
+        telemetry,
+    )
+    .await
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn member_runtime_backend_kind(
-    descriptor: &RuntimeSelectionDescriptor,
+    backend_kind: AgentRuntimeBackendKind,
 ) -> MemberRuntimeBackendKindV1 {
-    match descriptor.backend_kind {
+    match backend_kind {
         AgentRuntimeBackendKind::Codex => MemberRuntimeBackendKindV1::Codex,
         AgentRuntimeBackendKind::ClaudeCode => MemberRuntimeBackendKindV1::ClaudeCode,
     }
@@ -4403,6 +4721,15 @@ fn build_member_dispatch_transport_request(
     prepared: &PreparedAgentRuntime,
     initial_prompt: Option<String>,
 ) -> std::result::Result<MemberDispatchTransportRequest, RuntimeBootstrapFailure> {
+    let parity =
+        prepared
+            .member_dispatch_parity
+            .as_ref()
+            .ok_or_else(|| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "missing shared-contract-derived retained member parity subset"
+                    .to_string(),
+            })?;
     let manifest = prepared
         .manifest
         .lock()
@@ -4439,14 +4766,14 @@ fn build_member_dispatch_transport_request(
         orchestrator_participant_id,
         parent_participant_id: manifest.handle.parent_participant_id.clone(),
         resumed_from_participant_id: manifest.handle.resumed_from_participant_id.clone(),
-        backend_id: prepared.descriptor.backend_id.clone(),
-        protocol: prepared.descriptor.protocol.clone(),
+        backend_id: parity.backend_id.clone(),
+        protocol: parity.protocol.clone(),
         run_id: prepared.run_id.clone(),
         world_id,
         world_generation,
         initial_prompt,
-        backend_kind: member_runtime_backend_kind(&prepared.descriptor),
-        binary_path: prepared.descriptor.binary_path.display().to_string(),
+        backend_kind: member_runtime_backend_kind(parity.backend_kind),
+        binary_path: parity.binary_path.display().to_string(),
     })
 }
 
@@ -4523,8 +4850,8 @@ async fn start_remote_member_runtime_with_prepared(
     let transport_request = build_member_dispatch_transport_request(&prepared, initial_prompt)?;
     let PreparedAgentRuntime {
         descriptor,
-        gateway: _gateway,
-        agent_kind: _agent_kind,
+        member_dispatch_parity: _member_dispatch_parity,
+        prompt_fulfillment: _prompt_fulfillment,
         startup_context,
         manifest,
         run_id,
@@ -5143,7 +5470,7 @@ struct EnsureMemberRuntimeReadyContext<'a> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn ensure_member_runtime_ready_for_descriptor(
     context: EnsureMemberRuntimeReadyContext<'_>,
-    descriptor: &RuntimeSelectionDescriptor,
+    parity: &MemberDispatchParitySubset,
     initial_prompt: Option<&str>,
     member_runtimes: &mut RetainedMemberRuntimeMap,
     pending_member_replacements: &mut PendingMemberReplacementMap,
@@ -5160,11 +5487,12 @@ async fn ensure_member_runtime_ready_for_descriptor(
     let Some(world_session) = world_session else {
         return Ok(false);
     };
-    ensure_member_backend_allowed(startup_context, descriptor)
+    let descriptor = parity.to_runtime_selection_descriptor();
+    ensure_member_backend_allowed(startup_context, &descriptor)
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
     let exact_live_member =
-        live_member_for_generation(startup_context, descriptor, world_session.world_generation)
+        live_member_for_generation(startup_context, &descriptor, world_session.world_generation)
             .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
     if let Some(runtime) = member_runtimes.get(&descriptor.backend_id) {
@@ -5187,16 +5515,17 @@ async fn ensure_member_runtime_ready_for_descriptor(
         shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
 
+    let backend_id = descriptor.backend_id.clone();
     let resumed_from = pending_member_replacements
-        .get(&descriptor.backend_id)
+        .get(&backend_id)
         .filter(|participant| {
             participant.handle.orchestration_session_id
                 == startup_context.orchestration_session_id()
-                && participant.handle.backend_id == descriptor.backend_id
+                && participant.handle.backend_id == backend_id
         });
     let prepared = prepare_member_runtime_startup_for_descriptor(
         startup_context,
-        descriptor.clone(),
+        descriptor,
         &PersistedWorldBinding {
             world_id: world_session.world_id.clone(),
             world_generation: world_session.world_generation,
@@ -5217,45 +5546,11 @@ async fn ensure_member_runtime_ready_for_descriptor(
         Err(failure) => return Err(anyhow!("substrate: error: {}", failure.message)),
     };
     if let Some(runtime) = runtime {
-        pending_member_replacements.remove(&descriptor.backend_id);
+        pending_member_replacements.remove(&backend_id);
         member_runtimes.insert(runtime_backend_id(&runtime), runtime);
         return Ok(true);
     }
     Ok(false)
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-struct EnsureMemberRuntimeReadyContext<'a> {
-    startup_context: Option<&'a RuntimeOrchestrationContext>,
-    world_session: Option<&'a WorldSession>,
-    agent_printer: &'a ReplPrinter,
-    telemetry: &'a mut ReplSessionTelemetry,
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-async fn ensure_member_runtime_ready_for_descriptor(
-    context: EnsureMemberRuntimeReadyContext<'_>,
-    _descriptor: &RuntimeSelectionDescriptor,
-    _initial_prompt: Option<&str>,
-    _member_runtimes: &mut RetainedMemberRuntimeMap,
-    _pending_member_replacements: &mut PendingMemberReplacementMap,
-) -> Result<bool> {
-    let EnsureMemberRuntimeReadyContext {
-        startup_context,
-        world_session,
-        agent_printer: _agent_printer,
-        telemetry: _telemetry,
-    } = context;
-    let Some(_startup_context) = startup_context else {
-        return Ok(false);
-    };
-    let Some(_world_session) = world_session else {
-        return Ok(false);
-    };
-
-    Err(anyhow!(
-        "substrate: error: world-scoped member runtime dispatch is supported on Linux only"
-    ))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -5275,6 +5570,7 @@ async fn ensure_member_runtime_ready(
     else {
         return Ok(());
     };
+    let parity = MemberDispatchParitySubset::from_descriptor(&descriptor);
 
     ensure_member_runtime_ready_for_descriptor(
         EnsureMemberRuntimeReadyContext {
@@ -5283,7 +5579,7 @@ async fn ensure_member_runtime_ready(
             agent_printer,
             telemetry,
         },
-        &descriptor,
+        &parity,
         None,
         member_runtimes,
         pending_member_replacements,
@@ -5569,18 +5865,6 @@ async fn submit_world_targeted_turn(
         agent_printer,
     )?;
     Ok(())
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-async fn submit_world_targeted_turn(
-    _runtime: &mut AsyncReplAgentRuntime,
-    _prompt: &str,
-    _agent_printer: &ReplPrinter,
-    _telemetry: &mut ReplSessionTelemetry,
-) -> Result<()> {
-    Err(anyhow!(
-        "substrate: error: world-targeted follow-up turns are supported on Linux and macOS only"
-    ))
 }
 
 async fn shutdown_host_orchestrator_runtime(
@@ -5908,11 +6192,17 @@ fn can_park_host_runtime_after_detach(
         return false;
     };
     let participant_id = manifest.handle.participant_id.as_str();
-    if record.session.state != OrchestrationSessionState::Active
-        || record.session.posture != OrchestrationSessionPosture::ActiveAttached
-        || record.session.active_participant_id() != Some(participant_id)
-        || record.session.attached_participant_id() != Some(participant_id)
-    {
+    let persisted_attached_parent = record.session.state == OrchestrationSessionState::Active
+        && record.session.posture == OrchestrationSessionPosture::ActiveAttached
+        && record.session.active_participant_id() == Some(participant_id)
+        && record.session.attached_participant_id() == Some(participant_id);
+    let in_memory_completed_one_turn_handoff = orchestration_session.startup_prompt_state()
+        == Some(StartupPromptStreamState::Completed)
+        && orchestration_session.state == OrchestrationSessionState::Active
+        && orchestration_session.posture == OrchestrationSessionPosture::ActiveAttached
+        && orchestration_session.active_participant_id() == Some(participant_id)
+        && orchestration_session.attached_participant_id() == Some(participant_id);
+    if !persisted_attached_parent && !in_memory_completed_one_turn_handoff {
         return false;
     }
 
@@ -5955,6 +6245,7 @@ fn build_parked_host_runtime_snapshots(
         }
     }
 
+    parked_orchestration.sync_host_attach_contract(&parked_manifest);
     valid_detached_host_continuity_posture(&parked_orchestration, &parked_manifest, true)?;
     Some((parked_orchestration, parked_manifest))
 }
@@ -7658,7 +7949,13 @@ mod tests {
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
     };
     #[cfg(unix)]
+    use crate::execution::agent_runtime::control::{
+        HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+    };
+    #[cfg(unix)]
     use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
+    #[cfg(unix)]
+    use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
     #[cfg(unix)]
     use crate::execution::config_model::AgentExecutionScope;
     #[cfg(unix)]
@@ -7957,6 +8254,7 @@ mod tests {
             "shell-test".to_string(),
             "/tmp".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
         session.initialize_startup_prompt(manifest.handle.participant_id.clone());
         session.mark_startup_prompt_accepted(manifest.handle.participant_id.as_str());
@@ -8000,6 +8298,7 @@ mod tests {
             "shell-test".to_string(),
             "/tmp".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
         session.initialize_startup_prompt(manifest.handle.participant_id.clone());
         session.mark_startup_prompt_completed(manifest.handle.participant_id.as_str(), "success");
@@ -8088,6 +8387,24 @@ mod tests {
         perms.set_mode(0o755);
         fs::set_permissions(&path, perms).expect("set fake codex permissions");
         path
+    }
+
+    #[cfg(unix)]
+    fn write_fake_codex_attach_capture_script(temp: &TempDir) -> (PathBuf, PathBuf) {
+        let path = temp.path().join("fake-codex-attach-capture.sh");
+        let stdin_path = temp.path().join("fake-codex-attach.stdin");
+        let body = format!(
+            "#!/bin/sh\ncat > '{}'\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
+            stdin_path.display()
+        );
+        fs::write(&path, body).expect("write fake codex attach capture script");
+        let mut perms = fs::metadata(&path)
+            .expect("fake codex metadata")
+            .permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("set fake codex permissions");
+        (path, stdin_path)
     }
 
     #[cfg(unix)]
@@ -8395,6 +8712,29 @@ mod tests {
             assert_eq!(
                 fs::canonicalize(&parent.workspace_root).expect("canonicalize parent workspace"),
                 fs::canonicalize(&workspace_root).expect("canonicalize workspace root")
+            );
+            let host_attach_contract = parent
+                .host_attach_contract()
+                .expect("repl-born host session should persist durable attach truth");
+            assert_eq!(host_attach_contract.backend_id, "cli:codex");
+            assert_eq!(host_attach_contract.protocol, PURE_AGENT_PROTOCOL);
+            assert_eq!(
+                host_attach_contract
+                    .attach_launch_knobs
+                    .requested_execution_scope,
+                AgentExecutionScope::Host
+            );
+            assert!(host_attach_contract.capabilities.session_resume);
+            let persisted_policy: substrate_broker::Policy =
+                serde_json::from_value(host_attach_contract.effective_policy.clone())
+                    .expect("deserialize persisted policy snapshot");
+            assert_eq!(
+                persisted_policy.agents_allowed_backends,
+                vec!["cli:codex".to_string()]
+            );
+            assert_eq!(
+                host_attach_contract.continuity_uaa_session_id.as_deref(),
+                Some("thread-test")
             );
             assert_eq!(
                 runtime
@@ -8829,7 +9169,10 @@ mod tests {
             let mut runtime = start_host_orchestrator_runtime_with_prepared_prompt(
                 Some(prepared),
                 None,
-                None,
+                Some(InitialExecPromptPlan::Replace(
+                    "test hidden helper startup".to_string(),
+                )),
+                false,
                 true,
                 false,
                 &ReplPrinter::Stdout,
@@ -8926,6 +9269,136 @@ mod tests {
                 manifest.internal.last_error_bucket.as_deref(),
                 Some("runtime_shutdown")
             );
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn hidden_owner_helper_attach_startup_reaches_ready_attached() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let (fake_codex, stdin_capture_path) = write_fake_codex_attach_capture_script(&temp);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                fake_codex.display()
+            ),
+        )
+        .expect("write codex agent file");
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let mut descriptor = test_runtime_selection_descriptor();
+            descriptor.binary_path = fake_codex.clone();
+            let mut plan = super::HiddenOwnerHelperLaunchPlan {
+                mode: super::OwnerHelperMode::Attach,
+                descriptor: super::ResolvedRuntimeDescriptor::from(&descriptor),
+                session: HiddenOwnerHelperSessionPlan {
+                    orchestration_session_id: "orch-attach".to_string(),
+                    shell_trace_session_id: "trace-attach".to_string(),
+                    workspace_root: workspace_root.display().to_string(),
+                    world_id: None,
+                    world_generation: None,
+                },
+                participant: HiddenOwnerHelperParticipantPlan {
+                    participant_id: "ash-attach".to_string(),
+                    lease_token: "lease-attach".to_string(),
+                    run_id: "run-attach".to_string(),
+                    resumed_from_participant_id: Some("ash-source".to_string()),
+                    internal_uaa_session_id: Some("uaa-attach-source".to_string()),
+                },
+                host_attach_contract: None,
+                startup_prompt: None,
+                source_orchestration_session_id: Some("orch-source".to_string()),
+            };
+            let config = Arc::new(
+                owner_helper_shell_config(&plan)
+                    .expect("owner helper attach shell config should resolve"),
+            );
+            let resolved = resolve_host_orchestrator_bootstrap(&config)
+                .expect("resolve host bootstrap for attach test should succeed")
+                .expect("agents-enabled host bootstrap should be present");
+            plan.host_attach_contract = HostAttachContract::from_resolved_contract(
+                &resolved.resolved_contract,
+                Some("uaa-attach-source".to_string()),
+            );
+            let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
+                .expect("prepare hidden owner-helper attach runtime should succeed");
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+                Some(prepared),
+                None,
+                None,
+                true,
+                true,
+                false,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("hidden owner-helper attach runtime should start")
+            .expect("runtime");
+
+            let readiness = runtime
+                .store
+                .classify_hidden_owner_helper_launch_readiness("orch-attach", "ash-attach", true)
+                .expect("readiness classification");
+            assert_eq!(readiness, HiddenOwnerHelperLaunchReadiness::ReadyAttached);
+
+            let session = runtime
+                .store
+                .load_session("orch-attach")
+                .expect("load attached session")
+                .expect("attached session record");
+            let participant = session
+                .participants
+                .iter()
+                .find(|participant| participant.participant_id() == "ash-attach")
+                .expect("attached participant");
+            assert_eq!(session.session.active_participant_id(), Some("ash-attach"));
+            assert_eq!(participant.internal_uaa_session_id(), Some("thread-test"));
+            assert_eq!(
+                session
+                    .session
+                    .host_attach_contract()
+                    .and_then(|contract| contract.continuity_uaa_session_id.as_deref()),
+                Some("thread-test")
+            );
+            assert_eq!(
+                fs::read_to_string(&stdin_capture_path).expect("read attach stdin capture"),
+                "",
+                "control-only attach must close stdin without sending a bootstrap prompt"
+            );
+
+            let mut shutdown_telemetry = ReplSessionTelemetry::new(config, "async-test-stop");
+            shutdown_host_orchestrator_runtime(
+                runtime,
+                &ReplPrinter::Stdout,
+                &mut shutdown_telemetry,
+            )
+            .await;
         });
         std::env::remove_var("SUBSTRATE_HOME");
     }
@@ -9128,6 +9601,77 @@ mod tests {
         unsafe {
             libc::kill(pid, libc::SIGTERM);
         }
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn can_park_host_runtime_after_detach_accepts_completed_one_turn_when_store_lags() {
+        let temp = TempDir::new().expect("tempdir");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let descriptor = test_runtime_selection_descriptor();
+        let mut participant = AgentRuntimeParticipantRecord::new_replacement_participant(
+            &descriptor,
+            AgentRuntimeReplacementParticipantInit {
+                orchestration_session_id: "sess_one_turn_lag".to_string(),
+                participant_id: "ash_one_turn_lag".to_string(),
+                role: ORCHESTRATOR_ROLE.to_string(),
+                orchestrator_participant_id: None,
+                parent_participant_id: None,
+                resumed_from_participant_id: "ash_source".to_string(),
+                world: None,
+                lease_token: "lease_one_turn_lag".to_string(),
+            },
+        )
+        .expect("replacement participant");
+        participant.transition_state(AgentRuntimeSessionState::Ready);
+        participant.set_uaa_session_id("thread-test");
+        participant.mark_client_detached("owner detached cleanly");
+
+        let mut persisted_session = OrchestrationSessionRecord::new(
+            "sess_one_turn_lag".to_string(),
+            "trace_one_turn_lag".to_string(),
+            "/workspace".to_string(),
+            &participant,
+            HostAttachContract::from_manifest_for_test(&participant),
+        );
+        persisted_session.transition_state(OrchestrationSessionState::Active);
+        persisted_session.bind_active_session_handle(participant.handle.participant_id.clone());
+        persisted_session.mark_parked_resumable("owner detached cleanly");
+
+        store
+            .persist_orchestration_session(&persisted_session)
+            .expect("persist stale orchestration");
+        store
+            .persist_participant(&participant)
+            .expect("persist participant");
+
+        let mut in_memory_session = persisted_session.clone();
+        in_memory_session.bind_active_session_handle(participant.handle.participant_id.clone());
+        in_memory_session.initialize_startup_prompt(participant.handle.participant_id.clone());
+        in_memory_session
+            .mark_startup_prompt_completed(participant.handle.participant_id.as_str(), "success");
+
+        let mut in_memory_manifest = participant.clone();
+        in_memory_manifest.mark_runtime_ownership_retained();
+
+        assert!(
+            can_park_host_runtime_after_detach(
+                &store,
+                true,
+                &in_memory_session,
+                &in_memory_manifest,
+                true,
+                true,
+            ),
+            "completed resume-one-turn handoff should park even if the persisted session row still lags behind the attached snapshot"
+        );
+
         std::env::remove_var("SUBSTRATE_HOME");
     }
 
@@ -9347,6 +9891,168 @@ mod tests {
             )
             .await;
         });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn build_member_dispatch_transport_request_uses_shared_contract_parity_subset() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_member_test".to_string(),
+            world_generation: 7,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("one world-scoped member should be selected");
+        let expected_binary_path = selected_descriptor.binary_path.display().to_string();
+        let expected_protocol = selected_descriptor.protocol.clone();
+        let expected_backend_kind = selected_descriptor.backend_kind;
+        let mut member_prepared = prepare_member_runtime_startup_for_descriptor(
+            &startup_context,
+            selected_descriptor,
+            &initial_world_binding,
+            None,
+        )
+        .expect("member runtime prepare should succeed");
+        member_prepared.descriptor.protocol = "drifted.protocol".to_string();
+        member_prepared.descriptor.backend_kind = AgentRuntimeBackendKind::ClaudeCode;
+        member_prepared.descriptor.binary_path = PathBuf::from("/tmp/drifted-member-binary");
+
+        let request =
+            build_member_dispatch_transport_request(&member_prepared, Some("hello".to_string()))
+                .expect("member dispatch request");
+
+        assert_eq!(request.backend_id, "cli:codex");
+        assert_eq!(request.protocol, expected_protocol);
+        assert_eq!(request.binary_path, expected_binary_path);
+        assert_eq!(
+            request.backend_kind,
+            member_runtime_backend_kind(expected_backend_kind)
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn retained_member_dispatch_parity_subset_prefers_pending_replacement_truth() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let host_manifest = prepared.manifest.clone();
+            let initial_world_binding = PersistedWorldBinding {
+                world_id: "wld_member_old".to_string(),
+                world_generation: 2,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+            let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+                .expect("member selection should succeed")
+                .expect("one world-scoped member should be selected");
+            let backend_id = selected_descriptor.backend_id.clone();
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor.clone(),
+                &initial_world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_member_runtime_with_prepared(
+                Some(member_prepared),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+
+            let previous_member = runtime_manifest_snapshot(&member_runtime);
+            let mut pending_member_replacements = PendingMemberReplacementMap::new();
+            pending_member_replacements.insert(backend_id.clone(), previous_member.clone());
+
+            let mut drifted_startup_context = startup_context.clone();
+            drifted_startup_context.inventory.remove("codex");
+
+            let parity = retained_member_dispatch_parity_subset(
+                Some(&drifted_startup_context),
+                &RetainedMemberRuntimeMap::new(),
+                &pending_member_replacements,
+                &backend_id,
+            )
+            .expect("parity lookup should succeed")
+            .expect("pending retained member parity");
+
+            assert_eq!(parity.agent_id, previous_member.handle.agent_id);
+            assert_eq!(parity.backend_id, previous_member.handle.backend_id);
+            assert_eq!(parity.protocol, previous_member.handle.protocol);
+            assert_eq!(
+                parity.execution_scope,
+                previous_member.handle.execution.scope
+            );
+            assert_eq!(
+                parity.binary_path,
+                PathBuf::from(previous_member.internal.resolved_binary_path.clone())
+            );
+
+            shutdown_host_orchestrator_runtime(
+                member_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+        });
+
         std::env::remove_var("SUBSTRATE_HOME");
     }
 

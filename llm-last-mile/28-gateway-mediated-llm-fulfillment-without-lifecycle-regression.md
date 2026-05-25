@@ -1,6 +1,6 @@
 # SOW: Gateway-Mediated LLM Fulfillment Without Lifecycle Regression
 
-Status: remaining-work draft. This SOW closes the runtime seam after [25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md) and [27-uaa-boundary-and-naming-cleanup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/27-uaa-boundary-and-naming-cleanup.md). It is anchored to the lifecycle truth in [ADR-0047 — Host Orchestrator Durable Session and Parked-Resumable Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md), the gateway ownership split in [ADR-0040 — Substrate Gateway Boundary and Runtime Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md), the adapter intent in [ADR-0041 — Substrate Gateway Backend Adapter Contract](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md), and the already-landed gateway contracts under [docs/contracts/](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts).
+Status: truth-aligned closeout draft. This SOW closes the runtime seam after [25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md) and [27-uaa-boundary-and-naming-cleanup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/27-uaa-boundary-and-naming-cleanup.md). It is anchored to the lifecycle truth in [ADR-0047 — Host Orchestrator Durable Session and Parked-Resumable Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md), the gateway ownership split in [ADR-0040 — Substrate Gateway Boundary and Runtime Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md), the adapter intent in [ADR-0041 — Substrate Gateway Backend Adapter Contract](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md), and the already-landed gateway contracts under [docs/contracts/](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts).
 
 This slice is a seam replacement, not a public contract expansion. It must not absorb the shared dispatch-envelope work in [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md) or the public `--scope world` / capability-flag work in [30-public-world-scoped-agent-start-and-capability-flags.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md).
 
@@ -86,15 +86,14 @@ This SOW assumes the following are already true and must be reused rather than r
 
 ## Current Repo Truth
 
-### The direct fulfillment bypass is still real
+### The direct fulfillment bypass is no longer steady-state truth
 
-The production bypass points are concrete:
+The production prompt-bearing seam is now gateway-mediated:
 
-1. Host shell runtime still builds a local `AgentWrapperGateway` and directly registers concrete backends in [crates/shell/src/execution/agent_runtime/registry.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/registry.rs:8).
-2. Host follow-up prompt submission still rebuilds that direct gateway in [crates/shell/src/execution/agent_runtime/control.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:1251).
-3. REPL-owned host startup and preparation paths still depend on the same direct shell-local builder in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs).
-4. World member runtime still builds another direct `AgentWrapperGateway` and directly registers concrete backends in [crates/world-service/src/member_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/src/member_runtime.rs:557).
-5. The shell still prepares a local member gateway for world startup and then throws it away before dispatching `member_dispatch` into world-service. That is a real seam mismatch, not just stylistic duplication.
+1. Shell prompt-bearing execution delegates through [crates/shell/src/execution/prompt_fulfillment.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/prompt_fulfillment.rs) instead of rebuilding backend-registration tables in prompt-taking call sites.
+2. World-member prompt-bearing execution delegates through [crates/world-service/src/prompt_fulfillment.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/src/prompt_fulfillment.rs) instead of directly registering concrete backends in member runtime code.
+3. Gateway-owned adapter runtime construction lives in [crates/gateway/src/adapter_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/src/adapter_runtime.rs), which is now the singular explicit backend-registration seam consumed by those bridges.
+4. The discarded shell-local world-member gateway-prep pattern is removed from the production world-launch path; first-turn launch and resumed member follow-up now share the same gateway-mediated fulfillment boundary.
 
 ### The public lifecycle is already narrower than the runtime seam
 
@@ -105,12 +104,12 @@ What is already true:
 3. Durable parked and attention-needed host semantics are already landed.
 4. The gateway lifecycle is already real for `status | sync | restart`.
 
-What is still wrong:
+What remains intentionally narrow:
 
-1. production prompt-bearing execution still bypasses the gateway adapter seam,
-2. host and world duplicate backend-registration logic,
-3. first-turn world launch and resumed world follow-up do not clearly share one backend-fulfillment seam,
-4. auth and adapter lifecycle truth exist, but the main agent fulfillment path still does not consume them as its steady-state runtime boundary.
+1. public `start`, `turn`, `reattach`, and `stop` semantics remain frozen rather than widened,
+2. Linux world follow-up remains on the typed `/v1/member_turn/stream` seam,
+3. integrated auth still travels through the inherited FD auth-bundle path,
+4. the supported integrated backend matrix remains intentionally limited by the existing binding/runtime contract.
 
 ## In Scope
 

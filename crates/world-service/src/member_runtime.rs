@@ -1,11 +1,6 @@
 use agent_api::{
-    backends::{
-        claude_code::{ClaudeCodeBackend, ClaudeCodeBackendConfig},
-        codex::{CodexBackend, CodexBackendConfig},
-    },
     AgentWrapperCancelHandle, AgentWrapperCompletion, AgentWrapperError, AgentWrapperEvent,
-    AgentWrapperEventKind, AgentWrapperGateway, AgentWrapperKind, AgentWrapperRunControl,
-    AgentWrapperRunRequest,
+    AgentWrapperEventKind, AgentWrapperRunControl, AgentWrapperRunRequest,
 };
 use anyhow::{anyhow, Result};
 use axum::{
@@ -31,6 +26,7 @@ use transport_api_types::{
 use world_api::SharedWorldBindingSnapshot;
 
 use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlacementContext};
+use crate::prompt_fulfillment::PromptFulfillmentBridge;
 
 const MEMBER_ROLE: &str = "member";
 const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
@@ -122,25 +118,23 @@ impl MemberRuntimeManager {
             .chain(prepared_launcher.env.iter().cloned())
             .collect::<BTreeMap<_, _>>();
 
-        let (gateway, agent_kind) = build_gateway_for_backend(
+        let prompt_fulfillment = PromptFulfillmentBridge::for_member_backend(
             &dispatch.resolved_runtime.backend_kind,
             prepared_launcher.launcher_path.clone(),
         )?;
-        let initial_prompt = dispatch
-            .initial_prompt
-            .clone()
-            .unwrap_or_else(|| runtime_bootstrap_prompt().to_string());
-        let AgentWrapperRunControl { handle, cancel } = match gateway
-            .run_control(
-                &agent_kind,
-                AgentWrapperRunRequest {
-                    prompt: initial_prompt,
-                    working_dir: Some(placement.working_dir.clone()),
-                    timeout: None,
-                    env: runtime_env.clone(),
-                    extensions: BTreeMap::new(),
-                },
+        let initial_prompt = dispatch.initial_prompt.clone().ok_or_else(|| {
+            crate::service::BadRequestError::new(
+                "member_dispatch.initial_prompt is required for launch-time first turn".to_string(),
             )
+        })?;
+        let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
+            .run_control(AgentWrapperRunRequest {
+                prompt: initial_prompt,
+                working_dir: Some(placement.working_dir.clone()),
+                timeout: None,
+                env: runtime_env.clone(),
+                extensions: BTreeMap::new(),
+            })
             .await
         {
             Ok(control) => control,
@@ -260,8 +254,10 @@ impl MemberRuntimeManager {
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
         self.reserve_turn_slot(&active, &span_id)?;
 
-        let (gateway, agent_kind) =
-            build_gateway_for_backend(&active.backend_kind, active.binary_path.clone())?;
+        let prompt_fulfillment = PromptFulfillmentBridge::for_member_backend(
+            &active.backend_kind,
+            active.binary_path.clone(),
+        )?;
         let mut extensions = BTreeMap::new();
         extensions.insert(
             SESSION_RESUME_EXTENSION_V1.to_string(),
@@ -271,17 +267,14 @@ impl MemberRuntimeManager {
             }),
         );
 
-        let AgentWrapperRunControl { handle, cancel } = match gateway
-            .run_control(
-                &agent_kind,
-                AgentWrapperRunRequest {
-                    prompt: req.prompt.clone(),
-                    working_dir: Some(active.working_dir.clone()),
-                    timeout: None,
-                    env: active.env.clone(),
-                    extensions,
-                },
-            )
+        let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
+            .run_control(AgentWrapperRunRequest {
+                prompt: req.prompt.clone(),
+                working_dir: Some(active.working_dir.clone()),
+                timeout: None,
+                env: active.env.clone(),
+                extensions,
+            })
             .await
         {
             Ok(control) => control,
@@ -537,10 +530,6 @@ impl MemberRuntimeManager {
     }
 }
 
-fn runtime_bootstrap_prompt() -> &'static str {
-    "Enter persistent Substrate world-scoped member mode. Keep this control session attached for the lifetime of the parent REPL session and do not exit until the client cancels the run."
-}
-
 fn validate_member_runtime_binary(
     dispatch: &MemberDispatchRequestV1,
 ) -> Result<std::path::PathBuf> {
@@ -552,37 +541,6 @@ fn validate_member_runtime_binary(
         ));
     }
     Ok(path.to_path_buf())
-}
-
-fn build_gateway_for_backend(
-    backend_kind: &MemberRuntimeBackendKindV1,
-    binary_path: std::path::PathBuf,
-) -> Result<(AgentWrapperGateway, AgentWrapperKind)> {
-    let mut gateway = AgentWrapperGateway::new();
-    let binary_path = Some(binary_path);
-
-    let agent_kind = match backend_kind {
-        MemberRuntimeBackendKindV1::Codex => {
-            gateway
-                .register(Arc::new(CodexBackend::new(CodexBackendConfig {
-                    binary: binary_path,
-                    ..Default::default()
-                })))
-                .map_err(map_wrapper_error)?;
-            AgentWrapperKind::new("codex").map_err(map_wrapper_error)?
-        }
-        MemberRuntimeBackendKindV1::ClaudeCode => {
-            gateway
-                .register(Arc::new(ClaudeCodeBackend::new(ClaudeCodeBackendConfig {
-                    binary: binary_path,
-                    ..Default::default()
-                })))
-                .map_err(map_wrapper_error)?;
-            AgentWrapperKind::new("claude_code").map_err(map_wrapper_error)?
-        }
-    };
-
-    Ok((gateway, agent_kind))
 }
 
 struct PreparedMemberRuntimeLauncher {

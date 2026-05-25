@@ -1,0 +1,21 @@
+{
+  "npx gitnexus impact OrchestrationSessionRecord.sync_host_attach_contract --repo substrate --direction upstream": 0,
+  "npx gitnexus impact OrchestrationSessionRecord.fork_successor_attach_contract --repo substrate --direction upstream": 0,
+  "npx gitnexus impact AgentRuntimeStateStore.resolve_public_control_target --repo substrate --direction upstream": 0,
+  "npx gitnexus impact OrchestrationSessionRecord.validate_persisted_invariants --repo substrate --direction upstream": 0,
+  "npx gitnexus impact valid_detached_host_continuity_posture --repo substrate --direction upstream": 0,
+  "npx gitnexus impact recoverable_stale_host_attachment --repo substrate --direction upstream": 0,
+  "cargo fmt --all": 0,
+  "cargo fmt --all -- --check": 0,
+  "cargo clippy -p shell --lib --tests -- -D warnings": 0,
+  "cargo test -p shell new_session_starts_active_attached -- --nocapture": 0,
+  "cargo test -p shell detached_postures_enforce_pending_inbox_truth -- --nocapture": 0,
+  "cargo test -p shell resolve_public_control_target -- --nocapture": 0,
+  "cargo test -p shell successor_attach_contract_clears_continuity_and_preserves_launch_truth -- --nocapture": 0,
+  "cargo test -p shell host_attach_contract_knob_drift_fails_closed -- --nocapture": 0,
+  "cargo test -p shell resolve_public_turn_target_uses_persisted_continuity_truth -- --nocapture": 0,
+  "cargo test -p shell load_session_backfills_generalized_attach_contract_defaults_for_legacy_json -- --nocapture": 0,
+  "cargo test -p shell persisted_attach_contract_is_explicit_baseline_domain -- --nocapture": 0,
+  "git diff --check": 0,
+  "npx gitnexus detect-changes --repo substrate --scope compare --base-ref HEAD^": 0
+}

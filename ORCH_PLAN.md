@@ -1,959 +1,837 @@
-# ORCH_PLAN: UAA Boundary And Naming Cleanup Execution Controller
+# ORCH_PLAN: Shared Dispatch Contract Closeout And Parity Hardening
 
-Authoritative plan source: [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)  
-Source SOW: [27-uaa-boundary-and-naming-cleanup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/27-uaa-boundary-and-naming-cleanup.md)  
-Style reference: [ORCH_PLAN-25.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-25.md)  
-Current workspace branch: `chore/uaa-boundary-and-naming-cleanup`  
-Execution type: direct-cutover naming correction, parent-frozen contract, one serialized foundation code lane, two follow-on parallel lanes, one parent-only validation wall  
-Live repo root: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`  
-Fresh worktree root: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup`  
-Run id: `plan-uaa-boundary-and-naming-cleanup`  
-Worker model: `GPT-5.4` with `reasoning_effort=high`  
-Initial concurrent worker cap: `1`  
-Peak concurrent worker cap: `2`  
-Parent role: sole integrator, sole approval authority, sole writer of `.runs/**` artifacts
+Authoritative plan source: [PLAN.md](PLAN.md)  
+Controller file: [ORCH_PLAN.md](ORCH_PLAN.md)  
+Current branch: `feat/gateway-mediated-llm-fulfillment`  
+Authoritative checkout: `/home/azureuser/__Active_Code/atomize-hq/substrate`  
+Worktree root: `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-s29-5-shared-dispatch-closeout`  
+Run id: `slice-29-5-shared-dispatch-closeout-parity-hardening`
+
+## Execution Summary
+
+This file is the execution controller for the current dirty working-tree [PLAN.md](PLAN.md). It is not a summary of the plan. It tells the parent exactly how to run the slice.
+
+Operator facts:
+
+| Item | Value |
+| --- | --- |
+| Current branch | `feat/gateway-mediated-llm-fulfillment` |
+| Parent role | sole integrator, sole gate owner, sole writer of `.runs/**`, sole final acceptance authority |
+| Worker model | `GPT-5.4 high` |
+| Authoritative checkout | `/home/azureuser/__Active_Code/atomize-hq/substrate` |
+| Worker worktree root | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-s29-5-shared-dispatch-closeout` |
+| Concurrency cap | `2` total live worker lanes |
+| Exact safe parallel window | only after `G3`: `L4 retained member parity` plus `L4T frozen-surface regression tests` |
+| Integration owner | parent only |
+| Gate owner | parent only |
+| `.runs/**` owner | parent only |
+
+Execution shape:
+
+1. `P0` parent freeze and source lock.
+2. `T1/L1` durable attach truth first.
+3. `G1` parent integration gate.
+4. `T2/L2` policy overlay merge second.
+5. `G2` parent integration gate.
+6. `T3/L3` capability override closeout third.
+7. `G3` parent integration gate and hotspot freeze.
+8. `T4/L4` retained member parity plus `T4T/L4T` frozen-surface regression coverage in the only safe parallel window.
+9. `G4` parent integration gate for the parallel window.
+10. `T5/L5` docs truth sync last.
+11. `G5` parent docs gate.
+12. `P1` parent validation wall.
+13. `G6` parent final acceptance.
+14. `P2` parent closeout.
+
+Integration and gate ownership:
+
+| Step | Owner | Output |
+| --- | --- | --- |
+| `P0` | parent | source lock, lane map, branch map, hotspot freeze |
+| `T1` | worker `L1` | Phase 1 code + handoff |
+| `G1` | parent | integrated accepted tip for Phase 1 |
+| `T2` | worker `L2` | Phase 2 code + handoff |
+| `G2` | parent | integrated accepted tip for Phase 2 |
+| `T3` | worker `L3` | Phase 3 code + handoff |
+| `G3` | parent | integrated accepted tip for Phase 3 and shared-vocabulary freeze |
+| `T4` | worker `L4` | retained parity code + parity tests |
+| `T4T` | worker `L4T` | frozen-surface regression test additions only |
+| `G4` | parent | integrated accepted tip for the only parallel window |
+| `T5` | worker `L5` | docs truth sync |
+| `G5` | parent | accepted docs tip |
+| `P1` | parent | merged-tree validation wall |
+| `G6` | parent | final acceptance decision |
+| `P2` | parent | final run artifacts and completion sentinels |
 
 ## Summary
 
-This controller executes [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md). It is not a restatement of the plan.
+This run is complete only when the merged tree proves one truthful contract floor across the current slice:
 
-The run shape is frozen:
-
-1. Parent freezes the rename contract, the live-surface grep wall, the historical allowlist, and the worker ownership map.
-2. One foundation code lane lands the whole shared-hotspot cutover in order:
-   - `uaa.agent.session` -> `substrate.agent.session`
-   - `world-agent*` -> `world-service*`
-   - `agent-api*` -> `transport-api*`
-3. Only after the foundation lane is accepted does the parent open the parallel window:
-   - scripts, CI, release, and operator helper lane
-   - docs, ADR, and repo-truth lane
-4. Parent integrates the parallel lanes, runs the full validation wall from [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), and decides final acceptance.
-
-This run is honest only if the merged tree proves all of the following together:
-
-1. upstream `agent_api`, adopted `agent_api.*`, `uaa_session_id`, and unchanged `world-api` remain intact,
-2. `substrate.agent.session` is the only canonical supported local protocol-family label on live surfaces,
-3. the local daemon family is `world-service*` everywhere live,
-4. the local typed host↔world contract family is `transport-api*` everywhere live,
-5. world-required routing still fails closed if renamed service discovery breaks,
-6. the live-surface grep wall is green outside the explicit historical allowlist,
-7. code, scripts, CI, release bundles, docs, ADRs, fixtures, tests, and operator guidance tell one coherent boundary story.
+1. durable attach truth is persisted from resolved launch truth;
+2. inventory `policy_overlay` is merged into actual `effective_policy`;
+3. bounded capability override narrowing works for the approved family and fails closed for all other fields;
+4. retained member follow-up turns consume a shared-contract-derived subset instead of a hidden second dialect;
+5. docs, tests, and final validation agree on the same shipped semantics.
 
 ## Hard Guards
 
-These are run-stopping invariants.
+1. The parent is the sole integrator, sole gate owner, sole writer of `.runs/**`, and sole final acceptance authority.
+2. Workers must not edit `.runs/**`, `PLAN.md`, or `ORCH_PLAN.md`.
+3. The authoritative checkout is already dirty because `PLAN.md` is modified; this run must not assume a clean tree and must not revert or normalize that drift.
+4. The authoritative plan text is the current working-tree contents of `PLAN.md`, not the committed copy that may exist in clean worker worktrees.
+5. Worker worktrees branch only from committed accepted gate tips; source-lock state stays in the dirty authoritative checkout.
+6. `dispatch_contract.rs` is serialized through `T1`, `T2`, and `T3`; after `G3` it is frozen for the remainder of the run.
+7. `orchestration_session.rs` is Phase-1-only and frozen after `G1`.
+8. `policy_model.rs` and `agent_inventory.rs` are Phase-2-only and frozen after `G2`.
+9. `state_store.rs`, `validator.rs`, and `agents_cmd.rs` are Phase-3 surfaces and frozen after `G3`.
+10. `async_repl.rs` and additive `world_ops.rs` work belong only to retained parity after `G3`.
+11. Docs stay last; runtime semantic work does not continue during the docs lane.
+12. Honest parallelism only: two write lanes may overlap only when ownership is disjoint and all prerequisite hotspots are already frozen.
+13. Any need to reopen a frozen hotspot after `G3` stops the run and forces re-planning.
+14. Parent acceptance is against merged-tree behavior and the authoritative `PLAN.md` acceptance criteria, never lane-local green status alone.
 
-1. This slice is a naming correction and boundary cleanup only. It is not a runtime redesign, not a public contract redesign, and not a compatibility-migration project.
-2. Upstream `agent_api` and adopted `agent_api.*` ids remain untouched.
-3. `world-api` remains untouched.
-4. `uaa_session_id` and `internal.uaa_session_id` remain untouched.
-5. `substrate.agent.session` is the only canonical supported local protocol-family label after cutover.
-6. Old supported live names do not remain as aliases on canonical live surfaces just to avoid repo work.
-7. Stale `uaa.agent.session` configs, fixtures, or persisted runtime rows fail closed with explicit operator-readable errors after cutover.
-8. World-required routing must still hard-fail if renamed binary, socket, or unit discovery breaks. No rename drift may silently fall back to host execution.
-9. No parallel worker may touch shared foundation hotspots before the foundation lane is accepted:
-   - [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml)
-   - `dist-workspace.toml`
-   - `crates/shell/**`
-   - mixed-boundary imports that mention upstream `agent_api` plus local transport or service crates
-   - local protocol validation and persistence seams
-10. Parent is the only integrator, the only gate authority, and the only writer of `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-uaa-boundary-and-naming-cleanup/**`.
-11. Workers do not edit [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md), or `.runs/**`.
-12. Every symbol edit requires prior GitNexus impact analysis. Any `HIGH` or `CRITICAL` result is a parent-only escalation point.
-13. Every worker handoff must include `gitnexus_detect_changes()` status before the parent considers merge.
-14. Parent runs a final `gitnexus_detect_changes()` on the merged tree before closeout.
+## Blocked-Run Conditions
 
-Stop the run and write `blocked.json` if any of these become true:
+Stop the run and mark it blocked if any of the following becomes true:
 
-1. The foundation cutover needs to be split across multiple concurrent code owners to make progress.
-2. The rename cannot be landed without changing public selector semantics, `world-api`, upstream `agent_api.*`, or `uaa_session_id`.
-3. The only path to green is a long-lived compatibility alias layer for old live names.
-4. Fail-closed routing cannot be proven after the `world-service` rename.
-5. Parallel lanes need to reopen shared manifests, shell runtime seams, or rename decisions that should have been frozen by the foundation lane.
-6. Docs or ADRs can only be made truthful by contradicting the merged code and scripts tree.
-7. The final validation wall cannot prove grep, cargo, operator, release, and fail-closed checks on the same merged tree.
+1. `T1` cannot make `HostAttachContract` authoritative without introducing a second durable attach object.
+2. `T2` cannot merge `policy_overlay` using shared resolver semantics and instead requires caller-specific patch logic.
+3. `T3` cannot implement the approved narrowing-only override family without broadening scope, policy, or unsupported capability fields.
+4. `T4` retained parity needs to reopen any frozen `G1` to `G3` hotspot.
+5. `T4T` regression coverage needs to touch any frozen runtime hotspot instead of external tests only.
+6. Equivalent human and orchestrator cold starts still resolve to different contract truth after `T1` to `T4`.
+7. Persisted attach flows still regain permissive defaults from ambient runtime state after `T1` or `T3`.
+8. Docs can only be made truthful by contradicting merged runtime behavior.
+9. The validation wall cannot be satisfied on the same merged tree as the final docs.
+10. `PLAN.md` changes materially after source lock and before `G6`.
+11. A worker edits files outside its assigned lane ownership and the parent cannot quarantine the drift cleanly.
 
-## Fresh Worktrees / Branches / Worker Model / Concurrency Cap
+Blocked-path discipline:
 
-Fresh worktree root:
+1. Parent writes `.runs/<run-id>/blocked.json`.
+2. Parent creates `.runs/<run-id>/sentinels/RUN_BLOCKED`.
+3. Parent writes the current stop reason into the active gate directory under `decision.md`.
+4. Parent records accepted lanes, rejected lanes, and unresolved files in `final-summary.md`.
+5. Rejected worker branches remain unmerged.
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup`
+## Fresh Worktree And Branch Protocol
 
-Authoritative integration checkout:
+All worker worktrees live under:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`
-- branch: `chore/uaa-boundary-and-naming-cleanup`
+- `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-s29-5-shared-dispatch-closeout`
 
-Worker worktrees:
+The parent integrates only in:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup/foundation-code`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup/scripts-release`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup/docs-adrs`
+- `/home/azureuser/__Active_Code/atomize-hq/substrate`
 
-Worker branches:
-
-- `codex/chore-uaa-boundary-and-naming-cleanup-foundation`
-- `codex/chore-uaa-boundary-and-naming-cleanup-scripts-release`
-- `codex/chore-uaa-boundary-and-naming-cleanup-docs-adrs`
-
-Exact setup order:
+Parent run-open commands:
 
 ```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup
+RUN_ROOT="/home/azureuser/__Active_Code/atomize-hq/substrate/.runs/slice-29-5-shared-dispatch-closeout-parity-hardening"
+WORKTREE_ROOT="/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-s29-5-shared-dispatch-closeout"
+REPO_ROOT="/home/azureuser/__Active_Code/atomize-hq/substrate"
 
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate fetch origin
-
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup/foundation-code \
-  -b codex/chore-uaa-boundary-and-naming-cleanup-foundation \
-  chore/uaa-boundary-and-naming-cleanup
+mkdir -p "$RUN_ROOT" "$WORKTREE_ROOT"
+git -C "$REPO_ROOT" status --short
+BASE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 ```
 
-Do not create the parallel worktrees until `G1` is accepted.
+Cut protocol rules:
+
+1. The parent records `BASE_HEAD` in `branch-map.json`.
+2. The parent snapshots dirty `PLAN.md` and current `ORCH_PLAN.md` into `.runs/**/source-lock/` before any worker starts.
+3. Every worker worktree is cut from a committed accepted gate tip, never from the dirty authoritative checkout state.
+4. The parent records each accepted gate tip SHA in `branch-map.json` before cutting the next lane.
+5. The parent merges worker branches back into the authoritative checkout; workers never self-merge.
+
+Lane creation commands:
+
+### `T1/L1` durable attach truth from `BASE_HEAD`
 
 ```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup/scripts-release \
-  -b codex/chore-uaa-boundary-and-naming-cleanup-scripts-release \
-  chore/uaa-boundary-and-naming-cleanup
-
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-uaa-boundary-cleanup/docs-adrs \
-  -b codex/chore-uaa-boundary-and-naming-cleanup-docs-adrs \
-  chore/uaa-boundary-and-naming-cleanup
+git -C "$REPO_ROOT" worktree add \
+  "$WORKTREE_ROOT/t1-durable-attach-truth" \
+  -b codex/feat-gateway-mediated-llm-fulfillment-t1-durable-attach-truth \
+  "$BASE_HEAD"
 ```
 
-Concurrency contract:
+### `T2/L2` policy overlay merge from accepted `G1` tip
 
-1. `P0` and `A1` / `A2` are serialized.
-2. `B1` and `C1` are the only honest parallel window.
-3. Peak concurrency is `2`, not `3`, because there is one shared foundation hotspot lane and two isolated follow-on lanes.
+```bash
+ACCEPTED_TIP_G1="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 
-## Parent-Owned Run-State Surface And Required Artifacts
+git -C "$REPO_ROOT" worktree add \
+  "$WORKTREE_ROOT/t2-policy-overlay-merge" \
+  -b codex/feat-gateway-mediated-llm-fulfillment-t2-policy-overlay-merge \
+  "$ACCEPTED_TIP_G1"
+```
+
+### `T3/L3` capability override closeout from accepted `G2` tip
+
+```bash
+ACCEPTED_TIP_G2="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+
+git -C "$REPO_ROOT" worktree add \
+  "$WORKTREE_ROOT/t3-capability-override-closeout" \
+  -b codex/feat-gateway-mediated-llm-fulfillment-t3-capability-override-closeout \
+  "$ACCEPTED_TIP_G2"
+```
+
+### `T4/L4` retained member parity and `T4T/L4T` frozen-surface regression lane from accepted `G3` tip
+
+```bash
+ACCEPTED_TIP_G3="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+
+git -C "$REPO_ROOT" worktree add \
+  "$WORKTREE_ROOT/t4-retained-member-parity" \
+  -b codex/feat-gateway-mediated-llm-fulfillment-t4-retained-member-parity \
+  "$ACCEPTED_TIP_G3"
+
+git -C "$REPO_ROOT" worktree add \
+  "$WORKTREE_ROOT/t4t-frozen-surface-regression-tests" \
+  -b codex/feat-gateway-mediated-llm-fulfillment-t4t-frozen-surface-regression-tests \
+  "$ACCEPTED_TIP_G3"
+```
+
+### `T5/L5` docs truth sync from accepted `G4` tip
+
+```bash
+ACCEPTED_TIP_G4="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+
+git -C "$REPO_ROOT" worktree add \
+  "$WORKTREE_ROOT/t5-docs-truth-sync" \
+  -b codex/feat-gateway-mediated-llm-fulfillment-t5-docs-truth-sync \
+  "$ACCEPTED_TIP_G4"
+```
+
+## Parent-Owned Run-State Surface
 
 Canonical run root:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-uaa-boundary-and-naming-cleanup/`
+- `/home/azureuser/__Active_Code/atomize-hq/substrate/.runs/slice-29-5-shared-dispatch-closeout-parity-hardening/`
 
-Required parent-owned top-level artifacts:
+Canonical artifact layout:
 
-- `run-state.json`
-- `source-lock.json`
-- `contract-freeze.json`
-- `branch-map.json`
-- `lane-ownership.json`
-- `merge-order.json`
-- `validation-wall.md`
-- `session-log.md`
-- `final-summary.md`
-- `blocked.json` on blocked runs only
-- `sentinels/`
-- `tasks/`
-- `gates/`
+```text
+.runs/slice-29-5-shared-dispatch-closeout-parity-hardening/
+  run-state.json
+  queue.json
+  session-log.md
+  branch-map.json
+  lane-ownership.json
+  hotspot-freeze.json
+  merge-order.json
+  validation-wall.md
+  final-summary.md
+  blocked.json                       # blocked runs only
+  source-lock/
+    PLAN.authoritative.md
+    ORCH_PLAN.authoritative.md
+    git-status.txt
+    sha256.json
+  sentinels/
+    RUN_OPEN
+    RUN_BLOCKED                      # blocked runs only
+    RUN_COMPLETE                     # successful runs only
+  tasks/
+    P0-parent-freeze/
+    T1-durable-attach-truth/
+    G1-phase1-accept/
+    T2-policy-overlay-merge/
+    G2-phase2-accept/
+    T3-capability-override-closeout/
+    G3-phase3-accept/
+    T4-retained-member-parity/
+    T4T-frozen-surface-regression-tests/
+    G4-parallel-window-accept/
+    T5-docs-truth-sync/
+    G5-docs-accept/
+    P1-validation-wall/
+    G6-final-accept/
+    P2-parent-closeout/
+  gates/
+    G0-run-open/
+    G1-phase1-accept/
+    G2-phase2-accept/
+    G3-phase3-accept/
+    G4-parallel-window-accept/
+    G5-docs-accept/
+    G6-final-accept/
+```
 
-Required sentinels:
+Parent-only top-level files:
 
-- `sentinels/RUN_OPEN`
-- `sentinels/RUN_BLOCKED` on blocked runs only
-- `sentinels/RUN_COMPLETE` on successful closeout only
+| File | Purpose |
+| --- | --- |
+| `run-state.json` | current gate, current task, run status, active lane count, accepted tip SHA |
+| `queue.json` | ordered task queue, dependencies, ready/running/accepted/blocked states |
+| `session-log.md` | chronological operator log of worker launches, merges, blockers, and gate decisions |
+| `branch-map.json` | branch names, worktree paths, cut SHAs, merge SHAs, acceptance SHAs |
+| `lane-ownership.json` | file ownership map and forbidden surfaces per lane |
+| `hotspot-freeze.json` | hotspot files, freeze gate, reopen policy |
+| `merge-order.json` | required merge order and actual merge order |
+| `validation-wall.md` | final merged-tree proof record |
+| `final-summary.md` | completion or blocked summary for the whole run |
+| `blocked.json` | machine-readable stop artifact when blocked |
 
-Frozen gate directories:
+Required `source-lock/` files:
 
-- `gates/G0-parent-contract-freeze/`
-- `gates/G1-foundation-accept-and-parallel-launch/`
-- `gates/G2-parallel-window-integration/`
-- `gates/G3-validation-launch/`
-- `gates/G4-final-acceptance/`
+1. `PLAN.authoritative.md`
+2. `ORCH_PLAN.authoritative.md`
+3. `git-status.txt`
+4. `sha256.json`
 
-Every gate directory must contain:
+Required sentinel semantics:
 
-- `gate.json`
-- `evidence.md`
-- one sentinel exactly one of:
-  - `OPEN`
-  - `PASSED`
-  - `FAILED`
-  - `REOPENED`
-
-Task map:
-
-- `tasks/P0-parent-contract-freeze-and-run-init/`
-- `tasks/A1-protocol-label-cutover/`
-- `tasks/A2-family-rename-foundation-cutover/`
-- `tasks/G1-foundation-accept-and-parallel-launch/`
-- `tasks/B1-scripts-ci-release-cutover/`
-- `tasks/C1-docs-adr-truth-convergence/`
-- `tasks/G2-parallel-window-integration/`
-- `tasks/P1-parent-parallel-integration/`
-- `tasks/G3-validation-launch/`
-- `tasks/P2-parent-validation-wall/`
-- `tasks/P3-parent-closeout/`
+1. `RUN_OPEN` exists after `G0`.
+2. `RUN_BLOCKED` exists only when the run is stopped.
+3. `RUN_COMPLETE` exists only after `G6` and `P2`.
 
 Every task directory must contain:
 
-- `task.json`
-- `owner.txt`
-- `status.txt`
-- `scope.txt`
-- `deliverable.txt`
-- `dependencies.json`
-- `changed-files.txt`
-- `commands.txt`
-- `exit-codes.json`
-- `impact-analysis-summary.md`
-- `gitnexus-detect-changes.txt`
-- `handoff-notes.md`
-- `summary.md`
-- `HEAD_SHA.txt`
-- `blocker-notes.md` if blocked
-- one sentinel exactly one of:
-  - `READY_FOR_REVIEW`
-  - `ACCEPTED`
-  - `REJECTED`
-  - `BLOCKED`
+1. `task.json`
+2. `scope.md`
+3. `owned-files.txt`
+4. `forbidden-surfaces.txt`
+5. `commands.txt`
+6. `acceptance.md`
+7. `status.json`
+8. `handoff.md` when work has been returned
 
-Worker artifact rule:
+Every gate directory must contain:
 
-1. Workers do not write `.runs/**`.
-2. Workers return handoff content to the parent.
-3. Parent transcribes the handoff into `.runs/**`, including changed files, commands, exit codes, impact notes, detect-changes output, acceptance notes, and blocker notes.
-4. Parent creates or replaces the task sentinel after transcription. Workers never create task sentinels.
-5. No task is complete until the parent writes the artifacts and marks the task `ACCEPTED`.
+1. `gate.json`
+2. `checklist.md`
+3. `diff-summary.md`
+4. `decision.md`
+5. `next-step.md`
+6. `status.json`
 
-`contract-freeze.json` must record at minimum:
+Parent-only `.runs/**` rule:
 
-1. `authoritative_branch: "chore/uaa-boundary-and-naming-cleanup"`
-2. locked rename families:
-   - `uaa.agent.session -> substrate.agent.session`
-   - `world-agent* -> world-service*`
-   - `agent-api* -> transport-api*`
-3. preserved names:
-   - upstream `agent_api`
-   - upstream `agent_api.*`
-   - `uaa_session_id`
-   - unchanged `world-api`
-4. the fail-closed rule for renamed service discovery and stale protocol labels
-5. the live rename boundary
-6. the historical allowlist
-7. the exact validation wall commands
-8. the initial worker cap of `1` and peak worker cap of `2`
+1. Workers do not write these artifacts directly.
+2. Workers return structured handoffs to the parent.
+3. The parent writes the canonical record into `.runs/**`.
+4. Full worker transcripts are not the source of truth; `.runs/**` artifacts are.
 
-## GitNexus Workflow And Required Impact Targets
+## Hotspot Ownership And Freeze Map
 
-GitNexus is a required run control, not a best-effort check.
+| Surface | Owner task | Freeze gate | Reopen policy |
+| --- | --- | --- | --- |
+| `crates/shell/src/execution/agent_runtime/orchestration_session.rs` | `T1` | `G1` | forbidden |
+| `crates/shell/src/execution/agent_runtime/dispatch_contract.rs` | `T1`, `T2`, `T3` | `G3` | forbidden after `G3` |
+| `crates/shell/src/execution/agents_cmd.rs` | `T1`, `T3` | `G3` | forbidden after `G3` |
+| `crates/shell/src/execution/policy_model.rs` | `T2` | `G2` | forbidden |
+| `crates/shell/src/execution/agent_inventory.rs` | `T2` | `G2` | forbidden |
+| `crates/shell/src/execution/agent_runtime/state_store.rs` | `T3` | `G3` | forbidden after `G3` |
+| `crates/shell/src/execution/agent_runtime/validator.rs` | `T3` | `G3` | forbidden after `G3` |
+| `crates/shell/src/repl/async_repl.rs` | `T4` | `G4` | forbidden after `G4` |
+| `crates/shell/src/execution/routing/dispatch/world_ops.rs` | `T4` if needed | `G4` | forbidden after `G4` |
+| `crates/shell/tests/repl_world_first_routing_v1.rs` | `T4` | `G4` | forbidden after `G4` |
+| `crates/shell/tests/agent_public_control_surface_v1.rs` | `T4T` | `G4` | test-only lane |
+| `crates/shell/tests/agent_successor_contract_ahcsitc0.rs` | `T4T` | `G4` | test-only lane |
+| `llm-last-mile/29*.md`, `30*.md`, `31*.md` | `T5` | `G5` | docs only |
 
-### Source-Lock Stage
+Freeze rule:
 
-1. Parent checks GitNexus availability and index freshness before any worker edits.
-2. If the index is stale, parent runs `npx gitnexus analyze` from the authoritative checkout before launching `A1`.
-3. Parent records the freshness result in `tasks/P0-parent-contract-freeze-and-run-init/impact-analysis-summary.md`.
+1. If any later lane needs a frozen runtime hotspot, stop the run.
+2. Do not silently shift frozen work into a later lane.
+3. The safe parallel window exists only because `T4T` does not own runtime hotspots.
 
-### Minimum Required Targets By Task
+## Dependency And Parallel-Lanes Table
 
-`A1` protocol-label cutover
+| Task | Description | Depends on | Safe to run in parallel with |
+| --- | --- | --- | --- |
+| `P0` | parent freeze and source lock | - | none |
+| `T1` | durable attach truth | `P0`, `G0` | none |
+| `T2` | policy overlay merge | `G1` | none |
+| `T3` | capability override closeout | `G2` | none |
+| `T4` | retained member parity | `G3` | `T4T` only |
+| `T4T` | frozen-surface regression tests | `G3` | `T4` only |
+| `T5` | docs truth sync | `G4` | none |
+| `P1` | validation wall | `G5` | none |
+| `P2` | closeout | `G6` | none |
 
-1. Concrete symbol targets if present:
-   - `LOCAL_AGENT_PROTOCOL_FAMILY`
-   - the validator entrypoint that accepts or rejects local protocol labels in `crates/shell/src/execution/agent_runtime/validator.rs`
-   - the trace-emission seam in `crates/common/src/agent_events.rs`
-2. File-level seam targets that must be analyzed if symbol names drift:
-   - `crates/shell/src/execution/agent_runtime/mapping.rs`
-   - `crates/shell/src/execution/agent_runtime/validator.rs`
-   - `crates/shell/src/execution/agent_runtime/session.rs`
-   - `crates/shell/src/execution/agent_runtime/orchestration_session.rs`
-   - `crates/shell/src/execution/agent_runtime/state_store.rs`
-   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+Parallel-lane rationale:
 
-`A2` family-rename foundation cutover
+1. `T1`, `T2`, and `T3` are serialized because they share the contract and durable-state hotspots.
+2. `T4` is safe only after `G3` freezes shared contract vocabulary and runtime hotspots.
+3. `T4T` is safe only because it is limited to external regression tests that validate already-frozen behavior.
+4. If `T4T` needs any frozen runtime hotspot, the parallel window closes immediately and the parent absorbs follow-up work after `G4`.
 
-1. Concrete symbol targets if present:
-   - the Linux world-routing or socket-activation resolution path that locates the in-world daemon
-   - the `world-agent` binary entrypoint crate target being renamed to `world-service`
-2. File-level seam targets that must be analyzed if symbol names drift:
-   - [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml)
-   - `crates/shell/src/repl/async_repl.rs`
-   - `crates/shell/src/execution/socket_activation.rs`
-   - `crates/shell/src/execution/platform/linux.rs`
-   - `crates/shell/src/execution/routing/world.rs`
-   - `crates/world-agent/**` or renamed equivalents
-   - `crates/agent-api-types/**`, `crates/agent-api-core/**`, and `crates/agent-api-client/**` or renamed equivalents
+## Task-Level Orchestration
 
-`B1` scripts / CI / release cutover
+### `P0` Parent Freeze
 
-1. File-level seam targets:
-   - `scripts/linux/world-provision.sh`
-   - `scripts/substrate/install-substrate.sh`
-   - `scripts/substrate/dev-install-substrate.sh`
-   - `scripts/substrate/uninstall-substrate.sh`
-   - `scripts/mac/lima-warm.sh`
-   - `scripts/mac/smoke.sh`
-   - `scripts/windows/wsl-warm.ps1`
-   - `scripts/windows/wsl-smoke.ps1`
-   - `scripts/windows/wsl-doctor.ps1`
-   - `dist/scripts/assemble-release-bundles.sh`
-   - `.github/workflows/feature-smoke.yml`
-   - `.github/workflows/nightly.yml`
-2. If GitNexus has script or workflow indexing for callable entrypoints in these files, analyze those entrypoints before editing; otherwise the file-level seam analysis is sufficient and must be stated explicitly in the handoff.
+Goal:
 
-`C1` docs / ADR / truth convergence
+1. lock the dirty working-tree `PLAN.md` as authoritative;
+2. lock this controller version;
+3. publish lane ownership, hotspot freeze, branch protocol, and queue state.
 
-1. File-level seam targets:
-   - `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-   - `docs/WORLD.md`
-   - `docs/TRACE.md`
-   - `docs/CONFIGURATION.md`
-   - `docs/INSTALLATION.md`
-   - `docs/UNINSTALL.md`
-   - `docs/USAGE.md`
-   - `README.md`
-   - `AGENTS.md`
-   - relevant ADRs under `docs/project_management/adrs/**`
-2. GitNexus impact is docs-truth only here. If no symbol-level targets are relevant, the worker must state that the lane is file-level and docs-only.
+Required parent actions:
 
-### Escalation Rule
+1. snapshot `PLAN.md`, `ORCH_PLAN.md`, and `git status --short` into `.runs/**/source-lock/`;
+2. initialize `queue.json`, `branch-map.json`, `lane-ownership.json`, `hotspot-freeze.json`, and `merge-order.json`;
+3. create all task and gate directories;
+4. set `run-state.json` to `status=open-pending-g0`.
 
-1. Any `HIGH` or `CRITICAL` impact result stops that worker before edits.
-2. The worker returns a blocker handoff instead of proceeding.
-3. Parent records the blocker, decides whether the run still fits the frozen contract, and either relaunches with a narrower brief or blocks the run.
+Acceptance:
 
-## Workstream Plan With Parent-Owned Gates And Worker-Owned Lanes
+1. source lock exists;
+2. dirty-tree state is recorded;
+3. workers can be launched without relying on mutable ambient context.
 
-### Workstream Map
+### `G0` Run-Open Gate
 
-| PLAN.md workstream | Orchestration tasks | Ownership |
-| --- | --- | --- |
-| Freeze vocabulary, rename matrix, grep wall, historical allowlist | `P0`, `G0` | Parent only |
-| Cut over `substrate.agent.session` on runtime, validation, trace, config, and persistence surfaces | `A1` | Foundation lane |
-| Rename `world-agent*` and `agent-api*` families on code and manifests; keep mixed-boundary imports clear | `A2` | Foundation lane |
-| Sweep scripts, CI, release bundles, install/warm/smoke/uninstall, and operator helper text | `B1` | Scripts/release lane |
-| Sweep docs, ADRs, repo truth docs, examples, operator guidance, and matrix language | `C1` | Docs/ADR lane |
-| Integrate, validate, and close out | `G2`, `P1`, `G3`, `P2`, `G4`, `P3` | Parent only |
+Parent verifies:
 
-### Parent-Owned Gates
+1. authoritative branch is `feat/gateway-mediated-llm-fulfillment`;
+2. current dirty `PLAN.md` snapshot is captured;
+3. worker ownership and forbidden surfaces are recorded;
+4. `RUN_OPEN` sentinel can be created safely.
 
-`G0`: Contract freeze
+Advance only if:
 
-1. Parent locks the rename matrix, preserved-name list, live boundary, historical allowlist, validation wall, and branch map.
-2. Parent confirms that no worker will need to guess names, scope, or final grep commands.
+1. no required run artifacts are missing;
+2. there is no unresolved ambiguity about the ordered execution shape.
 
-`G1`: Foundation acceptance and parallel launch
+### `T1 / L1` Durable Attach Truth First
 
-1. `A1` and `A2` are both merged or otherwise accepted into the authoritative branch.
-2. Parent confirms that shared hotspots are stable:
-   - manifests
-   - `crates/shell/**`
-   - local protocol validation and persistence seams
-   - mixed-boundary imports
-3. Parent confirms the new canonical names are real enough for downstream scripts and docs work.
-4. Only after `G1` is accepted may `B1` and `C1` start.
+Scope:
 
-`G2`: Parallel-window integration
+1. derive `HostAttachContract` from resolved host launch truth;
+2. persist attach-relevant capabilities and attach knobs from resolved truth;
+3. keep sync continuity-only;
+4. keep successor copy as generalized truth plus cleared continuity only.
 
-1. Parent receives both worker handoffs.
-2. Parent verifies each lane stayed inside its ownership boundary.
-3. Parent merges accepted outputs into `chore/uaa-boundary-and-naming-cleanup`.
-4. Parent quarantines any lane that reopens foundation hotspots without approval.
+Owned files:
 
-`G3`: Validation launch
+1. `crates/shell/src/execution/agent_runtime/orchestration_session.rs`
+2. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+3. `crates/shell/src/execution/agents_cmd.rs`
 
-1. Parent confirms the merged tree is the validation candidate.
-2. Parent confirms no pending naming disputes remain.
-3. Parent freezes the validation command list from the plan and starts `P2`.
+Forbidden surfaces:
 
-`G4`: Final acceptance
+1. `.runs/**`
+2. `PLAN.md`
+3. `ORCH_PLAN.md`
+4. `policy_model.rs`
+5. `agent_inventory.rs`
+6. `state_store.rs`
+7. `validator.rs`
+8. `async_repl.rs`
+9. `world_ops.rs`
+10. docs
 
-1. Grep wall is green outside the historical allowlist.
-2. Cargo wall is green.
-3. Operator surface gates are green.
-4. Release gates are green.
-5. Fail-closed checks are green.
-6. Parent runs final GitNexus scope verification and writes closeout.
-
-### Worker-Owned Lanes
-
-`A` Foundation code lane: serialized under one owner
-
-1. `A1` protocol-label cutover
-2. `A2` family rename cutover
-
-`B` Scripts / CI / release lane: launch only after `G1`
-
-1. install and provision scripts
-2. dev-install and uninstall scripts
-3. Lima and WSL warm/smoke/doctor helpers
-4. release bundle assembly
-5. CI workflow package invocations and smoke checks
-6. operator helper, remediation, and script output text in those surfaces
-
-`C` Docs / ADR / truth lane: launch only after `G1`
-
-1. live docs
-2. repo truth docs
-3. ADRs
-4. README and AGENTS guidance
-5. examples, diagrams, and operator remediation wording in docs
-
-## Task Execution Contracts
-
-### `P0-parent-contract-freeze-and-run-init`
-
-Primary owned surfaces:
-
-- [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
-- [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md)
-- `.runs/plan-uaa-boundary-and-naming-cleanup/**`
-
-Required actions:
-
-1. Freeze the rename matrix, preserved-name list, live rename boundary, historical allowlist, and validation wall exactly from the current plan.
-2. Create `branch-map.json`, `lane-ownership.json`, `merge-order.json`, and `contract-freeze.json`.
-3. Record GitNexus freshness status and the concurrency contract.
-4. Write the initial gate and task directories with `OPEN` and `READY_FOR_REVIEW` only where appropriate for parent-owned setup completion.
-
-Verification commands:
+Required commands/tests:
 
 ```bash
-test -f /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md
-test -f /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md
-```
-
-Acceptance conditions:
-
-1. No worker would need to guess names, ownership, or final validation commands.
-2. `.runs/**` skeleton exists on paper with required artifacts and sentinel rules.
-3. Parent has recorded whether GitNexus freshness work is needed before `A1`.
-
-### `A1-protocol-label-cutover`
-
-Primary owned surfaces or file families:
-
-- `crates/common/src/agent_events.rs`
-- `crates/shell/src/execution/agent_runtime/**`
-- `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-- `config/**`
-- code-adjacent tests and fixtures for local protocol validation, trace emission, and persisted runtime state
-
-Required actions:
-
-1. Replace the canonical local protocol-family label from `uaa.agent.session` to `substrate.agent.session`.
-2. Update validator success paths, rejection text, config examples, emitted traces, transport payloads, durable writes, and durable reload paths to the new label.
-3. Rewrite supported fixtures and checked-in examples that still treat `uaa.agent.session` as supported canonical input.
-4. Make stale old-label configs or persisted rows fail closed with explicit operator-readable errors.
-5. Preserve upstream `agent_api.*` ids and `uaa_session_id` semantics unchanged.
-
-Verification commands:
-
-```bash
-cargo test -p shell agents_validate -- --nocapture
+cargo test -p shell dispatch_contract -- --nocapture
 cargo test -p shell agent_successor_contract_ahcsitc0 -- --nocapture
-rg -n "substrate\.agent\.session|uaa\.agent\.session" crates/common crates/shell config
 ```
 
-Acceptance conditions:
+Acceptance criteria:
 
-1. `substrate.agent.session` is the only supported canonical local protocol-family label on live code and config surfaces owned by `A1`.
-2. `uaa.agent.session` no longer succeeds silently on supported live paths.
-3. Trace, status, validation, and persistence seams owned by `A1` all reflect the new label.
-4. No upstream capability or session-correlation semantics changed.
+1. birth-time host attach truth comes from resolved contract truth;
+2. persisted attach planning no longer reconstructs permissive baseline truth from ambient participant state;
+3. successor copy preserves generalized truth and clears only continuity-specific state;
+4. handoff includes exact files changed, tests run, tests not run, and unresolved concerns.
 
-### `A2-family-rename-foundation-cutover`
+### `G1` Phase 1 Gate
 
-Primary owned surfaces or file families:
+Parent verifies:
 
-- [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml)
-- `dist-workspace.toml`
-- `crates/world-agent/**` to be renamed
-- `crates/agent-api-types/**`, `crates/agent-api-core/**`, `crates/agent-api-client/**` to be renamed
-- mixed-boundary code under `crates/shell/**`
-- code-level service discovery and doctor logic coupled to renamed package, binary, socket, or unit names
+1. only owned files changed;
+2. `HostAttachContract` remains the only durable attach object;
+3. no ambient-state fallback path survived in the touched attach flow;
+4. committed accepted tip is recorded in `branch-map.json`.
 
-Required actions:
+Advance only if:
 
-1. Rename `world-agent*` to `world-service*` across workspace members, package names, Rust crate ids, and binary names.
-2. Rename `agent-api*` to `transport-api*` across workspace members, package names, Rust crate ids, and imports.
-3. Update mixed-boundary consumers so upstream `agent_api` remains visually distinct from local `transport_api_*`.
-4. Preserve `world-api` unchanged.
-5. Keep service discovery fail closed when renamed binary, unit, or socket lookup breaks.
+1. durable attach schema is frozen enough for later phases;
+2. no `T2` or `T3` assumptions are required to explain `T1`.
 
-Verification commands:
+### `T2 / L2` Policy Overlay Merge Second
+
+Scope:
+
+1. expose or reuse one shared policy patch helper;
+2. apply validated inventory `policy_overlay` into `ResolvedLaunchContract.effective_policy`;
+3. return exact policy diagnostics and provenance.
+
+Owned files:
+
+1. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+2. `crates/shell/src/execution/policy_model.rs`
+3. `crates/shell/src/execution/agent_inventory.rs`
+
+Forbidden surfaces:
+
+1. `.runs/**`
+2. `PLAN.md`
+3. `ORCH_PLAN.md`
+4. `orchestration_session.rs`
+5. `state_store.rs`
+6. `validator.rs`
+7. `agents_cmd.rs`
+8. `async_repl.rs`
+9. `world_ops.rs`
+10. docs
+
+Required commands/tests:
 
 ```bash
-cargo build --workspace
-cargo test -p world-service -- --nocapture
-cargo test -p transport-api-types -- --nocapture
-cargo test -p transport-api-core -- --nocapture
-cargo test -p transport-api-client -- --nocapture
-rg -n "world-agent|world_agent|substrate-world-agent|agent-api-types|agent-api-core|agent-api-client|agent_api_types|agent_api_core|agent_api_client" Cargo.toml dist-workspace.toml crates
+cargo test -p shell dispatch_contract -- --nocapture
 ```
 
-Acceptance conditions:
+Acceptance criteria:
 
-1. Workspace manifests and crate imports compile with `world-service` and `transport-api*`.
-2. Mixed-boundary consumers remain readable: upstream `agent_api` untouched, local transport crates clearly renamed.
-3. `world-api` is unchanged.
-4. Code-level service discovery and doctor logic no longer depend on stale canonical `world-agent` naming.
+1. overlay-backed resolution returns materially narrower `effective_policy` where appropriate;
+2. overlay-free resolution stays unchanged;
+3. diagnostics explain overlay acceptance or denial at the policy layer;
+4. no parallel policy semantics are introduced outside the shared resolver path.
 
-### `B1-scripts-ci-release-cutover`
+### `G2` Phase 2 Gate
 
-Primary owned surfaces or file families:
+Parent verifies:
 
-- `scripts/**`
-- `.github/**`
-- `dist/**`
-- live packaging or launch helpers under `macos-hardening/**` if applicable
+1. only owned files changed;
+2. one merge semantics source is used;
+3. overlay behavior remains narrowing-only;
+4. accepted `G2` tip SHA is recorded before cutting `T3`.
 
-Required actions:
+Advance only if:
 
-1. Rename package, binary, alias, socket, and systemd unit references to `world-service` and `substrate-world-service`.
-2. Update install, dev-install, uninstall, provision, warm, smoke, and doctor flows to the new daemon and transport family names.
-3. Update release bundle assembly and release template payload naming.
-4. Update CI workflow package invocations and smoke steps.
-5. Ensure upgrade-capable paths remove or stop legacy `substrate-world-agent` assets where the plan requires cleanup.
+1. policy truth is frozen enough to support capability closeout and later parity;
+2. no caller-specific overlay behavior survives.
 
-Verification commands:
+### `T3 / L3` Capability Override Closeout Third
+
+Scope:
+
+1. implement field-by-field override handling;
+2. support only narrowing-only overrides for:
+   `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, `event_stream`;
+3. keep `session_start`, `llm`, and `mcp_client` rejected with field-scoped fail-closed diagnostics;
+4. keep persisted attach launches rejecting dispatch-time capability overrides;
+5. ensure persisted narrowed truth drives later state-store gates.
+
+Owned files:
+
+1. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+2. `crates/shell/src/execution/agent_runtime/state_store.rs`
+3. `crates/shell/src/execution/agent_runtime/validator.rs`
+4. `crates/shell/src/execution/agents_cmd.rs`
+
+Forbidden surfaces:
+
+1. `.runs/**`
+2. `PLAN.md`
+3. `ORCH_PLAN.md`
+4. `orchestration_session.rs`
+5. `policy_model.rs`
+6. `agent_inventory.rs`
+7. `async_repl.rs`
+8. `world_ops.rs`
+9. docs
+
+Required commands/tests:
 
 ```bash
-rg -n "world-agent|substrate-world-agent|agent-api-types|agent-api-core|agent-api-client" scripts .github dist macos-hardening
-rg -n "world-service|substrate-world-service|transport-api-types|transport-api-core|transport-api-client" scripts .github dist macos-hardening
-./dist/scripts/assemble-release-bundles.sh
+cargo test -p shell dispatch_contract -- --nocapture
+cargo test -p shell agent_public_control_surface_v1 -- --nocapture
 ```
 
-Acceptance conditions:
+Acceptance criteria:
 
-1. Live scripts, workflows, and release surfaces use the renamed service and transport families consistently.
-2. No operator helper script or release script points canonical usage back to `substrate-world-agent`.
-3. Release bundle assembly and CI naming surfaces prove the cutover beyond code compilation.
+1. approved override family works as narrowing-only;
+2. unsupported fields fail closed with exact field names and bounded reasons;
+3. later attach and control paths observe persisted narrowed truth;
+4. shared contract vocabulary is frozen enough for retained parity.
 
-### `C1-docs-adr-truth-convergence`
+### `G3` Phase 3 Gate
 
-Primary owned surfaces or file families:
+Parent verifies:
 
-- `docs/**`
-- `README.md`
-- `AGENTS.md`
-- `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-- relevant ADRs under `docs/project_management/adrs/**`
+1. only owned files changed;
+2. approved support matrix matches the authoritative plan;
+3. denial wording is field-scoped and truthful;
+4. `dispatch_contract.rs`, `state_store.rs`, `validator.rs`, and `agents_cmd.rs` can be frozen;
+5. accepted `G3` tip SHA is recorded before cutting the parallel window.
 
-Required actions:
+Advance only if:
 
-1. Rewrite docs, ADRs, and truth docs so upstream UAA, local `transport-api*`, local `world-service*`, unchanged `world-api`, and local `substrate.agent.session` are clearly separated.
-2. Update operator examples and remediation guidance to the new canonical names.
-3. Remove live doc guidance that still teaches `uaa.agent.session` or `substrate-world-agent` as supported canonical names.
-4. Keep historical references only where explicitly allowable as historical.
+1. shared contract vocabulary is stable;
+2. persisted narrowed truth is already real;
+3. any need to reopen these hotspots would be a blocker.
 
-Verification commands:
+### `T4 / L4` Retained Member Parity
+
+Scope:
+
+1. build the shared-contract-derived retained-turn subset;
+2. feed typed transport from that subset;
+3. keep retained follow-up turns off inventory and config re-resolution;
+4. own parity-specific integration coverage.
+
+Owned files:
+
+1. `crates/shell/src/repl/async_repl.rs`
+2. `crates/shell/src/execution/routing/dispatch/world_ops.rs` if additive wiring is required
+3. `crates/shell/tests/repl_world_first_routing_v1.rs`
+
+Forbidden surfaces:
+
+1. `.runs/**`
+2. `PLAN.md`
+3. `ORCH_PLAN.md`
+4. all frozen `G1` to `G3` runtime hotspots
+5. docs
+
+Required commands/tests:
 
 ```bash
-rg -n "world-agent|substrate-world-agent|agent-api-types|agent-api-core|agent-api-client|uaa\.agent\.session" docs README.md AGENTS.md AGENT_ORCHESTRATION_GAP_MATRIX.md
-rg -n "world-service|substrate-world-service|transport-api-types|transport-api-core|transport-api-client|substrate\.agent\.session|world-api|agent_api\." docs README.md AGENTS.md AGENT_ORCHESTRATION_GAP_MATRIX.md
+cargo test -p shell repl_world_first_routing_v1 -- --nocapture
 ```
 
-Acceptance conditions:
+Acceptance criteria:
 
-1. Live docs and ADRs tell the same boundary story as the merged code and scripts tree.
-2. Canonical examples use `substrate.agent.session`, `world-service*`, and `transport-api*`.
-3. No live operator doc instructs readers to inspect `substrate-world-agent` or configure `uaa.agent.session`.
+1. retained follow-up turns no longer own launch selection semantics;
+2. retained follow-up turns use shared-contract-derived subset truth;
+3. typed transport remains intact;
+4. no frozen hotspot was reopened.
 
-### `P1-parent-parallel-integration`
+### `T4T / L4T` Frozen-Surface Regression Tests
 
-Primary owned surfaces:
+Scope:
 
-- authoritative branch `chore/uaa-boundary-and-naming-cleanup`
-- `.runs/**`
+1. add or extend tests for durable attach truth, overlay merge, override persistence, and successor truth on already-frozen behavior;
+2. validate the merged contract floor from outside the frozen runtime hotspots.
 
-Required actions:
+Owned files:
 
-1. Review `B1` and `C1` handoffs against ownership boundaries.
-2. Merge accepted lane outputs in the frozen order.
-3. Replay or quarantine lanes when overlap breaks the ownership contract.
-4. Record integration outcomes, replays, and quarantines in `.runs/**`.
+1. `crates/shell/tests/agent_public_control_surface_v1.rs`
+2. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+3. additional external shell test files only if the parent pre-approves them in `lane-ownership.json`
 
-Verification commands:
+Forbidden surfaces:
+
+1. every frozen runtime hotspot from `G1` to `G3`
+2. `async_repl.rs`
+3. `world_ops.rs`
+4. docs
+5. `.runs/**`
+6. `PLAN.md`
+7. `ORCH_PLAN.md`
+
+Why this lane is safe:
+
+1. it branches from the accepted `G3` tip;
+2. it touches only external regression test files;
+3. it validates already-frozen semantics rather than defining new runtime behavior.
+
+If this lane needs a frozen runtime hotspot:
+
+1. stop the lane immediately;
+2. mark the issue in `G4` as a blocker;
+3. collapse the work back to parent-owned post-merge follow-up or re-plan the run.
+
+Required commands/tests:
 
 ```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate status --short
+cargo test -p shell agent_public_control_surface_v1 -- --nocapture
+cargo test -p shell agent_successor_contract_ahcsitc0 -- --nocapture
 ```
 
-Acceptance conditions:
+Acceptance criteria:
 
-1. The authoritative branch contains exactly the accepted outputs from `B1` and `C1`.
-2. Any overlap is resolved by explicit replay or quarantine, not silent manual blending.
-3. `.runs/**` reflects the actual merge and replay history.
+1. only approved test files changed;
+2. no frozen runtime hotspot changed;
+3. test coverage closes Phase-1-to-3 proof gaps without mutating frozen semantics.
 
-### `P2-parent-validation-wall`
+### `G4` Parallel Window Gate
 
-Primary owned surfaces:
+Parent verifies:
 
-- merged authoritative tree
-- `.runs/**`
+1. `T4` and `T4T` stayed inside disjoint ownership boundaries;
+2. `T4` did not reopen frozen `G1` to `G3` hotspots;
+3. `T4T` touched only approved external test files;
+4. retained parity lands first if merge order matters;
+5. compatible regression tests are replayed or rebased onto the accepted `G4` tip if necessary.
 
-Required actions:
+Advance only if:
 
-1. Run the grep gates.
-2. Run the cargo gates.
-3. Run the operator surface gates.
-4. Run the release gates.
-5. Record fail-closed proof points and environment blockers, if any.
+1. the only safe parallel window remained honest;
+2. retained parity truth and frozen-surface regression coverage can coexist on one accepted tree.
 
-Verification commands:
+### `T5 / L5` Docs Truth Sync Last
 
-1. The exact grep, cargo, operator, release, and fail-closed commands already frozen in `Validation Wall`.
+Scope:
 
-Acceptance conditions:
+1. update slice docs so 29, 29.5, 30, and 31 agree on shipped semantics;
+2. update nearby runtime comments or ASCII diagrams only if merged code made them stale;
+3. do not change runtime semantics in this lane.
 
-1. The validation wall is green or explicitly blocked by environment availability with no ambiguity about follow-up.
-2. The merged tree proves the rename across code, scripts, docs, release surfaces, and operator flows.
-3. Parent records exact commands, exit codes, and evidence in `.runs/**`.
+Owned files:
 
-### `P3-parent-closeout`
+1. `llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md`
+2. `llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md`
+3. `llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md`
+4. nearby comments or diagrams only if parent explicitly authorizes them
 
-Primary owned surfaces:
+Forbidden surfaces:
 
-- `.runs/**`
-- final authoritative branch state
+1. all runtime files
+2. `.runs/**`
+3. `PLAN.md`
+4. `ORCH_PLAN.md`
 
-Required actions:
+Required checks:
 
-1. Run final `gitnexus_detect_changes()` on the merged tree.
-2. Confirm the changed scope matches the frozen plan.
-3. Write `final-summary.md`, task and gate outcomes, and `RUN_COMPLETE`.
-4. If the run cannot close honestly, write `blocked.json` instead.
+1. manual cross-check against accepted merged runtime semantics;
+2. no runtime file drift.
 
-Verification commands:
+Acceptance criteria:
 
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate status --short
-```
+1. docs describe shipped semantics, not aspirational semantics;
+2. downstream slices can cite 29.5 as the truthful floor;
+3. no runtime hotspot is reopened.
 
-Acceptance conditions:
+### `G5` Docs Gate
 
-1. Final run-state artifacts match the actual merged result.
-2. Parent has recorded final scope verification and residual risks.
-3. The run ends with exactly one terminal sentinel: `RUN_COMPLETE` or `RUN_BLOCKED`.
+Parent verifies:
 
-## Exact Lane Ownership Boundaries By Directories / Modules
+1. only docs or explicitly approved nearby comment surfaces changed;
+2. docs match the merged runtime behavior from `G4`;
+3. there is no new semantic claim unsupported by tests or code.
 
-### Lane A: Foundation Code Ownership
+Advance only if:
 
-Owns these surfaces end to end:
+1. docs are last and truthful;
+2. the validation wall can run on the exact merged tree.
 
-- [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml)
-- `dist-workspace.toml`
-- `crates/common/**` where protocol-family trace identity is emitted
-- `crates/shell/**`
-- `crates/world-agent/**` to be renamed to `crates/world-service/**`
-- `crates/agent-api-types/**` to be renamed to `crates/transport-api-types/**`
-- `crates/agent-api-core/**` to be renamed to `crates/transport-api-core/**`
-- `crates/agent-api-client/**` to be renamed to `crates/transport-api-client/**`
-- code-adjacent tests and fixtures under those crates
-- `config/**` for supported live protocol examples
+### `P1` Parent Validation Wall
 
-Lane A owns both of these subproblems:
+Goal:
 
-1. protocol-label cutover:
-   - `uaa.agent.session -> substrate.agent.session`
-   - validators
-   - trace emission
-   - transport payloads
-   - durable writes and reload paths
-   - fail-closed handling for stale rows and configs
-2. family renames:
-   - `world-agent* -> world-service*`
-   - `agent-api* -> transport-api*`
-   - workspace members
-   - package names
-   - Rust crate ids
-   - mixed-boundary imports
-   - in-code service discovery and doctor logic that depends on the renamed family
+1. prove the authoritative `PLAN.md` acceptance criteria on the merged tree;
+2. record commands, results, and manual proof notes in `validation-wall.md`.
 
-Lane A may also touch:
-
-- code-level doctor or remediation strings that are directly coupled to renamed runtime or service discovery logic
-
-Lane A may not defer any shared-hotspot name choice to later lanes.
-
-### Lane B: Scripts / CI / Release Ownership
-
-Owns these surfaces after `G1`:
-
-- `scripts/**`
-- `.github/**`
-- `dist/**`
-- `macos-hardening/**` if the file is part of live packaging, launch, or operator setup
-
-Lane B specifically owns:
-
-1. package invocation updates
-2. binary, alias, socket, and systemd unit references in scripts
-3. install, warm, smoke, doctor, provision, and uninstall flows
-4. release payload staging and release-template references
-5. upgrade cleanup of legacy `substrate-world-agent` units or binaries where required by the plan
-
-Lane B may not edit:
-
-- crate code
-- workspace manifests
-- local protocol validation logic
-- docs or ADR narrative except tiny inline comments inside its own scripts if needed
-
-### Lane C: Docs / ADR / Truth Ownership
-
-Owns these surfaces after `G1`:
-
-- `docs/**`
-- `README.md`
-- `AGENTS.md`
-- `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-- `docs/project_management/adrs/**`
-
-Lane C specifically owns:
-
-1. upstream-vs-local boundary wording
-2. examples using `substrate.agent.session`
-3. docs and ADR references to `world-service*`
-4. docs and ADR references to `transport-api*`
-5. truth-table cleanup so no live doc implies local transport equals upstream UAA
-
-Lane C may not edit:
-
-- crate code
-- scripts
-- CI files
-- release bundle assembly
-- manifests
-
-### Hotspot No-Split List
-
-These surfaces must not be split across concurrent workers:
-
-1. [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml)
-2. `dist-workspace.toml`
-3. `crates/shell/**`
-4. any file importing upstream `agent_api` and local transport crates in the same module
-5. any validator, mapping, trace, routing, or persistence file that interprets the local protocol-family label
-6. any code path that resolves the renamed `world-service` binary, unit, or socket
-
-## Merge / Integration Order
-
-Frozen integration order:
-
-1. `P0-parent-contract-freeze-and-run-init`
-2. `A1-protocol-label-cutover`
-3. `A2-family-rename-foundation-cutover`
-4. `G1-foundation-accept-and-parallel-launch`
-5. parallel launch:
-   - `B1-scripts-ci-release-cutover`
-   - `C1-docs-adr-truth-convergence`
-6. `G2-parallel-window-integration`
-7. `P1-parent-parallel-integration`
-8. `G3-validation-launch`
-9. `P2-parent-validation-wall`
-10. `G4-final-acceptance`
-11. `P3-parent-closeout`
-
-Integration rule inside the parallel window:
-
-1. `B1` merges before `C1` unless the parent explicitly records that there is zero overlap.
-2. Reason: script, release, and operator helper names are execution surfaces; docs and ADRs should match the final merged operator vocabulary.
-3. Parent must diff the `B1` and `C1` file sets before merge. This is mandatory, not optional.
-4. If `B1` and `C1` overlap unexpectedly on any file outside an explicitly parent-approved shared file list, parent immediately rejects the later lane handoff and records `REJECTED` pending replay.
-5. If `C1` was prepared before the final `B1` operator-visible naming settled, parent must replay or rebase `C1` on the accepted `B1` tree before `C1` can become `ACCEPTED`.
-6. Parent may not manually cherry-pick prose fragments from a rejected `C1` handoff into the authoritative tree. The lane must be replayed as a coherent docs pass.
-7. If `B1` reopens any foundation hotspot, parent quarantines the lane and either narrows the brief or blocks the run.
-
-## Validation Wall
-
-Parent owns and runs the full validation wall on the merged tree only.
-
-### Grep Gates
-
-Zero-hit wall on live surfaces:
+Required commands:
 
 ```bash
-rg -n "world-agent|world_agent|substrate-world-agent|agent-api-types|agent-api-core|agent-api-client|agent_api_types|agent_api_core|agent_api_client|uaa\.agent\.session" \
-  Cargo.toml dist-workspace.toml crates scripts docs .github dist README.md AGENTS.md config macos-hardening
-```
-
-Positive guardrails that must still succeed:
-
-```bash
-rg -n "agent_api\.run|agent_api\.session\.resume\.v1|agent_api\.session\.handle\.v1" crates docs config
-rg -n "world-api" Cargo.toml crates docs
-rg -n "world-service|substrate-world-service|transport-api-types|transport-api-core|transport-api-client|transport_api_types|transport_api_core|transport_api_client|substrate\.agent\.session" \
-  Cargo.toml dist-workspace.toml crates scripts docs .github dist README.md AGENTS.md config macos-hardening
-```
-
-### Cargo Gates
-
-```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo build --workspace
-cargo test --workspace -- --nocapture
+cargo test -p shell dispatch_contract -- --nocapture
+cargo test -p shell agent_public_control_surface_v1 -- --nocapture
+cargo test -p shell repl_world_first_routing_v1 -- --nocapture
+cargo test -p shell agent_successor_contract_ahcsitc0 -- --nocapture
 cargo test -p shell -- --nocapture
-cargo test -p world-service -- --nocapture
-cargo test -p transport-api-types -- --nocapture
-cargo test -p transport-api-core -- --nocapture
-cargo test -p transport-api-client -- --nocapture
-cargo test -p world-mac-lima -- --nocapture
-cargo test -p world-windows-wsl -- --nocapture
-cargo test -p substrate-replay -- --nocapture
+cargo clippy -p shell --all-targets -- -D warnings
+cargo fmt --all -- --check
 ```
 
-### Operator Surface Gates
+Parent proof record must include:
 
-Linux:
+1. command results;
+2. manual checks;
+3. any skipped coverage with reason;
+4. exact merged commit SHA used for validation.
 
-```bash
-systemctl status substrate-world-service.socket --no-pager
-systemctl status substrate-world-service.service --no-pager
-systemctl list-unit-files | rg "substrate-world-agent"
-substrate host doctor --json | jq .
-substrate world doctor --json | jq .
-```
+### `G6` Final Acceptance Gate
 
-macOS Lima:
+Parent verifies the merged tree against the final acceptance matrix below and then either:
 
-```bash
-scripts/mac/lima-warm.sh --check-only
-scripts/mac/smoke.sh
-limactl shell substrate systemctl status substrate-world-service.socket
-limactl shell substrate systemctl status substrate-world-service.service
-```
+1. accepts the run and creates `RUN_COMPLETE`; or
+2. blocks the run and creates `RUN_BLOCKED`.
 
-WSL:
+### `P2` Parent Closeout
 
-```powershell
-pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
-pwsh -File scripts/windows/wsl-smoke.ps1
-pwsh -File scripts/windows/wsl-doctor.ps1
-```
+Parent actions:
 
-### Release Gates
+1. finalize `run-state.json`, `queue.json`, `session-log.md`, `validation-wall.md`, and `final-summary.md`;
+2. record accepted merge SHAs and final merged tip SHA;
+3. create `RUN_COMPLETE` only if `G6` passed;
+4. leave rejected or blocked worker branches unmerged.
 
-```bash
-./dist/scripts/assemble-release-bundles.sh
-rg -n "world-service|substrate-world-service" dist/release-template.md dist/scripts/assemble-release-bundles.sh
-```
+## Context-Control Rules
 
-### Fail-Closed Checks
+Parent live context:
 
-1. `protocol: substrate.agent.session` validates.
-2. Old `uaa.agent.session` live configs or persisted rows are rejected clearly after cutover.
-3. World-required routing still hard-fails if renamed service discovery breaks.
-4. No doctor, help, or remediation string points operators back to `substrate-world-agent`.
+1. authoritative dirty `PLAN.md` snapshot;
+2. current controller snapshot;
+3. current accepted gate tip SHA;
+4. lane ownership map;
+5. hotspot freeze map;
+6. queue state and current blocker state.
 
-### Manual Validation Proof Points
+Every worker prompt should contain:
 
-Parent closeout must explicitly record proof of:
+1. task ID and lane ID;
+2. goal and acceptance criteria;
+3. owned files;
+4. forbidden surfaces;
+5. authoritative source-lock reminder;
+6. required tests or commands;
+7. explicit stop conditions.
 
-1. canonical config and docs use `protocol: substrate.agent.session`,
-2. live trace identity emits `substrate.agent.session`,
-3. local host↔world contract crates are `transport-api-*`,
-4. local in-world daemon surfaces are `world-service*`,
-5. `world-api` remains unchanged,
-6. stale old-name live surfaces are gone outside the historical allowlist,
-7. world-required rename drift still fails closed,
-8. upstream `agent_api.*` wording remains unchanged.
+Every worker must return:
 
-## Blocked-Run Contract
+1. files changed;
+2. tests run;
+3. tests not run;
+4. assumptions made;
+5. blockers encountered;
+6. any evidence that the frozen gate assumptions are no longer valid.
 
-If the run blocks, parent writes:
+Context discipline:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-uaa-boundary-and-naming-cleanup/blocked.json`
+1. Workers get only the context needed for their lane.
+2. Workers treat all frozen hotspots outside their ownership as read-only.
+3. Workers stop on unexpected pre-existing edits in owned files.
+4. Workers do not broaden scope, normalize unrelated formatting, or rewrite docs unless assigned.
+5. Full worker transcripts are not the run ledger; parent-authored `.runs/**` artifacts are.
 
-Required fields:
+## Validation Wall And Final Acceptance Matrix
 
-- `run_id`
-- `authoritative_branch`
-- `timestamp`
-- `current_task_id`
-- `gate_state`
-- `summary`
-- `stop_condition_id`
-- `worker_lane`
-- `blocking_files`
-- `accepted_outputs`
-- `quarantined_outputs`
-- `next_required_parent_action`
+The merged tree must satisfy all of the following before the run is complete.
 
-Blocked-run rules:
-
-1. `blocked.json` is parent-written only.
-2. It is written exactly once at the stop point.
-3. No further worker launches occur after it is written.
-4. Existing worker outputs are either accepted and recorded or quarantined and named explicitly.
-
-## Context-Control Rules For Parent And Workers
-
-### Parent Rules
-
-1. Parent keeps the canonical plan state in `.runs/**` only.
-2. Parent is the only actor allowed to reopen a gate or reinterpret the rename contract.
-3. Parent must keep the frozen rename matrix and live boundary visible in every worker brief.
-4. Parent owns all cross-lane rebases, merges, and acceptance decisions.
-5. Parent records GitNexus findings, handoffs, validation commands, and final acceptance artifacts.
-
-### Worker Rules
-
-1. Read [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), this controller, and only the lane-relevant files before editing.
-2. Do not widen scope beyond the lane boundary.
-3. Run GitNexus impact analysis before editing symbols in the owned lane.
-4. Stop and escalate on `HIGH` or `CRITICAL` impact.
-5. Do not write `.runs/**`.
-6. Do not edit [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) or [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md).
-7. Handoffs must include:
-   - changed files
-   - commands run
-   - exit codes
-   - GitNexus impact summary
-   - `gitnexus_detect_changes()` output
-   - blockers or residual risks
-
-### Context Hygiene
-
-1. No worker loads broad unrelated surfaces just because the rename is repo-wide.
-2. Lane A reads only the code, manifests, config, and code-adjacent tests it owns.
-3. Lane B reads only scripts, CI, release, and packaging surfaces after `G1`.
-4. Lane C reads only docs, ADRs, truth docs, and guidance surfaces after `G1`.
-5. Archived or historical files are read only when needed to prove allowlist rationale.
-
-## Acceptance / Completion Criteria
-
-The run is complete only when all of the following are true on the merged tree:
-
-1. `P0`, `A1`, `A2`, `B1`, `C1`, `P1`, `P2`, and `P3` are accepted by the parent.
-2. The rename contract in `.runs/**` matches [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) exactly.
-3. The foundation lane completed before the parallel lanes started.
-4. The live-surface grep wall is green outside the historical allowlist.
-5. Positive guardrails still show upstream `agent_api.*`, unchanged `world-api`, and the new canonical local names.
-6. Cargo fmt, clippy, build, workspace tests, and targeted renamed-package tests are green.
-7. Linux, Lima, and WSL operator surface gates are green or explicitly recorded as environment-blocked with no ambiguity about required follow-up.
-8. Release bundle assembly is green and stages the renamed payloads.
-9. Fail-closed checks prove stale `uaa.agent.session` and broken renamed service discovery do not silently succeed.
-10. Code, scripts, release bundles, CI, docs, ADRs, fixtures, and operator guidance all tell one coherent boundary story.
-11. Parent runs final `gitnexus_detect_changes()` and confirms the changed scope matches the plan.
-12. Parent writes `final-summary.md` and marks `sentinels/RUN_COMPLETE`.
-
-## Task Acceptance Checklist
-
-| Task | Done means |
+| Final check | Mapped PLAN requirement |
 | --- | --- |
-| `P0` | Rename contract, live boundary, historical allowlist, validation wall, branch map, lane ownership, and `.runs` artifact contract are frozen in parent-owned artifacts. |
-| `A1` | `substrate.agent.session` is canonical on owned live code and config surfaces, stale `uaa.agent.session` fails closed, and owned tests or greps show the cutover. |
-| `A2` | `world-service*` and `transport-api*` compile and test on owned code surfaces, `world-api` stays unchanged, and mixed-boundary imports remain clear. |
-| `B1` | Scripts, CI, release, and operator helpers use the renamed service and transport families with no stale canonical `substrate-world-agent` guidance. |
-| `C1` | Docs, ADRs, and truth docs teach the same boundary story as the merged code and script surfaces and use the new canonical names. |
-| `P1` | Parent has integrated accepted parallel outputs, replayed or quarantined overlaps, and recorded the real integration history in `.runs/**`. |
-| `P2` | Grep, cargo, operator, release, and fail-closed checks are executed and recorded against the merged validation candidate. |
-| `P3` | Final GitNexus scope verification, final summary, terminal sentinel, and any residual-risk notes are written by the parent. |
+| `FA1` host-scoped resolved launch truth persists into `HostAttachContract` | Acceptance criteria 1 |
+| `FA2` persisted attach resolution reuses persisted capabilities and attach knobs instead of permissive defaults | Acceptance criteria 2 |
+| `FA3` inventory-backed resolution merges validated `policy_overlay` into `effective_policy` as narrowing truth | Acceptance criteria 3 |
+| `FA4` approved capability override family works as narrowing-only; unsupported fields fail closed with exact diagnostics | Acceptance criteria 4 |
+| `FA5` retained member turns consume a shared-contract-derived subset and do not reconstruct hidden launch semantics | Acceptance criteria 5 |
+| `FA6` equivalent human and orchestrator cold starts yield equivalent contract truth for backend, scope, capabilities, attach knobs, and policy | Acceptance criteria 6 |
+| `FA7` merged contract floor is sufficient for slices 30 and 31 without inventing a second override or attach-truth model | Acceptance criteria 7 and 8 |
+| `FA8` targeted shell tests, full `cargo test -p shell`, `clippy`, and `fmt --check` are green on the merged tree | Definition of done 8 |
+| `FA9` docs for 29, 29.5, 30, and 31 match shipped semantics on the merged tree | Definition of done 9 |
+
+Final acceptance checklist:
+
+1. `FA1` through `FA9` are all satisfied on one merged tree.
+2. No frozen hotspot was reopened after `G3`.
+3. The only safe parallel window remained within disjoint ownership.
+4. `PLAN.md` source lock remained authoritative for the duration of the run.
+5. `validation-wall.md` and `final-summary.md` both point at the same merged tip SHA.
 
 ## Assumptions
 
-1. The authoritative execution branch remains `chore/uaa-boundary-and-naming-cleanup`.
-2. Fresh worker worktrees can be created under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/`.
-3. GitNexus is available or can be refreshed before worker edits begin.
-4. The repo can tolerate a direct live-name cutover with fail-closed handling and no supported migration layer for stale `uaa.agent.session` runtime state.
-5. The final validation wall may require Linux, Lima, and WSL prerequisites already described in repo docs; if a platform environment is unavailable, the parent records that explicitly instead of silently skipping it.
-6. Historical files outside the live-surface wall may retain old tokens only when the parent records the allowlist rationale.
-7. This controller supersedes the stale async persistent-session orchestration topic previously present in this file.
+1. The current working-tree rewrite of `PLAN.md` is authoritative for this run.
+2. Parent integration remains on `feat/gateway-mediated-llm-fulfillment`.
+3. Worker worktrees can be created under `/home/azureuser/__Active_Code/atomize-hq/.worktrees/`.
+4. The slice stays limited to shared dispatch contract closeout and parity hardening.
+5. There is no public scope expansion or lazy-attach product work in this run.
+6. Parent can preserve the dirty authoritative checkout while cutting clean worker worktrees from committed gate tips.
+
+## Completion Behavior
+
+1. Parent merges accepted lanes in gate order only.
+2. Parent runs the validation wall only after docs are accepted.
+3. Parent marks the run complete only after `G6`.
+4. If blocked, parent writes `blocked.json`, leaves rejected worker branches unmerged, and records the exact stop condition in both `session-log.md` and `final-summary.md`.
+5. Workers never self-certify completion, never write `.runs/**`, and never own final acceptance.
+
+## Completion Target
+
+The target outcome is one merged tree where durable attach truth, overlay truth, override truth, retained member parity, and downstream docs all agree, with no hidden second contract dialect left for slices 30 or 31 to rediscover.

@@ -83,7 +83,7 @@ pub(crate) struct AgentApiAuthConfigV1 {
     pub env: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCapabilitiesV1 {
     pub session_start: bool,
@@ -100,6 +100,36 @@ pub(crate) struct AgentCapabilitiesV1 {
 pub(crate) struct AgentInventoryEntryV1 {
     pub path: PathBuf,
     pub file: AgentFileV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AgentInventoryBaselineOrigin {
+    GlobalInventory,
+    WorkspaceInventory,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProjectedInventoryValueOrigin {
+    InventoryExplicit,
+    EffectiveConfigDefault,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectedInventoryEntryV1 {
+    pub origin: AgentInventoryBaselineOrigin,
+    pub path: PathBuf,
+    pub agent_id: String,
+    pub backend_id: String,
+    pub kind: AgentConfigKind,
+    pub protocol: Option<String>,
+    pub execution_scope: crate::execution::config_model::AgentExecutionScope,
+    pub execution_scope_origin: ProjectedInventoryValueOrigin,
+    pub cli_mode: crate::execution::config_model::AgentCliMode,
+    pub cli_mode_origin: ProjectedInventoryValueOrigin,
+    pub cli_binary: Option<String>,
+    pub capabilities: AgentCapabilitiesV1,
+    #[allow(dead_code)]
+    pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
 }
 
 impl AgentFileV1 {
@@ -160,6 +190,92 @@ impl AgentInventoryEntryV1 {
 
     pub(crate) fn effective_cli_binary(&self) -> Option<&str> {
         self.file.effective_cli_binary()
+    }
+}
+
+pub(crate) fn inventory_entry_origin(
+    cwd: &Path,
+    entry: &AgentInventoryEntryV1,
+) -> AgentInventoryBaselineOrigin {
+    let Some(workspace_root) = workspace::find_workspace_root(cwd) else {
+        return AgentInventoryBaselineOrigin::GlobalInventory;
+    };
+    let workspace_agents_root = normalize_inventory_origin_path(
+        &workspace_root
+            .join(workspace::SUBSTRATE_DIR_NAME)
+            .join("agents"),
+    );
+    let entry_path = normalize_inventory_origin_path(&entry.path);
+
+    if entry_path.starts_with(&workspace_agents_root) {
+        AgentInventoryBaselineOrigin::WorkspaceInventory
+    } else {
+        AgentInventoryBaselineOrigin::GlobalInventory
+    }
+}
+
+fn normalize_inventory_origin_path(path: &Path) -> PathBuf {
+    let mut current = path;
+    let mut suffix = Vec::new();
+
+    loop {
+        if let Ok(canonical) = current.canonicalize() {
+            let mut normalized = canonical;
+            for component in suffix.iter().rev() {
+                normalized.push(component);
+            }
+            return normalized;
+        }
+
+        let Some(name) = current.file_name() else {
+            return path.to_path_buf();
+        };
+        let Some(parent) = current.parent() else {
+            return path.to_path_buf();
+        };
+
+        suffix.push(name.to_os_string());
+        current = parent;
+    }
+}
+
+pub(crate) fn project_inventory_entry(
+    cwd: &Path,
+    entry: &AgentInventoryEntryV1,
+    effective_config: &crate::execution::config_model::SubstrateConfig,
+) -> ProjectedInventoryEntryV1 {
+    let execution_scope_origin = if entry.file.config.execution.scope.is_some() {
+        ProjectedInventoryValueOrigin::InventoryExplicit
+    } else {
+        ProjectedInventoryValueOrigin::EffectiveConfigDefault
+    };
+    let cli_mode_origin = if entry
+        .file
+        .config
+        .cli
+        .as_ref()
+        .and_then(|cli| cli.mode)
+        .is_some()
+    {
+        ProjectedInventoryValueOrigin::InventoryExplicit
+    } else {
+        ProjectedInventoryValueOrigin::EffectiveConfigDefault
+    };
+
+    ProjectedInventoryEntryV1 {
+        origin: inventory_entry_origin(cwd, entry),
+        path: entry.path.clone(),
+        agent_id: entry.file.id.clone(),
+        backend_id: entry.derived_backend_id(),
+        kind: entry.file.config.kind,
+        protocol: entry.file.config.protocol.clone(),
+        execution_scope: entry.effective_scope(effective_config),
+        execution_scope_origin,
+        cli_mode: entry.effective_cli_mode(effective_config),
+        cli_mode_origin,
+        cli_binary: entry.effective_cli_binary().map(ToOwned::to_owned),
+        capabilities: entry.file.config.capabilities.clone(),
+        policy_overlay: entry.file.policy_overlay.clone(),
     }
 }
 
@@ -711,4 +827,53 @@ fn validate_overlay_subset(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        inventory_entry_origin, AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind,
+        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryBaselineOrigin,
+        AgentInventoryEntryV1,
+    };
+    use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
+    use tempfile::tempdir;
+
+    #[test]
+    fn inventory_entry_origin_treats_noncanonical_workspace_paths_as_workspace_inventory() {
+        let temp = tempdir().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let workspace_agents = workspace_root.join(SUBSTRATE_DIR_NAME).join("agents");
+        std::fs::create_dir_all(&workspace_agents).expect("workspace agents");
+        std::fs::write(workspace_marker_path(&workspace_root), "version: 1\n")
+            .expect("workspace marker");
+
+        let cwd = workspace_root.join("src");
+        std::fs::create_dir_all(&cwd).expect("cwd");
+        let entry = AgentInventoryEntryV1 {
+            path: workspace_agents.join("codex.yaml"),
+            file: AgentFileV1 {
+                version: 1,
+                id: "codex".to_string(),
+                config: AgentConfigV1 {
+                    enabled: true,
+                    kind: AgentConfigKind::Cli,
+                    protocol: Some("transport.iframe.v1".to_string()),
+                    execution: AgentExecutionConfigV1::default(),
+                    cli: Some(AgentCliConfigV1 {
+                        binary: "codex".to_string(),
+                        mode: None,
+                    }),
+                    api: None,
+                    capabilities: AgentCapabilitiesV1::default(),
+                },
+                policy_overlay: None,
+            },
+        };
+
+        assert_eq!(
+            inventory_entry_origin(&cwd, &entry),
+            AgentInventoryBaselineOrigin::WorkspaceInventory
+        );
+    }
 }

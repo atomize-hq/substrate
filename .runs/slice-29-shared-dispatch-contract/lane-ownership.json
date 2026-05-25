@@ -1,0 +1,99 @@
+{
+  "parent": {
+    "owns": [
+      ".runs/**",
+      "PLAN.md",
+      "ORCH_PLAN.md",
+      "gate transitions",
+      "merge decisions",
+      "blocked-run decisions",
+      "validation wall",
+      "final acceptance"
+    ]
+  },
+  "L0": {
+    "owned_files": [
+      "crates/shell/src/execution/agent_runtime/dispatch_contract.rs",
+      "crates/shell/src/execution/agent_runtime/mod.rs",
+      "crates/shell/src/execution/agent_inventory.rs",
+      "crates/shell/src/execution/agent_runtime/validator.rs",
+      "crates/shell/src/execution/agent_runtime/control.rs"
+    ],
+    "forbidden_files": [
+      "crates/shell/src/execution/agent_runtime/orchestration_session.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/agents_cmd.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+      "docs/**",
+      "llm-last-mile/**",
+      ".runs/**"
+    ]
+  },
+  "L1": {
+    "owned_files": [
+      "crates/shell/src/execution/agent_runtime/orchestration_session.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs"
+    ],
+    "forbidden_files": [
+      "crates/shell/src/execution/agent_runtime/dispatch_contract.rs",
+      "crates/shell/src/execution/agent_inventory.rs",
+      "crates/shell/src/execution/agent_runtime/validator.rs",
+      "crates/shell/src/execution/agent_runtime/control.rs",
+      "crates/shell/src/execution/agents_cmd.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+      "docs/**",
+      "llm-last-mile/**",
+      ".runs/**"
+    ]
+  },
+  "L2": {
+    "owned_files": [
+      "crates/shell/src/execution/agents_cmd.rs",
+      "crates/shell/src/execution/agent_runtime/control.rs",
+      "crates/shell/src/execution/prompt_fulfillment.rs",
+      "crates/shell/tests/agent_public_control_surface_v1.rs"
+    ],
+    "forbidden_files": [
+      "crates/shell/src/execution/agent_runtime/dispatch_contract.rs",
+      "crates/shell/src/execution/agent_inventory.rs",
+      "crates/shell/src/execution/agent_runtime/validator.rs",
+      "crates/shell/src/execution/agent_runtime/orchestration_session.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+      "docs/**",
+      "llm-last-mile/**",
+      ".runs/**"
+    ]
+  },
+  "L3": {
+    "owned_files": [
+      "crates/shell/src/repl/async_repl.rs",
+      "crates/shell/src/execution/routing/dispatch/world_ops.rs"
+    ],
+    "forbidden_files": [
+      "crates/shell/src/execution/agent_runtime/dispatch_contract.rs",
+      "crates/shell/src/execution/agent_inventory.rs",
+      "crates/shell/src/execution/agent_runtime/validator.rs",
+      "crates/shell/src/execution/agent_runtime/control.rs",
+      "crates/shell/src/execution/agent_runtime/orchestration_session.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/agents_cmd.rs",
+      "docs/**",
+      "llm-last-mile/**",
+      ".runs/**"
+    ]
+  },
+  "L4": {
+    "owned_files": [
+      "docs/**",
+      "llm-last-mile/**"
+    ],
+    "forbidden_files": [
+      "crates/**",
+      ".runs/**"
+    ]
+  }
+}

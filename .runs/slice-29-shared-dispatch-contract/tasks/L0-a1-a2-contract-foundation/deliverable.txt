@@ -1,0 +1,1 @@
+Shared dispatch-contract foundation landed on the L0 worker branch with explicit inventory and persisted-attach baseline domains, runtime materialization through the contract boundary, and no second contract owner or durable attach object.

@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use substrate_broker::Policy;
 use tempfile::{Builder, TempDir};
 
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
@@ -740,6 +741,7 @@ struct OrchestrationSessionManifestOptions<'a> {
     last_parked_at: Option<Option<&'a str>>,
     last_attention_at: Option<Option<&'a str>>,
     parked_reason: Option<Option<&'a str>>,
+    host_attach_contract: Option<Option<&'a str>>,
 }
 
 fn write_orchestration_session_with_manifest_options(
@@ -851,6 +853,13 @@ fn orchestration_session_manifest_with_options(
         Some(None) => Value::Null,
         None => Value::Null,
     };
+    let host_attach_contract = match options.host_attach_contract {
+        Some(Some(continuity_uaa_session_id)) => {
+            host_attach_contract_manifest(agent_id, continuity_uaa_session_id)
+        }
+        Some(None) => Value::Null,
+        None => host_attach_contract_manifest(agent_id, &format!("uaa-{orchestration_session_id}")),
+    };
     json!({
         "orchestration_session_id": orchestration_session_id,
         "shell_trace_session_id": "ses_agent_hub",
@@ -874,7 +883,46 @@ fn orchestration_session_manifest_with_options(
         "world_id": world_id,
         "world_generation": world_generation,
         "invalidation_reason": if state == "active" { Value::Null } else { json!("fixture stopped parent") },
-        "closed_at": closed_at
+        "closed_at": closed_at,
+        "host_attach_contract": host_attach_contract
+    })
+}
+
+fn host_attach_contract_manifest(agent_id: &str, continuity_uaa_session_id: &str) -> Value {
+    let backend_kind = if agent_id == "claude_code" {
+        "claude_code"
+    } else {
+        "codex"
+    };
+    json!({
+        "backend_id": format!("cli:{agent_id}"),
+        "execution_scope": "host",
+        "protocol": PURE_AGENT_PROTOCOL,
+        "launch_descriptor": {
+            "agent_id": agent_id,
+            "backend_id": format!("cli:{agent_id}"),
+            "backend_kind": backend_kind,
+            "protocol": PURE_AGENT_PROTOCOL,
+            "execution_scope": "host",
+            "binary_path": "sh"
+        },
+        "capabilities": {
+            "session_resume": true,
+            "session_fork": true,
+            "session_stop": true,
+            "status_snapshot": true,
+            "event_stream": true
+        },
+        "attach_launch_knobs": {
+            "requested_execution_scope": "host",
+            "host_execution_client_start": "start_now",
+            "attach_mode_preference": "continuity_required"
+        },
+        "effective_policy": serde_json::to_value(Policy {
+            agents_allowed_backends: vec![format!("cli:{agent_id}")],
+            ..Policy::default()
+        }).expect("serialize effective policy"),
+        "continuity_uaa_session_id": continuity_uaa_session_id
     })
 }
 
@@ -2656,6 +2704,7 @@ fn agent_status_json_surfaces_parked_resumable_fields_from_parent_session_truth(
             last_parked_at: Some(Some("2026-04-05T00:00:02Z")),
             last_attention_at: Some(None),
             parked_reason: Some(Some("owner detached cleanly")),
+            host_attach_contract: Some(Some("external-session-1")),
         },
     );
 
@@ -2721,6 +2770,7 @@ fn agent_status_json_surfaces_awaiting_attention_fields_from_parent_session_trut
             last_parked_at: Some(None),
             last_attention_at: Some(Some("2026-04-05T00:00:03Z")),
             parked_reason: Some(None),
+            host_attach_contract: Some(Some("external-session-1")),
         },
     );
 
@@ -3640,6 +3690,89 @@ fn agent_status_surfaces_host_successor_lineage_for_active_orchestrator_sessions
     assert!(
         persisted.get("resumed_from_session_handle_id").is_none(),
         "host successor persistence must keep participant lineage canonical"
+    );
+}
+
+#[test]
+fn host_successor_session_persists_durable_attach_continuity_contract() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_orchestration_session_with_manifest_options(
+        &fixture,
+        OrchestrationSessionManifestSpec {
+            agent_id: "claude_code",
+            orchestration_session_id: "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+            active_session_handle_id: Some("ash_orchestrator_new_attach_contract"),
+            state: "active",
+            ts: "2026-04-05T00:00:05Z",
+            world_binding: None,
+        },
+        OrchestrationSessionManifestOptions {
+            host_attach_contract: Some(Some("uaa-successor-continuity-1")),
+            ..OrchestrationSessionManifestOptions::default()
+        },
+    );
+    write_invalidated_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        "ash_orchestrator_old_attach_contract",
+        "2026-04-05T00:00:04Z",
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_orchestrator_new_attach_contract",
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        RuntimeParticipantOptions::host_orchestrator("running", true, "2026-04-05T00:00:05Z")
+            .with_resumed_from_participant_id(Some("ash_orchestrator_old_attach_contract")),
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should succeed for successor attach-contract fixtures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let successor = find_session_by_participant(sessions, "ash_orchestrator_new_attach_contract");
+    assert_eq!(
+        successor.pointer("/participant_id").and_then(Value::as_str),
+        Some("ash_orchestrator_new_attach_contract")
+    );
+    assert_eq!(
+        successor
+            .pointer("/attached_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_orchestrator_new_attach_contract"),
+        "status must keep the live successor attached to the canonical participant id"
+    );
+
+    let persisted = serde_json::from_str::<Value>(
+        &fs::read_to_string(canonical_orchestration_session_path(
+            &fixture,
+            "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        ))
+        .expect("host successor session should be readable"),
+    )
+    .expect("host successor session should be valid JSON");
+    assert_eq!(
+        persisted
+            .pointer("/host_attach_contract/continuity_uaa_session_id")
+            .and_then(Value::as_str),
+        Some("uaa-successor-continuity-1"),
+        "successor sessions must retain the durable attach continuity selector"
+    );
+    assert_eq!(
+        persisted
+            .pointer("/host_attach_contract/backend_id")
+            .and_then(Value::as_str),
+        Some("cli:claude_code"),
+        "successor sessions must keep the durable attach contract bound to the same backend"
     );
 }
 
@@ -5107,12 +5240,16 @@ metadata: {}
 
 #[test]
 fn doctor_member_selection_contract_source_locks_ambiguous_fail_closed_path() {
-    let validator = read_repo_file("crates/shell/src/execution/agent_runtime/validator.rs");
+    let dispatch_contract =
+        read_repo_file("crates/shell/src/execution/agent_runtime/dispatch_contract.rs");
     assert!(
-        validator.contains(
-            "ambiguous world member selection: multiple eligible world-scoped members found"
-        ),
-        "validator.rs must retain the shared ambiguous world-member fail-closed reason"
+        dispatch_contract
+            .contains("ambiguous world member selection: multiple eligible {} members found"),
+        "dispatch_contract.rs must retain the shared ambiguous world-member fail-closed format"
+    );
+    assert!(
+        dispatch_contract.contains("AgentExecutionScope::World => \"world-scoped\""),
+        "dispatch_contract.rs must keep world member ambiguity locked to the world-scoped label"
     );
 
     let agents_cmd = read_repo_file("crates/shell/src/execution/agents_cmd.rs");

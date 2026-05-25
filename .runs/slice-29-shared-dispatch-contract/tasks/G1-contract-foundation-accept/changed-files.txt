@@ -1,0 +1,11 @@
+crates/shell/src/execution/agent_inventory.rs
+crates/shell/src/execution/agent_runtime/dispatch_contract.rs
+crates/shell/src/execution/agent_runtime/mod.rs
+crates/shell/src/execution/agent_runtime/validator.rs
+.runs/slice-29-shared-dispatch-contract/branch-map.json
+.runs/slice-29-shared-dispatch-contract/run-state.json
+.runs/slice-29-shared-dispatch-contract/tasks.json
+.runs/slice-29-shared-dispatch-contract/session-log.md
+.runs/slice-29-shared-dispatch-contract/tasks/L0-a1-a2-contract-foundation/*
+.runs/slice-29-shared-dispatch-contract/tasks/G1-contract-foundation-accept/*
+.runs/slice-29-shared-dispatch-contract/gates/G1-contract-foundation/*

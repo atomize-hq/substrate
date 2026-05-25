@@ -1,0 +1,1 @@
+G3 passed on `0d15fb2fe8902a9201c891eccd3d7a20325f9d72`. The runtime lanes now satisfy the shared dispatch contract together, including the same-session parked-turn reattach/stop case that previously blocked acceptance.

@@ -36,18 +36,25 @@ use std::pin::Pin;
 use std::sync::Arc;
 use substrate_common::{
     GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
-    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE, GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX,
+    SUBSTRATE_LLM_AUTH_BUNDLE_FD, SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
     SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
 };
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 
 #[derive(Debug, Clone)]
 pub enum IntegratedGatewayAuthContext {
     CliCodex(CodexIntegratedAuthHandoff),
-    ApiOpenAI { api_key: String },
+    ApiKey {
+        backend_id: &'static str,
+        env_var: &'static str,
+        bundle_field: &'static str,
+        api_key: String,
+    },
 }
 
 impl IntegratedGatewayAuthContext {
@@ -64,21 +71,26 @@ impl IntegratedGatewayAuthContext {
             GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX => Ok(Self::CliCodex(
                 CodexIntegratedAuthHandoff::from_fields(&bundle.fields)?,
             )),
-            GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI => {
-                let api_key = bundle
-                    .fields
-                    .get(SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY)
-                    .map(|value| value.trim().to_string())
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Integrated gateway startup received invalid gateway auth bundle: gateway auth bundle for '{}' is missing required field '{}'",
-                            GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
-                            SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY
-                        )
-                    })?;
-                Ok(Self::ApiOpenAI { api_key })
-            }
+            GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE => Ok(Self::ApiKey {
+                backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE,
+                env_var: ANTHROPIC_API_KEY_ENV,
+                bundle_field: SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
+                api_key: read_required_bundle_field(
+                    &bundle,
+                    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE,
+                    SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
+                )?,
+            }),
+            GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI => Ok(Self::ApiKey {
+                backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+                env_var: OPENAI_API_KEY_ENV,
+                bundle_field: SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+                api_key: read_required_bundle_field(
+                    &bundle,
+                    GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+                    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+                )?,
+            }),
             other => Err(anyhow::anyhow!(
                 "Integrated gateway startup received invalid gateway auth bundle: unsupported gateway auth bundle backend_id '{}'",
                 other
@@ -94,9 +106,33 @@ impl IntegratedGatewayAuthContext {
                 install_integrated_codex_auth_handoff(Some(handoff.clone()))?;
                 Ok(())
             }
-            Self::ApiOpenAI { api_key } => overlay_api_openai_auth(config, api_key),
+            Self::ApiKey {
+                backend_id,
+                env_var,
+                bundle_field,
+                api_key,
+            } => overlay_api_key_auth(config, backend_id, env_var, bundle_field, api_key),
         }
     }
+}
+
+fn read_required_bundle_field(
+    bundle: &GatewayAuthBundleV1,
+    backend_id: &str,
+    field_name: &str,
+) -> anyhow::Result<String> {
+    bundle
+        .fields
+        .get(field_name)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Integrated gateway startup received invalid gateway auth bundle: gateway auth bundle for '{}' is missing required field '{}'",
+                backend_id,
+                field_name
+            )
+        })
 }
 
 /// Reloadable components - rebuilt on config reload
@@ -183,7 +219,13 @@ fn prepare_startup_config(
     Ok(())
 }
 
-fn overlay_api_openai_auth(config: &mut AppConfig, api_key: &str) -> anyhow::Result<()> {
+fn overlay_api_key_auth(
+    config: &mut AppConfig,
+    backend_id: &str,
+    env_var: &str,
+    bundle_field: &str,
+    api_key: &str,
+) -> anyhow::Result<()> {
     let mut applied = 0usize;
 
     for provider in &mut config.providers {
@@ -193,8 +235,7 @@ fn overlay_api_openai_auth(config: &mut AppConfig, api_key: &str) -> anyhow::Res
 
         match provider.api_key.as_deref() {
             Some(value)
-                if value == format!("${OPENAI_API_KEY_ENV}")
-                    || value == format!("${SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY}") =>
+                if value == format!("${env_var}") || value == format!("${bundle_field}") =>
             {
                 provider.api_key = Some(api_key.to_string());
                 applied += 1;
@@ -205,7 +246,10 @@ fn overlay_api_openai_auth(config: &mut AppConfig, api_key: &str) -> anyhow::Res
 
     if applied == 0 {
         anyhow::bail!(
-            "Integrated gateway startup could not apply api:openai auth bundle: no provider api_key matched $OPENAI_API_KEY or $SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY"
+            "Integrated gateway startup could not apply {} auth bundle: no provider api_key matched ${} or ${}",
+            backend_id,
+            env_var,
+            bundle_field
         );
     }
 

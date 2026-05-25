@@ -617,10 +617,14 @@ echo "==> Reloading systemd and enabling socket activation"
 LEGACY_WORLD_UNIT_PREFIX="substrate-world"
 LEGACY_SERVICE="${LEGACY_WORLD_UNIT_PREFIX}-agent.service"
 LEGACY_SOCKET="${LEGACY_WORLD_UNIT_PREFIX}-agent.socket"
-sudo_cmd systemctl stop "${LEGACY_SERVICE}" || true
-sudo_cmd systemctl stop "${LEGACY_SOCKET}" || true
-sudo_cmd systemctl disable "${LEGACY_SERVICE}" || true
-sudo_cmd systemctl disable "${LEGACY_SOCKET}" || true
+if sudo_cmd systemctl cat "${LEGACY_SERVICE}" >/dev/null 2>&1; then
+    sudo_cmd systemctl stop "${LEGACY_SERVICE}" || true
+    sudo_cmd systemctl disable "${LEGACY_SERVICE}" || true
+fi
+if sudo_cmd systemctl cat "${LEGACY_SOCKET}" >/dev/null 2>&1; then
+    sudo_cmd systemctl stop "${LEGACY_SOCKET}" || true
+    sudo_cmd systemctl disable "${LEGACY_SOCKET}" || true
+fi
 sudo_cmd rm -f "/etc/systemd/system/${LEGACY_SERVICE}" "/etc/systemd/system/${LEGACY_SOCKET}" || true
 sudo_cmd systemctl daemon-reload
 sudo_cmd systemctl enable substrate-world-service.service

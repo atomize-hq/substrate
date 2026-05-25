@@ -200,6 +200,14 @@ Constraints:
 
 Notes:
 - Detailed agent runtime behavior (roles, tool gating, steering) is defined by the Agent Hub ADRs. This ADR defines the config/policy storage surface and the inventory directory pattern that those ADRs depend on.
+- Slice 29 additive note:
+  - Runtime code now resolves agent launch semantics through one shared internal dispatch contract rooted in `dispatch_contract.rs`.
+  - That contract starts from explicit baseline domains:
+    - inventory-backed defaults for new dispatch,
+    - persisted-attach-backed truth for later host attach and detached host follow-up recovery.
+  - `DispatchCapabilityOverrideSet` and `AttachLaunchKnobs` are the frozen override families consumed by runtime code.
+  - `HostAttachContract` is the durable host-attach truth written under the orchestration session; later attach must not reconstruct launch truth from the last live participant snapshot.
+  - Downstream truth docs: `llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md`, `llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md`, and `llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md`.
 
 #### Agent inventory (new; file-based)
 Agent definitions are stored as inventory items, one file per agent, mirroring the deps inventory model (ADR-0011):

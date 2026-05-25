@@ -17,7 +17,8 @@ use std::path::PathBuf;
 #[cfg(unix)]
 use substrate_common::{
     GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
-    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE, GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX,
+    SUBSTRATE_LLM_AUTH_BUNDLE_FD, SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
     SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
 };
 use substrate_gateway::auth::CodexAuthSource;
@@ -1058,7 +1059,15 @@ async fn integrated_gateway_startup_reads_openai_bundle_without_secret_env_fallb
         .expect("read api:openai auth bundle")
         .expect("in-world startup should produce integrated auth context");
     match context {
-        IntegratedGatewayAuthContext::ApiOpenAI { api_key } => {
+        IntegratedGatewayAuthContext::ApiKey {
+            backend_id,
+            env_var,
+            bundle_field,
+            api_key,
+        } => {
+            assert_eq!(backend_id, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI);
+            assert_eq!(env_var, "OPENAI_API_KEY");
+            assert_eq!(bundle_field, SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY);
             assert_eq!(api_key, "sk-openai-bundle");
         }
         other => panic!("unexpected integrated auth context: {other:?}"),
@@ -1067,6 +1076,51 @@ async fn integrated_gateway_startup_reads_openai_bundle_without_secret_env_fallb
     assert!(
         env::var("OPENAI_API_KEY").is_err(),
         "integrated startup should not require OPENAI_API_KEY in process env"
+    );
+    assert!(
+        env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).is_err(),
+        "pointer env should be consumed on first read"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn integrated_gateway_startup_reads_claude_bundle_without_secret_env_fallback() {
+    let _guard = ENV_LOCK.lock().await;
+    let _anthropic = EnvVarGuard::unset("ANTHROPIC_API_KEY");
+    let _bundle = GatewayAuthBundleFdGuard::install(GatewayAuthBundleV1 {
+        schema_version: 1,
+        backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE.to_string(),
+        fields: std::collections::HashMap::from([(
+            SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY.to_string(),
+            "sk-ant-bundle".to_string(),
+        )]),
+    });
+
+    let context = IntegratedGatewayAuthContext::from_launch_mode(GatewayMode::InWorld)
+        .expect("read cli:claude_code auth bundle")
+        .expect("in-world startup should produce integrated auth context");
+    match context {
+        IntegratedGatewayAuthContext::ApiKey {
+            backend_id,
+            env_var,
+            bundle_field,
+            api_key,
+        } => {
+            assert_eq!(backend_id, GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE);
+            assert_eq!(env_var, "ANTHROPIC_API_KEY");
+            assert_eq!(
+                bundle_field,
+                SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY
+            );
+            assert_eq!(api_key, "sk-ant-bundle");
+        }
+        other => panic!("unexpected integrated auth context: {other:?}"),
+    }
+
+    assert!(
+        env::var("ANTHROPIC_API_KEY").is_err(),
+        "integrated startup should not require ANTHROPIC_API_KEY in process env"
     );
     assert!(
         env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).is_err(),

@@ -1,0 +1,1 @@
+Generalized persisted host attach truth landed on the L1 worker branch: session birth now stores launch descriptor, capabilities, and attach knobs inside HostAttachContract; successor copy clears only continuity-specific state; and detached planning consumes persisted attach truth instead of ambient participant truth.

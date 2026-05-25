@@ -1,0 +1,1 @@
+L1 completed on the worker lane. HostAttachContract now persists generalized launch truth, capabilities, and attach knobs; successor copies preserve launch truth while clearing only the continuity selector; and state-store detached attach planning now consumes persisted contract truth instead of ambient participant truth.

@@ -1,847 +1,687 @@
-# PLAN: Gateway-Mediated LLM Fulfillment Without Lifecycle Regression
+# PLAN: Authoritative Host Attach Truth And REPL Cold-Start Parity
 
-Source SOW: [28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md)  
-Primary contract anchors: [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md), [ADR-0040](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md), [ADR-0041](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md), [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md), [docs/contracts/substrate-gateway-backend-adapter-protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-protocol.md)  
+Source SOW: [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md)  
+Primary code anchors: [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs), [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs), [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs), [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs), [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)  
+Primary test anchors: [crates/shell/tests/agent_public_control_surface_v1.rs](crates/shell/tests/agent_public_control_surface_v1.rs), [crates/shell/tests/repl_world_first_routing_v1.rs](crates/shell/tests/repl_world_first_routing_v1.rs), [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](crates/shell/tests/agent_successor_contract_ahcsitc0.rs), unit tests in [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs), unit tests in [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)  
+Downstream dependency docs: [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md), [30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md), [31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)  
 Execution branch: `feat/gateway-mediated-llm-fulfillment`  
 Base branch: `main`  
-Plan type: runtime seam replacement with lifecycle freeze  
-Status: implementation-ready execution plan, unified to `/autoplan` plus `/plan-eng-review` rigor on 2026-05-22
+Plan type: implementation-ready residual contract-authority hardening slice, no UI scope, strong shell/runtime DX scope  
+Status: implementation-ready
 
 ## Objective
 
-Move all production prompt-bearing LLM fulfillment onto the existing `substrate-gateway` adapter seam without changing the already-landed public lifecycle contract.
+Finish the remaining contract-authority gaps so every host-rooted session birth path persists the same attach-relevant truth and every later attach path consumes that truth without regaining manifest-era defaults or permissive fallbacks.
 
-After this slice lands:
+This plan is complete only when all of the following are true:
 
-1. host prompt-bearing execution no longer directly constructs `AgentWrapperGateway`, `CodexBackend`, or `ClaudeCodeBackend` in shell-owned runtime code,
-2. world-member prompt-bearing execution no longer directly constructs those objects in `world-service`,
-3. host first prompt, host follow-up prompt, world first targeted prompt, and world resumed follow-up all use one production fulfillment story:
-   - stable backend id selection first,
-   - gateway adapter dispatch second,
-   - lifecycle semantics unchanged,
-4. integrated auth still uses the existing FD auth-bundle handoff,
-5. `start`, `turn`, `reattach`, `stop`, `Accepted -> terminal`, `parked_resumable`, `awaiting_attention`, and typed `/v1/member_turn/stream` behavior remain unchanged from the operator's point of view.
+1. REPL host cold start resolves through the same shared dispatch contract family already used by public start.
+2. The first persisted host-rooted orchestration session stores `HostAttachContract` derived from resolved launch truth, not `HostAttachContract::from_manifest(...)`.
+3. Persisted attach resolution treats `HostAttachContract` as the only durable attach baseline and applies only a bounded attach-time overlay.
+4. Missing durable truth fails closed in modern steady-state paths instead of silently recovering through `Policy::default()` or manifest reconstruction.
+5. Slices 30 and 31 can build on 29.75 without reopening attach-baseline semantics.
 
-This is a seam replacement. It is not a public contract expansion, not a lifecycle redesign, and not a backend-matrix expansion project.
+## Executive Summary
 
-## Acceptance Criteria
+This is a hardening slice, not a redesign. The repo already has the shared vocabulary, the durable attach structure, and most of the public-start authority flow. The remaining problem is that equivalent host-rooted sessions can still persist different attach truth depending on how they were born, and later attach code can still regain broader semantics than the durable baseline intended.
 
-This slice is complete only when all of the following are true:
+The implementation direction is therefore locked:
 
-1. No production code under `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/repl/`, or `crates/world-service/src/member_runtime.rs` directly instantiates `AgentWrapperGateway`, `CodexBackend`, or `ClaudeCodeBackend` for prompt-bearing execution.
-2. Host initial prompt execution and host follow-up prompt execution both fulfill through the gateway adapter seam rather than shell-local backend registration.
-3. World launch-time first targeted turn and world resumed follow-up turn both fulfill through the gateway adapter seam rather than world-local backend registration.
-4. The effective adapter dispatch target remains the already-landed stable backend id chosen before execution begins.
-5. The visible lifecycle contract does not regress:
-   - `start` uses the user prompt as the real first prompt,
-   - `turn` uses the user prompt as the real follow-up prompt,
-   - `reattach` remains recovery-only,
-   - `stop` remains canonical closeout,
-   - `Accepted` still terminates with an explicit terminal envelope.
-6. World follow-up still routes through typed `MemberTurnSubmitRequestV1` plus `/v1/member_turn/stream`.
-7. Detached world follow-up still fails closed.
-8. Integrated auth still travels through the FD auth-bundle handoff and does not regress to child secret env vars.
-9. The shell no longer prepares and discards a shell-local authoritative world-member gateway object before actual world dispatch.
-10. Tests and invariants prove that host and world prompt-bearing execution no longer maintain separate direct backend-registration tables.
+1. `ResolvedLaunchContract` is the only birth-time authority source.
+2. `HostAttachContract` is the only durable attach baseline.
+3. Reattach-style attach callers may only honor that baseline, narrow it where permitted, or select among explicitly baseline-permitted modes when the durable baseline already encodes multiple allowed realizations. They may never replace or broaden it.
+4. Fork is not a caller overlay on the source session. It consumes source durable truth and derives a new successor baseline for a new successor session.
+5. 29.75 is greenfield for durable attach truth: no legacy compatibility helper or manifest-backfill path is part of this slice.
 
 ## Locked Decisions
 
-These decisions are already made. Implementation does not reopen them.
+These are frozen for implementation. Do not keep multiple interpretations open in code or docs.
 
 | Topic | Locked decision | Why |
 | --- | --- | --- |
-| Public lifecycle | Keep `start`, `turn`, `reattach`, and `stop` exactly as they are | ADR-0047 is already the lifecycle floor |
-| Public routing selector | Keep exact `--backend <kind:name>` routing on prompt-bearing follow-up | Selector widening would change operator meaning |
-| World follow-up seam | Keep `MemberTurnSubmitRequestV1` plus `POST /v1/member_turn/stream` | That seam is already landed and frozen |
-| Initial prompt semantics | The user prompt remains the true first prompt | Hidden bootstrap prompts are a regression |
-| Detached world posture | Detached world follow-up remains fail-closed | No ownership-bypass recovery path is allowed |
-| Auth carrier | Keep `SUBSTRATE_LLM_AUTH_BUNDLE_FD` and the existing auth bundle contract | Secure carrier already exists and is landed |
-| Backend selection grammar | Keep stable backend ids as `<kind>:<name>` | Selection and adapter contracts already own this |
-| Gateway ownership | Substrate owns lifecycle and placement; `substrate-gateway` owns adapter dispatch and backend internals | ADR-0040 already fixed the boundary |
-| Scope boundary | Do not absorb SOW 29 or SOW 30 | Shared dispatch envelope and public world-scoped start are separate slices |
+| Durable attach object | `HostAttachContract` remains the only persisted attach object | A second durable model would recreate the split 29.75 exists to close |
+| Birth-time authority | Host-rooted session birth persists attach truth from `ResolvedLaunchContract`, not from manifest defaults | Manifest defaults are runtime materialization detail, not contract authority |
+| REPL cold start posture | REPL host cold start must join the shared dispatch contract family before the first session write | Public start and REPL cold start must stop producing different durable truth for the same backend |
+| Modern missing truth | Missing or invalid durable attach truth fails closed in modern paths | Silent repair through permissive defaults broadens authority and hides corruption |
+| Supported persisted-state posture | Supported persisted sessions must contain a present and valid `host_attach_contract` plus valid policy snapshot; absent, null, malformed, or incomplete durable truth fails closed | Greenfield 29.75 does not carry a compatibility classifier or repair surface |
+| Attach overlay semantics | Overlay may honor baseline, narrow it where permitted, or select among explicitly baseline-permitted modes when the durable baseline already encodes multiple allowed realizations; it may not silently broaden or replace baseline semantics | Later callers cannot reinterpret the same durable session ad hoc |
+| `requested_execution_scope` | For persisted attach, execution scope stays baseline-owned and immutable | 29.75 is not reopening scope selection |
+| `host_execution_client_start` | Overlay may keep baseline, narrow `StartNow -> Defer`, or select among explicitly baseline-permitted modes. Because 29.75 does not add multi-mode durable encoding, current 29.75 implementations only exercise honor-or-narrow behavior. | This matches the SOW contract without letting this slice silently grow a second encoding model |
+| `attach_mode_preference` | Overlay may keep baseline, narrow toward stricter continuity (`FreshAllowed -> ContinuityPreferred -> ContinuityRequired`), or select among explicitly baseline-permitted modes. Because 29.75 does not add multi-mode durable encoding, current 29.75 implementations only exercise honor-or-narrow behavior. | Continuity policy is durable baseline truth, and selection is only legal when the durable baseline explicitly says multiple realizations are allowed |
+| Fork semantics | Fork may not broaden the source session by pretending to be an attach overlay. It must consume source durable truth, allocate a new successor session, and persist a new successor `HostAttachContract` through explicit successor-derivation rules. | This keeps the no-broadening overlay rule intact and prevents fork from becoming the loophole that collapses the model |
+| Successor-only behavior scope | 29.75 freezes that fork uses explicit successor-baseline derivation rather than overlay broadening. It does not freeze the final successor attach-behavior policy for continuity-versus-fresh or lazy-attach defaults; that remains downstream slice 31 work unless the SOW is amended. | This keeps 29.75 focused on contract authority rather than absorbing 31's product-policy decisions |
+| Retained member follow-up parity | Existing `MemberDispatchParitySubset` stays the retained-turn contract; 29.75 must not invent a second retained-member dialect | 29.5 already landed this architecture far enough to build on |
+| Multi-mode baseline encoding | 29.75 does not extend `HostAttachContract` or persisted session schema to encode a set of allowed attach modes or client-start modes | This slice freezes authority semantics, not a new durable representation; “selection” remains a contract-level allowance that is dormant unless an explicit baseline encoding already exists |
 
 ## Scope
 
 ### In scope
 
-1. Replacing direct host prompt-bearing fulfillment with gateway-mediated fulfillment.
-2. Replacing direct world-member prompt-bearing fulfillment with gateway-mediated fulfillment.
-3. Removing hidden synthetic bootstrap-prompt behavior from production world-member startup.
-4. Collapsing duplicated backend-registration logic into one production fulfillment seam.
-5. Reusing the landed gateway runtime, adapter, backend-selection, and auth-bundle contracts.
-6. Tightening regression coverage so lifecycle invariants stay frozen while the seam moves.
-7. Updating truth docs that would otherwise keep describing the bypass as acceptable steady-state behavior.
+1. Carry resolved-contract truth through REPL host cold start before first orchestration-session persistence.
+2. Stop seeding modern host attach truth from `HostAttachContract::from_manifest(...)`.
+3. Freeze attach-time overlay rules for persisted attach resolution and enforce them in code, diagnostics, and tests.
+4. Remove steady-state fallback to `Policy::default()` and silent manifest reconstruction in modern paths.
+5. Update downstream SOWs and this root plan so 30 and 31 depend on 29.75 correctly.
 
-## NOT in scope
+### NOT in scope
 
-1. Public `--scope world` root `start`.
-2. Shared dispatch-envelope and capability-override work from SOW 29.
-3. Human capability flags and world-root public start work from SOW 30.
-4. New backend-id grammar, new backend-selection semantics, or allowlist redesign.
-5. Generic multi-backend integrated expansion beyond the already-wired bindings.
-6. Moving the orchestrator into the world.
-7. Durable-session redesign or new posture semantics.
-8. New public config or policy surfaces already owned by ADR-0027.
-9. Reintroducing secret-bearing process env vars as the normal auth path.
+1. Public `substrate agent start --scope world`.
+2. Attach-worker behavior and lazy attach trigger policy from slice 31.
+3. Widening capability override families beyond the already-landed bounded narrowing set.
+4. Inventing a second durable attach structure or third baseline domain.
+5. Changing retained world-member transport format.
+6. Adding new crates, binaries, or packaging flows.
+7. Extending persisted attach schema to represent multi-mode allowed-mode sets for `host_execution_client_start` or `attach_mode_preference`.
 
 ## Step 0: Scope Challenge
 
-This section answers the `/plan-eng-review` questions before implementation starts.
+### 0A. What already exists
 
-### What already exists
+The repo already contains the pieces this slice should reuse.
 
-| Sub-problem | Existing code or contract | Reuse decision |
+| Sub-problem | Existing code | Reuse decision |
 | --- | --- | --- |
-| Lifecycle truth | `ADR-0047`, `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/repl_world_first_routing_v1.rs` | Reuse exactly. This slice must not reinterpret lifecycle meaning. |
-| Gateway runtime lifecycle and status surface | `docs/contracts/substrate-gateway-runtime-parity.md`, `crates/shell/src/builtins/world_gateway.rs`, `crates/world-service/src/gateway_runtime.rs` | Reuse the typed runtime ownership split. Do not reintroduce raw wrapper construction as runtime truth. |
-| Adapter protocol and backend selection | `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `docs/contracts/substrate-gateway-backend-adapter-protocol.md` | Reuse exactly. Backend selection remains explicit and stable before execution. |
-| Auth carrier | `crates/common/src/gateway_auth_bundle.rs`, `crates/world-service/src/gateway_runtime.rs`, `crates/gateway/src/server/mod.rs` | Reuse exactly. No second auth seam. |
-| Launch-time world-member transport | `crates/shell/src/execution/routing/dispatch/world_ops.rs`, `crates/world-service/src/service.rs` | Reuse the typed transport. Replace only the fulfillment implementation behind it. |
-| Resumed world-member transport | `MemberTurnSubmitRequestV1`, `/v1/member_turn/stream` | Reuse exactly. No version bump or selector redesign. |
+| Shared launch resolution vocabulary | `DispatchRequestEnvelope`, `ResolvedLaunchContract`, `DispatchBaselineKind` in [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) | Reuse. Do not invent a REPL-only launch dialect. |
+| Public start durable attach persistence | `persist_resolved_start_attach_contract(...)` in [agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs) | Reuse semantics. Pull REPL cold start onto this same authority model. |
+| Durable attach storage | `HostAttachContract`, `HostAttachLaunchKnobs`, `OrchestrationSessionRecord` in [orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Reuse. Tighten constructors and recovery rules. |
+| Persisted attach resolution | `resolve_persisted_host_attach_contract(...)` in [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) | Reuse entrypoint. Tighten overlay semantics and fail-closed behavior. |
+| REPL cold start bootstrap | `resolve_host_orchestrator_bootstrap(...)` and `prepare_host_orchestrator_runtime_from_resolved(...)` in [async_repl.rs](crates/shell/src/repl/async_repl.rs) | Reuse flow. Change it to carry `ResolvedLaunchContract` instead of only `RuntimeSelectionDescriptor`. |
+| Runtime materialization | `validate_runtime_realizability(...)` and `RuntimeSelectionDescriptor` | Reuse. Descriptor materialization stays downstream of contract resolution. |
+| Retained member parity | `MemberDispatchParitySubset`, `retained_member_dispatch_parity_subset(...)`, `build_member_dispatch_transport_request(...)` in [async_repl.rs](crates/shell/src/repl/async_repl.rs) | Reuse. Keep parity subset intact while making parent host session birth truthful. |
+| Public attach gating | `resolve_public_control_target(...)` in [state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse. It already enforces capability gates using durable attach truth. |
 
-### Minimum honest change
+### 0B. Exact gaps this plan closes
 
-The minimum honest change is still cross-cutting:
+The live code still leaves four blocking gaps:
 
-1. remove all production direct wrapper/backend registration from shell host prompt execution,
-2. remove all production direct wrapper/backend registration from world-member prompt execution,
-3. convert world bootstrap from a fake agent prompt into a control-plane concern rather than a user-visible turn,
-4. route both first-turn and resumed-turn execution through one gateway-mediated production seam,
-5. prove the seam change with tests that pin lifecycle behavior and auth carrier behavior.
+1. `OrchestrationSessionRecord::new(...)` seeds `host_attach_contract` via `HostAttachContract::from_manifest(...)`, and REPL cold start persists that first write unchanged.
+2. `sync_host_attach_contract(...)` repopulates a missing contract from manifest truth instead of treating missing modern durable truth as an error.
+3. `resolve_persisted_host_attach_contract(...)` deserializes `effective_policy` and then falls back to `unwrap_or_default()`, which silently regains `Policy::default()` in modern paths.
+4. Persisted attach resolution still lets request-time callers replace parts of `host_execution_client_start` and `attach_mode_preference` too freely.
 
-Anything smaller leaves the repo in the current contradictory state: the contracts say gateway-mediated runtime ownership, but the main prompt-bearing runtime still does something else.
+### 0C. Minimum honest change
 
-### Complexity check
+The minimum honest change set is:
 
-This slice touches more than 8 files and crosses shell plus world runtime boundaries. That is acceptable because the duplication already spans those modules.
+1. Extend REPL bootstrap to compute and retain a `ResolvedLaunchContract`.
+2. Add an explicit host-orchestrator session seed path that accepts durable attach truth up front.
+3. Quarantine `from_manifest(...)` out of modern persistence and steady-state attach paths entirely.
+4. Centralize persisted attach overlay validation in one helper owned by `resolve_persisted_host_attach_contract(...)`.
+5. Extend unit and integration tests around the exact authority seams above.
+6. Update downstream docs so the dependency floor is truthful.
 
-The constraint is not "touch fewer files at any cost." The constraint is:
+Anything smaller leaves 29.75 half done and pushes the same ambiguity into 30 or 31.
 
-1. no new public surface,
-2. no new runtime framework,
-3. no new schema version,
-4. no new policy/config layer,
-5. no second fulfillment seam hidden behind nicer naming.
+### 0D. Complexity check
 
-The correct posture is narrow in contract, broad in implementation:
+This slice touches more than eight files and crosses REPL, runtime, state store, CLI, tests, and docs. That would normally be a smell. Here it is justified because:
 
-1. narrow in contract because the lifecycle and selectors stay frozen,
-2. broad in implementation because all production bypasses must move together.
+1. The work is narrow in concept even if it spans multiple seams.
+2. The change is contract-hardening, not new product behavior.
+3. Each touched file participates in the same authority chain.
+4. There is still no need for a new crate or a new persisted state model.
 
-### Search check
+### 0E. Search, completeness, and distribution
 
-This plan intentionally prefers existing repo seams over new architecture. It reuses:
+This slice should do the complete version, not the doc-only shortcut.
 
-1. the existing gateway runtime,
-2. the existing adapter contract,
-3. the existing backend-id selection contract,
-4. the existing auth-bundle carrier,
-5. the existing typed member-turn transport.
+The shortcut is to narrow wording and accept current behavior. That saves little implementation time and guarantees later slices have to rediscover attach-authority bugs under more product pressure.
 
-That is a Layer 1 choice, not a custom-framework choice.
+The complete version is:
 
-### Expected blast radius
+1. Fix REPL birth-time persistence.
+2. Fix persisted attach overlay semantics.
+3. Fix modern fail-closed behavior.
+4. Prove parity and failure cases in tests.
+5. Align downstream docs.
 
-Treat this as the planned change budget. If implementation spills outside these surfaces, stop and justify the expansion before continuing.
+No new binary, package, image, or release channel is introduced, so distribution work is unchanged.
 
-| Surface class | Expected modules or files | Why this is the right boundary |
+## Contract Model
+
+### Baseline domains
+
+After 29.75 there are still only two baseline domains:
+
+| Baseline domain | Used by | Authority source |
 | --- | --- | --- |
-| Production host runtime | `crates/shell/src/execution/agent_runtime/`, narrowly-targeted paths in `crates/shell/src/repl/async_repl.rs` | This is where host prompt submission and shell-owned bootstrap prep still treat local gateway construction as runtime truth. |
-| Production world runtime | `crates/world-service/src/member_runtime.rs`, only minimum plumbing in `crates/world-service/src/service.rs` if needed | This is where launch-time and resumed world-member turns still directly build wrappers and backends. |
-| Transport and lifecycle tests | `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/repl_world_first_routing_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, `crates/world-service/tests/*`, `crates/shell/tests/world_gateway.rs`, `crates/gateway/tests/openai_shared_parity.rs` | These are the proof surfaces for lifecycle freeze, seam convergence, and auth continuity. |
-| Truth docs | `PLAN.md`, `llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md`, gateway contracts, usage docs, gap matrix | The runtime story changes here after code changes, not before. |
+| Inventory launch | public start, REPL host cold start, future world-scoped public start | `ResolvedLaunchContract` |
+| Persisted host attach | `reattach`, detached-turn recovery, later lazy attach, plus source and successor sessions involved in `fork` | `HostAttachContract` |
 
-### Explicit stop conditions
+There is no third domain for REPL-only launch semantics and no manifest-only fallback domain.
 
-If implementation requires any of the following, stop and revise the plan first:
-
-1. a new CLI flag or public verb,
-2. a new JSON schema or route for world follow-up,
-3. a new policy or config surface,
-4. a new crate just to move the seam,
-5. a synthetic prompt-bearing bootstrap step,
-6. a fallback auth path through child secret env vars.
-
-## Current Repo Truth
-
-These facts are concrete in the repo today. This plan is anchored to them.
-
-1. The shell host runtime still builds a local `AgentWrapperGateway` and directly registers concrete backends in `crates/shell/src/execution/agent_runtime/registry.rs`.
-2. Host follow-up prompt submission still rebuilds that direct gateway in `submit_host_prompt_turn()` inside `crates/shell/src/execution/agent_runtime/control.rs`.
-3. `crates/shell/src/repl/async_repl.rs` still carries gateway-shaped local runtime state and bootstrap helpers that treat local wrapper construction as an execution concern.
-4. The world member runtime still builds another direct `AgentWrapperGateway` in `crates/world-service/src/member_runtime.rs`.
-5. The world member runtime still contains a synthetic runtime bootstrap prompt via `runtime_bootstrap_prompt()`. That is incompatible with the frozen "the real user prompt is the first prompt" rule.
-6. The typed world-member follow-up seam is already real and should be preserved:
-   - request type: `MemberTurnSubmitRequestV1`,
-   - route: `/v1/member_turn/stream`.
-7. The gateway runtime and auth-bundle seams are already real and already owned:
-   - auth bundle contract: `crates/common/src/gateway_auth_bundle.rs`,
-   - world-service gateway runtime handoff: `crates/world-service/src/gateway_runtime.rs`,
-   - gateway server consumption of the FD bundle: `crates/gateway/src/server/mod.rs`.
-8. Current shell world dispatch already packages typed launch-time world-member requests with `member_dispatch.initial_prompt`. The transport seam is not what needs redesign.
-9. The current contradiction is operational, not contractual:
-   - docs and ADRs already say gateway-mediated runtime ownership,
-   - production prompt-bearing execution still bypasses that seam.
-
-## Frozen Execution Contract
-
-If implementation wants to violate any rule below, stop and revise the plan first.
-
-1. `substrate agent start` remains host-only in v1.
-2. `start` uses the user prompt as the true initial prompt.
-3. `turn --session <orchestration_session_id> --backend <backend_id> --prompt ...` remains the exact public follow-up contract.
-4. `reattach --session <orchestration_session_id>` remains recovery-only and must not submit a prompt.
-5. `stop --session <orchestration_session_id>` remains canonical closeout for attached, parked, and attention-needed durable host sessions.
-6. Once a public prompt request emits `Accepted`, the bridge still terminates with an explicit terminal envelope.
-7. Durable postures remain authoritative:
-   - `parked_resumable` means detached, resumable, no pending inbox work,
-   - `awaiting_attention` means detached, resumable, pending inbox work,
-   - `terminal` remains the only non-routable posture family.
-8. Detached world follow-up remains fail-closed until valid host ownership is restored.
-9. Linux world follow-up remains on typed `MemberTurnSubmitRequestV1` plus `/v1/member_turn/stream`.
-10. Stable backend ids remain selectors only. They do not become auth carriers or provider-quirk carriers.
-11. Integrated auth remains on the FD auth-bundle contract. Partial env auth remains invalid; blocked envs do not fall back through a bypass path.
-12. Production bootstrap mechanics must not surface as hidden user prompts, synthetic warm-up turns, or replay-visible fake agent prompts.
-
-## Target Architecture
-
-### Canonical runtime story after cutover
+### Data flow
 
 ```text
-Public shell lifecycle
-    substrate agent start|turn|reattach|stop
-                    |
-                    v
-        lifecycle + routing owner (shell)
-                    |
-       stable backend-id selection + allowlist
-                    |
-                    v
-      gateway-mediated fulfillment boundary
-      (typed runtime surface + adapter protocol)
-             /                       \
-            /                         \
-           v                           v
-  host prompt-bearing path     world-member prompt-bearing path
-  no local wrapper registry    no member-local wrapper registry
-           |                           |
-           +-----------+   +-----------+
-                       |   |
-                       v   v
-               substrate-gateway adapter dispatch
-                       |
-                       v
-             concrete backend/provider internals
+HOST COLD START
+===============
+effective config + policy + inventory
+        |
+        v
+shared dispatch resolver
+        |
+        +--> ResolvedLaunchContract
+        |       |
+        |       +--> RuntimeSelectionDescriptor (runtime materialization only)
+        |       |
+        |       `--> HostAttachContract::from_resolved_contract(...)
+        |
+        `--> OrchestrationSessionRecord persisted with authoritative attach truth
+
+
+PERSISTED ATTACH
+================
+DispatchRequestEnvelope + HostAttachContract
+        |
+        v
+resolve_persisted_host_attach_contract(...)
+        |
+        +--> validate immutable baseline fields
+        +--> deserialize persisted policy snapshot
+        +--> apply bounded attach overlay
+        `--> ResolvedLaunchContract for attach/recovery
+
+
+FORK SUCCESSOR DERIVATION
+=========================
+source HostAttachContract
+        |
+        v
+explicit successor-derivation helper
+        |
+        +--> carry forward generalized durable truth
+        +--> clear continuity-specific state
+        +--> set successor attach defaults
+        `--> persist new successor HostAttachContract
+
+
+RETAINED MEMBER TURN
+====================
+existing member runtime
+    or pending replacement
+    or exact backend descriptor fallback
+        |
+        v
+MemberDispatchParitySubset
+        |
+        v
+build_member_dispatch_transport_request(...)
 ```
 
-The important rule is not "host and world must share identical transport." The important rule is "host and world must share the same production fulfillment boundary." Placement-specific transport is allowed below that seam. Duplicate backend-registration tables above that seam are not.
+### Field ownership
 
-### Runtime ownership after cutover
+#### `ResolvedLaunchContract` owns birth-time truth
 
-| Surface | Owns | Must stop owning |
-| --- | --- | --- |
-| `crates/shell/src/execution/agent_runtime/` | lifecycle state, prompt submission orchestration, posture persistence, trace publication | direct backend registration and local wrapper-gateway construction |
-| `crates/shell/src/repl/async_repl.rs` | startup planning, world routing, typed member-dispatch request construction | preparing a shell-local authoritative world-member gateway for real execution |
-| `crates/world-service/src/member_runtime.rs` | retained-member validation, typed member-turn handling, stream translation, placement checks | direct `AgentWrapperGateway` and concrete backend registration |
-| `crates/world-service/src/gateway_runtime.rs` and gateway runtime contracts | runtime launch, auth-bundle handoff, managed runtime wiring | nothing new; these are reuse surfaces |
-| `substrate-gateway` adapter protocol | backend resolution, capability validation, request normalization, normalized adapter execution | lifecycle and operator ownership |
+For host-rooted session birth, the following fields are authoritative only once they have passed through shared resolution:
 
-### Canonical seam contract
+1. Backend identity and backend kind.
+2. Protocol.
+3. Execution scope.
+4. Runtime launch descriptor.
+5. Attach-relevant capabilities.
+6. Effective policy snapshot.
+7. Attach launch defaults.
 
-| Prompt-bearing path | Current state | Required post-slice state |
-| --- | --- | --- |
-| Host first prompt | shell-local runtime owns wrapper and backend construction | shell owns lifecycle and routing only; fulfillment is gateway-mediated |
-| Host follow-up prompt | shell-local runtime rebuilds gateway and backend per turn | same gateway-mediated fulfillment seam as host first prompt |
-| World first targeted turn | shell launches world flow, then world-member runtime owns wrapper and backend construction and synthetic bootstrap prompt | first targeted world prompt reaches gateway-mediated fulfillment with no synthetic user prompt |
-| World resumed follow-up turn | typed `/v1/member_turn/stream` transport, but member runtime still owns backend construction | same gateway-mediated fulfillment seam as world first targeted turn |
-| Gateway auth | existing FD bundle already available | same FD bundle, same fail-closed auth precedence |
-| Backend selection | stable backend id already exists | same stable backend id; adapter dispatch happens after selection, not instead of selection |
+#### `HostAttachContract` owns durable attach truth
 
-The required convergence is:
+`HostAttachContract` is the persisted attach baseline for:
 
-1. one stable backend selection story,
-2. one adapter dispatch story,
-3. one auth carrier story,
-4. two placement-specific transport stories at most,
-5. zero production direct backend-registration tables above the gateway seam.
+1. Backend identity.
+2. Protocol.
+3. Execution scope.
+4. Resolved runtime descriptor.
+5. Attach-relevant capabilities.
+6. Effective policy snapshot.
+7. Continuity selector.
+8. Attach policy defaults:
+   - `requested_execution_scope`
+   - `host_execution_client_start`
+   - `attach_mode_preference`
 
-### Helper constraints
+#### Request envelope owns only bounded overlay inputs
 
-Implementation is free to choose names, but it is not free to reopen the seam.
+For persisted attach, request-time input is not replacement truth. It is only:
 
-If a new helper is needed, it may only do one of these jobs:
+1. A no-op if it matches the durable baseline.
+2. A narrowing request if the baseline semantics allow narrowing.
+3. A selection among explicitly baseline-permitted modes when the durable baseline encodes more than one acceptable realization.
+4. A hard error if it broadens or semantically replaces the durable baseline.
 
-1. translate already-selected runtime metadata into a gateway-mediated request,
-2. normalize host and world resume metadata into one explicit input shape,
-3. hide placement-specific transport details below the shared fulfillment boundary.
+### Fork is not an attach overlay
 
-A new helper is not allowed to:
+Fork is a separate contract operation and must not be implemented as a broadening exception to persisted attach overlay rules.
 
-1. construct `AgentWrapperGateway`,
-2. register concrete backends,
-3. synthesize or rewrite the user prompt,
-4. invent a second backend-selection path,
-5. silently turn bootstrap work into a fake prompt-bearing run.
+1. `reattach`, detached-turn recovery, and later lazy attach consume an existing durable baseline through the bounded overlay model above.
+2. `fork` consumes the source session's durable truth as input, but it does not reinterpret that source session through caller overlay.
+3. `fork` allocates a new successor session and persists a new successor `HostAttachContract`.
+4. Successor derivation may transform continuity-dependent fields because it is creating a new baseline for a new session, not broadening the old one.
+5. 29.75 freezes the structural rule, not the final product-policy defaults:
+   - the successor path must be explicit and separate from persisted attach overlay;
+   - continuity-dependent fields must be handled by successor-only derivation logic, not by broadening the source session;
+   - the exact successor attach-behavior defaults remain downstream slice 31 work unless the SOW is explicitly amended.
+6. Any implementation that tries to make `fork` legal by broadening the source session through `resolve_persisted_host_attach_contract(...)` is out of contract for this plan.
 
-### Bootstrap rule
+### Encoding rule for “selection among baseline-permitted modes”
 
-The hidden `runtime_bootstrap_prompt()` path is not allowed to survive as production behavior.
+This plan makes the encoding rule explicit so 29.75 stays narrow.
 
-The replacement rule is:
+1. 29.75 does not introduce new persisted schema for “allowed mode sets” on `host_execution_client_start` or `attach_mode_preference`.
+2. The current durable baseline in `HostAttachContract` remains single-valued for those fields unless the existing code already has an explicit multi-mode representation available in the same durable contract family.
+3. Therefore the SOW’s “selection among baseline-permitted modes” rule remains part of the contract model, but it is intentionally dormant in 29.75 unless an explicit pre-existing durable encoding is already present.
+4. In practical 29.75 implementation terms: if the durable baseline is single-valued, overlay behavior is honor-or-narrow only; any request that would require selecting among multiple baseline-permitted modes must fail closed rather than inventing new encoding semantics on the fly.
+5. Fork does not use this dormant selection allowance. It gets its own explicit successor-baseline derivation rule above.
+6. Any future slice that wants active selection behavior must first introduce and document an explicit durable encoding for multiple permitted realizations. That is not part of 29.75.
 
-1. member runtime startup may still need a control-plane attach or readiness step,
-2. that step must not consume or overwrite the user prompt,
-3. that step must not appear as a synthetic agent turn in traces, persisted state, or captured stdin,
-4. the first prompt-bearing agent execution must be the real user prompt.
+### Durable-state validity rule
 
-## Implementation Plan
+This plan freezes one simple greenfield rule so missing truth cannot drift back into repair semantics.
 
-### Execution order at a glance
+1. Supported persisted sessions must carry a present and valid `host_attach_contract` and a valid serialized policy snapshot.
+2. Therefore:
+   - absent `host_attach_contract` fails closed;
+   - present-but-null `host_attach_contract` fails closed;
+   - present-but-malformed `host_attach_contract` fails closed;
+   - present `host_attach_contract` plus missing `effective_policy`, missing required attach fields, or invalid serialized policy fails closed.
+3. 29.75 does not introduce or preserve a migration, repair, or compatibility branch for these cases.
 
-This slice should execute in exactly this order:
+## Engineering Guardrails
 
-1. freeze the contract and the grep wall,
-2. cut over host prompt-bearing fulfillment,
-3. cut over world-member prompt-bearing fulfillment,
-4. reconverge in the shared conflict zone to remove bootstrap semantics and discarded shell-local gateway prep,
-5. sync truth docs only after the runtime story is stable,
-6. run the validation wall and publish one reviewer-facing proof artifact.
+### DRY and boundary rules
 
-The sequencing rule is strict: host and world cutovers may proceed in parallel for a short window, but `async_repl.rs`, bootstrap semantics, and shared lifecycle assertions are a serialized reconvergence step, not cleanup.
+1. Do not duplicate public-start persistence logic and REPL persistence logic; the REPL should reuse the same resolved-contract-to-durable-contract semantics as `persist_resolved_start_attach_contract(...)`.
+2. Do not spread attach overlay rules across `dispatch_contract.rs`, `agents_cmd.rs`, and `state_store.rs`; one helper should own the monotonicity rules.
+3. Do not let `RuntimeSelectionDescriptor` become a shadow contract object; it stays a materialization descriptor only.
+4. Keep manifest-derived construction logic obviously out of modern steady-state logic and attach resolution.
+5. Do not introduce new crates or a second durable persisted model for this slice.
 
-### Workstream summary
+### Performance constraints
 
-| Workstream | Goal | Primary surfaces | Depends on | Exit gate |
-| --- | --- | --- | --- | --- |
-| 1 | Freeze lifecycle, seam contract, grep wall, and change budget | `PLAN.md`, truth docs, target tests | - | Later code work has one fixed contract and one fixed blast radius |
-| 2 | Cut over host prompt-bearing fulfillment | `crates/shell/src/execution/agent_runtime/`, host bootstrap prep in `crates/shell/src/repl/async_repl.rs`, host tests | 1 | Host first prompt and follow-up no longer treat local gateway/backend construction as execution truth |
-| 3 | Cut over world-member fulfillment | `crates/world-service/src/member_runtime.rs`, minimum required `crates/world-service/src/service.rs`, world routing tests | 1 | Launch-time first turn and resumed follow-up use one world-side fulfillment seam without changing typed transport |
-| 4 | Reconverge shared bootstrap and startup semantics | `crates/shell/src/repl/async_repl.rs`, `crates/world-service/src/member_runtime.rs`, shared routing tests | 2, 3 | No production bootstrap prompt remains, and no discarded shell-local authoritative gateway prep remains |
-| 5 | Sync truth docs and usage text | SOW, gap matrix, gateway contracts, usage docs | 4 | Live docs match the actual runtime story |
-| 6 | Validation wall and closeout | static grep gates, focused tests, auth/runtime regression checks, full workspace gates | 2, 3, 4, 5 | Seam movement and lifecycle stability are proven together |
+This is not a throughput-driven slice, but there are still performance constraints:
 
-### Workstream 1: Freeze the lifecycle and fulfillment contract
+1. Do not add repeated inventory reload or policy recomputation during steady-state attach; the durable snapshot should make attach cheaper, not more expensive.
+2. Do not add raw-payload classification or compatibility-only branching to the hot path.
+3. Avoid repeated serde round-trips beyond the single persisted policy deserialize already required by attach resolution.
+4. Do not add REPL-path logic that re-runs full contract resolution for retained member follow-up turns.
 
-Primary surfaces:
+## Execution Plan
 
-1. `PLAN.md`
-2. `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`
-3. `ADR-0047`
-4. `docs/contracts/substrate-gateway-runtime-parity.md`
-5. `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-6. `crates/shell/tests/agent_public_control_surface_v1.rs`
-7. `crates/shell/tests/repl_world_first_routing_v1.rs`
+The implementation order is intentionally strict. Phase A freezes the contract semantics first. Every later phase consumes that decision rather than reinterpreting it.
 
-Required changes:
+### Phase A: Freeze persisted attach baseline and overlay semantics
 
-1. Freeze the exact production runtime files allowed to change in this slice.
-2. Freeze the behavioral invariants that later code work is not allowed to reopen.
-3. Freeze the grep wall for forbidden production symbols:
-   - `AgentWrapperGateway`,
-   - `CodexBackend`,
-   - `ClaudeCodeBackend`,
-   - `runtime_bootstrap_prompt`.
-4. Freeze the exact test files that carry the regression burden.
+Primary files:
 
-Must remain true:
-
-1. no public lifecycle or selector change,
-2. no new route or schema version,
-3. no new auth carrier,
-4. no widening of "what this slice is about."
-
-Exit gate:
-
-1. every later workstream can point back to one explicit contract,
-2. implementation does not have to guess whether a behavior change is allowed,
-3. reviewers can distinguish acceptable helper additions from forbidden seam drift.
-
-### Workstream 2: Cut over host prompt-bearing fulfillment
-
-Primary surfaces:
-
-1. `crates/shell/src/execution/agent_runtime/registry.rs`
-2. `crates/shell/src/execution/agent_runtime/control.rs`
-3. `crates/shell/src/execution/agent_runtime/mapping.rs`
-4. `crates/shell/src/execution/agent_runtime/validator.rs`
-5. `crates/shell/src/repl/async_repl.rs`
-6. `crates/shell/tests/agent_public_control_surface_v1.rs`
-7. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+1. [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
+2. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
+3. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
 
 Required changes:
 
-1. Replace `submit_host_prompt_turn()` as a direct wrapper-construction path. Today it builds a local gateway via `build_gateway_for_descriptor()`. After this slice it should invoke the gateway-mediated seam using the already-selected backend id plus existing resume metadata.
-2. Remove shell-local `gateway` and `agent_kind` from any host bootstrap state that still treats them as authoritative execution truth. `ResolvedHostOrchestratorBootstrap` and `PreparedAgentRuntime` may keep metadata needed for routing, but they must stop carrying a production local backend registry just to submit prompt-bearing work.
-3. Preserve host public meaning exactly:
-   - `start` remains the real first user prompt,
-   - `turn` remains the real follow-up prompt,
-   - session resume state still threads through the execution path,
-   - completion, posture, and trace publication semantics stay unchanged.
-4. Keep failure buckets coherent:
-   - invalid selection stays invalid selection,
-   - dependency unavailable stays dependency unavailable,
-   - policy denial stays policy denial.
+1. Add one explicit helper that computes persisted attach launch knobs from durable baseline plus request overlay, and keep that helper scoped to reattach-style persisted attach consumers rather than fork successor creation.
+2. Change `resolve_persisted_host_attach_contract(...)` so:
+   - `requested_execution_scope` always comes from the contract baseline;
+   - `host_execution_client_start` can honor baseline, narrow `StartNow -> Defer`, or select among explicitly baseline-permitted modes if and only if the durable baseline already encodes that allowance; otherwise it must fail closed rather than infer new multi-mode semantics;
+   - `attach_mode_preference` can honor baseline, narrow toward stricter continuity, or select among explicitly baseline-permitted modes if and only if the durable baseline already encodes that allowance; otherwise it must fail closed rather than infer new multi-mode semantics;
+   - invalid overlay attempts fail with field-specific baseline-truth diagnostics.
+3. Replace `effective_policy.unwrap_or_default()` with explicit modern-path validation:
+   - valid snapshot -> use it;
+   - absent `host_attach_contract` at the session-record level -> fail closed;
+   - present `host_attach_contract` plus missing or invalid snapshot -> fail closed as modern durable-state corruption.
+4. Preserve `field_provenance` truth so diagnostics still explain which fields came from persisted baseline versus accepted narrowing.
+5. Add an explicit successor-derivation path for fork so `agents_cmd` and public control flows do not rely on caller-side broadening of the source session baseline.
+6. Verify `agents_cmd` and public control flows consume the stricter resolved contract without reopening caller-side semantic replacement.
 
-Must remain true:
+Outputs:
 
-1. no hidden warm-up prompt appears in stdin, traces, or runtime artifacts,
-2. no host-only direct backend-registration table survives above the gateway seam,
-3. host execution is still host-scoped in public meaning even if fulfillment is now gateway-mediated.
+1. One shared persisted-attach overlay helper.
+2. One explicit baseline-vs-overlay diagnostic posture.
+3. One fail-closed policy-snapshot rule used by all modern persisted-attach paths.
+4. One explicit fork successor-baseline derivation rule that is separate from persisted attach overlay.
 
-Exit gate:
+Definition of done:
 
-1. no host prompt-bearing production path directly registers concrete backends,
-2. host `start` and host `turn` still behave the same from the CLI surface,
-3. session resume metadata still threads correctly through the new seam.
+1. Persisted attach never broadens or replaces durable baseline semantics.
+2. Modern missing policy or contract truth fails closed.
+3. Error messages explain baseline corruption or unsupported broadening.
+4. Fork successor creation is legal without weakening the no-broadening overlay rule.
 
-### Workstream 3: Cut over world-member fulfillment for first-turn and resumed-turn execution
+### Phase B: Thread resolved-contract truth into REPL host cold start
 
-Primary surfaces:
+Primary files:
 
-1. `crates/world-service/src/member_runtime.rs`
-2. `crates/world-service/src/service.rs`
-3. `crates/world-service/src/lib.rs`
-4. `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-5. `crates/shell/src/repl/async_repl.rs`
-6. `crates/shell/tests/repl_world_first_routing_v1.rs`
-7. `crates/world-service/tests/streamed_execute_cancel_v1.rs`
-8. `crates/world-service/tests/member_runtime_world_placement_v1.rs`
-
-Required changes:
-
-1. Replace both direct world execution call sites in `MemberRuntimeManager`:
-   - `launch()` currently builds a gateway with `build_gateway_for_backend()` and falls back to `runtime_bootstrap_prompt()` when `dispatch.initial_prompt` is absent,
-   - `submit_turn()` currently builds another direct gateway with `build_gateway_for_backend()` for resumed follow-up.
-2. Make both call sites traverse one world-side gateway-mediated execution seam. The important outcome is not "same function name," it is "one execution boundary, one auth/runtime story, no duplicate backend registry."
-3. Preserve the typed transport boundary exactly:
-   - launch-time world first prompt still enters through `member_dispatch.initial_prompt`,
-   - resumed world follow-up still enters through `MemberTurnSubmitRequestV1`,
-   - `POST /v1/member_turn/stream` stays unchanged,
-   - `service.rs` changes only if needed to preserve the existing typed request and response translation.
-4. Preserve retained-member identity validation, world binding checks, participant/backend/world tuple validation, and detached-world fail-closed behavior.
-5. Keep member-stream event translation and completion framing stable from the shell's perspective.
-
-Must remain true:
-
-1. first-turn and resumed-turn world execution are visibly on one fulfillment seam,
-2. no synthetic bootstrap prompt survives,
-3. typed transport contracts remain unchanged,
-4. retained-member invariants still hold.
-
-Exit gate:
-
-1. world-member production execution no longer locally constructs wrappers or backends,
-2. first-turn and resumed-turn world execution are visibly on one fulfillment seam,
-3. retained-member validation and fail-closed behavior still hold.
-
-### Workstream 4: Reconverge bootstrap semantics and shell/world startup state
-
-This is the shared conflict zone. Treat it as a required merge step, not follow-up cleanup.
-
-Primary surfaces:
-
-1. `crates/world-service/src/member_runtime.rs`
-2. `crates/shell/src/repl/async_repl.rs`
-3. `crates/shell/tests/repl_world_first_routing_v1.rs`
-4. `crates/shell/tests/support/repl_world_service.rs`
+1. [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs)
+2. [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
+3. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
 
 Required changes:
 
-1. Delete or demote `runtime_bootstrap_prompt()` in both host and world startup logic so it is no longer part of production prompt semantics.
-2. Ensure the first targeted world turn carries the real user prompt all the way to fulfillment. If any attach or readiness step remains, it must live as control-plane state, not as a fake prompt-bearing run.
-3. Remove shell-local gateway prep in `async_repl.rs` that is created only to be discarded before real remote member execution. If a prepared runtime object still exists, it should carry routing metadata only, not a local authoritative gateway registry.
-4. Update shared lifecycle assertions and prompt-capture tests in the same workstream so the bootstrap removal and seam cutover settle together.
+1. Change `ResolvedHostOrchestratorBootstrap` so it carries the resolved contract, not just the runtime descriptor.
+2. Make `resolve_host_orchestrator_bootstrap(...)` compute a host-scoped `ResolvedLaunchContract` first, then derive `RuntimeSelectionDescriptor` from it.
+3. Add an explicit session-construction path for modern host-orchestrator birth, for example `OrchestrationSessionRecord::new_host_orchestrator(...)` or a `HostAttachContractSeed`, so the first persisted session write already contains `HostAttachContract::from_resolved_contract(...)`.
+4. Stop relying on `OrchestrationSessionRecord::new(...)` plus manifest seeding for REPL cold start.
+5. Keep `RuntimeSelectionDescriptor` as runtime materialization input only.
 
-Must remain true:
+Outputs:
 
-1. traces and captured transport payloads show only the real user prompt as the first prompt,
-2. there is no production bootstrap prompt constant left on the execution path,
-3. there is no production shell-local authoritative member gateway prep pattern left behind.
+1. REPL cold start and public start share the same birth-time authority story.
+2. The first disk write for a modern REPL-born host session already contains authoritative attach truth.
 
-Exit gate:
+Definition of done:
 
-1. the first prompt-bearing execution is always the real user prompt,
-2. `async_repl.rs` no longer owns a discarded execution-time gateway for world members,
-3. shared routing assertions prove the post-merge story end to end.
+1. Equivalent public start and REPL cold start persist equivalent host attach truth for the same backend.
+2. No modern REPL cold-start write hits disk with a manifest-derived attach contract.
 
-### Workstream 5: Sync truth docs to the new steady state
+### Phase C: Remove manifest-era reconstruction from steady-state logic
 
-Primary surfaces:
+Primary files:
 
-1. `llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md`
-2. `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-3. `docs/contracts/substrate-gateway-runtime-parity.md`
-4. `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-5. `docs/USAGE.md`
+1. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+2. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
+3. [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)
 
-Required changes:
+Implementation note:
 
-1. Update live docs so they describe direct wrapper and backend registration as historical bypass behavior, not steady-state architecture.
-2. Update the gap matrix so this seam is no longer described as outstanding once code lands.
-3. Keep ADR-0040, ADR-0041, and ADR-0047 stable in ownership and lifecycle meaning. Only sync descriptive wording where implementation evidence now exists.
-
-Must remain true:
-
-1. docs lag implementation by at most one PR,
-2. ADR meaning stays stable,
-3. no doc implies shell-local or member-local backend registration is acceptable steady-state production behavior.
-
-Exit gate:
-
-1. live docs tell the same runtime story as the code,
-2. no truth doc implies the bypass is still the intended architecture.
-
-### Workstream 6: Validation and closeout
+Current runtime/tests still tolerate some partial persisted `HostAttachContract` rows because `HostAttachContract`, `HostAttachCapabilities`, and `HostAttachLaunchKnobs` deserialize with defaults. Phase C must tighten that behavior so incomplete attach-contract rows fail validation/load instead of silently inheriting defaults, and any tests that currently expect partial-contract backfill on load must be updated to expect fail-closed rejection instead.
 
 Required changes:
 
-1. Run the static grep wall on production runtime code.
-2. Run focused runtime tests for shell host control and world-member routing.
-3. Run gateway and auth regression tests that prove the FD auth-bundle path still holds.
-4. Run full workspace checks after focused coverage is green.
-5. Produce one compact validation artifact for reviewers naming:
-   - lifecycle invariants checked,
-   - world first-turn versus follow-up checks,
-   - auth-bundle checks,
-   - seam-removal grep checks.
+1. Keep `HostAttachContract::from_manifest(...)` out of steady-state modern birth paths.
+2. Change `sync_host_attach_contract(...)` so it only refreshes continuity selector state on an existing contract for modern sessions.
+3. Treat absent, null, malformed, incomplete, or otherwise invalid `host_attach_contract` as unsupported/corrupt durable state that fails closed.
+4. Ensure persistence helpers in control and parking paths do not silently repair missing durable truth during ordinary runtime snapshots.
 
-Exit gate:
+Outputs:
 
-1. seam movement and lifecycle stability are both proven,
-2. auth, selection, and retained-member invariants still hold,
-3. the repo no longer contains the production bypass in the targeted runtime surfaces.
+1. Zero steady-state codepaths that recreate authority from manifest defaults.
+2. One clear fail-closed posture for unsupported or corrupt persisted attach truth.
 
-## Code Quality Review
+Definition of done:
 
-The implementation should be judged against these rules:
+1. Modern missing durable attach truth is observable and rejected.
+2. Any missing or invalid durable attach truth is observable and rejected.
 
-1. Prefer seam removal over seam layering. Delete duplicate backend-registration tables instead of hiding them behind more indirection.
-2. Keep backend-kind mapping explicit and fail-closed, but move actual backend execution behind the gateway boundary.
-3. Preserve typed request and response contracts wherever already landed. Do not widen stable schemas unless there is no internal-only alternative.
-4. Any new helper must be named by responsibility, not by generic architecture vocabulary.
-5. Update comments near changed control flow so future readers can see why direct backend registration is forbidden there.
-6. Tests must prove the user-visible invariants, not just internal call graphs.
-7. If a compatibility harness still needs direct wrapper instantiation, keep it in tests only and label it as non-production.
-8. `async_repl.rs` is the biggest merge-conflict trap in the slice. Keep host-only and world-only prep out of that file unless the change is part of Workstream 4.
+### Phase D: Expand unit and integration coverage around the authority seams
 
-## Test Review
+Primary files:
 
-Runtime tests, seam-removal invariants, and auth-carrier tests are the authoritative test layers for this slice.
+1. [crates/shell/tests/repl_world_first_routing_v1.rs](crates/shell/tests/repl_world_first_routing_v1.rs)
+2. [crates/shell/tests/agent_public_control_surface_v1.rs](crates/shell/tests/agent_public_control_surface_v1.rs)
+3. [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
+4. Unit tests in [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+5. Unit tests in [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-This is runtime and transport work, not prompt-quality work. No LLM output-quality eval suite is required. The burden is lifecycle, routing, auth, and seam-removal proof.
+Required changes:
 
-### CODE PATH COVERAGE
+1. Add birth-time parity tests proving REPL cold start and public start persist the same attach truth shape for the same backend.
+2. Add modern fail-closed tests for missing and corrupt persisted policy snapshots.
+3. Add monotonicity tests proving `host_execution_client_start` and `attach_mode_preference` can honor baseline, narrow where allowed, and only select when the durable baseline explicitly encodes multiple permitted modes. They must never broaden or infer multi-mode semantics that are not durably encoded.
+4. Add fork-successor tests proving successor creation derives a new baseline instead of broadening the source session through persisted attach overlay.
+5. Add regression tests proving runtime snapshot and parked/resumed flows do not silently recreate missing modern contracts.
+6. Keep retained member parity coverage intact while ensuring the parent host session baseline is now truthful.
+
+Outputs:
+
+1. Unit tests for authoritative persistence and fail-closed behavior.
+2. Integration tests for REPL/public parity and recovery semantics.
+3. A targeted test matrix that future slices 30 and 31 can trust.
+
+Definition of done:
+
+1. All critical authority seams have direct regression coverage.
+2. Tests distinguish supported persisted-state behavior from unsupported or corrupt durable state.
+
+### Phase E: Keep downstream docs truthful
+
+Primary files:
+
+1. [llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
+2. [llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md)
+3. [llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)
+4. [llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)
+5. [PLAN.md](PLAN.md)
+
+Required changes:
+
+1. Make 29, 29.75, and this root plan say the same thing about the 29.75 contract floor.
+2. Ensure 30 states it inherits durable attach truth and does not repair it.
+3. Ensure 31 states attach-mode behavior consumes the 29.75 two-layer model and does not reopen baseline semantics.
+4. Update lingering 29.5 language that still implies contract-authority gaps are already closed.
+
+Outputs:
+
+1. One consistent narrative from 29 -> 29.75 -> 30 -> 31.
+2. No downstream doc that implies 30 or 31 will repair baseline contract truth left open by 29.x.
+
+Definition of done:
+
+1. A reader can move from 29 -> 29.75 -> 30 -> 31 without encountering contradictory contract ownership.
+
+## Test and Validation Plan
+
+### Code-path coverage diagram
 
 ```text
-CODE PATH COVERAGE
-==================
-[+] Host prompt-bearing fulfillment
-    crates/shell/src/execution/agent_runtime/control.rs
-    crates/shell/src/execution/agent_runtime/registry.rs
-    crates/shell/tests/agent_public_control_surface_v1.rs
-    crates/shell/tests/agent_successor_contract_ahcsitc0.rs
-    Required proof:
-        - start uses real user prompt
-        - turn uses real user prompt
-        - no direct backend registration remains in production path
-        - Accepted -> terminal still holds
+AUTHORITATIVE HOST BIRTH
+[+] async_repl.rs
+  ├── resolve_host_orchestrator_bootstrap()
+  │   ├── [GAP] resolve shared contract before descriptor materialization
+  │   └── [GAP] persist resolved contract on first orchestration-session write
+  └── prepare_host_orchestrator_runtime_from_resolved()
+      └── [GAP] carry resolved contract through REPL cold start
 
-[+] World first-turn fulfillment
-    crates/shell/src/repl/async_repl.rs
-    crates/shell/src/execution/routing/dispatch/world_ops.rs
-    crates/world-service/src/member_runtime.rs
-    crates/shell/tests/repl_world_first_routing_v1.rs
-    Required proof:
-        - launch-time initial_prompt carries the real user prompt
-        - no synthetic bootstrap prompt remains
-        - no local member-runtime backend registry remains
+[+] orchestration_session.rs
+  ├── OrchestrationSessionRecord::new(...)
+  │   └── [GAP] modern host birth still seeds host_attach_contract from manifest
+  ├── sync_host_attach_contract(...)
+  │   ├── [GAP] missing contract silently recreated from manifest
+  │   └── [ADD] continuity refresh only on existing modern contract
+  └── HostAttachContract::from_resolved_contract(...)
+      └── [EXISTING ★★★] preserves runtime/capability/policy truth
 
-[+] World resumed follow-up fulfillment
-    crates/world-service/src/member_runtime.rs
-    crates/world-service/src/lib.rs
-    crates/shell/tests/repl_world_first_routing_v1.rs
-    crates/world-service/tests/streamed_execute_cancel_v1.rs
-    Required proof:
-        - resumed follow-up still uses /v1/member_turn/stream
-        - retained-member tuple validation still holds
-        - same fulfillment seam as launch-time first turn
+[+] dispatch_contract.rs
+  ├── resolve_persisted_host_attach_contract(...)
+  │   ├── [EXISTING ★★] persisted capabilities reused
+  │   ├── [GAP] missing policy snapshot falls back to Policy::default()
+  │   ├── [GAP] attach_mode_preference currently caller-replaced
+  │   ├── [GAP] host_execution_client_start currently caller-replaced
+  │   └── [ADD] bounded overlay helper rejects broadening
+  └── field provenance
+      └── [ADD] persisted baseline vs accepted narrowing provenance stays truthful
 
-[+] Gateway/auth/adapter continuity
-    crates/world-service/src/gateway_runtime.rs
-    crates/gateway/src/server/mod.rs
-    crates/shell/tests/world_gateway.rs
-    crates/gateway/tests/openai_shared_parity.rs
-    Required proof:
-        - FD auth bundle still used
-        - bundle is consumed once
-        - no child secret env fallback path appears
-        - backend selection remains stable and allowlist-driven
+[+] retained member parity
+  ├── retained_member_dispatch_parity_subset(...)
+  │   └── [EXISTING ★★★] prefers live runtime / pending replacement / descriptor fallback
+  └── build_member_dispatch_transport_request(...)
+      └── [EXISTING ★★★] uses shared-contract-derived parity subset
+
+COVERAGE TARGET
+  Current explicit coverage is strong around persisted capability reuse and retained member parity.
+  This slice must add missing parity tests for REPL cold-start birth truth, fail-closed policy snapshot handling,
+  and attach overlay monotonicity.
 ```
 
-### USER FLOW COVERAGE
+Legend: `★★★` behavior + edge + error coverage already present, `★★` partial existing coverage, `[GAP]` new test required, `[ADD]` new assertion family to add.
 
-```text
-USER FLOW COVERAGE
-==================
-[+] Host start
-    substrate agent start --prompt ...
-        - real user prompt is first prompt-bearing execution
-        - lifecycle events still close with explicit terminal envelope
+### Required unit tests
 
-[+] Host follow-up
-    substrate agent turn --session ... --backend ... --prompt ...
-        - exact backend selector still required
-        - resumed metadata still threads through the run
-        - no local shell backend registry is reintroduced
+1. `orchestration_session.rs`
+   - host-orchestrator session birth from resolved contract persists authoritative attach truth on the first write;
+   - modern `sync_host_attach_contract(...)` does not recreate a missing contract from manifest;
+   - absent, null, malformed, or incomplete persisted contracts fail closed.
+2. `dispatch_contract.rs`
+   - missing modern `effective_policy` fails closed;
+   - invalid serialized policy fails closed with clear diagnostics;
+   - `host_execution_client_start` accepts honor, narrowing, and selection only when explicitly encoded by the durable baseline; with the current 29.75 single-valued baseline it therefore behaves as honor-or-narrow only;
+   - `attach_mode_preference` accepts honor, narrowing, and selection only when explicitly encoded by the durable baseline; with the current 29.75 single-valued baseline it therefore behaves as honor-or-narrow only;
+   - overlay broadening attempts fail with the correct `field`.
+3. `agents_cmd.rs` and successor-focused tests
+   - fork must not call persisted attach resolution in a way that broadens the source baseline;
+   - successor allocation derives and persists a new successor `HostAttachContract`;
+   - successor sessions use explicit successor-only handling for continuity-dependent fields rather than inheriting behavior through overlay broadening;
+   - all non-successor durable truth carries forward unless an explicit successor-only rule says otherwise.
+4. Durable-state validity tests
+   - rows with no `host_attach_contract` fail closed as unsupported/corrupt durable state;
+   - rows with present-but-null `host_attach_contract` fail closed as corrupted durable state;
+   - rows with malformed `host_attach_contract` fail closed as corrupted durable state;
+   - rows with a present but incomplete or otherwise invalid `host_attach_contract` fail closed as corrupted durable state.
 
-[+] World first targeted turn
-    shell routes member_dispatch.initial_prompt into world-service
-        - typed request survives unchanged
-        - first world prompt is the user prompt
-        - any attach/readiness step stays off the prompt-bearing path
+### Required integration tests
 
-[+] World resumed follow-up
-    shell routes MemberTurnSubmitRequestV1 into /v1/member_turn/stream
-        - tuple validation still blocks detached or mismatched follow-up
-        - same fulfillment seam as first targeted turn
+1. `repl_world_first_routing_v1.rs`
+   - REPL host cold start persists the same attach-relevant truth shape as public start for the same backend;
+   - a REPL-born session that gets parked and later resumed still uses the persisted continuity selector and stored policy snapshot.
+2. `agent_public_control_surface_v1.rs`
+   - reattach and turn recovery reject sessions missing modern durable policy truth;
+   - attach-time requests that attempt to broaden attach mode or client-start posture fail closed;
+   - fork succeeds through explicit successor derivation rather than overlay broadening of the source session.
+3. `agent_successor_contract_ahcsitc0.rs`
+   - successor sessions preserve generalized attach truth and handle continuity-dependent fields through explicit successor derivation after the 29.75 changes;
+   - successor sessions do not require overlay broadening to achieve their successor-only behavior.
 
-[+] Failure-facing flows
-    invalid backend id / dependency unavailable / policy denial / detached world
-        - failures stay in the correct bucket
-        - no bypass path silently "helps" by routing around the gateway seam
-```
+### Test commands
 
-### Concrete test additions or tightening
-
-| Target | Test requirement | Type |
-| --- | --- | --- |
-| `crates/shell/tests/agent_public_control_surface_v1.rs` | Add or tighten assertions that `start`, `turn`, `reattach`, `stop`, posture transitions, and `Accepted -> terminal` remain unchanged after the seam move. | focused integration |
-| `crates/shell/tests/agent_successor_contract_ahcsitc0.rs` | Prove no hidden bootstrap or synthetic prompt appears in host prompt-bearing execution artifacts. | focused integration |
-| `crates/shell/tests/repl_world_first_routing_v1.rs` | Tighten first-targeted-world-turn assertions so the real user prompt is the only first prompt-bearing input, and launch-time first turn plus resumed follow-up prove the same seam. | focused integration |
-| `crates/world-service/tests/streamed_execute_cancel_v1.rs` | Preserve cancel and completion behavior while removing member-local backend registration. | focused integration |
-| `crates/world-service/tests/member_runtime_world_placement_v1.rs` | Preserve retained-member tuple and world placement validation while the fulfillment seam moves. | focused integration |
-| `crates/shell/tests/world_gateway.rs` and `crates/gateway/tests/openai_shared_parity.rs` | Prove the FD auth-bundle path, one-time consumption, and fail-closed auth precedence remain intact. | focused integration |
-| Static repo invariant | Add one grep-backed invariant or test-time assertion that the targeted production runtime surfaces no longer instantiate `AgentWrapperGateway`, `CodexBackend`, or `ClaudeCodeBackend`. | static validation |
-| Static repo invariant | Add one grep-backed invariant or test-time assertion that `runtime_bootstrap_prompt` or equivalent synthetic prompt-bearing bootstrap behavior is gone from production runtime code. | static validation |
-
-### QA handoff artifact
-
-Implementation is not done when the tests compile. The PR or implementation notes must also leave one compact handoff artifact that names:
-
-1. the exact lifecycle commands exercised,
-2. the exact world first-turn and resumed-follow-up scenarios exercised,
-3. the auth-bundle checks performed,
-4. the static seam-removal checks performed,
-5. any remaining test-only direct wrapper uses that are intentionally non-production.
-
-### Regression rule for this slice
-
-These are mandatory blockers:
-
-1. any path that causes `start` or `turn` to send a hidden synthetic prompt before the real user prompt,
-2. any path that breaks `Accepted -> terminal`,
-3. any path that widens or changes the typed world follow-up contract,
-4. any path that restores direct backend registration in the targeted production runtime files,
-5. any path that reopens auth delivery through secret-bearing env vars.
-
-## Failure Modes Registry
-
-| Failure mode | Where it happens | Required handling | Test requirement | Critical gap if missing |
-| --- | --- | --- | --- | --- |
-| Host fulfillment still routes through shell-local wrapper construction after refactor | `crates/shell/src/execution/agent_runtime/` | fail review; remove remaining bypass | static seam check plus host integration tests | Yes |
-| World first-turn and resumed-turn drift onto different fulfillment seams | `crates/world-service/src/member_runtime.rs`, world dispatch tests | refactor until both paths converge | world first-turn plus resumed-turn regression tests | Yes |
-| Synthetic bootstrap prompt survives as hidden runtime behavior | `member_runtime.rs`, REPL startup flow | delete or demote to non-prompt control-plane step | prompt-capture regression tests | Yes |
-| Detached world follow-up reopens through a bypass path | member-turn validation | fail closed with current error posture | retained-member and detached-world tests | Yes |
-| Stable backend-id selection is bypassed by local backend mapping logic | shell or world helper code | fail closed and restore selection-before-dispatch | focused host/world integration plus static inspection | Yes |
-| FD auth-bundle handoff regresses to child env or duplicate secret path | gateway runtime or server startup | fail closed | gateway parity and auth tests | Yes |
-| Docs still describe direct wrapper construction as acceptable steady state | SOW, gap matrix, gateway contracts, usage docs | update in same slice | doc review | No, but unacceptable at ship |
-
-Any failure mode with silent prompt-semantic drift or silent auth drift is a release blocker for this slice.
-
-## Performance And Complexity Review
-
-1. This slice should not add new hot-path layers beyond the minimum gateway-mediated handoff needed to remove duplicate backend registration.
-2. Do not add per-turn discovery work that can be derived from already-selected backend ids and existing runtime wiring.
-3. The dominant cost center here is behavioral complexity, not CPU. Optimize for one obvious runtime story.
-4. If a helper can only exist by smuggling placement-specific behavior into generic terminology, do not add it.
-5. The implementation should spend zero innovation tokens on new architecture. This is a convergence slice. Boring is correct.
-
-## Deferred Follow-Ups / TODO Candidates
-
-These are real follow-ups, but they are not part of this slice:
-
-1. Shared dispatch-envelope and capability-override work from SOW 29.
-2. Public world-scoped root start and capability flags from SOW 30.
-3. Any generic integrated backend matrix expansion beyond the already-supported bindings.
-4. Any future cleanup that further normalizes gateway runtime wiring once this seam replacement is complete.
-
-## Worktree Parallelization Strategy
-
-### Dependency table
-
-| Step | Modules touched | Depends on |
-| --- | --- | --- |
-| A0. Freeze lifecycle and seam contract | truth docs, target tests, grep wall definitions | - |
-| A1. Host fulfillment cutover | `crates/shell/src/execution/agent_runtime/`, host-facing paths in `crates/shell/src/repl/async_repl.rs`, host control tests | A0 |
-| A2. World-member fulfillment cutover | `crates/world-service/src/member_runtime.rs`, minimum `crates/world-service/src/service.rs`, world routing tests | A0 |
-| A3. Shared reconvergence and bootstrap removal | `crates/shell/src/repl/async_repl.rs`, `crates/world-service/src/member_runtime.rs`, shared routing tests | A1, A2 |
-| B. Truth-doc sync | SOW, gap matrix, gateway contracts, usage docs | A3 |
-| C. Validation wall and closeout | repo root, targeted tests, auth tests | A1, A2, A3, B |
-
-### Parallel lanes
-
-Lane 0: A0  
-Reason: there is no useful parallelism until the contract, grep wall, and change budget are frozen.
-
-Lane H: A1  
-Reason: host cutover work is mostly concentrated in `crates/shell/src/execution/agent_runtime/` plus host lifecycle tests.
-
-Lane W: A2  
-Reason: world cutover work is mostly concentrated in `crates/world-service/src/member_runtime.rs` plus world routing tests.
-
-Lane R: A3  
-Reason: reconvergence touches the exact shared conflict zone, `async_repl.rs` plus bootstrap semantics plus shared routing assertions, so it must wait for H and W to land.
-
-Lane D: B  
-Reason: docs should not move until the runtime story has stopped changing.
-
-Lane V: C  
-Reason: validation is the merge gate and must run after code and docs converge.
-
-### Safe parallel split
-
-The only honest parallel split in this slice is:
-
-1. one owner or worktree handles host fulfillment cutover,
-2. one owner or worktree handles world-member fulfillment cutover,
-3. one reconvergence owner handles bootstrap removal, `async_repl.rs`, and the shared lifecycle test updates after both cutovers merge.
-
-This works because:
-
-1. host seam work is concentrated in `crates/shell/src/execution/agent_runtime/`,
-2. world seam work is concentrated in `crates/world-service/src/member_runtime.rs` and world routing tests,
-3. the conflict zone is `crates/shell/src/repl/async_repl.rs`, bootstrap semantics, and shared lifecycle assertions, which is why A3 is serialized after A1 and A2.
-
-### Suggested worktree ownership
-
-| Lane | Owns | Should avoid |
-| --- | --- | --- |
-| H | `crates/shell/src/execution/agent_runtime/`, host lifecycle tests, host resume metadata plumbing | world-member execution semantics, typed member-turn transport, doc sync |
-| W | `crates/world-service/src/member_runtime.rs`, world execution tests, minimal service plumbing | host bootstrap state, shell lifecycle semantics, doc sync |
-| R | `crates/shell/src/repl/async_repl.rs`, shared routing tests, bootstrap removal, final seam wording validation | inventing new runtime abstractions after H and W already converged |
-
-### Conflict flags
-
-1. Do not split A3 across worktrees. It touches the exact boundary where host and world behavior becomes one user-visible prompt story.
-2. `crates/shell/src/repl/async_repl.rs` is not fair game during both A1 and A2 except for the narrowest unavoidable plumbing. Major edits there belong to A3.
-3. Do not start doc sync before A3. The plan depends on the final bootstrap decision and the exact post-cutover seam wording.
-4. If A1 introduces helper shapes that A2 needs, rebase A2 onto A1 before final integration rather than cloning the helper differently in both lanes.
-
-### Execution order
-
-1. Land A0 first.
-2. Launch H and W in parallel worktrees.
-3. Merge H and W back to the main branch.
-4. Run R as the serialized reconvergence pass.
-5. Run D after the runtime story is stable.
-6. Run V last, and use that output as the ship gate.
-
-### Parallelization verdict
-
-This slice has:
-
-1. one required contract-freeze step,
-2. two short parallel execution lanes for host and world seam cutover,
-3. one serialized reconvergence step for bootstrap removal and REPL cleanup,
-4. one doc lane,
-5. one final validation lane.
-
-Peak honest parallelism is `A1 + A2`. Everything after that should be sequenced.
-
-## Validation Commands
-
-### Static seam-removal gates
-
-These commands are expected to be green in the targeted production runtime surfaces after implementation:
-
-```bash
-rg -n "AgentWrapperGateway|CodexBackend|ClaudeCodeBackend" \
-  crates/shell/src/execution/agent_runtime \
-  crates/shell/src/repl \
-  crates/world-service/src/member_runtime.rs
-```
-
-Expected result after the slice:
-
-1. no production hits in the targeted runtime files,
-2. any remaining hits must be in tests or explicitly documented non-production harnesses.
-
-Synthetic bootstrap prompt gate:
-
-```bash
-rg -n "runtime_bootstrap_prompt|Enter persistent Substrate world-scoped member mode" \
-  crates/world-service/src/member_runtime.rs \
-  crates/shell/src/repl \
-  crates/shell/tests \
-  crates/world-service/tests
-```
-
-Expected result after the slice:
-
-1. no production hits,
-2. test fixtures may refer to the old behavior only if the test is explicitly historical or transitional.
-
-### Focused cargo gates
+At minimum:
 
 ```bash
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
-cargo test -p shell --test world_gateway -- --nocapture
-cargo test -p world-service --test streamed_execute_cancel_v1 -- --nocapture
-cargo test -p world-service --test member_runtime_world_placement_v1 -- --nocapture
-cargo test -p substrate-gateway --test openai_shared_parity -- --nocapture
+cargo test -p shell host_attach_contract_from_resolved_contract_preserves_truth -- --nocapture
+cargo test -p shell persisted_attach_contract_is_explicit_baseline_domain -- --nocapture
 ```
 
-### Full workspace gates
+If helper APIs change substantially, also run:
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace -- --nocapture
+cargo test -p shell --lib execution::agent_runtime::dispatch_contract -- --nocapture
+cargo test -p shell --lib execution::agent_runtime::orchestration_session -- --nocapture
 ```
 
-### Manual validation proof points
+### Manual validation
 
-Manual validation for this slice must explicitly confirm:
+Manual validation must prove:
 
-1. host `start` uses the real user prompt as the first prompt,
-2. host `turn` uses the real user prompt as the follow-up prompt,
-3. world first targeted turn uses the real user prompt and not a bootstrap prompt,
-4. resumed world follow-up still travels through `/v1/member_turn/stream`,
-5. detached world follow-up still fails closed,
-6. gateway startup still consumes the FD auth bundle,
-7. runtime artifacts or traces provide evidence that fulfillment is gateway-mediated rather than shell-local or member-local wrapper construction.
+1. A REPL-born host session persists the same attach-relevant truth shape as a public-start-born host session for the same backend.
+2. Later attach planning reuses the full durable baseline from `HostAttachContract`, including attach policy defaults, without regaining `Policy::default()` or manifest-default capabilities.
+3. Missing or invalid persisted durable truth fails closed with no repair or compatibility branch.
+4. Bounded overlay behavior is explicit and auditable, with no caller-side semantic replacement of persisted attach policy.
+5. 30 and 31 can be read straight through after 29.75 without contradicting the actual runtime contract floor.
 
-## Completion Summary
+## Failure Modes Registry
 
-This plan is implementation-ready because it now freezes the entire execution story:
+| Code path | Realistic production failure | Test required | Error handling required | User-visible outcome |
+| --- | --- | --- | --- | --- |
+| REPL host cold start | session is persisted with manifest-derived defaults instead of resolved truth | Yes | Yes | Later attach behaves differently from public start |
+| Persisted attach resolution | stored `effective_policy` is missing or corrupt on a session that already has `host_attach_contract` | Yes | Yes | Clear corruption error, not silent permissive attach or accidental legacy fallback |
+| Durable-state validation | a row with missing or incomplete `host_attach_contract` is mistakenly accepted or silently repaired | Yes | Yes | Corrupt or unsupported sessions slip past the contract floor |
+| Attach overlay | caller broadens `attach_mode_preference` or `host_execution_client_start` | Yes | Yes | Clear "baseline truth rejected field" error |
+| Fork successor allocation | fork is implemented as a broadening overlay on the source session instead of successor derivation | Yes | Yes | Fork fails unexpectedly or weakens the overlay contract for every other caller |
+| Runtime snapshot sync | missing contract silently recreated from manifest during parking or snapshot write | Yes | Yes | Hidden authority drift that only appears on later resume |
+| Retained member parity | REPL retains old member parity while parent host session baseline changed | Existing coverage plus regression check | Yes | Follow-up turn routes with stale runtime truth |
 
-1. Objective: gateway-mediated fulfillment replaces the production bypass without changing lifecycle meaning.
-2. Locked decisions: public lifecycle, backend-id selection, typed world-member transport, and FD auth carrier remain fixed.
-3. Step 0: the minimum honest change, blast radius, stop conditions, and reuse surfaces are explicit.
-4. Current repo truth: the exact bypass points and bootstrap regression points are named.
-5. Architecture review: ownership is explicit and the target seam is singular.
-6. Implementation plan: each workstream has inputs, boundaries, constraints, and exit gates.
-7. Test review: the exact runtime paths, proof obligations, and regression blockers are defined.
-8. Failure modes: the dangerous regressions are named and treated as blockers.
-9. Parallelization: one freeze step, one honest host/world parallel window, one serialized reconvergence step, then docs and validation.
-10. Validation: grep, focused tests, auth checks, manual proof points, and full workspace gates are all specified.
+### Critical gaps
 
-After this slice lands, the runtime story should read as if it were intentional from the start:
+These are the critical gaps this plan must close before implementation can be called done:
 
-1. shell owns lifecycle and routing,
-2. typed runtime surfaces own transport and world attachment,
-3. stable backend ids are selected before execution,
-4. `substrate-gateway` owns adapter dispatch and backend internals,
-5. no production prompt-bearing path bypasses that seam anymore.
+1. First-write REPL cold-start parity is currently unproven and likely false.
+2. Modern missing policy snapshot currently broadens through defaults.
+3. Attach-time caller input currently replaces durable attach knobs too freely.
+4. Current fork allocation broadens `ContinuityRequired` source sessions by asking for `FreshAllowed` through persisted attach overlay.
+
+## Worktree Parallelization Strategy
+
+This plan has real parallelization opportunities, but only after the contract rules are frozen. Before that point, parallel work would just create rebase churn and semantic drift.
+
+### Dependency table
+
+| Step | Modules touched | Depends on |
+| --- | --- | --- |
+| A. Freeze attach baseline and overlay rules | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/` | — |
+| B. Thread resolved contract into REPL cold start | `crates/shell/src/repl/`, `crates/shell/src/execution/agent_runtime/` | A plus the shared `orchestration_session.rs` session-seed prerequisite landed from Lane C |
+| C. Remove manifest fallback from steady-state paths | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/agent_runtime/control.rs` | A |
+| D. Expand unit and integration coverage | `crates/shell/src/execution/agent_runtime/`, `crates/shell/tests/`, `crates/shell/src/repl/` | A for resolver semantics, B and C for parity and recovery cases |
+| E. Align downstream docs | `llm-last-mile/`, repo root planning docs | A complete enough to freeze wording, final pass after B and C |
+
+### Parallel lanes
+
+Lane A: Step A  
+Reason: this freezes the contract and helper shapes every other lane consumes.
+
+Lane B: Step B REPL bootstrap wiring plus Step D subset for REPL parity  
+Reason: REPL cold-start work can proceed once the baseline and overlay helper shape is frozen, but it consumes a shared session-seed prerequisite owned outside Lane B.
+
+Lane C: Step C plus the shared `orchestration_session.rs` session-seed prerequisite, then Step D subset for fail-closed persistence validation  
+Reason: steady-state manifest-reconstruction removal already owns `agent_runtime/` and `orchestration_session.rs`, so it is the right lane to land the shared constructor or seed primitive that Lane B then consumes.
+
+Lane D: Step E  
+Reason: doc rewrites can begin once Step A lands conceptually, but final wording waits for B and C behavior to settle.
+
+### Execution order
+
+1. Land Lane A first. Nothing else starts until the baseline and overlay semantics are frozen.
+2. After Lane A stabilizes, Lane C lands the shared `orchestration_session.rs` session-seed prerequisite plus the steady-state reconstruction removal in the same files.
+3. Once that prerequisite is in place, launch the remaining Lane B and Lane C work in parallel worktrees if ownership is still clean.
+4. Merge B and C, then run the full targeted test matrix.
+5. Finish with Lane D once runtime behavior is stable enough that docs can be written once and stay true.
+
+### Conflict flags
+
+1. Lanes B and C both touch `crates/shell/src/execution/agent_runtime/`, and Phase B requires a new session-construction path in `orchestration_session.rs`. That prerequisite belongs to Lane C, not Lane B.
+2. If two workers are used, assign ownership explicitly:
+   - Worker B owns `async_repl.rs` plus REPL-facing tests and consumes the already-landed session-seed API;
+   - Worker C owns `dispatch_contract.rs`, `orchestration_session.rs`, `state_store.rs`, `control.rs`, and attach-control tests, including the session-seed constructor or helper Phase B depends on.
+3. If Lane C cannot land that prerequisite first, run B and C sequentially.
+4. Lane D should not finalize any dependency wording until B and C land, or the docs will drift again.
+
+## Acceptance Criteria
+
+This slice is complete only when all of the following are true:
+
+1. REPL host cold start and public start persist equivalent `HostAttachContract` truth for equivalent host-backed launches.
+2. No steady-state host session birth path relies on `HostAttachContract::from_manifest(...)` as its primary truth source.
+3. Persisted attach resolution reuses the full durable attach baseline from `HostAttachContract`, including attach policy defaults for `requested_execution_scope`, `host_execution_client_start`, and `attach_mode_preference`.
+4. Any attach-time request variation is modeled explicitly as a bounded overlay constrained by that baseline, with no silent caller-side replacement of persisted attach policy.
+5. Missing durable policy or attach truth fails closed in modern steady-state paths instead of silently broadening through defaults.
+6. Code, tests, and docs all describe the same overlay rules: honor baseline, narrow where permitted, or select among baseline-permitted modes, but never broaden or replace the durable baseline silently.
+7. Fork is implemented as successor-baseline derivation, not as a broadening overlay on the source session.
+8. Missing, null, malformed, or incomplete persisted durable attach truth fails closed with no compatibility helper or repair branch in this slice.
+9. 30 and 31 can both move forward after 29.75 without reopening baseline attach semantics.
+
+## Implementation Tasks
+
+Synthesized from the scope challenge, contract model, and execution plan above. Each task is buildable and directly tied to one of the contract gaps this slice owns.
+
+- [ ] **T1 (P1, human: ~2h / CC: ~20min)** — `agent_runtime/` — Add an authoritative host-orchestrator session seed path that persists `HostAttachContract` from `ResolvedLaunchContract` on the first write.
+  - Surfaced by: Step 0 / Phase B — REPL cold start currently persists manifest-derived attach truth.
+  - Files: `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agents_cmd.rs`
+  - Verify: unit tests for first-write host attach truth plus public-start parity checks.
+
+- [ ] **T2 (P1, human: ~2h / CC: ~20min)** — `repl/` — Make `resolve_host_orchestrator_bootstrap(...)` carry resolved-contract truth and make REPL cold start persist it before runtime launch.
+  - Surfaced by: Phase B — REPL bootstrap still materializes runtime without durable contract authority.
+  - Files: `crates/shell/src/repl/async_repl.rs`
+  - Verify: `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
+
+- [ ] **T3 (P1, human: ~2h / CC: ~15min)** — `dispatch_contract` — Add one bounded overlay helper for persisted attach launch knobs, scope it to reattach-style consumers, and reject broadening attempts.
+  - Surfaced by: Step 0 / Phase A — attach-mode and client-start semantics are too caller-owned today, and fork must not become a broadening loophole.
+  - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+  - Verify: targeted persisted-attach resolver unit tests.
+
+- [ ] **T4 (P1, human: ~1h / CC: ~10min)** — `dispatch_contract` — Remove modern `Policy::default()` fallback from persisted attach resolution and fail closed on missing or invalid policy snapshots.
+  - Surfaced by: Step 0 / Failure modes — missing durable truth currently broadens silently.
+  - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+  - Verify: new unit tests plus `agent_public_control_surface_v1`.
+
+- [ ] **T5 (P1, human: ~90min / CC: ~15min)** — `orchestration_session/control` — Remove steady-state manifest reconstruction, stop `sync_host_attach_contract(...)` from silently recreating missing modern contracts, and add an explicit successor-baseline derivation path for fork.
+  - Surfaced by: Step 0 / Phase C — steady-state semantics and successor derivation both need clear fail-closed boundaries.
+  - Files: `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agents_cmd.rs`
+  - Verify: modern fail-closed tests and successor-contract tests.
+
+- [ ] **T6 (P2, human: ~2h / CC: ~20min)** — `shell tests` — Add REPL/public-start parity coverage, attach overlay monotonicity tests, and regression coverage for parked and resumed host sessions.
+  - Surfaced by: Test and validation plan — core authority paths still have coverage holes.
+  - Files: `crates/shell/tests/repl_world_first_routing_v1.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+  - Verify: full targeted test matrix in this plan.
+
+- [ ] **T7 (P2, human: ~45min / CC: ~10min)** — `docs` — Update 29, 29.75, 30, and 31 wording so every slice describes the same contract floor and dependency order.
+  - Surfaced by: Phase E — downstream docs already point at 29.75 and must stay truthful.
+  - Files: `llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md`, `llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md`, `llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md`, `llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md`, `PLAN.md`
+  - Verify: manual read-through of 29 -> 29.75 -> 30 -> 31.

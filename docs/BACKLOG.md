@@ -124,13 +124,63 @@ Keep concise, actionable, and security-focused.
     - Add fields as optional/backwards-compatible (or bump schema with clear migration rules) and update any schema/fixtures/tests/docs.
   - Acceptance: `substrate world doctor --json` includes the world OS identity fields when world is enabled; missing data degrades gracefully; docs explain the semantics.
 
+## Deferred Product Follow-Ups — Guest World Images / Linux `guest_rootfs`
+
+- **P2 – Additional guest distro support beyond Ubuntu/Debian**
+  - Problem: `guest_rootfs` is intentionally Ubuntu/Debian-first, but the long-term goal is guest-distro flexibility decoupled from the host distro.
+  - Work:
+    - Define how additional blessed guest images are introduced, validated, and documented.
+    - Add per-image compatibility rules so unsupported images fail closed with clear remediation.
+    - Extend validation to prove cross-host-distro behavior remains deterministic.
+  - Acceptance: Substrate can support more than one blessed Linux guest distro without redefining the backend contract.
+
+- **P2 – Non-APT guest-image provisioning support**
+  - Problem: provisioning-time system-package support is currently manager-limited; additional guest distros will require non-APT provisioning paths.
+  - Work:
+    - Add manager-aware provisioning support for guest images that do not use APT (`pacman`, `dnf`, `yum`, `apk`, `zypper`, etc.).
+    - Keep runtime `world deps current sync|install` probe-only for system packages across all managers.
+    - Ensure manager selection is derived from in-world identity/probes rather than host PATH.
+  - Acceptance: supported guest images can provision system packages with their native package manager while preserving the explicit provisioning-only posture.
+
+- **P2 – User-imported or arbitrary guest images**
+  - Problem: the first ship should bless one built-in image family, but advanced users may eventually want to bring their own guest images.
+  - Work:
+    - Define an allowlisted import/registration workflow for operator-supplied guest images.
+    - Specify provenance, validation, and fail-closed handling for untrusted or malformed images.
+    - Clarify how imported images participate in doctor output, compatibility checks, and remediation.
+  - Acceptance: operators can register approved guest images without weakening image provenance or safety guarantees.
+
 - **P2 – World image selection/pinning (Linux guest-rootfs, Lima, WSL)**
   - Problem: once we have guest-like world images across platforms, operators will want to pin the world OS/distro per workspace for reproducibility and parity (instead of relying on whatever Substrate ships by default or whatever the host happens to be).
   - Work:
     - Add a first-class “world image” identity and selection surface (workspace + global), surfaced in `substrate world doctor --json` and health output.
     - Support pinning per workspace (e.g., `.substrate/settings.yaml`) with a stable identifier and upgrade story.
-    - Ensure `world deps provision` and other guest-only flows validate that the active image is supported and report actionable remediation when it is not.
+    - Ensure `substrate world enable --provision-deps` and other guest-only flows validate that the active image is supported and report actionable remediation when it is not.
   - Acceptance: operators can pin the world image per workspace and see the effective image in doctor/health; behavior is reproducible across machines; unsafe/unknown images fail closed with clear guidance.
+
+- **P3 – Make Linux `guest_rootfs` the default backend**
+  - Problem: first ship should keep `host_native` as the default, but long term the stronger guest-backed model may become the preferred Linux execution posture.
+  - Work:
+    - Gather validation and operator evidence that `guest_rootfs` is stable enough for default use.
+    - Define the exact rollout criteria and fallback/remediation expectations before changing the default.
+    - Update docs, install defaults, doctor messaging, and smoke coverage if the default flips.
+  - Acceptance: Linux can move to `guest_rootfs` by default without surprising existing operators or weakening fail-closed guarantees.
+
+- **P3 – Dedicated CLI surface for guest-rootfs/image lifecycle**
+  - Problem: first ship uses a script-first warm flow, but long term image lifecycle likely needs a first-class CLI contract.
+  - Work:
+    - Design a dedicated CLI for rootfs/image bootstrap, repair, reset, and inspection.
+    - Keep the CLI aligned with existing world enable/provisioning flows rather than creating competing operator workflows.
+    - Define cross-platform boundaries so Linux guest-rootfs lifecycle and future image lifecycle stay coherent with Lima/WSL.
+  - Acceptance: operators can manage guest-rootfs/image lifecycle through a stable CLI surface instead of helper scripts alone.
+
+- **P4 – Full VM-backed Linux backend (only if later justified)**
+  - Problem: the current direction intentionally avoids a heavyweight Linux VM, but some future constraints may justify an optional VM-backed Linux world.
+  - Work:
+    - Define concrete criteria that would justify a VM-backed Linux backend instead of continuing to invest in host-kernel guest-rootfs execution.
+    - Compare resource cost, isolation guarantees, and operator complexity against `guest_rootfs`.
+    - If pursued, keep the backend contract explicit so VM-backed Linux does not silently replace the lighter-weight path.
+  - Acceptance: any future Linux VM backend is introduced as an explicit, justified backend choice rather than accidental scope creep.
 
 - **P1 fs_diff parity (agent HTTP + PTY)**
   - *Agent HTTP path:* Today only replay/local backends attach `fs_diff`; agent-routed non-PTY commands drop the diff. Extend `transport-api-types::ExecuteResponse` / `world-service` so `/v1/execute` returns `fs_diff: Option<FsDiff>` and update the shell to record it in completion spans. Acceptance: `fs_diff` shows up in `trace.jsonl` for agent HTTP runs.

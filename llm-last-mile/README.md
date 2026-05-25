@@ -82,6 +82,12 @@ The original packet stops before public control-plane productization. The follow
   - Hardening follow-on: host bootstrap and detach parking now preserve the exact durable-session fields that later `turn`, `reattach`, `stop`, and `status --json` rely on.
 - [25-host-durable-session-closeout-and-qa-hardening.md](./25-host-durable-session-closeout-and-qa-hardening.md)
   - Truth-convergence and QA-hardening follow-on: freeze `turn` as prompt-taking follow-up on the same durable session, `reattach` as attached-owner recovery only, `stop` as durable closeout for attached and parked host sessions, `status --json` as the authoritative parked-session read surface, detached-world follow-up as fail-closed until `reattach`, and inbox behavior as narrow retained state rather than a public inbox workflow.
+- [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](./29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
+  - Landed shared dispatch-contract truth: one internal dispatch contract now resolves inventory-backed and persisted-attach-backed baselines, persists generalized `HostAttachContract` truth, and keeps human plus orchestrator-controlled dispatch on the same semantics.
+- [30-public-world-scoped-agent-start-and-capability-flags.md](./30-public-world-scoped-agent-start-and-capability-flags.md)
+  - Draft follow-on: public world-scoped `agent start` depends on the slice 29 contract and keeps durable authority host-rooted.
+- [31-lazy-host-attach-for-host-rooted-world-start.md](./31-lazy-host-attach-for-host-rooted-world-start.md)
+  - Draft follow-on: later attach must reuse the persisted slice 29 host-attach truth for explicit continuity or fresh attach modes.
 
 ## Non-Goals in This Packet
 

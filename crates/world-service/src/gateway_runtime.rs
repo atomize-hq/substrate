@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use substrate_common::{
     GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
     SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
@@ -35,13 +36,18 @@ const GATEWAY_MODE_IN_WORLD: &str = "in_world";
 const GATEWAY_MODE_HOST_ONLY: &str = "host_only";
 
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 const GATEWAY_BINARY_OVERRIDE_ENV: &str = "SUBSTRATE_GATEWAY_BINARY";
 const HEALTH_PATH: &str = "/health";
 const DEFAULT_BACKEND: &str = "cli:codex";
+const CLI_CLAUDE_CODE_BACKEND: &str = "cli:claude_code";
 const API_OPENAI_BACKEND: &str = "api:openai";
 const DEFAULT_ROUTED_MODEL: &str = "codex";
 const DEFAULT_ACTUAL_MODEL: &str = "codex-mini-latest";
 const DEFAULT_PROVIDER_NAME: &str = "openai-codex";
+const CLAUDE_ROUTED_MODEL: &str = "claude-sonnet-4.5";
+const CLAUDE_ACTUAL_MODEL: &str = "claude-sonnet-4-5-20250929";
+const CLAUDE_PROVIDER_NAME: &str = "anthropic-api";
 const OPENAI_ROUTED_MODEL: &str = "gpt-4.1-mini";
 const OPENAI_ACTUAL_MODEL: &str = "gpt-4.1-mini";
 const OPENAI_PROVIDER_NAME: &str = "openai-api";
@@ -54,7 +60,9 @@ const WORLD_ENTRY_WRAPPER_MODE: u32 = 0o755;
 const KNOWN_GATEWAY_AUTH_ENV_VARS: &[&str] = &[
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
     SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+    ANTHROPIC_API_KEY_ENV,
     OPENAI_API_KEY_ENV,
 ];
 const REQUIRED_GATEWAY_CAPABILITIES: &[&str] =
@@ -203,8 +211,26 @@ const API_OPENAI_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding 
     auth_kind: GatewayIntegratedAuthKind::ApiEnv,
 };
 
-const GATEWAY_BACKEND_BINDINGS: &[GatewayBackendBinding] =
-    &[CLI_CODEX_BACKEND_BINDING, API_OPENAI_BACKEND_BINDING];
+const CLI_CLAUDE_CODE_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: CLI_CLAUDE_CODE_BACKEND,
+    routed_model: CLAUDE_ROUTED_MODEL,
+    actual_model: CLAUDE_ACTUAL_MODEL,
+    provider_name: CLAUDE_PROVIDER_NAME,
+    provider_type: "anthropic",
+    advertised_capabilities: CLI_CODEX_BACKEND_BINDING.advertised_capabilities,
+    required_capabilities: REQUIRED_GATEWAY_CAPABILITIES,
+    provider_auth: GatewayProviderAuthConfig::ApiKey {
+        env_var: ANTHROPIC_API_KEY_ENV,
+        bundle_field: SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
+    },
+    auth_kind: GatewayIntegratedAuthKind::ApiEnv,
+};
+
+const GATEWAY_BACKEND_BINDINGS: &[GatewayBackendBinding] = &[
+    CLI_CODEX_BACKEND_BINDING,
+    CLI_CLAUDE_CODE_BACKEND_BINDING,
+    API_OPENAI_BACKEND_BINDING,
+];
 
 pub(crate) fn resolve_gateway_backend_binding(
     backend_id: &str,
@@ -1628,8 +1654,19 @@ mod tests {
                 }),
                 api_env: None,
             }),
+            CLI_CLAUDE_CODE_BACKEND => Some(anthropic_integrated_auth_payload("sk-ant-proof")),
             API_OPENAI_BACKEND => Some(openai_integrated_auth_payload("sk-openai-test")),
             _ => None,
+        }
+    }
+
+    fn anthropic_integrated_auth_payload(api_key: &str) -> GatewayIntegratedAuthPayloadV1 {
+        let mut env = HashMap::new();
+        env.insert(ANTHROPIC_API_KEY_ENV.to_string(), api_key.to_string());
+        GatewayIntegratedAuthPayloadV1 {
+            backend_id: CLI_CLAUDE_CODE_BACKEND.to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
         }
     }
 
@@ -2065,6 +2102,14 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
     }
 
     #[test]
+    fn binding_lookup_includes_explicit_claude_code_proof_target() {
+        let binding =
+            resolve_gateway_backend_binding(CLI_CLAUDE_CODE_BACKEND).expect("claude binding");
+        assert_eq!(binding.backend_id, CLI_CLAUDE_CODE_BACKEND);
+        assert_eq!(binding.provider_name, CLAUDE_PROVIDER_NAME);
+    }
+
+    #[test]
     fn binding_lookup_returns_none_for_unbound_backend() {
         assert!(resolve_gateway_backend_binding("api:anthropic").is_none());
     }
@@ -2084,6 +2129,14 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         assert!(openai_config.contains("auth_type = \"apikey\""));
         assert!(openai_config.contains("api_key = \"$OPENAI_API_KEY\""));
         assert!(!openai_config.contains("oauth_provider ="));
+
+        let claude_binding =
+            resolve_gateway_backend_binding(CLI_CLAUDE_CODE_BACKEND).expect("claude binding");
+        let claude_config = render_integrated_config(4319, claude_binding);
+        assert!(claude_config.contains("provider_type = \"anthropic\""));
+        assert!(claude_config.contains("auth_type = \"apikey\""));
+        assert!(claude_config.contains("api_key = \"$ANTHROPIC_API_KEY\""));
+        assert!(!claude_config.contains("oauth_provider ="));
     }
 
     #[test]
@@ -2100,6 +2153,25 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
             HashMap::from([(
                 SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY.to_string(),
                 "sk-openai-proof".to_string(),
+            )])
+        );
+    }
+
+    #[test]
+    fn claude_auth_handoff_uses_api_env_when_available() {
+        let binding =
+            resolve_gateway_backend_binding(CLI_CLAUDE_CODE_BACKEND).expect("claude binding");
+        let auth = resolve_integrated_auth_handoff(
+            binding,
+            Some(anthropic_integrated_auth_payload("sk-ant-proof")),
+        )
+        .expect("claude auth handoff");
+
+        assert_eq!(
+            auth.bundle.fields,
+            HashMap::from([(
+                SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY.to_string(),
+                "sk-ant-proof".to_string(),
             )])
         );
     }

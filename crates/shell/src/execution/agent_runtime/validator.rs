@@ -4,8 +4,12 @@ use std::path::PathBuf;
 use anyhow::Result;
 use substrate_broker::Policy;
 
-use crate::execution::agent_inventory::{
-    AgentCapabilitiesV1, AgentConfigKind, AgentInventoryEntryV1,
+use crate::execution::agent_inventory::{AgentCapabilitiesV1, AgentInventoryEntryV1};
+use crate::execution::agent_runtime::dispatch_contract::{
+    resolve_inventory_contract_for_exact_backend, resolve_inventory_contract_for_unique_scope,
+    AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind, DispatchCallerKind,
+    DispatchCapabilityOverrideSet, DispatchRequestEnvelope, HostExecutionClientStart,
+    ResolvedLaunchContract,
 };
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 
@@ -121,25 +125,72 @@ pub(crate) fn validate_runtime_realizability(
     entry: &AgentInventoryEntryV1,
     effective_config: &SubstrateConfig,
 ) -> std::result::Result<RuntimeSelectionDescriptor, RuntimeRealizabilityError> {
-    if entry.file.config.kind != AgentConfigKind::Cli {
+    let contract = ResolvedLaunchContract {
+        caller_kind: DispatchCallerKind::HumanStart,
+        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+        agent_id: entry.file.id.clone(),
+        backend_id: entry.derived_backend_id(),
+        backend_kind: orchestrator_backend_kind(&entry.file.id).map_err(|err| {
+            RuntimeRealizabilityError {
+                exit_code: 2,
+                reason: err
+                    .to_string()
+                    .replace("selected orchestrator backend", "selected runtime backend"),
+            }
+        })?,
+        protocol: entry
+            .file
+            .config
+            .protocol
+            .clone()
+            .unwrap_or_else(|| PURE_AGENT_PROTOCOL.to_string()),
+        execution_scope: entry.effective_scope(effective_config),
+        runtime: crate::execution::agent_runtime::dispatch_contract::ResolvedLaunchRuntime {
+            kind: entry.file.config.kind,
+            cli_mode: entry.effective_cli_mode(effective_config),
+            cli_binary: entry.effective_cli_binary().map(ToOwned::to_owned),
+        },
+        capabilities: entry.file.config.capabilities.clone(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: entry.effective_scope(effective_config),
+            host_execution_client_start: HostExecutionClientStart::StartNow,
+            attach_mode_preference: AttachModePreference::ContinuityRequired,
+        },
+        effective_policy: Policy::default(),
+        baseline_source: crate::execution::agent_runtime::dispatch_contract::BaselineSourceMetadata {
+            baseline_kind: DispatchBaselineKind::InventoryLaunch,
+            baseline_origin:
+                crate::execution::agent_runtime::dispatch_contract::FieldBaselineOrigin::GlobalInventory,
+            inventory_path: Some(entry.path.clone()),
+            orchestration_session_id: None,
+        },
+        field_provenance: BTreeMap::new(),
+    };
+
+    materialize_runtime_descriptor(&contract)
+}
+
+pub(crate) fn materialize_runtime_descriptor(
+    contract: &ResolvedLaunchContract,
+) -> std::result::Result<RuntimeSelectionDescriptor, RuntimeRealizabilityError> {
+    if contract.runtime.kind != crate::execution::agent_inventory::AgentConfigKind::Cli {
         return Err(RuntimeRealizabilityError {
             exit_code: 2,
             reason: format!(
                 "selected runtime '{}' is not runtime-realizable by the shell-owned UAA runtime because config.kind={} is unsupported; only config.kind=cli is supported in v1",
-                entry.file.id,
-                entry.file.config.kind.as_str()
+                contract.agent_id,
+                contract.runtime.kind.as_str()
             ),
         });
     }
 
-    let cli_mode = entry.effective_cli_mode(effective_config);
-    if cli_mode != AgentCliMode::Persistent {
+    if contract.runtime.cli_mode != AgentCliMode::Persistent {
         return Err(RuntimeRealizabilityError {
             exit_code: 2,
             reason: format!(
                 "selected runtime '{}' is not runtime-realizable because cli.mode={} is unsupported; only cli.mode=persistent is supported for the first caller path",
-                entry.file.id,
-                match cli_mode {
+                contract.agent_id,
+                match contract.runtime.cli_mode {
                     AgentCliMode::Persistent => "persistent",
                     AgentCliMode::PerRequest => "per_request",
                 }
@@ -147,37 +198,32 @@ pub(crate) fn validate_runtime_realizability(
         });
     }
 
-    let backend_kind =
-        orchestrator_backend_kind(&entry.file.id).map_err(|err| RuntimeRealizabilityError {
-            exit_code: 2,
-            reason: err
-                .to_string()
-                .replace("selected orchestrator backend", "selected runtime backend"),
-        })?;
-
-    let binary = entry
-        .effective_cli_binary()
-        .ok_or_else(|| RuntimeRealizabilityError {
-            exit_code: 4,
-            reason: format!(
+    let binary =
+        contract
+            .runtime
+            .cli_binary
+            .as_deref()
+            .ok_or_else(|| RuntimeRealizabilityError {
+                exit_code: 4,
+                reason: format!(
             "selected runtime '{}' is not runtime-realizable because config.cli.binary is missing",
-            entry.file.id
+            contract.agent_id
         ),
-        })?;
+            })?;
     let binary_path = which::which(binary).map_err(|err| RuntimeRealizabilityError {
         exit_code: 4,
         reason: format!(
             "selected runtime '{}' is not runtime-realizable because config.cli.binary '{}' did not resolve on the host: {}",
-            entry.file.id, binary, err
+            contract.agent_id, binary, err
         ),
     })?;
 
     Ok(RuntimeSelectionDescriptor {
-        agent_id: entry.file.id.clone(),
-        backend_id: entry.derived_backend_id(),
-        backend_kind,
-        protocol: PURE_AGENT_PROTOCOL.to_string(),
-        execution_scope: entry.effective_scope(effective_config),
+        agent_id: contract.agent_id.clone(),
+        backend_id: contract.backend_id.clone(),
+        backend_kind: contract.backend_kind,
+        protocol: contract.protocol.clone(),
+        execution_scope: contract.execution_scope,
         binary_path,
     })
 }
@@ -186,65 +232,34 @@ pub(crate) fn validate_member_selection(
     effective_config: &SubstrateConfig,
     inventory: &BTreeMap<String, AgentInventoryEntryV1>,
 ) -> std::result::Result<Option<RuntimeSelectionDescriptor>, MemberSelectionError> {
-    let mut selected = Vec::new();
+    let envelope = inventory_dispatch_envelope(
+        DispatchCallerKind::OrchestratorMemberStart,
+        DispatchBaselineKind::InventoryLaunch,
+        None,
+        AgentExecutionScope::World,
+    );
+    let selection_policy = permissive_inventory_selection_policy(inventory);
+    let resolved = resolve_inventory_contract_for_unique_scope(
+        PathBuf::from(".").as_path(),
+        effective_config,
+        inventory,
+        &selection_policy,
+        &envelope,
+        AgentExecutionScope::World,
+    )
+    .map_err(|err| MemberSelectionError {
+        exit_code: 2,
+        reason: err.reason,
+    })?;
 
-    for entry in inventory.values() {
-        if !entry.file.config.enabled
-            || entry.effective_scope(effective_config) != AgentExecutionScope::World
-        {
-            continue;
-        }
-
-        if entry.file.config.protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
-            return Err(MemberSelectionError {
-                exit_code: 2,
-                reason: format!(
-                    "world-scoped member '{}' is not eligible because {}",
-                    entry.file.id,
-                    protocol_validation_error("it", entry.file.config.protocol.as_deref())
-                ),
-            });
-        }
-
-        if let Some(capability) =
-            missing_required_orchestrator_capability(&entry.file.config.capabilities)
-        {
-            return Err(MemberSelectionError {
-                exit_code: 2,
-                reason: format!(
-                    "world-scoped member '{}' is not eligible because it is missing required capability '{}'",
-                    entry.file.id, capability
-                ),
-            });
-        }
-
-        let descriptor =
-            validate_runtime_realizability(entry, effective_config).map_err(|err| {
-                MemberSelectionError {
-                    exit_code: err.exit_code,
-                    reason: err.reason,
-                }
-            })?;
-        selected.push(descriptor);
-    }
-
-    match selected.len() {
-        0 => Ok(None),
-        1 => Ok(selected.into_iter().next()),
-        _ => {
-            let agent_ids = selected
-                .iter()
-                .map(|descriptor| descriptor.agent_id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            Err(MemberSelectionError {
-                exit_code: 2,
-                reason: format!(
-                    "ambiguous world member selection: multiple eligible world-scoped members found ({agent_ids})"
-                ),
-            })
-        }
-    }
+    resolved
+        .as_ref()
+        .map(materialize_runtime_descriptor)
+        .transpose()
+        .map_err(|err| MemberSelectionError {
+            exit_code: err.exit_code,
+            reason: err.reason,
+        })
 }
 
 pub(crate) fn validate_exact_backend_selection(
@@ -253,90 +268,75 @@ pub(crate) fn validate_exact_backend_selection(
     scope: AgentExecutionScope,
     backend_id: &str,
 ) -> std::result::Result<Option<RuntimeSelectionDescriptor>, ExactBackendSelectionError> {
-    let mut matches = inventory
-        .values()
-        .filter(|entry| {
-            entry.file.config.enabled
-                && entry.effective_scope(effective_config) == scope
-                && entry.derived_backend_id() == backend_id
-        })
-        .collect::<Vec<_>>();
+    let envelope = inventory_dispatch_envelope(
+        if scope == AgentExecutionScope::Host {
+            DispatchCallerKind::HumanStart
+        } else {
+            DispatchCallerKind::OrchestratorMemberStart
+        },
+        DispatchBaselineKind::InventoryLaunch,
+        Some(backend_id),
+        scope,
+    );
+    let selection_policy = permissive_inventory_selection_policy(inventory);
+    let resolved = resolve_inventory_contract_for_exact_backend(
+        PathBuf::from(".").as_path(),
+        effective_config,
+        inventory,
+        &selection_policy,
+        &envelope,
+        scope,
+    )
+    .map_err(|err| ExactBackendSelectionError {
+        exit_code: 2,
+        reason: err.reason,
+    })?;
 
-    match matches.len() {
-        0 => Ok(None),
-        1 => {
-            let entry = matches.pop().expect("single exact backend match");
-            validate_exact_backend_entry(entry, effective_config, scope, backend_id)
-        }
-        _ => {
-            let agent_ids = matches
-                .iter()
-                .map(|entry| entry.file.id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            Err(ExactBackendSelectionError {
-                exit_code: 2,
-                reason: format!(
-                    "ambiguous exact backend selection: multiple {} runtime entries advertise backend '{}' ({agent_ids})",
-                    runtime_scope_label(scope),
-                    backend_id,
-                ),
-            })
-        }
-    }
-}
-
-fn validate_exact_backend_entry(
-    entry: &AgentInventoryEntryV1,
-    effective_config: &SubstrateConfig,
-    scope: AgentExecutionScope,
-    backend_id: &str,
-) -> std::result::Result<Option<RuntimeSelectionDescriptor>, ExactBackendSelectionError> {
-    if entry.file.config.protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
-        return Err(ExactBackendSelectionError {
-            exit_code: 2,
-            reason: format!(
-                "selected {} runtime '{}' for backend '{}' {}",
-                runtime_scope_label(scope),
-                entry.file.id,
-                backend_id,
-                protocol_validation_error(
-                    "does not advertise",
-                    entry.file.config.protocol.as_deref()
-                )
-                .replacen("does not advertise ", "", 1),
-            ),
-        });
-    }
-
-    if let Some(capability) =
-        missing_required_orchestrator_capability(&entry.file.config.capabilities)
-    {
-        return Err(ExactBackendSelectionError {
-            exit_code: 2,
-            reason: format!(
-                "selected {} runtime '{}' for backend '{}' is missing required capability '{}'",
-                runtime_scope_label(scope),
-                entry.file.id,
-                backend_id,
-                capability,
-            ),
-        });
-    }
-
-    let descriptor = validate_runtime_realizability(entry, effective_config).map_err(|err| {
-        ExactBackendSelectionError {
+    resolved
+        .as_ref()
+        .map(materialize_runtime_descriptor)
+        .transpose()
+        .map_err(|err| ExactBackendSelectionError {
             exit_code: err.exit_code,
             reason: err.reason,
-        }
-    })?;
-    Ok(Some(descriptor))
+        })
 }
 
-fn runtime_scope_label(scope: AgentExecutionScope) -> &'static str {
-    match scope {
-        AgentExecutionScope::Host => "host-scoped",
-        AgentExecutionScope::World => "world-scoped",
+fn inventory_dispatch_envelope(
+    caller_kind: DispatchCallerKind,
+    baseline_kind: DispatchBaselineKind,
+    backend_id: Option<&str>,
+    scope: AgentExecutionScope,
+) -> DispatchRequestEnvelope {
+    DispatchRequestEnvelope {
+        caller_kind,
+        baseline_kind,
+        backend_id: backend_id.map(ToOwned::to_owned),
+        orchestration_session_id: None,
+        requested_execution_scope_override: None,
+        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: scope,
+            host_execution_client_start: if scope == AgentExecutionScope::Host {
+                HostExecutionClientStart::StartNow
+            } else {
+                HostExecutionClientStart::Defer
+            },
+            attach_mode_preference: AttachModePreference::ContinuityRequired,
+        },
+        has_prompt_payload: false,
+    }
+}
+
+fn permissive_inventory_selection_policy(
+    inventory: &BTreeMap<String, AgentInventoryEntryV1>,
+) -> Policy {
+    Policy {
+        agents_allowed_backends: inventory
+            .values()
+            .map(AgentInventoryEntryV1::derived_backend_id)
+            .collect(),
+        ..Policy::default()
     }
 }
 

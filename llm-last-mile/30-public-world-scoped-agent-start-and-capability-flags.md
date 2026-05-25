@@ -1,197 +1,141 @@
 # SOW: Public World-Scoped Agent Start And Capability Flags
 
-Status: remaining-work draft. This SOW is the public contract follow-on after [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md). It is anchored to [ADR-0025 — Agent Hub Core](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md), [ADR-0027 — LLM and Agent Config/Policy Surface](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md), and [ADR-0047 — Host Orchestrator Durable Session and Parked-Resumable Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md).
+Status: draft aligned to validated architecture. This slice is not implementation-ready yet. It depends on [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md), [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md), and the landed [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md) floor.
 
-This slice is a real public contract expansion. Today, public root start remains host-only. This slice is where that rule changes, if the repo chooses to change it.
+This slice no longer carries host-rooted versus standalone world-root as an open product decision. The validated architecture has already closed that question.
 
-## Current Frozen Contract
+## Frozen Direction
 
-The current public contract still says:
+The only valid forward meaning of public `substrate agent start --scope world ...` is:
 
-- `substrate agent start --backend <backend_id> --prompt ...` is host-only in v1 in [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:115),
-- world-only root start is intentionally rejected today in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:915),
-- and [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md:90) still fixes root `start` as host-only in v1.
+1. create a host-rooted durable orchestration session,
+2. persist the resolved host attach contract under that session,
+3. launch a world worker/member under that session through the shared dispatch contract,
+4. leave durable authority host-rooted,
+5. avoid eager host execution-client startup.
 
-This SOW is the slice that would intentionally broaden that contract.
+This slice must not reopen standalone world-root continuity.
 
 ## Objective
 
-Broaden the public `substrate agent start` surface so a human can explicitly launch host-scoped or world-scoped agents through one shared dispatch contract, including explicit capability flags.
+Broaden the public `substrate agent start` surface so a human can explicitly launch a world-scoped worker under a host-rooted orchestration session using the shared dispatch contract from 29.
 
 This slice is done only when all of the following are true:
 
-1. `substrate agent start` accepts an explicit scope selector such as `--scope host|world`.
-2. Human launches and orchestrator-only tool launches consume the same underlying dispatch envelope.
-3. Capability flags exposed on the human command map onto the same effective launch contract used by orchestrator tool calls.
-4. The new public world-scoped start semantics are explicit, documented, and fully tested.
+1. `substrate agent start` accepts explicit scope selection through the validated shared dispatch contract.
+2. `--scope world` always means host-rooted orchestration plus world worker launch.
+3. The command persists the host attach contract at session birth.
+4. The command does not eagerly start a host execution client just to create ownership theater.
+5. The CLI surface and docs explain the resulting durable session truth clearly.
 
-## Required Product Decision
+## What This Slice Assumes Is Already Landed
 
-Before implementation is considered closed, this slice must choose one exact meaning for public `--scope world` root start.
+1. 28.5 has removed blank-prompt control semantics from Substrate architecture and split control-only attach from prompt-bearing launch.
+2. 29 has landed one shared `DispatchRequestEnvelope`, one resolved launch contract, and one persisted host attach contract.
+3. 29 has frozen the two baseline domains:
+   - inventory-backed resolution for new dispatch,
+   - persisted-attach-backed resolution for later host attach and detached follow-up recovery.
 
-### Option A: Host-rooted orchestration session plus world worker
+## What This Slice Leaves To 31
 
-Public `substrate agent start --scope world ...`:
+This slice does not finish lazy host attach behavior. 31 owns:
 
-- creates or binds a host-rooted orchestration session,
-- launches a world-scoped worker/member under that orchestration session,
-- and keeps the durable orchestration authority host-rooted.
+1. when lazy host attach is triggered,
+2. fresh attach versus continuity attach behavior,
+3. operator/status truth for born-unattached sessions with pending host-side work.
 
-This option is more compatible with the current [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md) model.
+## Open Architectural Split: Born-Unattached Status Truth
 
-### Option B: Standalone world-root session
+The repo has already landed durable detached host-session posture truth for attached-then-detached sessions (`parked_resumable` and `awaiting_attention`), but it has not yet fully frozen or implemented a distinct born-unattached host-rooted status taxonomy.
 
-Public `substrate agent start --scope world ...`:
+That remaining architecture split is intentionally divided across 30 and 31:
 
-- can create a standalone world-root session with no host-rooted orchestrator session above it.
+1. 30 must freeze and implement the minimum operator-visible status floor required to ship truthful public `agent start --scope world` behavior:
+   - a born-unattached host-rooted world-start session is a valid non-terminal steady state;
+   - it must not be reported as attached/active ownership theater;
+   - it must not silently collapse into semantics that imply prior attach history if that distinction would be misleading;
+   - detached-world follow-up remains fail-closed until sanctioned host attach occurs.
+2. 31 must freeze and implement the fuller born-unattached taxonomy and lifecycle meaning:
+   - exact posture/status naming,
+   - the distinction between never-attached versus previously-attached-and-parked,
+   - how pending host-side work changes status/posture,
+   - how attach-worker behavior and trigger policy interact with those states.
 
-This option is a broader contract change and requires a more substantial rethink of the current host-rooted durability model.
+This slice must therefore define enough pre-attach status truth to make public world-start honest, but it must not overreach into the full lazy-attach taxonomy that belongs to 31.
 
-This SOW does not assume A or B. It requires the repo to choose one and align the public contract, runtime semantics, and docs to that choice.
+## 29.75 Contract Floor This Slice Must Reuse
 
-## Already Landed And Assumed
+Before this public surface is promoted, it must inherit the 29.75 closeout floor exactly:
 
-This SOW assumes the following are already true and are not being redesigned here:
+1. inventory `policy_overlay` already merges into the resolved `effective_policy`;
+2. the only dispatch-time capability narrowing family currently supported is `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, and only from `true` to `false`;
+3. `session_start`, `llm`, and `mcp_client` remain dispatch-time unsupported and must stay fail closed until a later slice deliberately broadens scope;
+4. retained world-member follow-up turns already consume a shared-contract-derived parity subset, so this slice must not invent a second public world-start follow-up dialect.
+5. host session birth now persists authoritative attach-relevant truth from resolved-contract semantics across both public start and REPL host cold start, so this slice must not repair durable attach truth itself.
+6. missing or invalid persisted durable attach truth now fails closed with no repair/backfill branch in 29.75, so this slice must not reintroduce one.
 
-- the shared dispatch envelope from [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md) exists or is the prerequisite contract,
-- agent inventory already provides baseline defaults and policy overlays in [agent_inventory.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_inventory.rs:13),
-- the orchestrator remains host-scoped in the current v1 model under [ADR-0025](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md:141),
-- and gateway-mediated LLM fulfillment is handled by the prior slice rather than being invented here.
+## Draft Work Breakdown
 
-## In Scope
+### 1. Expose explicit scope selection on public `agent start`
 
-- broaden public `substrate agent start` beyond host-only,
-- add explicit scope selection for public root start,
-- add explicit human-facing capability flags that map onto the shared dispatch envelope,
-- align orchestrator tool launches and human launches behind the same launch contract,
-- and document exactly what a public world-scoped root start means.
+Required direction:
 
-## Out Of Scope
+1. `--scope host` preserves the current host-rooted start meaning.
+2. `--scope world` routes through the same shared dispatch contract from 29; it does not invent a second CLI-only launch dialect.
+3. invalid scope/backend combinations fail closed.
 
-This slice does not include:
+### 2. Define the public world-start contract in operator-visible terms
 
-- moving the orchestrator itself in-world,
-- bypassing the shared dispatch envelope,
-- inventing a second public worker-launch system separate from orchestrator tools,
-- or reopening the gateway-mediated fulfillment seam as a separate architecture project.
+Required direction:
 
-## Concrete Work Breakdown
+1. a durable host-rooted orchestration session exists immediately,
+2. a world worker/member is launched under that session,
+3. the host attach contract is already persisted,
+4. no host execution client must be attached yet.
 
-### 1. Freeze one public meaning for `--scope world`
+### 3. Reuse the same capability flag families exposed by 29
 
-Primary anchors:
+Required direction:
 
-- [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
-- [ADR-0025](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md)
+1. user-facing capability flags map onto the same resolved launch contract used by orchestrator-controlled dispatch,
+2. policy-denied flags fail closed,
+3. the command does not invent a CLI-only override model or alternate attach-truth vocabulary,
+4. any public capability flags introduced in this slice must stay inside the already-supported narrowing family unless a later slice explicitly reopens the contract.
 
-Required outcome:
+### 4. Preserve current lifecycle boundaries
 
-- the repo chooses whether world-scoped public root start is host-rooted or standalone world-root,
-- that rule is explicit,
-- and the rule is enforced consistently by runtime and docs.
+Required direction:
 
-### 2. Expose scope selection on public `agent start`
+1. no hidden bootstrap prompt reappears,
+2. detached-world follow-up remains fail-closed until host ownership is attached through the sanctioned path,
+3. `start` does not imply standalone world continuity.
 
-Primary anchors:
+## Draft Acceptance Shape
 
-- [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
-- [cli.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/cli.rs)
+This slice should only be promoted out of draft once:
 
-Required outcome:
+1. 28.5 has landed,
+2. 29 has landed,
+3. 29.75 has landed,
+4. the command can create a host-rooted durable session plus world worker without eager host attach,
+5. the public CLI and docs no longer imply standalone world-root as an option.
 
-- the public root start command accepts an explicit scope selector,
-- invalid scope/backend combinations fail closed,
-- and current host-scoped starts continue to work under the same user-visible semantics.
+## Draft Validation Targets
 
-### 3. Expose capability flags on the human command
+When this slice is eventually promoted, validation must include:
 
-Primary anchors:
+1. host-scoped root start still working,
+2. world-scoped root start creating a host-rooted durable session,
+3. resolved capability flags matching the 29 contract,
+4. truthful status output for the newly created session before any host attach,
+5. detached-world fail-closed behavior before host attach.
 
-- [ADR-0027](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md)
-- [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
+## Sequencing
 
-Required outcome:
+Current stack status:
 
-- human operators can express explicit launch-time capability choices as flags,
-- those flags map onto the same internal dispatch envelope used by orchestrator tool calls,
-- and the flag set is explicit rather than relying entirely on hidden inventory defaults.
-
-### 4. Keep lifecycle semantics stable while broadening root start
-
-Primary anchors:
-
-- [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
-- [25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)
-
-Required outcome:
-
-- broadening public root start must not reintroduce hidden bootstrap prompts,
-- must not regress `start`/`turn`/`reattach`/`stop` semantics for host-rooted orchestration,
-- and must keep durable-session behavior truthful and explicit under the chosen contract.
-
-### 5. Align human launch and orchestrator launch under one model
-
-Primary anchors:
-
-- [ADR-0025](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md)
-- [ADR-0026](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md)
-
-Required outcome:
-
-- the human command is a first-class supported launch path,
-- orchestrator tool calls remain the primary worker-dispatch path in normal orchestration use,
-- and both consume the same effective launch contract rather than diverging over time.
-
-## Required Test Additions Or Tightening
-
-### Public CLI coverage
-
-Required scenarios:
-
-- `substrate agent start --scope host ...` preserves current behavior,
-- `substrate agent start --scope world ...` follows the chosen contract exactly,
-- invalid capability flags or invalid scope/backend combinations fail closed,
-- and user-facing JSON/text output stays explicit about what was launched.
-
-### Shared-envelope parity coverage
-
-Required scenarios:
-
-- human capability flags resolve to the same effective launch contract as orchestrator tool-call inputs,
-- policy-denied flags fail closed in both paths,
-- and inventory defaults remain visible in effective launch resolution.
-
-### Lifecycle regression coverage
-
-Required scenarios:
-
-- no hidden bootstrap prompts reappear,
-- host durable-session behavior remains correct,
-- and any new world-scoped root start behavior is fully explicit rather than heuristic.
-
-## Acceptance Criteria
-
-- public `substrate agent start` supports explicit scope selection.
-- human operators can express launch-time capability choices as explicit flags.
-- the human command and orchestrator tool paths share one dispatch contract.
-- the exact meaning of public world-scoped root start is frozen and documented.
-- current host-scoped lifecycle semantics do not regress.
-
-## Validation Expectations
-
-- run targeted CLI, inventory, dispatch, and durable-session tests,
-- run full touched package coverage and then full workspace tests:
-  - `cargo test --workspace -- --nocapture`
-- manual validation for this slice must explicitly exercise:
-  - host-scoped public root start,
-  - world-scoped public root start,
-  - capability flag resolution,
-  - and parity between human launches and orchestrator-driven launches.
-
-## Docs And Truth Sync
-
-When this slice is closed:
-
-- update [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md),
-- update [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md) or its successor truth surfaces where they still say root start is host-only,
-- and document the public flag surface so world-scoped launch and capability overrides are explicit operator-facing contract rather than tribal knowledge.
+1. [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md): implementation-ready immediate slice.
+2. [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md): implementation-ready next slice.
+3. [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md): final contract-authority closeout floor.
+4. This SOW: draft pending those earlier landings.
+5. [31-lazy-host-attach-for-host-rooted-world-start.md](31-lazy-host-attach-for-host-rooted-world-start.md): draft follow-on after this slice fixes the public entrypoint.

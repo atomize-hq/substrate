@@ -11,6 +11,7 @@ The owned runtime/parity surface covers:
 
 - the typed lifecycle/status control path behind `substrate world gateway sync`, `status`, and `restart`
 - the authority boundary between shell/operator surfaces and the world/backend runtime
+- the gateway-owned prompt-fulfillment seam used by prompt-bearing host orchestration and world-member execution
 - the Linux/macOS/Windows parity guarantees for lifecycle/status semantics
 - the allowed divergence list for backend transport and bootstrap mechanics
 
@@ -19,6 +20,7 @@ Concrete rules:
 - Shell/operator entrypoints consume a typed runtime surface; they must not rebuild gateway state via raw exec probing, backend-private config files, or log scraping.
 - `crates/shell/src/builtins/world_gateway.rs` and later shell execution wiring are consumers of that typed surface. They may render operator output and exit codes, but they do not own runtime truth.
 - The typed runtime surface is owned by the world/backend boundary: `crates/world-service`, shared request/response models in `crates/transport-api-types`, and transport helpers in `crates/transport-api-client`.
+- Prompt-bearing shell/world orchestration paths that consume integrated gateway bindings must enter the gateway-owned runtime seam (`crates/gateway/src/adapter_runtime.rs`) through their bridge layers, not through duplicated shell-local or world-local backend-registration tables.
 - Non-isolated gateway lifecycle/status flows must not depend on reusable session-world creation or recovery when no world-backed isolation is required for the gateway runtime. In that posture, the typed runtime surface may use a stable synthetic runtime identity derived from the effective lifecycle binding inputs.
 - Isolated gateway lifecycle/status flows must continue to require a real compatible world/session identity and any required world-backed attachment primitives.
 - `substrate world gateway status --json` remains governed by `docs/contracts/substrate-gateway-status-schema.md`; this contract may not widen the JSON field list or redefine `client_wiring.*`.
@@ -56,9 +58,12 @@ Concrete rules:
 The later execution slices must keep the runtime/parity contract aligned across these surfaces:
 
 - `crates/shell/src/builtins/world_gateway.rs`
+- `crates/gateway/src/adapter_runtime.rs`
+- `crates/shell/src/execution/prompt_fulfillment.rs`
 - `crates/shell/tests/world_gateway.rs`
 - `crates/world-service/src/lib.rs`
 - `crates/world-service/src/gateway_runtime.rs`
+- `crates/world-service/src/prompt_fulfillment.rs`
 - `crates/world-service/tests/socket_activation.rs`
 - `crates/transport-api-types/src/lib.rs`
 - `crates/transport-api-client/src/lib.rs`

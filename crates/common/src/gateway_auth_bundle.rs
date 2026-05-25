@@ -34,9 +34,12 @@ pub const SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN: &str =
     "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN";
 pub const SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY: &str =
     "SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY";
+pub const SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY: &str =
+    "SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY";
 
 pub const GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION: u32 = 1;
 pub const GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX: &str = "cli:codex";
+pub const GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE: &str = "cli:claude_code";
 pub const GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI: &str = "api:openai";
 
 pub const CLI_CODEX_GATEWAY_AUTH_ALLOWED_FIELDS: &[&str] = &[
@@ -45,6 +48,10 @@ pub const CLI_CODEX_GATEWAY_AUTH_ALLOWED_FIELDS: &[&str] = &[
 ];
 pub const CLI_CODEX_GATEWAY_AUTH_REQUIRED_FIELDS: &[&str] =
     &[SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN];
+pub const CLI_CLAUDE_CODE_GATEWAY_AUTH_ALLOWED_FIELDS: &[&str] =
+    &[SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY];
+pub const CLI_CLAUDE_CODE_GATEWAY_AUTH_REQUIRED_FIELDS: &[&str] =
+    &[SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY];
 pub const API_OPENAI_GATEWAY_AUTH_ALLOWED_FIELDS: &[&str] =
     &[SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY];
 pub const API_OPENAI_GATEWAY_AUTH_REQUIRED_FIELDS: &[&str] =
@@ -141,6 +148,9 @@ pub fn validate_gateway_auth_bundle(bundle: &GatewayAuthBundleV1) -> Result<(), 
 pub fn required_gateway_auth_fields(backend_id: &str) -> Result<&'static [&'static str], String> {
     match backend_id {
         GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX => Ok(CLI_CODEX_GATEWAY_AUTH_REQUIRED_FIELDS),
+        GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE => {
+            Ok(CLI_CLAUDE_CODE_GATEWAY_AUTH_REQUIRED_FIELDS)
+        }
         GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI => Ok(API_OPENAI_GATEWAY_AUTH_REQUIRED_FIELDS),
         other => Err(format!(
             "unsupported gateway auth bundle backend_id '{}'",
@@ -152,6 +162,9 @@ pub fn required_gateway_auth_fields(backend_id: &str) -> Result<&'static [&'stat
 pub fn allowed_gateway_auth_fields(backend_id: &str) -> Result<&'static [&'static str], String> {
     match backend_id {
         GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX => Ok(CLI_CODEX_GATEWAY_AUTH_ALLOWED_FIELDS),
+        GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE => {
+            Ok(CLI_CLAUDE_CODE_GATEWAY_AUTH_ALLOWED_FIELDS)
+        }
         GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI => Ok(API_OPENAI_GATEWAY_AUTH_ALLOWED_FIELDS),
         other => Err(format!(
             "unsupported gateway auth bundle backend_id '{}'",
@@ -188,6 +201,20 @@ mod tests {
             fields: HashMap::from([(
                 SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY.to_string(),
                 "sk-test".to_string(),
+            )]),
+        };
+
+        bundle.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_cli_claude_code_bundle_with_required_field() {
+        let bundle = GatewayAuthBundleV1 {
+            schema_version: GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION,
+            backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CLAUDE_CODE.to_string(),
+            fields: HashMap::from([(
+                SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY.to_string(),
+                "sk-ant-test".to_string(),
             )]),
         };
 

@@ -1,0 +1,1 @@
+Own the shared dispatch-contract module and immediate inventory/validator consumers only: create the contract vocabulary, make baseline domains explicit, keep policy narrowing fail-closed, and stop before durable-state, public CLI, REPL, docs, or .runs ownership.

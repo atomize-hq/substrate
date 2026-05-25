@@ -1,0 +1,8 @@
+{
+  "git status --short --branch -- PLAN.md ORCH_PLAN.md": 0,
+  "git rev-parse HEAD": 0,
+  "sha256sum PLAN.md": 0,
+  "git worktree list --porcelain": 0,
+  "npx gitnexus status": 0,
+  "npx gitnexus analyze": 1
+}

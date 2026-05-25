@@ -1,6 +1,14 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
+#[cfg(test)]
+use crate::execution::agent_runtime::control::ResolvedRuntimeBackendKind;
+use crate::execution::agent_runtime::control::ResolvedRuntimeDescriptor;
+use crate::execution::config_model::AgentExecutionScope;
+
+use super::dispatch_contract::ResolvedLaunchContract;
+use super::dispatch_contract::{AttachLaunchKnobs, AttachModePreference, HostExecutionClientStart};
 use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
 use super::session::AgentRuntimeSessionManifest;
 
@@ -67,6 +75,198 @@ pub(crate) enum OrchestrationSessionPosture {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct HostAttachContract {
+    pub backend_id: String,
+    pub execution_scope: AgentExecutionScope,
+    pub protocol: String,
+    pub launch_descriptor: ResolvedRuntimeDescriptor,
+    pub capabilities: HostAttachCapabilities,
+    pub attach_launch_knobs: HostAttachLaunchKnobs,
+    pub effective_policy: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuity_uaa_session_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct HostAttachCapabilities {
+    pub session_resume: bool,
+    pub session_fork: bool,
+    pub session_stop: bool,
+    pub status_snapshot: bool,
+    pub event_stream: bool,
+}
+
+impl Default for HostAttachCapabilities {
+    fn default() -> Self {
+        Self {
+            session_resume: true,
+            session_fork: true,
+            session_stop: true,
+            status_snapshot: true,
+            event_stream: true,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum HostAttachExecutionClientStart {
+    #[default]
+    StartNow,
+    Defer,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum HostAttachModePreference {
+    #[default]
+    ContinuityRequired,
+    ContinuityPreferred,
+    FreshAllowed,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct HostAttachLaunchKnobs {
+    pub requested_execution_scope: AgentExecutionScope,
+    pub host_execution_client_start: HostAttachExecutionClientStart,
+    pub attach_mode_preference: HostAttachModePreference,
+}
+
+impl Default for HostAttachLaunchKnobs {
+    fn default() -> Self {
+        Self {
+            requested_execution_scope: AgentExecutionScope::Host,
+            host_execution_client_start: HostAttachExecutionClientStart::StartNow,
+            attach_mode_preference: HostAttachModePreference::ContinuityRequired,
+        }
+    }
+}
+
+impl HostAttachContract {
+    #[cfg(test)]
+    pub(crate) fn from_manifest_for_test(manifest: &AgentRuntimeSessionManifest) -> Option<Self> {
+        if manifest.handle.role != super::mapping::ORCHESTRATOR_ROLE
+            || manifest.handle.execution.scope != AgentExecutionScope::Host
+        {
+            return None;
+        }
+
+        let backend_kind = match manifest.internal.resolved_agent_kind.as_str() {
+            "codex" => ResolvedRuntimeBackendKind::Codex,
+            "claude_code" => ResolvedRuntimeBackendKind::ClaudeCode,
+            _ => return None,
+        };
+
+        Some(Self {
+            backend_id: manifest.handle.backend_id.clone(),
+            execution_scope: manifest.handle.execution.scope,
+            protocol: manifest.handle.protocol.clone(),
+            launch_descriptor: ResolvedRuntimeDescriptor {
+                agent_id: manifest.handle.agent_id.clone(),
+                backend_id: manifest.handle.backend_id.clone(),
+                backend_kind,
+                protocol: manifest.handle.protocol.clone(),
+                execution_scope: manifest.handle.execution.scope,
+                binary_path: manifest.internal.resolved_binary_path.clone(),
+            },
+            capabilities: HostAttachCapabilities::default(),
+            attach_launch_knobs: HostAttachLaunchKnobs {
+                requested_execution_scope: manifest.handle.execution.scope,
+                ..HostAttachLaunchKnobs::default()
+            },
+            effective_policy: serde_json::to_value(substrate_broker::Policy::default())
+                .expect("test policy should serialize"),
+            continuity_uaa_session_id: manifest.internal_uaa_session_id().map(ToOwned::to_owned),
+        })
+    }
+
+    pub(crate) fn from_resolved_contract(
+        resolved: &ResolvedLaunchContract,
+        continuity_uaa_session_id: Option<String>,
+    ) -> Option<Self> {
+        if resolved.execution_scope != AgentExecutionScope::Host {
+            return None;
+        }
+
+        Some(Self {
+            backend_id: resolved.backend_id.clone(),
+            execution_scope: resolved.execution_scope,
+            protocol: resolved.protocol.clone(),
+            launch_descriptor: ResolvedRuntimeDescriptor {
+                agent_id: resolved.agent_id.clone(),
+                backend_id: resolved.backend_id.clone(),
+                backend_kind: resolved.backend_kind.into(),
+                protocol: resolved.protocol.clone(),
+                execution_scope: resolved.execution_scope,
+                binary_path: resolved.runtime.cli_binary.clone().unwrap_or_default(),
+            },
+            capabilities: HostAttachCapabilities::from(&resolved.capabilities),
+            attach_launch_knobs: HostAttachLaunchKnobs::from(&resolved.attach_launch_knobs),
+            effective_policy: serde_json::to_value(&resolved.effective_policy)
+                .expect("effective policy should serialize"),
+            continuity_uaa_session_id,
+        })
+    }
+
+    pub(crate) fn supports_resume(&self) -> bool {
+        self.capabilities.session_resume
+    }
+
+    pub(crate) fn supports_fork(&self) -> bool {
+        self.capabilities.session_fork
+    }
+
+    pub(crate) fn supports_stop(&self) -> bool {
+        self.capabilities.session_stop
+    }
+
+    pub(crate) fn supports_continuity_attach(&self) -> bool {
+        matches!(
+            self.attach_launch_knobs.attach_mode_preference,
+            HostAttachModePreference::ContinuityRequired
+                | HostAttachModePreference::ContinuityPreferred
+        )
+    }
+
+    pub(crate) fn has_continuity_selector(&self) -> bool {
+        self.continuity_uaa_session_id.is_some()
+    }
+}
+
+impl From<&crate::execution::agent_inventory::AgentCapabilitiesV1> for HostAttachCapabilities {
+    fn from(value: &crate::execution::agent_inventory::AgentCapabilitiesV1) -> Self {
+        Self {
+            session_resume: value.session_resume,
+            session_fork: value.session_fork,
+            session_stop: value.session_stop,
+            status_snapshot: value.status_snapshot,
+            event_stream: value.event_stream,
+        }
+    }
+}
+
+impl From<&AttachLaunchKnobs> for HostAttachLaunchKnobs {
+    fn from(value: &AttachLaunchKnobs) -> Self {
+        Self {
+            requested_execution_scope: value.requested_execution_scope,
+            host_execution_client_start: match value.host_execution_client_start {
+                HostExecutionClientStart::StartNow => HostAttachExecutionClientStart::StartNow,
+                HostExecutionClientStart::Defer => HostAttachExecutionClientStart::Defer,
+            },
+            attach_mode_preference: match value.attach_mode_preference {
+                AttachModePreference::ContinuityRequired => {
+                    HostAttachModePreference::ContinuityRequired
+                }
+                AttachModePreference::ContinuityPreferred => {
+                    HostAttachModePreference::ContinuityPreferred
+                }
+                AttachModePreference::FreshAllowed => HostAttachModePreference::FreshAllowed,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct OrchestrationSessionRecord {
     // This is the public/operator-facing selector for the parent orchestration row.
     pub orchestration_session_id: String,
@@ -102,6 +302,8 @@ pub(crate) struct OrchestrationSessionRecord {
     pub parked_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startup_prompt: Option<StartupPromptRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_attach_contract: Option<HostAttachContract>,
 }
 
 impl OrchestrationSessionRecord {
@@ -110,6 +312,7 @@ impl OrchestrationSessionRecord {
         shell_trace_session_id: String,
         workspace_root: String,
         child_manifest: &AgentRuntimeSessionManifest,
+        host_attach_contract: Option<HostAttachContract>,
     ) -> Self {
         let now = Utc::now();
         Self {
@@ -137,6 +340,7 @@ impl OrchestrationSessionRecord {
             last_attention_at: None,
             parked_reason: None,
             startup_prompt: None,
+            host_attach_contract,
         }
     }
 
@@ -169,6 +373,33 @@ impl OrchestrationSessionRecord {
 
     pub(crate) fn has_world_binding(&self) -> bool {
         self.world_id.is_some() && self.world_generation.is_some()
+    }
+
+    pub(crate) fn host_attach_contract(&self) -> Option<&HostAttachContract> {
+        self.host_attach_contract.as_ref()
+    }
+
+    pub(crate) fn sync_host_attach_contract(&mut self, manifest: &AgentRuntimeSessionManifest) {
+        let Some(contract) = self.host_attach_contract.as_mut() else {
+            return;
+        };
+        if manifest.handle.role != super::mapping::ORCHESTRATOR_ROLE
+            || manifest.handle.execution.scope != AgentExecutionScope::Host
+            || manifest.handle.orchestration_session_id != self.orchestration_session_id
+            || manifest.handle.agent_id != self.orchestrator_agent_id
+        {
+            return;
+        }
+
+        if let Some(session_id) = manifest.internal_uaa_session_id() {
+            contract.continuity_uaa_session_id = Some(session_id.to_string());
+        }
+    }
+
+    pub(crate) fn fork_successor_attach_contract(&self) -> Option<HostAttachContract> {
+        let mut contract = self.host_attach_contract.clone()?;
+        contract.continuity_uaa_session_id = None;
+        Some(contract)
     }
 
     pub(crate) fn bind_active_session_handle(&mut self, participant_id: impl Into<String>) {
@@ -231,6 +462,38 @@ impl OrchestrationSessionRecord {
             anyhow::bail!(
                 "orchestration session {}",
                 protocol_validation_error("it", Some(self.orchestrator_protocol.as_str()))
+            );
+        }
+
+        let contract = self.host_attach_contract.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("host_attach_contract is required for authoritative host sessions")
+        })?;
+        if contract.execution_scope != AgentExecutionScope::Host {
+            anyhow::bail!("host_attach_contract must remain host scoped");
+        }
+        if contract.protocol != PURE_AGENT_PROTOCOL {
+            anyhow::bail!("host_attach_contract must use the pure agent protocol");
+        }
+        if contract.backend_id != self.orchestrator_backend_id {
+            anyhow::bail!("host_attach_contract backend_id must match the session backend");
+        }
+        if contract.launch_descriptor.backend_id != contract.backend_id {
+            anyhow::bail!("host_attach_contract launch_descriptor backend drifted");
+        }
+        if contract.launch_descriptor.execution_scope != contract.execution_scope {
+            anyhow::bail!("host_attach_contract launch_descriptor scope drifted");
+        }
+        if contract.launch_descriptor.protocol != contract.protocol {
+            anyhow::bail!("host_attach_contract launch_descriptor protocol drifted");
+        }
+        if contract.attach_launch_knobs.requested_execution_scope != contract.execution_scope {
+            anyhow::bail!("host_attach_contract requested_execution_scope drifted");
+        }
+        if serde_json::from_value::<substrate_broker::Policy>(contract.effective_policy.clone())
+            .is_err()
+        {
+            anyhow::bail!(
+                "host_attach_contract effective_policy must remain a valid policy snapshot"
             );
         }
 
@@ -370,26 +633,38 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    #[cfg(unix)]
+    use crate::execution::agent_inventory::{AgentCapabilitiesV1, AgentConfigKind};
+    #[cfg(unix)]
+    use crate::execution::agent_runtime::dispatch_contract::{
+        BaselineSourceMetadata, DispatchBaselineKind, DispatchCallerKind, FieldBaselineOrigin,
+        ResolvedLaunchRuntime,
+    };
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind, validator::RuntimeSelectionDescriptor,
     };
     use crate::execution::config_model::AgentExecutionScope;
+    #[cfg(unix)]
+    use substrate_broker::Policy;
 
     fn manifest() -> AgentRuntimeSessionManifest {
-        crate::execution::agent_runtime::session::AgentRuntimeParticipantRecord::new_orchestrator_participant(
-            &RuntimeSelectionDescriptor {
-                agent_id: "codex".to_string(),
-                backend_id: "cli:codex".to_string(),
-                backend_kind: AgentRuntimeBackendKind::Codex,
-                protocol: "substrate.agent.session".to_string(),
-                execution_scope: AgentExecutionScope::Host,
-                binary_path: PathBuf::from("/usr/bin/codex"),
-            },
-            "sess_001".to_string(),
-            "ash_001".to_string(),
-            "lease_001".to_string(),
-        )
-        .expect("manifest")
+        let mut manifest =
+            crate::execution::agent_runtime::session::AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &RuntimeSelectionDescriptor {
+                    agent_id: "codex".to_string(),
+                    backend_id: "cli:codex".to_string(),
+                    backend_kind: AgentRuntimeBackendKind::Codex,
+                    protocol: "substrate.agent.session".to_string(),
+                    execution_scope: AgentExecutionScope::Host,
+                    binary_path: PathBuf::from("/usr/bin/codex"),
+                },
+                "sess_001".to_string(),
+                "ash_001".to_string(),
+                "lease_001".to_string(),
+            )
+            .expect("manifest");
+        manifest.set_uaa_session_id("uaa_session");
+        manifest
     }
 
     #[test]
@@ -400,11 +675,39 @@ mod tests {
             "trace_001".to_string(),
             "/workspace".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
 
         assert_eq!(session.posture, OrchestrationSessionPosture::ActiveAttached);
         assert_eq!(session.attached_participant_id(), Some("ash_001"));
         assert_eq!(session.pending_inbox_count, 0);
+        let contract = session
+            .host_attach_contract()
+            .expect("new session should persist host attach truth");
+        assert_eq!(contract.backend_id, "cli:codex");
+        assert_eq!(contract.execution_scope, AgentExecutionScope::Host);
+        assert_eq!(contract.launch_descriptor.backend_id, "cli:codex");
+        assert_eq!(
+            contract.attach_launch_knobs.requested_execution_scope,
+            AgentExecutionScope::Host
+        );
+        assert_eq!(
+            contract.attach_launch_knobs.host_execution_client_start,
+            HostAttachExecutionClientStart::StartNow
+        );
+        assert_eq!(
+            contract.attach_launch_knobs.attach_mode_preference,
+            HostAttachModePreference::ContinuityRequired
+        );
+        assert!(contract.capabilities.session_resume);
+        assert!(contract.capabilities.session_fork);
+        assert!(contract.capabilities.session_stop);
+        assert!(contract.capabilities.status_snapshot);
+        assert!(contract.capabilities.event_stream);
+        assert_eq!(
+            contract.continuity_uaa_session_id.as_deref(),
+            Some("uaa_session")
+        );
         session
             .validate_persisted_invariants()
             .expect("new session invariants");
@@ -418,6 +721,7 @@ mod tests {
             "trace_001".to_string(),
             "/workspace".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
 
         session.mark_parked_resumable("owner detached cleanly");
@@ -432,5 +736,136 @@ mod tests {
         session
             .validate_persisted_invariants()
             .expect("attention invariants");
+    }
+
+    #[test]
+    fn successor_attach_contract_clears_continuity_and_preserves_launch_truth() {
+        let manifest = manifest();
+        let session = OrchestrationSessionRecord::new(
+            "sess_001".to_string(),
+            "trace_001".to_string(),
+            "/workspace".to_string(),
+            &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
+        );
+
+        let original = session
+            .host_attach_contract()
+            .expect("source contract")
+            .clone();
+        let successor = session
+            .fork_successor_attach_contract()
+            .expect("successor contract");
+
+        assert_eq!(successor.backend_id, original.backend_id);
+        assert_eq!(successor.execution_scope, original.execution_scope);
+        assert_eq!(successor.protocol, original.protocol);
+        assert_eq!(successor.launch_descriptor, original.launch_descriptor);
+        assert_eq!(successor.capabilities, original.capabilities);
+        assert_eq!(successor.attach_launch_knobs, original.attach_launch_knobs);
+        assert_eq!(successor.continuity_uaa_session_id, None);
+    }
+
+    #[test]
+    fn host_attach_contract_knob_drift_fails_closed() {
+        let manifest = manifest();
+        let mut session = OrchestrationSessionRecord::new(
+            "sess_001".to_string(),
+            "trace_001".to_string(),
+            "/workspace".to_string(),
+            &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
+        );
+        session
+            .host_attach_contract
+            .as_mut()
+            .expect("contract")
+            .attach_launch_knobs
+            .requested_execution_scope = AgentExecutionScope::World;
+
+        let err = session
+            .validate_persisted_invariants()
+            .expect_err("scope drift must fail closed");
+        assert!(err
+            .to_string()
+            .contains("host_attach_contract requested_execution_scope drifted"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn host_attach_contract_from_resolved_contract_preserves_truth() {
+        let resolved = ResolvedLaunchContract {
+            caller_kind: DispatchCallerKind::HumanStart,
+            baseline_kind: DispatchBaselineKind::InventoryLaunch,
+            agent_id: "codex".to_string(),
+            backend_id: "cli:codex".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            runtime: ResolvedLaunchRuntime {
+                kind: AgentConfigKind::Cli,
+                cli_mode: crate::execution::config_model::AgentCliMode::Persistent,
+                cli_binary: Some("/opt/codex/bin/codex".to_string()),
+            },
+            capabilities: AgentCapabilitiesV1 {
+                session_start: true,
+                session_resume: false,
+                session_fork: true,
+                session_stop: false,
+                status_snapshot: true,
+                event_stream: false,
+                llm: true,
+                mcp_client: false,
+            },
+            attach_launch_knobs: AttachLaunchKnobs {
+                requested_execution_scope: AgentExecutionScope::Host,
+                host_execution_client_start: HostExecutionClientStart::Defer,
+                attach_mode_preference: AttachModePreference::FreshAllowed,
+            },
+            effective_policy: Policy {
+                agents_allowed_backends: vec!["cli:codex".to_string()],
+                ..Policy::default()
+            },
+            baseline_source: BaselineSourceMetadata {
+                baseline_kind: DispatchBaselineKind::InventoryLaunch,
+                baseline_origin: FieldBaselineOrigin::WorkspaceInventory,
+                inventory_path: None,
+                orchestration_session_id: None,
+            },
+            field_provenance: Default::default(),
+        };
+
+        let contract =
+            HostAttachContract::from_resolved_contract(&resolved, Some("uaa_resolved".to_string()))
+                .expect("host attach contract");
+
+        assert_eq!(contract.backend_id, "cli:codex");
+        assert_eq!(
+            contract.launch_descriptor.binary_path,
+            "/opt/codex/bin/codex"
+        );
+        assert!(!contract.capabilities.session_resume);
+        assert!(contract.capabilities.session_fork);
+        assert!(!contract.capabilities.session_stop);
+        assert!(contract.capabilities.status_snapshot);
+        assert!(!contract.capabilities.event_stream);
+        assert_eq!(
+            contract.attach_launch_knobs.host_execution_client_start,
+            HostAttachExecutionClientStart::Defer
+        );
+        assert_eq!(
+            contract.attach_launch_knobs.attach_mode_preference,
+            HostAttachModePreference::FreshAllowed
+        );
+        let persisted_policy: Policy = serde_json::from_value(contract.effective_policy.clone())
+            .expect("deserialize persisted policy");
+        assert_eq!(
+            persisted_policy.agents_allowed_backends,
+            vec!["cli:codex".to_string()]
+        );
+        assert_eq!(
+            contract.continuity_uaa_session_id.as_deref(),
+            Some("uaa_resolved")
+        );
     }
 }

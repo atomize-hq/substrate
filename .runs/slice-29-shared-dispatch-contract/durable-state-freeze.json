@@ -1,0 +1,27 @@
+{
+  "durable_owner": "HostAttachContract",
+  "owner_module": "crates/shell/src/execution/agent_runtime/orchestration_session.rs",
+  "required_persisted_fields": [
+    "backend identity derived from resolved contract",
+    "scope truth derived from resolved contract",
+    "cli mode truth derived from resolved contract",
+    "capability truth derived from resolved contract",
+    "attach continuity selector state",
+    "resume-contract continuity requirements"
+  ],
+  "continuity_successor_copy_rule": [
+    "Preserve resolved launch truth needed for successor attach.",
+    "Clear only continuity-specific state on successor copy.",
+    "Do not persist a second durable attach object.",
+    "Do not persist full provenance trees."
+  ],
+  "compatibility_constraints": [
+    "Persisted JSON changes must remain additive or migration-safe through OrchestrationSessionRecord::validate_persisted_invariants(...).",
+    "Detached attach planning must consume persisted attach truth instead of ambient participant state."
+  ],
+  "prohibitions": [
+    "No second durable attach object.",
+    "No caller-specific reconstruction of host launch truth.",
+    "No non-additive persisted-state break."
+  ]
+}

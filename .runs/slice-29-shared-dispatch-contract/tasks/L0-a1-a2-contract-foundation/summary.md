@@ -1,0 +1,1 @@
+L0 completed on the worker lane. The slice added `dispatch_contract.rs` as the single internal dispatch owner, projected inventory entries into explicit baseline/value origins, resolved persisted host attach truth without inventing a second durable attach object, and moved validator runtime selection through `ResolvedLaunchContract` materialization.

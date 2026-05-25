@@ -1,0 +1,1 @@
+Written P0 run-state artifacts, passed G0 evidence, and a clean authorization boundary for opening the L0 worktree.

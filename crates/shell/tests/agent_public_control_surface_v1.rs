@@ -15,6 +15,7 @@ use std::process::{Child, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use substrate_broker::Policy;
 use support::{
     binary_path, ensure_substrate_built, persist_runtime_alert_for_substrate_home,
     substrate_shell_driver,
@@ -268,7 +269,7 @@ fn write_fake_codex_script_turn_requires_helper_cancel_after_prompt(dir: &Path) 
     let path = dir.join("fake-codex-turn-requires-helper-cancel.sh");
     let count_path = dir.join("fake-codex-turn-requires-helper-cancel.count");
     let body = format!(
-        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-bootstrap\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nif [ \"$count\" -eq 2 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nwhile :; do sleep 1; done\n",
         count_path.display(),
         dir.display(),
     );
@@ -760,6 +761,48 @@ fn write_json_file(path: &Path, value: &Value) {
     .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
 }
 
+fn host_attach_contract_manifest(
+    fixture: &AgentControlFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+) -> Value {
+    let backend_kind = if agent_id == "claude_code" {
+        "claude_code"
+    } else {
+        "codex"
+    };
+    json!({
+        "backend_id": format!("cli:{agent_id}"),
+        "execution_scope": "host",
+        "protocol": PURE_AGENT_PROTOCOL,
+        "launch_descriptor": {
+            "agent_id": agent_id,
+            "backend_id": format!("cli:{agent_id}"),
+            "backend_kind": backend_kind,
+            "protocol": PURE_AGENT_PROTOCOL,
+            "execution_scope": "host",
+            "binary_path": fixture.fake_codex.display().to_string()
+        },
+        "capabilities": {
+            "session_resume": true,
+            "session_fork": true,
+            "session_stop": true,
+            "status_snapshot": true,
+            "event_stream": true
+        },
+        "attach_launch_knobs": {
+            "requested_execution_scope": "host",
+            "host_execution_client_start": "start_now",
+            "attach_mode_preference": "continuity_required"
+        },
+        "effective_policy": serde_json::to_value(Policy {
+            agents_allowed_backends: vec![format!("cli:{agent_id}")],
+            ..Policy::default()
+        }).expect("serialize effective policy"),
+        "continuity_uaa_session_id": format!("uaa-{orchestration_session_id}")
+    })
+}
+
 fn write_active_orchestration_session(
     fixture: &AgentControlFixture,
     agent_id: &str,
@@ -792,7 +835,12 @@ fn write_active_orchestration_session(
             "world_id": Value::Null,
             "world_generation": Value::Null,
             "invalidation_reason": Value::Null,
-            "closed_at": Value::Null
+            "closed_at": Value::Null,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id
+            )
         }),
     );
 }
@@ -829,7 +877,12 @@ fn write_parked_orchestration_session(
             "world_id": Value::Null,
             "world_generation": Value::Null,
             "invalidation_reason": Value::Null,
-            "closed_at": Value::Null
+            "closed_at": Value::Null,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id
+            )
         }),
     );
 }
@@ -869,7 +922,12 @@ fn write_parked_world_orchestration_session(
             "world_id": world_id,
             "world_generation": world_generation,
             "invalidation_reason": Value::Null,
-            "closed_at": Value::Null
+            "closed_at": Value::Null,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id
+            )
         }),
     );
 }
@@ -937,7 +995,12 @@ fn write_orchestration_session(
             "world_id": world_id,
             "world_generation": world_generation,
             "invalidation_reason": Value::Null,
-            "closed_at": closed_at
+            "closed_at": closed_at,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id,
+            )
         }),
     );
 }
@@ -1492,6 +1555,17 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         turn_stdin.contains("hello from turn"),
         "resume-backed follow-up turns must continue to send the prompt on stdin: {turn_stdin:?}"
     );
+    let reparked_session = wait_for_session_posture(
+        &fixture,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    let authoritative_participant_id = reparked_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("authoritative participant id after detached turn")
+        .to_string();
 
     let stop_output = fixture.run(&[
         "agent",
@@ -1517,7 +1591,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     );
     assert_eq!(
         stop_json.get("participant_id").and_then(Value::as_str),
-        Some(participant_id.as_str())
+        Some(authoritative_participant_id.as_str())
     );
     assert_eq!(
         stop_json.get("backend_id").and_then(Value::as_str),
@@ -1626,6 +1700,11 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
         pid_is_alive(resumed_owner_pid),
         "reattach must leave a live owner loop"
     );
+    let reattach_stdin = fixture.read_fake_codex_stdin(1);
+    assert!(
+        reattach_stdin.trim().is_empty(),
+        "reattach must not send a hidden bootstrap prompt or any other user prompt payload: {reattach_stdin:?}"
+    );
 
     fixture.reset_fake_codex_state();
     let fork_output = fixture.run(&["agent", "fork", "--session", "sess_resume_source", "--json"]);
@@ -1651,7 +1730,11 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     assert_eq!(fork_json.get("scope").and_then(Value::as_str), Some("host"));
     assert_eq!(
         fork_json.get("state").and_then(Value::as_str),
-        Some("active")
+        Some("parked_resumable")
+    );
+    assert!(
+        fork_json.get("participant_id").is_none(),
+        "fork should return only the successor orchestration session handle: {fork_json}"
     );
     assert_empty_warnings(&fork_json);
 
@@ -1663,9 +1746,10 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
         fork_session_id, "sess_resume_source",
         "fork must allocate a new orchestration session id"
     );
-    let fork_participant_id = fork_json["participant_id"]
+    let fork_session = fixture.load_orchestration_session(&fork_session_id);
+    let fork_participant_id = fork_session["active_session_handle_id"]
         .as_str()
-        .expect("fork participant id")
+        .expect("fork successor active participant id")
         .to_string();
     let fork_participant = fixture.load_participant(&fork_session_id, &fork_participant_id);
     assert_eq!(
@@ -1675,16 +1759,265 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
         Some(resumed_participant_id.as_str()),
         "fork successor persistence must point lineage at the exact live source participant"
     );
-    let fork_owner_pid = fixture.load_orchestration_session(&fork_session_id)["shell_owner_pid"]
-        .as_u64()
-        .expect("fork owner pid") as u32;
     assert!(
-        pid_is_alive(fork_owner_pid),
-        "fork must leave a live owner loop"
+        matches!(
+            fork_session.get("posture").and_then(Value::as_str),
+            Some("parked_resumable")
+        ),
+        "fork successor must persist detached resumable posture: {fork_session}"
+    );
+    assert!(
+        matches!(
+            fork_session.get("shell_owner_pid").and_then(Value::as_u64),
+            Some(0)
+        ),
+        "fork successor allocation should not leave an attached owner loop: {fork_session}"
     );
 
     terminate_pid(resumed_owner_pid);
-    terminate_pid(fork_owner_pid);
+}
+
+#[test]
+#[serial]
+fn public_reattach_uses_persisted_attach_continuity_selector_for_resume_args() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_resume_contract_args",
+        "ash_resume_contract_args",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_resume_contract_args",
+        "codex",
+        "sess_resume_contract_args",
+        "running",
+        false,
+        Some("uaa-ambient-detached"),
+        None,
+        ts,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        "sess_resume_contract_args",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "public reattach should resume from the persisted attach contract: {output:?}"
+    );
+
+    let args = fixture.read_fake_codex_args(1);
+    assert!(
+        args.iter().any(|arg| arg == "resume"),
+        "reattach must issue a resume-backed invocation: {args:?}"
+    );
+    assert!(
+        args.iter()
+            .any(|arg| arg == "uaa-sess_resume_contract_args"),
+        "reattach must use the persisted continuity selector from host_attach_contract: {args:?}"
+    );
+    assert!(
+        !args.iter().any(|arg| arg == "uaa-ambient-detached"),
+        "reattach must not recover continuity from the detached participant snapshot: {args:?}"
+    );
+
+    let owner_pid = fixture.load_orchestration_session("sess_resume_contract_args")
+        ["shell_owner_pid"]
+        .as_u64()
+        .expect("reattach owner pid") as u32;
+    terminate_pid(owner_pid);
+}
+
+#[test]
+#[serial]
+fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_resume_disabled_contract";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        "ash_resume_disabled_contract",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_resume_disabled_contract",
+        "codex",
+        orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-ambient-detached"),
+        None,
+        ts,
+    );
+
+    let mut session = fixture.load_orchestration_session(orchestration_session_id);
+    session["host_attach_contract"]["capabilities"] = json!({
+        "session_resume": false,
+        "session_fork": true,
+        "session_stop": true,
+        "status_snapshot": true,
+        "event_stream": true
+    });
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &session,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        !output.status.success(),
+        "public reattach must fail closed when durable attach truth disables resume: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("durable host attach contract does not allow resume"),
+        "reattach denial must explain the persisted attach capability gate: {output:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(1).exists(),
+        "reattach denial must fail before launching the backend runtime"
+    );
+}
+
+#[test]
+#[serial]
+fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capabilities() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_capability_gated_public_control";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        "ash_capability_gated_source",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_capability_gated_source",
+        "codex",
+        orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-capability-gated"),
+        None,
+        ts,
+    );
+
+    let reattach_output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        reattach_output.status.success(),
+        "public reattach should succeed before fork/stop capability denial is exercised: {reattach_output:?}"
+    );
+
+    let mut session = fixture.load_orchestration_session(orchestration_session_id);
+    session["host_attach_contract"]["capabilities"] = json!({
+        "session_resume": true,
+        "session_fork": false,
+        "session_stop": false,
+        "status_snapshot": true,
+        "event_stream": true
+    });
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &session,
+    );
+
+    let fork_output = fixture.run(&[
+        "agent",
+        "fork",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        !fork_output.status.success(),
+        "public fork must fail closed when durable attach truth disables fork: {fork_output:?}"
+    );
+    let fork_stderr = String::from_utf8_lossy(&fork_output.stderr);
+    assert!(
+        fork_stderr.contains("durable host attach contract does not allow fork"),
+        "fork denial must explain the persisted attach capability gate: {fork_output:?}"
+    );
+
+    let stopped_session_id = "sess_capability_gated_public_stop";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        stopped_session_id,
+        "ash_capability_gated_stop_source",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_capability_gated_stop_source",
+        "codex",
+        stopped_session_id,
+        "running",
+        false,
+        Some("uaa-capability-gated-stop"),
+        None,
+        ts,
+    );
+    let mut stopped_session = fixture.load_orchestration_session(stopped_session_id);
+    stopped_session["host_attach_contract"]["capabilities"] = json!({
+        "session_resume": true,
+        "session_fork": true,
+        "session_stop": false,
+        "status_snapshot": true,
+        "event_stream": true
+    });
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, stopped_session_id),
+        &stopped_session,
+    );
+
+    let stop_output = fixture.run(&["agent", "stop", "--session", stopped_session_id, "--json"]);
+    assert!(
+        !stop_output.status.success(),
+        "public stop must fail closed when parked durable attach truth disables stop: {stop_output:?}"
+    );
+    let stop_stderr = String::from_utf8_lossy(&stop_output.stderr);
+    assert!(
+        stop_stderr.contains("durable host attach contract does not allow stop"),
+        "stop denial must explain the persisted attach capability gate: {stop_output:?}"
+    );
+
+    let owner_pid = fixture.load_orchestration_session(orchestration_session_id)["shell_owner_pid"]
+        .as_u64()
+        .expect("reattach owner pid") as u32;
+    terminate_pid(owner_pid);
 }
 
 #[test]
@@ -1895,6 +2228,64 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
             .get("resumed_from_participant_id")
             .and_then(Value::as_str),
         Some("ash_parked")
+    );
+}
+
+#[test]
+#[serial]
+fn public_turn_uses_persisted_attach_continuity_selector_when_recovering_detached_host_turns() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_turn_contract_args",
+        "ash_turn_contract_args",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_contract_args",
+        "codex",
+        "sess_turn_contract_args",
+        "running",
+        false,
+        Some("uaa-ambient-turn"),
+        None,
+        ts,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_turn_contract_args",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "resume detached host turn via persisted contract",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "detached host turn should recover through the persisted attach contract: {output:?}"
+    );
+
+    let args = fixture.read_fake_codex_args(1);
+    assert!(
+        args.iter().any(|arg| arg == "resume"),
+        "detached host turn recovery must use a resume-backed invocation: {args:?}"
+    );
+    assert!(
+        args.iter().any(|arg| arg == "uaa-sess_turn_contract_args"),
+        "detached host turn recovery must use the persisted continuity selector: {args:?}"
+    );
+    assert!(
+        !args.iter().any(|arg| arg == "uaa-ambient-turn"),
+        "detached host turn recovery must not derive continuity from the detached participant snapshot: {args:?}"
     );
 }
 
@@ -3390,6 +3781,42 @@ fn public_root_start_rejects_world_scoped_backends_in_v1() {
     assert!(
         stderr.contains("public root start is host-only in v1"),
         "world-scoped root start failure must explain the Linux-first host-only contract: {stderr}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_root_start_denials_name_field_layer_and_reason() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(true);
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "hello",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "world-scoped root start must fail closed: {output:?}"
+    );
+    let stderr = stderr_text(&output);
+    assert!(
+        stderr.contains("unsupported_platform_or_posture"),
+        "start denial must keep the posture classifier: {stderr}"
+    );
+    assert!(
+        stderr.contains("baseline truth rejected field 'requested_execution_scope'"),
+        "start denial must name the rejecting layer and field: {stderr}"
+    );
+    assert!(
+        stderr.contains("public root start is host-only in v1"),
+        "start denial must preserve the concrete posture reason: {stderr}"
     );
 }
 
