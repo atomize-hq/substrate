@@ -4298,6 +4298,8 @@ async fn dispatch_targeted_follow_up_turn(
         agent_printer,
         telemetry,
     } = context;
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let _ = (&member_runtimes, &pending_member_replacements);
 
     let route = match resolve_targeted_turn_route(
         startup_context.as_ref(),
@@ -5508,40 +5510,6 @@ async fn ensure_member_runtime_ready_for_descriptor(
     Ok(false)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-struct EnsureMemberRuntimeReadyContext<'a> {
-    startup_context: Option<&'a RuntimeOrchestrationContext>,
-    world_session: Option<&'a WorldSession>,
-    agent_printer: &'a ReplPrinter,
-    telemetry: &'a mut ReplSessionTelemetry,
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-async fn ensure_member_runtime_ready_for_descriptor(
-    context: EnsureMemberRuntimeReadyContext<'_>,
-    _parity: &MemberDispatchParitySubset,
-    _initial_prompt: Option<&str>,
-    _member_runtimes: &mut RetainedMemberRuntimeMap,
-    _pending_member_replacements: &mut PendingMemberReplacementMap,
-) -> Result<bool> {
-    let EnsureMemberRuntimeReadyContext {
-        startup_context,
-        world_session,
-        agent_printer: _agent_printer,
-        telemetry: _telemetry,
-    } = context;
-    let Some(_startup_context) = startup_context else {
-        return Ok(false);
-    };
-    let Some(_world_session) = world_session else {
-        return Ok(false);
-    };
-
-    Err(anyhow!(
-        "substrate: error: world-scoped member runtime dispatch is supported on Linux only"
-    ))
-}
-
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
@@ -5854,18 +5822,6 @@ async fn submit_world_targeted_turn(
         agent_printer,
     )?;
     Ok(())
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-async fn submit_world_targeted_turn(
-    _runtime: &mut AsyncReplAgentRuntime,
-    _prompt: &str,
-    _agent_printer: &ReplPrinter,
-    _telemetry: &mut ReplSessionTelemetry,
-) -> Result<()> {
-    Err(anyhow!(
-        "substrate: error: world-targeted follow-up turns are supported on Linux and macOS only"
-    ))
 }
 
 async fn shutdown_host_orchestrator_runtime(

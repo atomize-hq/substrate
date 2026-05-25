@@ -23,8 +23,10 @@ use crate::execution::agent_runtime::control::{
     run_hidden_owner_helper_startup_prompt_stream,
     run_hidden_owner_helper_startup_prompt_stream_with_action, HiddenOwnerHelperStartupPromptPlan,
 };
+#[cfg(unix)]
+use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
-    HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
+    OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 #[cfg(unix)]

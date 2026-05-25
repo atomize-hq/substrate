@@ -7,9 +7,9 @@ use crate::execution::agent_runtime::control::{
 };
 use crate::execution::config_model::AgentExecutionScope;
 
-use super::dispatch_contract::{
-    AttachLaunchKnobs, AttachModePreference, HostExecutionClientStart, ResolvedLaunchContract,
-};
+#[cfg(unix)]
+use super::dispatch_contract::ResolvedLaunchContract;
+use super::dispatch_contract::{AttachLaunchKnobs, AttachModePreference, HostExecutionClientStart};
 use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
 use super::session::AgentRuntimeSessionManifest;
 
@@ -637,16 +637,18 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    #[cfg(unix)]
     use crate::execution::agent_inventory::{AgentCapabilitiesV1, AgentConfigKind};
+    #[cfg(unix)]
+    use crate::execution::agent_runtime::dispatch_contract::{
+        BaselineSourceMetadata, DispatchBaselineKind, DispatchCallerKind, FieldBaselineOrigin,
+        ResolvedLaunchRuntime,
+    };
     use crate::execution::agent_runtime::{
-        dispatch_contract::{
-            BaselineSourceMetadata, DispatchBaselineKind, DispatchCallerKind, FieldBaselineOrigin,
-            ResolvedLaunchRuntime,
-        },
-        mapping::AgentRuntimeBackendKind,
-        validator::RuntimeSelectionDescriptor,
+        mapping::AgentRuntimeBackendKind, validator::RuntimeSelectionDescriptor,
     };
     use crate::execution::config_model::AgentExecutionScope;
+    #[cfg(unix)]
     use substrate_broker::Policy;
 
     fn manifest() -> AgentRuntimeSessionManifest {
