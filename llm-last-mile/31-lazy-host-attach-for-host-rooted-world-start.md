@@ -1,6 +1,6 @@
 # SOW: Lazy Host Attach For Host-Rooted World Start
 
-Status: draft aligned to validated architecture. This slice is not implementation-ready yet. It depends on [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md), [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md), and the public host-rooted world-start entrypoint from [30-public-world-scoped-agent-start-and-capability-flags.md](30-public-world-scoped-agent-start-and-capability-flags.md).
+Status: draft aligned to validated architecture. This slice is not implementation-ready yet. It depends on [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md), [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md), [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md), and the public host-rooted world-start entrypoint from [30-public-world-scoped-agent-start-and-capability-flags.md](30-public-world-scoped-agent-start-and-capability-flags.md).
 
 This slice no longer tries to discover the architecture. The validated architecture is already fixed:
 
@@ -10,9 +10,9 @@ This slice no longer tries to discover the architecture. The validated architect
 4. lazy host attach is a Substrate attach-worker concern, not a prompt trick,
 5. 29 owns the only shared dispatch contract and the only durable host-attach truth.
 
-The 29.5 closeout floor this slice inherits is also fixed:
+The 29.75 closeout floor this slice inherits is also fixed:
 
-1. persisted host attach resolution already reuses durable capabilities, attach launch knobs, effective policy, and continuity selector state from `HostAttachContract`,
+1. persisted host attach resolution already reuses durable backend, protocol, scope, capabilities, effective policy, and continuity selector truth from `HostAttachContract`, while attach-time caller inputs remain explicitly scoped to attach mode/start selection,
 2. successor allocation already copies generalized attach truth forward while clearing only continuity-specific state,
 3. retained world-member follow-up turns already avoid hidden baseline re-resolution and therefore must stay orthogonal to lazy host attach.
 
@@ -79,10 +79,11 @@ Required direction:
 This slice should only be promoted out of draft once:
 
 1. 28.5 and 29 have landed,
-2. 30 has landed the public host-rooted world-start entrypoint,
-3. the repo has frozen whether lazy attach is manual-only or may be auto-launched from pending work,
-4. attach-worker mode selection is explicit and testable,
-5. born-unattached versus parked versus awaiting-attention status truth is operator-visible.
+2. 29.75 has landed the final authoritative attach-truth floor,
+3. 30 has landed the public host-rooted world-start entrypoint,
+4. the repo has frozen whether lazy attach is manual-only or may be auto-launched from pending work,
+5. attach-worker mode selection is explicit and testable,
+6. born-unattached versus parked versus awaiting-attention status truth is operator-visible.
 
 ## Draft Validation Targets
 
@@ -101,5 +102,6 @@ Current stack status:
 
 1. [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md): implementation-ready immediate slice.
 2. [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md): implementation-ready next slice.
-3. [30-public-world-scoped-agent-start-and-capability-flags.md](30-public-world-scoped-agent-start-and-capability-flags.md): draft public entrypoint slice.
-4. This SOW: draft lazy-attach realization slice after the earlier landings.
+3. [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md): final contract-authority closeout floor.
+4. [30-public-world-scoped-agent-start-and-capability-flags.md](30-public-world-scoped-agent-start-and-capability-flags.md): draft public entrypoint slice.
+5. This SOW: draft lazy-attach realization slice after the earlier landings.

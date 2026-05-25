@@ -1,6 +1,6 @@
 # SOW: Public World-Scoped Agent Start And Capability Flags
 
-Status: draft aligned to validated architecture. This slice is not implementation-ready yet. It depends on [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md) and [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md) landing first.
+Status: draft aligned to validated architecture. This slice is not implementation-ready yet. It depends on [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md), [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md), and [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md) landing first.
 
 This slice no longer carries host-rooted versus standalone world-root as an open product decision. The validated architecture has already closed that question.
 
@@ -44,14 +44,15 @@ This slice does not finish lazy host attach behavior. 31 owns:
 2. fresh attach versus continuity attach behavior,
 3. operator/status truth for born-unattached sessions with pending host-side work.
 
-## 29.5 Contract Floor This Slice Must Reuse
+## 29.75 Contract Floor This Slice Must Reuse
 
-Before this public surface is promoted, it must inherit the already-shipped 29.5 closeout semantics exactly:
+Before this public surface is promoted, it must inherit the 29.75 closeout floor exactly:
 
 1. inventory `policy_overlay` already merges into the resolved `effective_policy`;
 2. the only dispatch-time capability narrowing family currently supported is `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, and only from `true` to `false`;
 3. `session_start`, `llm`, and `mcp_client` remain dispatch-time unsupported and must stay fail closed until a later slice deliberately broadens scope;
 4. retained world-member follow-up turns already consume a shared-contract-derived parity subset, so this slice must not invent a second public world-start follow-up dialect.
+5. host session birth now persists authoritative attach-relevant truth from resolved-contract semantics across both public start and REPL host cold start, so this slice must not repair durable attach truth itself.
 
 ## Draft Work Breakdown
 
@@ -95,8 +96,9 @@ This slice should only be promoted out of draft once:
 
 1. 28.5 has landed,
 2. 29 has landed,
-3. the command can create a host-rooted durable session plus world worker without eager host attach,
-4. the public CLI and docs no longer imply standalone world-root as an option.
+3. 29.75 has landed,
+4. the command can create a host-rooted durable session plus world worker without eager host attach,
+5. the public CLI and docs no longer imply standalone world-root as an option.
 
 ## Draft Validation Targets
 
@@ -114,5 +116,6 @@ Current stack status:
 
 1. [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md): implementation-ready immediate slice.
 2. [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](29-shared-agent-dispatch-envelope-and-capability-override-contract.md): implementation-ready next slice.
-3. This SOW: draft pending those earlier landings.
-4. [31-lazy-host-attach-for-host-rooted-world-start.md](31-lazy-host-attach-for-host-rooted-world-start.md): draft follow-on after this slice fixes the public entrypoint.
+3. [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md): final contract-authority closeout floor.
+4. This SOW: draft pending those earlier landings.
+5. [31-lazy-host-attach-for-host-rooted-world-start.md](31-lazy-host-attach-for-host-rooted-world-start.md): draft follow-on after this slice fixes the public entrypoint.
