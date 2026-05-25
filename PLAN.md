@@ -1,944 +1,666 @@
-# PLAN: Shared Dispatch Contract Closeout And Parity Hardening
+# PLAN: Authoritative Host Attach Truth And REPL Cold-Start Parity
 
-Source SOW: [29.5-shared-dispatch-contract-closeout-and-parity-hardening.md](llm-last-mile/29.5-shared-dispatch-contract-closeout-and-parity-hardening.md)  
-Primary code anchors: [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs), [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs), [crates/shell/src/execution/agent_runtime/validator.rs](crates/shell/src/execution/agent_runtime/validator.rs), [crates/shell/src/execution/agent_inventory.rs](crates/shell/src/execution/agent_inventory.rs), [crates/shell/src/execution/policy_model.rs](crates/shell/src/execution/policy_model.rs), [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs), [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs), [crates/shell/src/execution/routing/dispatch/world_ops.rs](crates/shell/src/execution/routing/dispatch/world_ops.rs)  
-Primary test anchors: [crates/shell/tests/agent_public_control_surface_v1.rs](crates/shell/tests/agent_public_control_surface_v1.rs), [crates/shell/tests/repl_world_first_routing_v1.rs](crates/shell/tests/repl_world_first_routing_v1.rs), [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](crates/shell/tests/agent_successor_contract_ahcsitc0.rs), tests in [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)  
-Adjacent slices: [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md), [30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md), [31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)  
+Source SOW: [29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md)  
+Primary code anchors: [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs), [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs), [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs), [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs), [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)  
+Primary test anchors: [crates/shell/tests/agent_public_control_surface_v1.rs](crates/shell/tests/agent_public_control_surface_v1.rs), [crates/shell/tests/repl_world_first_routing_v1.rs](crates/shell/tests/repl_world_first_routing_v1.rs), [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](crates/shell/tests/agent_successor_contract_ahcsitc0.rs), unit tests in [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs), unit tests in [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)  
+Downstream dependency docs: [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md), [30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md), [31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)  
 Execution branch: `feat/gateway-mediated-llm-fulfillment`  
 Base branch: `main`  
-Plan type: contract-closeout slice, no UI scope, strong DX scope  
-Planning posture: unified implementation plan tightened to `/autoplan` plus `/plan-eng-review` rigor  
-Status: implementation-ready planning pass on 2026-05-24
+Plan type: implementation-ready residual contract-authority hardening slice, no UI scope, strong shell/runtime DX scope  
+Status: implementation-ready
 
 ## Objective
 
-Make slice 29 truthful enough that slices 30 and 31 can build on one shared dispatch contract and one durable host-attach contract without reopening semantics later.
+Finish the remaining contract-authority gaps so every host-rooted session birth path persists the same attach-relevant truth and every later attach path consumes that truth without regaining manifest-era defaults or permissive fallbacks.
 
-This slice is complete only when the repository has one contract floor that does all of the following:
+This plan is complete only when all of the following are true:
 
-1. inventory-backed launches resolve through the shared contract and produce merged effective policy, accepted bounded overrides, and truthful provenance;
-2. persisted host attach launches reuse durable attach truth instead of reconstructing it from ambient runtime state;
-3. `HostAttachContract` is authoritative for attach-relevant capabilities and attach knobs, not a partial shadow of launch truth;
-4. retained orchestrator member turns no longer bypass the shared contract vocabulary through hidden manifest-only semantics;
-5. docs, tests, and downstream slices all describe the same supported override families and the same parity story.
-
-This is a closeout slice, not a new product slice. It does not ship public `agent start --scope world`. It does not ship lazy attach. It does not create a second durable orchestration object.
+1. REPL host cold start resolves through the same shared dispatch contract family already used by public start.
+2. The first persisted host-rooted orchestration session stores `HostAttachContract` derived from resolved launch truth, not `HostAttachContract::from_manifest(...)`.
+3. Persisted attach resolution treats `HostAttachContract` as the only durable attach baseline and applies only a bounded attach-time overlay.
+4. Missing durable truth fails closed in modern steady-state paths instead of silently recovering through `Policy::default()` or manifest reconstruction.
+5. Slices 30 and 31 can build on 29.75 without reopening attach-baseline semantics.
 
 ## Executive Summary
 
-The codebase already has the right architecture. The remaining work is closeout, not discovery.
+This is a hardening slice, not a redesign. The repo already has the shared vocabulary, the durable attach structure, and most of the public-start authority flow. The remaining problem is that equivalent host-rooted sessions can still persist different attach truth depending on how they were born, and later attach code can still regain broader semantics than the durable baseline intended.
 
-The actual gaps in the current branch are concrete:
+The implementation direction is therefore locked:
 
-1. `HostAttachContract::from_manifest(...)` still derives durable attach truth from manifest-era defaults, including permissive capability defaults;
-2. `resolve_persisted_host_attach_contract(...)` still reconstructs permissive capabilities and `Policy::default()` instead of reusing persisted attach truth;
-3. inventory `policy_overlay` is validated in [agent_inventory.rs](crates/shell/src/execution/agent_inventory.rs) but not merged into `ResolvedLaunchContract.effective_policy`;
-4. `validate_dispatch_overrides(...)` still blanket-rejects capability overrides rather than implementing the bounded narrowing family this stack now needs;
-5. retained member-turn transport in [async_repl.rs](crates/shell/src/repl/async_repl.rs) still derives its request from prepared runtime state instead of one explicit shared-contract-derived subset.
-
-The implementation strategy is therefore:
-
-1. make birth-time resolved contract truth authoritative for durable attach persistence;
-2. make inventory overlay narrowing real in resolver output;
-3. make the approved capability narrowing family real and keep everything else fail-closed;
-4. make retained member turns consume a derived subset of the same resolved truth instead of a second dialect;
-5. lock tests and docs to that exact contract floor.
-
-## Acceptance Criteria
-
-This plan is only done when all of the following are true in code, tests, and docs:
-
-1. a host-scoped resolved launch contract can be persisted into `HostAttachContract` without losing attach-relevant capability truth or attach-launch knobs;
-2. `resolve_persisted_host_attach_contract(...)` reuses persisted capabilities and attach knobs from `HostAttachContract` instead of hardcoding permissive defaults or `Policy::default()`;
-3. inventory-backed resolution merges validated `policy_overlay` data into `ResolvedLaunchContract.effective_policy` as narrowing-only truth;
-4. bounded dispatch-time capability narrowing is genuinely supported for the explicitly approved family in this plan, and all other capability override families fail closed with truthful diagnostics;
-5. retained orchestrator member turns consume a resolved subset derived from the shared contract instead of reconstructing launch semantics from live manifest state alone;
-6. equivalent human and orchestrator-controlled launches with equivalent baseline truth produce equivalent resolved contract truth for backend, protocol, scope, capabilities, attach knobs, and effective policy;
-7. slice 30 can expose public scope and capability flags without inventing a second override model;
-8. slice 31 can trust the durable attach contract for continuity-vs-fresh attach inputs without re-deriving launch truth.
+1. `ResolvedLaunchContract` is the only birth-time authority source.
+2. `HostAttachContract` is the only durable attach baseline.
+3. Reattach-style attach callers may only honor that baseline, narrow it where permitted, or select among explicitly baseline-permitted modes when the durable baseline already encodes multiple allowed realizations. They may never replace or broaden it.
+4. Fork is not a caller overlay on the source session. It consumes source durable truth and derives a new successor baseline for a new successor session.
+5. Legacy compatibility, if kept, must be explicit and visibly separate from modern steady-state behavior.
 
 ## Locked Decisions
 
-These decisions are frozen. Implementation does not get to keep both branches open.
+These are frozen for implementation. Do not keep multiple interpretations open in code or docs.
 
 | Topic | Locked decision | Why |
 | --- | --- | --- |
-| Override closeout direction | Implement bounded dispatch-time capability narrowing now, not docs-only narrowing | Slice 30 needs a truthful override model to expose publicly |
-| Supported capability override family | Inventory-backed launches may narrow `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream` from `true` to `false` | These are the attach-relevant and control-surface-relevant capabilities already modeled by the state store and durable attach contract |
-| Unsupported capability override family | `session_start`, `llm`, and `mcp_client` remain dispatch-time unsupported in 29.5 and must fail closed with field-scoped diagnostics | Supporting them would broaden this closeout slice into runtime-product semantics |
-| Scope override posture | `requested_execution_scope_override` remains narrowing-only and may not change baseline scope in 29.5 | Slice 30 owns the public scope surface |
-| Policy overlay merge posture | Inventory `policy_overlay` must be applied into `effective_policy` using shared patch semantics and remain restriction-only | Validation without merge is a lie; merge without restriction-only semantics is unsafe |
-| Durable attach object | `HostAttachContract` remains the only durable attach object | A second durable attach structure would reopen the exact semantic split this slice exists to close |
-| Retained member-turn parity shape | Retained orchestrator member turns will consume a persisted or already-resolved subset derived from the shared contract, not a fresh full-envelope resolution on every follow-up turn | Retained turns are transport reuse, not new baseline selection |
-| Sync semantics | `sync_host_attach_contract(...)` may refresh continuity-only runtime state, not baseline launch truth | Birth-time launch truth must not drift opportunistically as the session runs |
-| Successor semantics | `fork_successor_attach_contract(...)` copies generalized truth forward and clears only continuity-specific state | This is the smallest correct rule for slice 31 fresh-attach behavior |
+| Durable attach object | `HostAttachContract` remains the only persisted attach object | A second durable model would recreate the split 29.75 exists to close |
+| Birth-time authority | Host-rooted session birth persists attach truth from `ResolvedLaunchContract`, not from manifest defaults | Manifest defaults are runtime materialization detail, not contract authority |
+| REPL cold start posture | REPL host cold start must join the shared dispatch contract family before the first session write | Public start and REPL cold start must stop producing different durable truth for the same backend |
+| Modern missing truth | Missing or invalid durable attach truth fails closed in modern paths | Silent repair through permissive defaults broadens authority and hides corruption |
+| Legacy compatibility | Any manifest-based backfill must be explicit, isolated, and clearly marked as legacy compatibility | Compatibility cannot masquerade as normal steady-state behavior |
+| Attach overlay semantics | Overlay may honor baseline, narrow it where permitted, or select among explicitly baseline-permitted modes when the durable baseline already encodes multiple allowed realizations; it may not silently broaden or replace baseline semantics | Later callers cannot reinterpret the same durable session ad hoc |
+| `requested_execution_scope` | For persisted attach, execution scope stays baseline-owned and immutable | 29.75 is not reopening scope selection |
+| `host_execution_client_start` | Overlay may keep baseline, narrow `StartNow -> Defer`, or select among explicitly baseline-permitted modes. Because 29.75 does not add multi-mode durable encoding, current 29.75 implementations only exercise honor-or-narrow behavior. | This matches the SOW contract without letting this slice silently grow a second encoding model |
+| `attach_mode_preference` | Overlay may keep baseline, narrow toward stricter continuity (`FreshAllowed -> ContinuityPreferred -> ContinuityRequired`), or select among explicitly baseline-permitted modes. Because 29.75 does not add multi-mode durable encoding, current 29.75 implementations only exercise honor-or-narrow behavior. | Continuity policy is durable baseline truth, and selection is only legal when the durable baseline explicitly says multiple realizations are allowed |
+| Fork semantics | Fork may not broaden the source session by pretending to be an attach overlay. It must consume source durable truth, allocate a new successor session, and persist a new successor `HostAttachContract` through explicit successor-derivation rules. | This keeps the no-broadening overlay rule intact and prevents fork from becoming the loophole that collapses the model |
+| Successor continuity defaults | Successor derivation clears continuity-specific state and persists successor attach defaults with `host_execution_client_start = Defer` and `attach_mode_preference = FreshAllowed` unless a future successor-only rule is explicitly documented otherwise | These are properties of the new successor baseline, not reinterpretations of the source session |
+| Retained member follow-up parity | Existing `MemberDispatchParitySubset` stays the retained-turn contract; 29.75 must not invent a second retained-member dialect | 29.5 already landed this architecture far enough to build on |
+| Multi-mode baseline encoding | 29.75 does not extend `HostAttachContract` or persisted session schema to encode a set of allowed attach modes or client-start modes | This slice freezes authority semantics, not a new durable representation; “selection” remains a contract-level allowance that is dormant unless an explicit baseline encoding already exists |
 
 ## Scope
 
 ### In scope
 
-1. generalize `HostAttachContract` so it is derived from `ResolvedLaunchContract` and remains authoritative for attach-relevant truth;
-2. apply validated inventory `policy_overlay` patches into `ResolvedLaunchContract.effective_policy`;
-3. implement bounded capability override narrowing for the approved capability family in inventory-backed resolution;
-4. keep unsupported capability override families explicit and fail closed;
-5. route retained orchestrator member-turn semantics through a shared-contract-derived subset;
-6. extend tests and truth docs until 29, 29.5, 30, and 31 all describe the same contract floor.
+1. Carry resolved-contract truth through REPL host cold start before first orchestration-session persistence.
+2. Stop seeding modern host attach truth from `HostAttachContract::from_manifest(...)`.
+3. Freeze attach-time overlay rules for persisted attach resolution and enforce them in code, diagnostics, and tests.
+4. Remove steady-state fallback to `Policy::default()` and silent manifest reconstruction in modern paths.
+5. Update downstream SOWs and this root plan so 30 and 31 depend on 29.75 correctly.
 
 ### NOT in scope
 
-1. public `substrate agent start --scope world`;
-2. lazy host attach trigger policy;
-3. born-unattached posture UX beyond the fields 31 will later consume;
-4. adding a new crate or a second orchestration state model;
-5. redesigning transport APIs when the existing typed member-dispatch request can carry the shared-contract-derived subset;
-6. widening policy semantics to allow dispatch-time broadening.
+1. Public `substrate agent start --scope world`.
+2. Attach-worker behavior and lazy attach trigger policy from slice 31.
+3. Widening capability override families beyond the already-landed bounded narrowing set.
+4. Inventing a second durable attach structure or third baseline domain.
+5. Changing retained world-member transport format.
+6. Adding new crates, binaries, or packaging flows.
+7. Extending persisted attach schema to represent multi-mode allowed-mode sets for `host_execution_client_start` or `attach_mode_preference`.
 
 ## Step 0: Scope Challenge
 
 ### 0A. What already exists
 
-The repo already has the foundation this slice needs. This is not architecture discovery.
+The repo already contains the pieces this slice should reuse.
 
 | Sub-problem | Existing code | Reuse decision |
 | --- | --- | --- |
-| Shared launch vocabulary | `DispatchRequestEnvelope`, `ResolvedLaunchContract`, `DispatchCallerKind`, `DispatchBaselineKind` in [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) | Reuse and finish. Do not create a second resolver surface. |
-| Inventory-backed baseline resolution | `resolve_inventory_contract_for_exact_backend(...)`, `resolve_inventory_contract_for_unique_scope(...)` in [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) | Reuse, then add overlay merge and bounded capability narrowing. |
-| Durable attach seam | `HostAttachContract`, `sync_host_attach_contract(...)`, `fork_successor_attach_contract(...)` in [orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Reuse, but derive from resolved truth instead of manifest-era defaults. |
-| Attach-time selection gate | `resolve_public_control_target(...)` in [state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse. It already enforces `supports_resume`, `supports_fork`, `supports_stop`, and continuity gating. |
-| Attach launch planning | `build_attach_launch_plan(...)` in [agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs) | Reuse, but make persisted attach truth actually authoritative. |
-| Retained member transport | `build_member_dispatch_transport_request(...)` in [async_repl.rs](crates/shell/src/repl/async_repl.rs) plus typed request handling in [world_ops.rs](crates/shell/src/execution/routing/dispatch/world_ops.rs) | Reuse transport. Replace hidden launch semantics only. |
-| Policy patch model | `PolicyPatch` and `apply_policy_patch_over(...)` in [policy_model.rs](crates/shell/src/execution/policy_model.rs) | Reuse semantics. Expose a crate-private helper rather than inventing parallel merge logic. |
-| Overlay validation | `validate_policy_overlay(...)` in [agent_inventory.rs](crates/shell/src/execution/agent_inventory.rs) | Reuse. Keep this as the narrowing-only gate. |
-| Runtime realizability | `materialize_runtime_descriptor(...)` in [validator.rs](crates/shell/src/execution/agent_runtime/validator.rs) | Reuse exactly. This slice is not a runtime materialization redesign. |
+| Shared launch resolution vocabulary | `DispatchRequestEnvelope`, `ResolvedLaunchContract`, `DispatchBaselineKind` in [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) | Reuse. Do not invent a REPL-only launch dialect. |
+| Public start durable attach persistence | `persist_resolved_start_attach_contract(...)` in [agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs) | Reuse semantics. Pull REPL cold start onto this same authority model. |
+| Durable attach storage | `HostAttachContract`, `HostAttachLaunchKnobs`, `OrchestrationSessionRecord` in [orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Reuse. Tighten constructors and recovery rules. |
+| Persisted attach resolution | `resolve_persisted_host_attach_contract(...)` in [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) | Reuse entrypoint. Tighten overlay semantics and fail-closed behavior. |
+| REPL cold start bootstrap | `resolve_host_orchestrator_bootstrap(...)` and `prepare_host_orchestrator_runtime_from_resolved(...)` in [async_repl.rs](crates/shell/src/repl/async_repl.rs) | Reuse flow. Change it to carry `ResolvedLaunchContract` instead of only `RuntimeSelectionDescriptor`. |
+| Runtime materialization | `validate_runtime_realizability(...)` and `RuntimeSelectionDescriptor` | Reuse. Descriptor materialization stays downstream of contract resolution. |
+| Retained member parity | `MemberDispatchParitySubset`, `retained_member_dispatch_parity_subset(...)`, `build_member_dispatch_transport_request(...)` in [async_repl.rs](crates/shell/src/repl/async_repl.rs) | Reuse. Keep parity subset intact while making parent host session birth truthful. |
+| Public attach gating | `resolve_public_control_target(...)` in [state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse. It already enforces capability gates using durable attach truth. |
 
-### 0B. Exact gaps being closed
+### 0B. Exact gaps this plan closes
 
-The live code confirms the SOW is still directionally correct:
+The live code still leaves four blocking gaps:
 
-1. persisted attach resolution still returns permissive capabilities plus `Policy::default()` in [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs);
-2. inventory `policy_overlay` is validated in [agent_inventory.rs](crates/shell/src/execution/agent_inventory.rs) but is not applied to `ResolvedLaunchContract.effective_policy`;
-3. `validate_dispatch_overrides(...)` currently rejects every capability override with "frozen but not supported";
-4. `HostAttachContract::from_manifest(...)` still derives from manifest/runtime defaults rather than a resolved host contract;
-5. `sync_host_attach_contract(...)` only refreshes continuity selector state, which is correct, but that makes birth-time contract truth completeness non-negotiable;
-6. retained member-turn transport in [async_repl.rs](crates/shell/src/repl/async_repl.rs) still builds its request from prepared manifest state without one explicit shared-contract-derived parity object.
+1. `OrchestrationSessionRecord::new(...)` seeds `host_attach_contract` via `HostAttachContract::from_manifest(...)`, and REPL cold start persists that first write unchanged.
+2. `sync_host_attach_contract(...)` repopulates a missing contract from manifest truth instead of treating missing modern durable truth as an error.
+3. `resolve_persisted_host_attach_contract(...)` deserializes `effective_policy` and then falls back to `unwrap_or_default()`, which silently regains `Policy::default()` in modern paths.
+4. Persisted attach resolution still lets request-time callers replace parts of `host_execution_client_start` and `attach_mode_preference` too freely.
 
 ### 0C. Minimum honest change
 
-The minimum honest implementation is:
+The minimum honest change set is:
 
-1. keep one resolver module;
-2. add one crate-private policy-overlay merge helper reusable by the resolver;
-3. add one resolved-to-persisted conversion path for `HostAttachContract`;
-4. add one crate-private retained-turn parity builder that reconstructs the required subset from participant and session fields already persisted at cold start from resolved contract truth;
-5. add tests proving overlay merge, bounded capability narrowing, persisted attach authority, and retained-turn parity.
+1. Extend REPL bootstrap to compute and retain a `ResolvedLaunchContract`.
+2. Add an explicit host-orchestrator session seed path that accepts durable attach truth up front.
+3. Quarantine `from_manifest(...)` and manifest backfill behind a compatibility-only path.
+4. Centralize persisted attach overlay validation in one helper owned by `resolve_persisted_host_attach_contract(...)`.
+5. Extend unit and integration tests around the exact authority seams above.
+6. Update downstream docs so the dependency floor is truthful.
 
-Anything smaller leaves 29.5 half-claimed and forces 30 or 31 to rediscover semantics.
+Anything smaller leaves 29.75 half done and pushes the same ambiguity into 30 or 31.
 
 ### 0D. Complexity check
 
-This slice touches a lot of seams:
+This slice touches more than eight files and crosses REPL, runtime, state store, CLI, tests, and docs. That would normally be a smell. Here it is justified because:
 
-1. dispatch resolution;
-2. persistent orchestration state;
-3. state-store control gates;
-4. CLI attach planning;
-5. REPL retained member transport;
-6. tests and truth docs.
+1. The work is narrow in concept even if it spans multiple seams.
+2. The change is contract-hardening, not new product behavior.
+3. Each touched file participates in the same authority chain.
+4. There is still no need for a new crate or a new persisted state model.
 
-That is acceptable only because we are freezing the shape tightly:
+### 0E. Search, completeness, and distribution
 
-1. no new crate;
-2. no new public CLI verb;
-3. no public transport redesign;
-4. no new persisted parity object;
-5. docs only update the truth surface directly affected by these contract semantics.
+This slice should do the complete version, not the doc-only shortcut.
 
-### 0E. Completeness and distribution check
-
-Completeness wins here.
-
-The shortcut version is to narrow docs and leave the code mostly as-is. That saves almost no AI-assisted implementation time and guarantees slice 30 or 31 reopens the same seams.
+The shortcut is to narrow wording and accept current behavior. That saves little implementation time and guarantees later slices have to rediscover attach-authority bugs under more product pressure.
 
 The complete version is:
 
-1. make durable attach truth real;
-2. make overlay merge real;
-3. make bounded capability narrowing real;
-4. make retained-turn parity real;
-5. prove it with targeted tests.
+1. Fix REPL birth-time persistence.
+2. Fix persisted attach overlay semantics.
+3. Fix modern fail-closed behavior.
+4. Prove parity and failure cases in tests.
+5. Align downstream docs.
 
-No new binary, package, container, or artifact type is introduced, so distribution work is not applicable.
+No new binary, package, image, or release channel is introduced, so distribution work is unchanged.
 
-## Architecture Contract
-
-### Thesis
-
-The repo already has the right seams. The missing piece is truthful contract ownership.
-
-After 29.5:
-
-1. inventory-backed launches resolve once through the shared contract;
-2. host attach launches resolve from durable attach truth, not ambient runtime snapshots;
-3. retained member turns use a contract-derived subset rather than a second dialect;
-4. policy and capability narrowing are visible in the resolved contract and survive into later consumers where required.
+## Contract Model
 
 ### Baseline domains
 
-There are exactly two baseline domains. This slice does not allow a third.
+After 29.75 there are still only two baseline domains:
 
-| Domain | Used by | Baseline source | 29.5 behavior |
-| --- | --- | --- | --- |
-| Inventory launch | human `start`, orchestrator member cold start, future public world start | effective inventory plus effective config plus validated inventory `policy_overlay` | may accept bounded capability narrowing; may not broaden scope or policy |
-| Persisted host attach | `reattach`, `fork`, detached turn attach planning, future lazy attach | durable `HostAttachContract` under the orchestration session | may change continuity-vs-fresh attach selection only; may not reconstruct launch truth from ambient state |
+| Baseline domain | Used by | Authority source |
+| --- | --- | --- |
+| Inventory launch | public start, REPL host cold start, future world-scoped public start | `ResolvedLaunchContract` |
+| Persisted host attach | `reattach`, detached-turn recovery, later lazy attach, plus source and successor sessions involved in `fork` | `HostAttachContract` |
 
-### Target architecture
+There is no third domain for REPL-only launch semantics and no manifest-only fallback domain.
+
+### Data flow
 
 ```text
-INVENTORY-BACKED LAUNCH
-=======================
-caller
-  |
-  v
-DispatchRequestEnvelope
-  |
-  v
-dispatch_contract.rs
-  1. select inventory baseline
-  2. validate bounded override family
-  3. apply accepted capability narrowing
-  4. merge validated policy_overlay into effective_policy
-  5. emit ResolvedLaunchContract + provenance
-  |
-  +--> materialize_runtime_descriptor(...)
-  +--> host attach persistence for host-scoped owner sessions
-  `--> member dispatch parity subset for world members
+HOST COLD START
+===============
+effective config + policy + inventory
+        |
+        v
+shared dispatch resolver
+        |
+        +--> ResolvedLaunchContract
+        |       |
+        |       +--> RuntimeSelectionDescriptor (runtime materialization only)
+        |       |
+        |       `--> HostAttachContract::from_resolved_contract(...)
+        |
+        `--> OrchestrationSessionRecord persisted with authoritative attach truth
 
 
-PERSISTED ATTACH LAUNCH
-=======================
-caller
-  |
-  v
-resolve_public_control_target(...)
-  |
-  v
-HostAttachContract
-  |
-  v
+PERSISTED ATTACH
+================
+DispatchRequestEnvelope + HostAttachContract
+        |
+        v
 resolve_persisted_host_attach_contract(...)
-  1. trust persisted backend/protocol/scope/runtime descriptor
-  2. trust persisted attach-relevant capabilities
-  3. trust persisted attach_launch_knobs baseline
-  4. apply attach-mode request checks only
-  |
-  `--> materialize_runtime_descriptor(...)
+        |
+        +--> validate immutable baseline fields
+        +--> deserialize persisted policy snapshot
+        +--> apply bounded attach overlay
+        `--> ResolvedLaunchContract for attach/recovery
+
+
+FORK SUCCESSOR DERIVATION
+=========================
+source HostAttachContract
+        |
+        v
+explicit successor-derivation helper
+        |
+        +--> carry forward generalized durable truth
+        +--> clear continuity-specific state
+        +--> set successor attach defaults
+        `--> persist new successor HostAttachContract
 
 
 RETAINED MEMBER TURN
 ====================
-member cold start
-  |
-  v
-ResolvedLaunchContract
-  |
-  v
+existing member runtime
+    or pending replacement
+    or exact backend descriptor fallback
+        |
+        v
 MemberDispatchParitySubset
-  |
-  v
+        |
+        v
 build_member_dispatch_transport_request(...)
-  |
-  `--> typed transport stays, hidden launch dialect goes away
 ```
 
-### Authoritative field ownership after 29.5
+### Field ownership
 
-#### `ResolvedLaunchContract`
+#### `ResolvedLaunchContract` owns birth-time truth
 
-Remains authoritative for:
+For host-rooted session birth, the following fields are authoritative only once they have passed through shared resolution:
 
-1. `backend_id`
-2. `backend_kind`
-3. `protocol`
-4. `execution_scope`
-5. runtime descriptor inputs
-6. accepted bounded capabilities
-7. attach launch knobs
-8. merged effective policy
-9. field provenance
+1. Backend identity and backend kind.
+2. Protocol.
+3. Execution scope.
+4. Runtime launch descriptor.
+5. Attach-relevant capabilities.
+6. Effective policy snapshot.
+7. Attach launch defaults.
 
-#### `HostAttachContract`
+#### `HostAttachContract` owns durable attach truth
 
-Must become authoritative for:
+`HostAttachContract` is the persisted attach baseline for:
 
-1. `backend_id`
-2. `execution_scope`
-3. `protocol`
-4. `launch_descriptor`
-5. attach-relevant capabilities:
-   - `session_resume`
-   - `session_fork`
-   - `session_stop`
-   - `status_snapshot`
-   - `event_stream`
-6. attach launch knobs
-7. continuity selector state when present
+1. Backend identity.
+2. Protocol.
+3. Execution scope.
+4. Resolved runtime descriptor.
+5. Attach-relevant capabilities.
+6. Effective policy snapshot.
+7. Continuity selector.
+8. Attach policy defaults:
+   - `requested_execution_scope`
+   - `host_execution_client_start`
+   - `attach_mode_preference`
 
-It is intentionally not required to persist full `Policy`, `session_start`, `llm`, or `mcp_client` in 29.5.
+#### Request envelope owns only bounded overlay inputs
 
-#### `MemberDispatchParitySubset`
+For persisted attach, request-time input is not replacement truth. It is only:
 
-This is an in-memory crate-private helper, not a new durable object.
+1. A no-op if it matches the durable baseline.
+2. A narrowing request if the baseline semantics allow narrowing.
+3. A selection among explicitly baseline-permitted modes when the durable baseline encodes more than one acceptable realization.
+4. A hard error if it broadens or semantically replaces the durable baseline.
 
-It must contain exactly what retained member dispatch needs from already-persisted resolved truth:
+### Fork is not an attach overlay
 
-1. `backend_id`
-2. `protocol`
-3. `backend_kind`
-4. `binary_path`
-5. `execution_scope`
-6. capability truth needed for follow-up authorization where relevant
-7. orchestration and world linkage fields already required by typed transport
+Fork is a separate contract operation and must not be implemented as a broadening exception to persisted attach overlay rules.
 
-It must not perform inventory selection, config fallback, or policy re-resolution on retained follow-up turns.
+1. `reattach`, detached-turn recovery, and later lazy attach consume an existing durable baseline through the bounded overlay model above.
+2. `fork` consumes the source session's durable truth as input, but it does not reinterpret that source session through caller overlay.
+3. `fork` allocates a new successor session and persists a new successor `HostAttachContract`.
+4. Successor derivation may transform continuity-dependent fields because it is creating a new baseline for a new session, not broadening the old one.
+5. For 29.75, the successor baseline should:
+   - clear continuity selector state;
+   - persist `host_execution_client_start = Defer`;
+   - persist `attach_mode_preference = FreshAllowed`;
+   - carry forward all other durable attach truth unless an explicit successor-only rule says otherwise.
+6. Any implementation that tries to make `fork` legal by broadening the source session through `resolve_persisted_host_attach_contract(...)` is out of contract for this plan.
 
-## Implementation Plan
+### Encoding rule for “selection among baseline-permitted modes”
 
-### Workstream 1: Generalize `HostAttachContract` from resolved truth
+This plan makes the encoding rule explicit so 29.75 stays narrow.
 
-### Goal
+1. 29.75 does not introduce new persisted schema for “allowed mode sets” on `host_execution_client_start` or `attach_mode_preference`.
+2. The current durable baseline in `HostAttachContract` remains single-valued for those fields unless the existing code already has an explicit multi-mode representation available in the same durable contract family.
+3. Therefore the SOW’s “selection among baseline-permitted modes” rule remains part of the contract model, but it is intentionally dormant in 29.75 unless an explicit pre-existing durable encoding is already present.
+4. In practical 29.75 implementation terms: if the durable baseline is single-valued, overlay behavior is honor-or-narrow only; any request that would require selecting among multiple baseline-permitted modes must fail closed rather than inventing new encoding semantics on the fly.
+5. Fork does not use this dormant selection allowance. It gets its own explicit successor-baseline derivation rule above.
+6. Any future slice that wants active selection behavior must first introduce and document an explicit durable encoding for multiple permitted realizations. That is not part of 29.75.
 
-Make the durable attach contract truthful at session birth and successor creation.
+## Engineering Guardrails
 
-### Primary files
+### DRY and boundary rules
 
-1. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
-2. [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
-3. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
-4. [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)
+1. Do not duplicate public-start persistence logic and REPL persistence logic; the REPL should reuse the same resolved-contract-to-durable-contract semantics as `persist_resolved_start_attach_contract(...)`.
+2. Do not spread attach overlay rules across `dispatch_contract.rs`, `agents_cmd.rs`, and `state_store.rs`; one helper should own the monotonicity rules.
+3. Do not let `RuntimeSelectionDescriptor` become a shadow contract object; it stays a materialization descriptor only.
+4. Keep manifest-derived recovery logic obviously separate from modern steady-state logic, either by naming or by module-local helper boundaries.
+5. Do not introduce new crates or a second durable persisted model for this slice.
 
-### Required changes
+### Performance constraints
 
-1. add a crate-private conversion from host-scoped `ResolvedLaunchContract` to `HostAttachContract`;
-2. stop deriving the durable contract from manifest defaults in the steady-state birth path;
-3. persist the attach-relevant capability subset from the resolved contract instead of defaulting all of them to `true`;
-4. persist attach launch knobs from the resolved contract instead of recomputing them later;
-5. keep `sync_host_attach_contract(...)` continuity-only:
-   - allowed to refresh `continuity_uaa_session_id`;
-   - not allowed to mutate backend, scope, protocol, runtime descriptor, capabilities, or attach knobs;
-6. keep `fork_successor_attach_contract(...)` as clone-plus-clear-continuity only.
+This is not a throughput-driven slice, but there are still performance constraints:
 
-### Exit criteria
+1. Do not add repeated inventory reload or policy recomputation during steady-state attach; the durable snapshot should make attach cheaper, not more expensive.
+2. Keep compatibility backfill off the hot path for modern sessions.
+3. Avoid repeated serde round-trips beyond the single persisted policy deserialize already required by attach resolution.
+4. Do not add REPL-path logic that re-runs full contract resolution for retained member follow-up turns.
 
-1. host session birth persists authoritative attach truth once;
-2. later attach planning no longer reconstructs baseline truth from detached participant state;
-3. successor attach contract copies only the intended generalized truth forward.
+## Execution Plan
 
-### Workstream 2: Merge inventory `policy_overlay` into resolved effective policy
+The implementation order is intentionally strict. Phase A freezes the contract semantics first. Every later phase consumes that decision rather than reinterpreting it.
 
-### Goal
+### Phase A: Freeze persisted attach baseline and overlay semantics
 
-Make `effective_policy` in inventory-backed resolution real, not placeholder.
-
-### Primary files
-
-1. [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
-2. [crates/shell/src/execution/agent_inventory.rs](crates/shell/src/execution/agent_inventory.rs)
-3. [crates/shell/src/execution/policy_model.rs](crates/shell/src/execution/policy_model.rs)
-
-### Required changes
-
-1. expose or extract a crate-private helper in `policy_model.rs` that applies a `PolicyPatch` over an existing `Policy` using the same semantics already encoded there;
-2. keep `validate_policy_overlay(...)` as the pre-merge narrowing-only gate;
-3. in inventory-backed resolution:
-   - start from the effective base policy;
-   - if `policy_overlay` exists, apply it into a working copy;
-   - validate the merged result before returning it;
-4. if merge application or merged validation fails, return a `DispatchResolutionError` at the policy layer with an exact field and reason;
-5. record provenance so later diagnostics can say whether the final policy stayed baseline-only or was narrowed by overlay.
-
-### Exit criteria
-
-1. `ResolvedLaunchContract.effective_policy` differs when overlay narrowing exists;
-2. diagnostics can explain exactly why an overlay was accepted or rejected;
-3. no caller needs to infer whether overlay semantics were applied.
-
-### Workstream 3: Close the capability override contract honestly
-
-### Goal
-
-Support the bounded override family this stack actually needs and deny the rest explicitly.
-
-### Primary files
+Primary files:
 
 1. [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
-2. [crates/shell/src/execution/agent_runtime/validator.rs](crates/shell/src/execution/agent_runtime/validator.rs)
-3. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
-4. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
+2. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
+3. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
 
-### Required changes
+Required changes:
 
-1. replace blanket capability-override rejection in `validate_dispatch_overrides(...)` with field-by-field handling;
-2. accepted 29.5 behavior:
-   - only inventory-backed resolution may accept capability overrides;
-   - accepted values may only narrow from `true` to `false`;
-   - if the baseline capability is already `false`, keep the current fail-closed behavior;
-3. rejected 29.5 behavior:
-   - `session_start`, `llm`, and `mcp_client` remain unsupported override fields;
-   - persisted attach launches still reject dispatch-time capability overrides entirely;
-4. write accepted narrowed capabilities into `ResolvedLaunchContract.capabilities`;
-5. when a host-scoped session persists `HostAttachContract`, carry the attach-relevant narrowed values forward so later `resume`, `fork`, and `stop` gates remain truthful;
-6. ensure state-store gates continue to read those persisted capability values and therefore reflect the narrowed contract in operator behavior.
+1. Add one explicit helper that computes persisted attach launch knobs from durable baseline plus request overlay, and keep that helper scoped to reattach-style persisted attach consumers rather than fork successor creation.
+2. Change `resolve_persisted_host_attach_contract(...)` so:
+   - `requested_execution_scope` always comes from the contract baseline;
+   - `host_execution_client_start` can honor baseline, narrow `StartNow -> Defer`, or select among explicitly baseline-permitted modes if and only if the durable baseline already encodes that allowance; otherwise it must fail closed rather than infer new multi-mode semantics;
+   - `attach_mode_preference` can honor baseline, narrow toward stricter continuity, or select among explicitly baseline-permitted modes if and only if the durable baseline already encodes that allowance; otherwise it must fail closed rather than infer new multi-mode semantics;
+   - invalid overlay attempts fail with field-specific baseline-truth diagnostics.
+3. Replace `effective_policy.unwrap_or_default()` with explicit modern-path validation:
+   - valid snapshot -> use it;
+   - missing snapshot in legacy compatibility path -> recover only if the compatibility gate says so;
+   - missing snapshot in modern path -> fail closed.
+4. Preserve `field_provenance` truth so diagnostics still explain which fields came from persisted baseline versus accepted narrowing.
+5. Add an explicit successor-derivation path for fork so `agents_cmd` and public control flows do not rely on caller-side broadening of the source session baseline.
+6. Verify `agents_cmd` and public control flows consume the stricter resolved contract without reopening caller-side semantic replacement.
 
-### Exact support matrix
+Outputs:
 
-| Capability field | 29.5 support | Reason |
-| --- | --- | --- |
-| `session_resume` | supported as narrowing-only | consumed by attach and state-store control gates |
-| `session_fork` | supported as narrowing-only | consumed by successor attach semantics |
-| `session_stop` | supported as narrowing-only | consumed by control gates |
-| `status_snapshot` | supported as narrowing-only | part of control-surface truth and future public semantics |
-| `event_stream` | supported as narrowing-only | part of retained ownership and operator-surface behavior |
-| `session_start` | rejected in 29.5 | not a meaningful per-dispatch narrowing knob for the active start path |
-| `llm` | rejected in 29.5 | would broaden into runtime product semantics |
-| `mcp_client` | rejected in 29.5 | would broaden into runtime product semantics |
+1. One shared persisted-attach overlay helper.
+2. One explicit baseline-vs-overlay diagnostic posture.
+3. One fail-closed policy-snapshot rule used by all modern persisted-attach paths.
+4. One explicit fork successor-baseline derivation rule that is separate from persisted attach overlay.
 
-### Exit criteria
+Definition of done:
 
-1. the approved family works in code, not just docs;
-2. denials are field-scoped and truthful;
-3. later attach and control paths observe the same narrowed truth.
+1. Persisted attach never broadens or replaces durable baseline semantics.
+2. Modern missing policy or contract truth fails closed.
+3. Error messages explain baseline corruption or unsupported broadening.
+4. Fork successor creation is legal without weakening the no-broadening overlay rule.
 
-### Workstream 4: Finish retained member-turn parity
+### Phase B: Thread resolved-contract truth into REPL host cold start
 
-### Goal
-
-Remove the hidden second contract without rewriting working transport.
-
-### Primary files
+Primary files:
 
 1. [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs)
-2. [crates/shell/src/execution/routing/dispatch/world_ops.rs](crates/shell/src/execution/routing/dispatch/world_ops.rs)
+2. [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
+3. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+
+Required changes:
+
+1. Change `ResolvedHostOrchestratorBootstrap` so it carries the resolved contract, not just the runtime descriptor.
+2. Make `resolve_host_orchestrator_bootstrap(...)` compute a host-scoped `ResolvedLaunchContract` first, then derive `RuntimeSelectionDescriptor` from it.
+3. Add an explicit session-construction path for modern host-orchestrator birth, for example `OrchestrationSessionRecord::new_host_orchestrator(...)` or a `HostAttachContractSeed`, so the first persisted session write already contains `HostAttachContract::from_resolved_contract(...)`.
+4. Stop relying on `OrchestrationSessionRecord::new(...)` plus manifest seeding for REPL cold start.
+5. Keep `RuntimeSelectionDescriptor` as runtime materialization input only.
+
+Outputs:
+
+1. REPL cold start and public start share the same birth-time authority story.
+2. The first disk write for a modern REPL-born host session already contains authoritative attach truth.
+
+Definition of done:
+
+1. Equivalent public start and REPL cold start persist equivalent host attach truth for the same backend.
+2. No modern REPL cold-start write hits disk with a manifest-derived attach contract.
+
+### Phase C: Quarantine manifest-era backfill to compatibility-only logic
+
+Primary files:
+
+1. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+2. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
 3. [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)
-4. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
-5. [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-### Required changes
+Required changes:
 
-1. define a crate-private retained-turn parity builder over the existing persisted participant and session fields written at member startup;
-2. ensure member startup persists every field that builder needs through the existing participant and session records;
-3. feed retained member-turn transport from the reconstructed subset plus live orchestration linkage fields;
-4. keep `MemberDispatchTransportRequest` as the wire shape in 29.5 and satisfy its inputs from the reconstructed shared-contract-derived subset;
-5. ensure retained member turns do not consult inventory, effective config defaults, or ad hoc launch reconstruction on follow-up turns.
+1. Keep `HostAttachContract::from_manifest(...)` out of steady-state modern birth paths.
+2. Change `sync_host_attach_contract(...)` so it only refreshes continuity selector state on an existing contract for modern sessions.
+3. Introduce an explicitly named compatibility helper if legacy JSON rows still need one-time backfill, for example `legacy_backfill_host_attach_contract_from_manifest(...)`.
+4. Make the compatibility path opt-in and narrow so tests can distinguish modern fail-closed behavior from legacy recovery behavior.
+5. Ensure persistence helpers in control and parking paths do not silently repair missing durable truth during ordinary runtime snapshots.
 
-### Why this shape is frozen
+Outputs:
 
-Direct full-envelope re-resolution on every retained turn sounds pure but is the wrong abstraction:
+1. One visibly separate legacy compatibility path, if needed at all.
+2. Zero modern steady-state codepaths that recreate authority from manifest defaults.
 
-1. the retained member already exists;
-2. inventory or workspace defaults may have drifted since startup;
-3. follow-up turn transport should reuse the already-authorized launch basis, not pretend it is a new selection event.
+Definition of done:
 
-The parity contract is therefore:
+1. Modern missing durable attach truth is observable and rejected.
+2. Any manifest-based reconstruction is clearly labeled legacy compatibility.
 
-1. cold start uses full shared resolution;
-2. retained turn uses a derived subset from that same resolved truth;
-3. both surfaces speak one vocabulary.
+### Phase D: Expand unit and integration coverage around the authority seams
 
-### Exit criteria
+Primary files:
 
-1. retained follow-up turns no longer own launch selection semantics;
-2. equivalent cold-start truth yields equivalent retained-turn inputs;
-3. typed transport remains intact.
+1. [crates/shell/tests/repl_world_first_routing_v1.rs](crates/shell/tests/repl_world_first_routing_v1.rs)
+2. [crates/shell/tests/agent_public_control_surface_v1.rs](crates/shell/tests/agent_public_control_surface_v1.rs)
+3. [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
+4. Unit tests in [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+5. Unit tests in [crates/shell/src/execution/agent_runtime/dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-### Workstream 5: Sync docs and downstream assumptions
+Required changes:
 
-### Goal
+1. Add birth-time parity tests proving REPL cold start and public start persist the same attach truth shape for the same backend.
+2. Add modern fail-closed tests for missing and corrupt persisted policy snapshots.
+3. Add monotonicity tests proving `host_execution_client_start` and `attach_mode_preference` can honor baseline, narrow where allowed, and only select when the durable baseline explicitly encodes multiple permitted modes. They must never broaden or infer multi-mode semantics that are not durably encoded.
+4. Add fork-successor tests proving successor creation derives a new baseline instead of broadening the source session through persisted attach overlay.
+5. Add regression tests proving runtime snapshot and parked/resumed flows do not silently recreate missing modern contracts.
+6. Keep retained member parity coverage intact while ensuring the parent host session baseline is now truthful.
 
-Stop future slices from building on outdated claims.
+Outputs:
 
-### Primary files
+1. Unit tests for authoritative persistence, fail-closed behavior, and explicit legacy handling.
+2. Integration tests for REPL/public parity and recovery semantics.
+3. A targeted test matrix that future slices 30 and 31 can trust.
+
+Definition of done:
+
+1. All critical authority seams have direct regression coverage.
+2. Tests distinguish modern fail-closed behavior from explicitly retained legacy behavior.
+
+### Phase E: Keep downstream docs truthful
+
+Primary files:
 
 1. [llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
-2. [llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)
-3. [llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)
-4. active operator-facing docs or inline ASCII diagrams that describe touched attach or dispatch semantics
+2. [llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md](llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md)
+3. [llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)
+4. [llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)
+5. [PLAN.md](PLAN.md)
 
-### Required changes
+Required changes:
 
-1. 29 must no longer imply unbounded capability override support;
-2. 29 must explicitly say which capability family 29.5 makes real and which fields remain denied;
-3. 30 must explicitly depend on 29.5 for truthful public capability and scope mapping;
-4. 31 must explicitly depend on 29.5 for durable attach truth and successor-copy semantics;
-5. if active code comments or inline ASCII diagrams near touched runtime seams become stale, update them in the same diff.
+1. Make 29, 29.75, and this root plan say the same thing about the 29.75 contract floor.
+2. Ensure 30 states it inherits durable attach truth and does not repair it.
+3. Ensure 31 states attach-mode behavior consumes the 29.75 two-layer model and does not reopen baseline semantics.
+4. Update lingering 29.5 language that still implies contract-authority gaps are already closed.
 
-### Exit criteria
+Outputs:
 
-1. downstream slices do not have to guess what 29.5 made real;
-2. docs and nearby code comments tell the same truth as tests and runtime behavior.
+1. One consistent narrative from 29 -> 29.75 -> 30 -> 31.
+2. No downstream doc that implies 30 or 31 will repair baseline contract truth left open by 29.x.
 
-## Implementation Sequence
+Definition of done:
 
-This is the concrete execution order. It is intentionally more explicit than the workstreams so implementation cannot drift.
+1. A reader can move from 29 -> 29.75 -> 30 -> 31 without encountering contradictory contract ownership.
 
-### Phase 1: Durable attach truth first
+## Test and Validation Plan
 
-Land Workstream 1 first.
-
-Reason:
-
-1. persisted attach truth is the floor for later control-gate behavior;
-2. capability narrowing is not done until the durable contract can actually preserve it;
-3. slice 31 depends on successor and continuity semantics staying stable after this point.
-
-Deliverables:
-
-1. resolved-to-attach conversion path exists;
-2. host session birth uses it;
-3. sync and successor semantics are explicitly bounded by tests.
-
-### Phase 2: Real policy truth second
-
-Land Workstream 2 next.
-
-Reason:
-
-1. policy overlay merge belongs in the resolver, before parity and override behavior are declared complete;
-2. cold-start parity claims are incomplete until both policy and capability truth flow through the same contract.
-
-Deliverables:
-
-1. shared patch helper exists;
-2. overlay-backed resolution returns narrower policy;
-3. resolver diagnostics explain overlay acceptance or denial.
-
-### Phase 3: Capability override closeout third
-
-Land Workstream 3 after Phases 1 and 2.
-
-Reason:
-
-1. accepted narrowed capabilities must persist into durable attach truth;
-2. user-facing denial semantics should be built once the final resolver and policy shape are already stable.
-
-Deliverables:
-
-1. supported family works;
-2. unsupported family fails closed with exact field names;
-3. state-store gates observe the persisted narrowed truth.
-
-### Phase 4: Retained member parity fourth
-
-Land Workstream 4 after policy truth is stable, but before doc lock-in.
-
-Reason:
-
-1. retained-turn parity needs the final shared vocabulary;
-2. it should reuse the already-frozen contract floor rather than race its definition.
-
-Deliverables:
-
-1. retained-turn parity builder exists;
-2. typed transport is fed from the shared-contract-derived subset;
-3. retained turns no longer consult inventory or config defaults on follow-up turns.
-
-### Phase 5: Docs, tests, and final lock-in last
-
-Finish Workstream 5 plus the full regression suite after the semantic work lands.
-
-Reason:
-
-1. docs should describe shipped semantics, not aspirational mid-flight semantics;
-2. final validation should prove the entire contract floor together, not per-file in isolation.
-
-Deliverables:
-
-1. 29, 29.5, 30, and 31 all agree;
-2. targeted tests plus full shell pass are green;
-3. nearby comments and diagrams are accurate.
-
-## Architecture Review
-
-### Locked architecture decisions
-
-1. keep one resolver module;
-2. keep policy narrowing explicit inside the resolver;
-3. keep runtime materialization below the contract;
-4. keep durable attach truth small but real;
-5. keep retained member transport typed;
-6. keep later slices boring and dependent on this contract rather than reinterpretive.
-
-### Architecture issues this plan resolves
-
-1. persisted attach truth is currently under-specified;
-2. effective policy is currently a lie in inventory-backed contract output when overlay exists;
-3. retained member turns still have a hidden contract dialect.
-
-### Architecture diagrams that must stay current in code or docs
-
-If touched files already contain nearby ASCII flow comments, they must be reviewed and updated in the same diff. The highest-risk places are:
-
-1. [orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs) for durable attach lifecycle;
-2. [dispatch_contract.rs](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) for baseline-domain split and override flow;
-3. [async_repl.rs](crates/shell/src/repl/async_repl.rs) or [world_ops.rs](crates/shell/src/execution/routing/dispatch/world_ops.rs) for retained member dispatch flow.
-
-## Code Quality Review
-
-### Implementation guardrails
-
-1. one source of launch truth: `dispatch_contract.rs`;
-2. one durable attach object: `HostAttachContract`;
-3. one state-store authorization gate for persisted attach capabilities;
-4. one policy-overlay merge semantics source, reused from `policy_model.rs`;
-5. no duplicated ad hoc capability narrowing logic in CLI or REPL callers;
-6. no "just set everything true" fallback paths.
-
-### Minimal-diff rules
-
-1. prefer exposing a crate-private merge helper over reimplementing patch semantics in the resolver;
-2. prefer one parity subset helper over threading ad hoc booleans through multiple transport builders;
-3. keep public type changes additive or avoid them entirely;
-4. do not widen this slice into public flag parsing or lazy-attach product behavior.
-
-### Code quality risks being actively prevented
-
-1. `HostAttachContract::from_manifest(...)` encoding defaults that can drift from resolved truth;
-2. blanket capability rejection hiding which fields are intentionally unsupported;
-3. overlay validation without overlay merge forcing maintainers to carry a false mental model;
-4. retained-turn parity logic leaking into unrelated transport or CLI layers.
-
-## Test Review
-
-This slice changes contract truth and control truth. The plan therefore requires full coverage of the changed contract edges, not just happy-path smoke tests.
-
-### Code path coverage
+### Code-path coverage diagram
 
 ```text
-CODE PATHS
-==========
-[+] dispatch_contract.rs
-  ├── resolve_inventory_contract_for_exact_backend(...)
-  │   ├── [GAP] policy_overlay absent -> base effective_policy passes through unchanged
-  │   ├── [GAP] policy_overlay present -> merged effective_policy is narrower
-  │   ├── [GAP] accepted capability narrowing persists into resolved contract
-  │   ├── [GAP] unsupported capability field fails closed with field-scoped reason
-  │   └── [GAP] scope change still fails closed
-  ├── resolve_inventory_contract_for_unique_scope(...)
-  │   └── [GAP] world-member parity path sees the same narrowed capability and merged policy truth
-  └── resolve_persisted_host_attach_contract(...)
-      ├── [GAP] persisted capabilities are reused, not hardcoded permissive defaults
-      ├── [GAP] persisted attach knobs are reused as baseline truth
-      ├── [GAP] continuity-required without selector still fails closed
-      └── [GAP] dispatch-time capability override still rejected for persisted attach
+AUTHORITATIVE HOST BIRTH
+[+] async_repl.rs
+  ├── resolve_host_orchestrator_bootstrap()
+  │   ├── [GAP] resolve shared contract before descriptor materialization
+  │   └── [GAP] persist resolved contract on first orchestration-session write
+  └── prepare_host_orchestrator_runtime_from_resolved()
+      └── [GAP] carry resolved contract through REPL cold start
 
 [+] orchestration_session.rs
-  ├── HostAttachContract birth-time derivation from resolved truth
-  │   └── [GAP] host-scoped resolved contract round-trips into durable attach truth
+  ├── OrchestrationSessionRecord::new(...)
+  │   └── [GAP] modern host birth still seeds host_attach_contract from manifest
   ├── sync_host_attach_contract(...)
-  │   └── [GAP] only continuity selector refreshes; baseline truth does not drift
-  └── fork_successor_attach_contract(...)
-      └── [GAP] successor copy preserves generalized truth and clears continuity only
+  │   ├── [GAP] missing contract silently recreated from manifest
+  │   └── [ADD] continuity refresh only on existing modern contract
+  └── HostAttachContract::from_resolved_contract(...)
+      └── [EXISTING ★★★] preserves runtime/capability/policy truth
 
-[+] state_store.rs
-  ├── resolve_public_control_target(...)
-  │   ├── [GAP] narrowed resume capability denies resume
-  │   ├── [GAP] narrowed fork capability denies fork
-  │   └── [GAP] narrowed stop capability denies stop
-  └── detached host continuity helpers
-      └── [GAP] continuity gating still keys off durable contract truth only
+[+] dispatch_contract.rs
+  ├── resolve_persisted_host_attach_contract(...)
+  │   ├── [EXISTING ★★] persisted capabilities reused
+  │   ├── [GAP] missing policy snapshot falls back to Policy::default()
+  │   ├── [GAP] attach_mode_preference currently caller-replaced
+  │   ├── [GAP] host_execution_client_start currently caller-replaced
+  │   └── [ADD] bounded overlay helper rejects broadening
+  └── field provenance
+      └── [ADD] persisted baseline vs accepted narrowing provenance stays truthful
 
-[+] async_repl.rs / world_ops.rs
-  ├── member cold start
-  │   └── [GAP] retained member parity subset derived from resolved contract
-  └── retained member turn transport
-      └── [GAP] follow-up turn uses resolved subset, not manifest-only hidden semantics
+[+] retained member parity
+  ├── retained_member_dispatch_parity_subset(...)
+  │   └── [EXISTING ★★★] prefers live runtime / pending replacement / descriptor fallback
+  └── build_member_dispatch_transport_request(...)
+      └── [EXISTING ★★★] uses shared-contract-derived parity subset
+
+COVERAGE TARGET
+  Current explicit coverage is strong around persisted capability reuse and retained member parity.
+  This slice must add missing parity tests for REPL cold-start birth truth, fail-closed policy snapshot handling,
+  and attach overlay monotonicity.
 ```
 
-### User flow coverage
+Legend: `★★★` behavior + edge + error coverage already present, `★★` partial existing coverage, `[GAP]` new test required, `[ADD]` new assertion family to add.
 
-```text
-USER FLOWS
-==========
-[+] human host start with no overlay and no overrides
-  └── [GAP] baseline behavior remains unchanged
+### Required unit tests
 
-[+] human host start with inventory policy_overlay
-  └── [GAP] resolved contract and diagnostics reflect narrowed effective_policy
+1. `orchestration_session.rs`
+   - host-orchestrator session birth from resolved contract persists authoritative attach truth on the first write;
+   - modern `sync_host_attach_contract(...)` does not recreate a missing contract from manifest;
+   - explicit legacy backfill helper, if retained, is separately tested and clearly named.
+2. `dispatch_contract.rs`
+   - missing modern `effective_policy` fails closed;
+   - invalid serialized policy fails closed with clear diagnostics;
+   - `host_execution_client_start` accepts honor, narrowing, and selection only when explicitly encoded by the durable baseline; with the current 29.75 single-valued baseline it therefore behaves as honor-or-narrow only;
+   - `attach_mode_preference` accepts honor, narrowing, and selection only when explicitly encoded by the durable baseline; with the current 29.75 single-valued baseline it therefore behaves as honor-or-narrow only;
+   - overlay broadening attempts fail with the correct `field`.
+3. `agents_cmd.rs` and successor-focused tests
+   - fork must not call persisted attach resolution in a way that broadens the source baseline;
+   - successor allocation derives and persists a new successor `HostAttachContract`;
+   - successor sessions clear continuity selector state and persist `host_execution_client_start = Defer` plus `attach_mode_preference = FreshAllowed`;
+   - all non-successor durable truth carries forward unless an explicit successor-only rule says otherwise.
 
-[+] human host start with supported capability narrowing
-  ├── [GAP] launch succeeds
-  ├── [GAP] durable attach contract persists narrowed capabilities
-  └── [GAP] later resume/fork/stop honor those narrowed capabilities
+### Required integration tests
 
-[+] human host start with unsupported capability override field
-  └── [GAP] fail closed with exact field plus caller-contract reason
+1. `repl_world_first_routing_v1.rs`
+   - REPL host cold start persists the same attach-relevant truth shape as public start for the same backend;
+   - a REPL-born session that gets parked and later resumed still uses the persisted continuity selector and stored policy snapshot.
+2. `agent_public_control_surface_v1.rs`
+   - reattach and turn recovery reject sessions missing modern durable policy truth;
+   - attach-time requests that attempt to broaden attach mode or client-start posture fail closed;
+   - fork succeeds through explicit successor derivation rather than overlay broadening of the source session.
+3. `agent_successor_contract_ahcsitc0.rs`
+   - successor sessions preserve generalized attach truth and clear only continuity-specific state after the 29.75 changes;
+   - successor sessions persist `host_execution_client_start = Defer` and `attach_mode_preference = FreshAllowed` as successor-baseline defaults.
 
-[+] human reattach / turn / fork from durable host contract
-  ├── [GAP] resolved attach path reuses persisted capabilities and knobs
-  ├── [GAP] missing continuity still fails closed for continuity-required attach
-  └── [GAP] no ambient participant-state reconstruction occurs
+### Test commands
 
-[+] orchestrator world-member cold start
-  └── [GAP] same shared resolver semantics as human inventory-backed start
+At minimum:
 
-[+] retained orchestrator member follow-up turn
-  ├── [GAP] typed transport remains valid
-  └── [GAP] no hidden second launch-resolution dialect remains
+```bash
+cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
+cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
+cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
+cargo test -p shell host_attach_contract_from_resolved_contract_preserves_truth -- --nocapture
+cargo test -p shell persisted_attach_contract_is_explicit_baseline_domain -- --nocapture
 ```
 
-### Required test additions by file
+If helper APIs change substantially, also run:
 
-#### `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+```bash
+cargo test -p shell --lib execution::agent_runtime::dispatch_contract -- --nocapture
+cargo test -p shell --lib execution::agent_runtime::orchestration_session -- --nocapture
+```
 
-Add direct unit coverage for:
+### Manual validation
 
-1. overlay-free inventory resolution returns unchanged base effective policy;
-2. overlay-backed inventory resolution returns narrower effective policy;
-3. supported capability narrowing writes narrowed booleans into `ResolvedLaunchContract.capabilities`;
-4. unsupported capability fields fail closed with exact field names;
-5. persisted attach resolution reuses persisted capabilities and attach knobs;
-6. persisted attach launches still reject dispatch-time capability overrides.
+Manual validation must prove:
 
-#### `crates/shell/src/execution/agent_runtime/orchestration_session.rs`
-
-Add unit coverage for:
-
-1. host attach contract birth-time derivation from resolved truth;
-2. continuity-only sync semantics;
-3. successor-copy semantics preserving generalized truth while clearing continuity only.
-
-#### `crates/shell/tests/agent_public_control_surface_v1.rs`
-
-Add CLI-surface coverage for:
-
-1. persisted narrowed `session_resume=false` denies `reattach`;
-2. persisted narrowed `session_fork=false` denies `fork`;
-3. persisted narrowed `session_stop=false` denies `stop`;
-4. continuity-required attach still fails closed when durable continuity selector is absent.
-
-#### `crates/shell/tests/repl_world_first_routing_v1.rs`
-
-Add parity coverage for:
-
-1. equivalent human inventory-backed world launch and orchestrator member cold start produce equivalent resolved contract truth for backend, scope, capabilities, and policy;
-2. retained member follow-up turn uses the shared-contract-derived subset and not a reconstructed hidden contract.
-
-#### `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
-
-Add contract-proof coverage for:
-
-1. docs and runtime continue to use one truthful fail-closed wording for parity and capability-denial semantics;
-2. successor durable attach truth preserves generalized capability and attach-knob state.
-
-### Test plan artifact
-
-Write a QA handoff artifact for this slice under `~/.gstack/projects/<slug>/` during implementation. It should cover:
-
-1. host start with and without overlay;
-2. supported capability narrowing flow;
-3. persisted attach resume, fork, and stop gates;
-4. retained world-member follow-up turn parity;
-5. continuity-required attach denial.
+1. A REPL-born host session persists the same attach-relevant truth shape as a public-start-born host session for the same backend.
+2. Later attach planning reuses the full durable baseline from `HostAttachContract`, including attach policy defaults, without regaining `Policy::default()` or manifest-default capabilities.
+3. Legacy compatibility handling, if retained, is isolated and does not masquerade as steady-state semantics.
+4. Bounded overlay behavior is explicit and auditable, with no caller-side semantic replacement of persisted attach policy.
+5. 30 and 31 can be read straight through after 29.75 without contradicting the actual runtime contract floor.
 
 ## Failure Modes Registry
 
-| New codepath | Real production failure | Test covers it? | Error handling exists? | User sees clear error? | Critical gap? |
-| --- | --- | --- | --- | --- | --- |
-| overlay merge in resolver | overlay validates but effective policy stays broader than docs claim | not yet | not fully | no | yes until merge tests land |
-| bounded capability narrowing | resolved contract narrows capability but durable attach contract reverts it to permissive defaults | not yet | no | no | yes |
-| persisted attach resolution | attach, fork, or turn silently regain capabilities by hardcoded defaults | not yet | no | no | yes |
-| retained member-turn parity | follow-up turns drift from cold-start contract semantics after inventory or config changes | not yet | partial | no | yes |
-| continuity-only sync | runtime refresh accidentally mutates durable baseline truth | not yet | partial | no | yes |
-| unsupported capability override | caller sees vague blanket rejection instead of field-scoped denial | not yet | partial | partial | no once field-scoped denial ships |
+| Code path | Realistic production failure | Test required | Error handling required | User-visible outcome |
+| --- | --- | --- | --- | --- |
+| REPL host cold start | session is persisted with manifest-derived defaults instead of resolved truth | Yes | Yes | Later attach behaves differently from public start |
+| Persisted attach resolution | stored `effective_policy` is missing or corrupt | Yes | Yes | Clear corruption or unsupported-legacy error, not silent permissive attach |
+| Attach overlay | caller broadens `attach_mode_preference` or `host_execution_client_start` | Yes | Yes | Clear "baseline truth rejected field" error |
+| Fork successor allocation | fork is implemented as a broadening overlay on the source session instead of successor derivation | Yes | Yes | Fork fails unexpectedly or weakens the overlay contract for every other caller |
+| Runtime snapshot sync | missing contract silently recreated from manifest during parking or snapshot write | Yes | Yes | Hidden authority drift that only appears on later resume |
+| Retained member parity | REPL retains old member parity while parent host session baseline changed | Existing coverage plus regression check | Yes | Follow-up turn routes with stale runtime truth |
 
-Critical-gap rule for this slice:
+### Critical gaps
 
-If any path can still silently broaden capability truth, silently ignore overlay narrowing, or let retained member turns bypass the shared vocabulary, 29.5 is not done.
+These are the critical gaps this plan must close before implementation can be called done:
 
-## Performance Review
-
-This is a correctness slice first, but it still has performance rules:
-
-1. do not re-run inventory resolution on every retained follow-up turn;
-2. do not add a new policy cache for a problem that only needs a one-shot merge during resolution;
-3. keep parity data small and serializable;
-4. keep all new checks O(1) or bounded by already-loaded inventory or session state.
-
-Performance verdict:
-
-1. no material throughput risk if the slice follows the chosen subset-parity design;
-2. the main performance footgun is full baseline re-resolution on retained member turns;
-3. this plan explicitly forbids that footgun.
-
-## DX Review
-
-This slice has no UI scope. It has strong DX scope because the product surface here is a developer runtime surface.
-
-### Developer journey map
-
-| Stage | What the developer is doing | Current friction | Target after this slice |
-| --- | --- | --- | --- |
-| 1 | Read 29 and assume capability overrides are real | medium-high | docs say exactly which fields work |
-| 2 | Launch a host runtime with overlay data | medium | resolved contract truth matches docs |
-| 3 | Resume or fork later | high if durable contract drifted | durable attach truth is trustworthy |
-| 4 | Debug retained world-member follow-up behavior | high | one parity model, no hidden second dialect |
-| 5 | Plan slice 30 | high | public flags map to a truthful internal support matrix |
-| 6 | Plan slice 31 | high | attach worker can trust durable knobs and capabilities |
-
-### Developer empathy narrative
-
-I am about to build slice 30 or 31. I need to know whether the shared dispatch contract is real or whether it still contains "frozen but not supported" scaffolding that I am expected to paper over later.
-
-After 29.5, I should not need repo archaeology for that answer. I should be able to read one plan, inspect one resolver, and trust that persisted attach behavior and retained member-turn behavior are using the same contract floor.
-
-### DX scorecard
-
-| Dimension | Score | Notes |
-| --- | --- | --- |
-| Getting started on this stack | 6/10 | too many partial promises today |
-| Naming and surface truth | 7/10 | core names are good, semantics still incomplete |
-| Error messages | 6/10 | blanket override rejection is not precise enough |
-| Docs findability | 6/10 | 29, 30, and 31 still need a tighter truth chain |
-| Upgrade path safety | 8/10 | this slice makes later slices safer if completed fully |
-| Debuggability | 6/10 | retained member parity is still too implicit today |
-
-Target after this slice: 8/10 overall DX for the dispatch and attach contract floor.
+1. First-write REPL cold-start parity is currently unproven and likely false.
+2. Modern missing policy snapshot currently broadens through defaults.
+3. Attach-time caller input currently replaces durable attach knobs too freely.
+4. Current fork allocation broadens `ContinuityRequired` source sessions by asking for `FreshAllowed` through persisted attach overlay.
 
 ## Worktree Parallelization Strategy
 
-This slice does have real parallelization opportunity, but only if we partition the integration hotspot deliberately.
+This plan has real parallelization opportunities, but only after the contract rules are frozen. Before that point, parallel work would just create rebase churn and semantic drift.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A. Durable attach truth closeout | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/agents_cmd.rs` | - |
-| B. Policy overlay merge closeout | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/policy_model.rs`, `crates/shell/src/execution/agent_inventory.rs` | - |
-| C. Capability override support closeout | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agents_cmd.rs` | A, B |
-| D. Retained member-turn parity closeout | `crates/shell/src/repl/`, `crates/shell/src/execution/routing/dispatch/`, `crates/shell/src/execution/agent_runtime/` | B |
-| E. Docs and downstream truth sync | `llm-last-mile/`, active docs only if drifted | A, B, C, D |
-| F. Final validation and fixups | `crates/shell/`, `llm-last-mile/`, active docs | C, D, E |
+| A. Freeze attach baseline and overlay rules | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/` | — |
+| B. Thread resolved contract into REPL cold start | `crates/shell/src/repl/`, `crates/shell/src/execution/agent_runtime/` | A |
+| C. Quarantine manifest fallback and compatibility path | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/agent_runtime/control.rs` | A |
+| D. Expand unit and integration coverage | `crates/shell/src/execution/agent_runtime/`, `crates/shell/tests/`, `crates/shell/src/repl/` | A for resolver semantics, B and C for parity and recovery cases |
+| E. Align downstream docs | `llm-last-mile/`, repo root planning docs | A complete enough to freeze wording, final pass after B and C |
 
 ### Parallel lanes
 
-- Lane A: Step A
-- Lane B: Step B
-- Lane C: Step C after A and B
-- Lane D: Step D after B
-- Lane E: Step E after A, B, C, and D
-- Lane F: Step F after C, D, and E
+Lane A: Step A  
+Reason: this freezes the contract and helper shapes every other lane consumes.
+
+Lane B: Step B REPL bootstrap wiring plus Step D subset for REPL parity  
+Reason: REPL cold-start work can proceed once the baseline and overlay helper shape is frozen, but it consumes a shared session-seed prerequisite owned outside Lane B.
+
+Lane C: Step C plus the shared `orchestration_session.rs` session-seed prerequisite, then Step D subset for fail-closed and legacy compatibility  
+Reason: compatibility-path quarantine already owns `agent_runtime/` and `orchestration_session.rs`, so it is the right lane to land the shared constructor or seed primitive that Lane B then consumes.
+
+Lane D: Step E  
+Reason: doc rewrites can begin once Step A lands conceptually, but final wording waits for B and C behavior to settle.
 
 ### Execution order
 
-1. launch Lane A and Lane B in parallel first;
-2. merge A and B before starting capability override support in Lane C;
-3. start Lane D once Lane B lands because retained-turn parity needs the stable resolver vocabulary and merged policy semantics, not the full attach closeout;
-4. launch Lane E only after A, B, C, and D have settled the truth surface;
-5. run Lane F last for the full validation pass and any mechanical doc or test fixups.
+1. Land Lane A first. Nothing else starts until the baseline and overlay semantics are frozen.
+2. After Lane A stabilizes, Lane C lands the shared `orchestration_session.rs` session-seed prerequisite plus any compatibility-path reshaping needed in the same files.
+3. Once that prerequisite is in place, launch the remaining Lane B and Lane C work in parallel worktrees if ownership is still clean.
+4. Merge B and C, then run the full targeted test matrix.
+5. Finish with Lane D once runtime behavior is stable enough that docs can be written once and stay true.
 
 ### Conflict flags
 
-1. `dispatch_contract.rs` is shared by Lanes A, B, C, and D;
-   treat it as the primary merge-conflict hotspot and use one owner branch as the integration lane.
-2. `orchestration_session.rs` and `state_store.rs` are Lane A and Lane C territory;
-   keep Lane D out of those files unless absolutely necessary.
-3. `async_repl.rs` is Lane D only;
-   do not let capability work drift into retained-turn transport code.
-4. `policy_model.rs` is Lane B only;
-   Lane C should consume the exported crate-private helper, not modify policy semantics independently.
+1. Lanes B and C both touch `crates/shell/src/execution/agent_runtime/`, and Phase B requires a new session-construction path in `orchestration_session.rs`. That prerequisite belongs to Lane C, not Lane B.
+2. If two workers are used, assign ownership explicitly:
+   - Worker B owns `async_repl.rs` plus REPL-facing tests and consumes the already-landed session-seed API;
+   - Worker C owns `dispatch_contract.rs`, `orchestration_session.rs`, `state_store.rs`, `control.rs`, and attach-control tests, including the session-seed constructor or helper Phase B depends on.
+3. If Lane C cannot land that prerequisite first, run B and C sequentially.
+4. Lane D should not finalize any dependency wording until B and C land, or the docs will drift again.
 
-### Parallelization verdict
+## Acceptance Criteria
 
-1. 6 lanes total;
-2. 2 lanes can launch immediately in parallel;
-3. 2 more lanes can proceed in partial parallel after those land;
-4. final validation remains sequential and non-negotiable.
+This slice is complete only when all of the following are true:
+
+1. REPL host cold start and public start persist equivalent `HostAttachContract` truth for equivalent host-backed launches.
+2. No steady-state host session birth path relies on `HostAttachContract::from_manifest(...)` as its primary truth source.
+3. Persisted attach resolution reuses the full durable attach baseline from `HostAttachContract`, including attach policy defaults for `requested_execution_scope`, `host_execution_client_start`, and `attach_mode_preference`.
+4. Any attach-time request variation is modeled explicitly as a bounded overlay constrained by that baseline, with no silent caller-side replacement of persisted attach policy.
+5. Missing durable policy or attach truth fails closed in modern steady-state paths instead of silently broadening through defaults.
+6. Code, tests, and docs all describe the same overlay rules: honor baseline, narrow where permitted, or select among baseline-permitted modes, but never broaden or replace the durable baseline silently.
+7. Fork is implemented as successor-baseline derivation, not as a broadening overlay on the source session.
+8. 30 and 31 can both move forward after 29.75 without reopening baseline attach semantics.
 
 ## Implementation Tasks
 
-Synthesized from this plan's findings. Each task derives from a concrete contract gap above.
+Synthesized from the scope challenge, contract model, and execution plan above. Each task is buildable and directly tied to one of the contract gaps this slice owns.
 
-- [ ] **T1 (P1, human: ~2h / CC: ~20min)** - durable attach contract - derive `HostAttachContract` from resolved host launch truth
-  - Surfaced by: Workstream 1 - current durable attach birth path still derives from manifest-era defaults
-  - Files: `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agents_cmd.rs`
-  - Verify: targeted orchestration-session tests plus attach control-surface tests
-
-- [ ] **T2 (P1, human: ~2h / CC: ~20min)** - policy merge - apply validated inventory `policy_overlay` into `ResolvedLaunchContract.effective_policy`
-  - Surfaced by: Workstream 2 - overlay validation exists but merge truth does not
-  - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/policy_model.rs`, `crates/shell/src/execution/agent_inventory.rs`
-  - Verify: resolver unit tests proving narrower effective policy
-
-- [ ] **T3 (P1, human: ~3h / CC: ~30min)** - bounded capability overrides - support narrowing-only overrides for the approved capability family
-  - Surfaced by: Workstream 3 - blanket override rejection is no longer acceptable
-  - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agents_cmd.rs`
-  - Verify: resolver tests plus `agent_public_control_surface_v1.rs` denial coverage
-
-- [ ] **T4 (P1, human: ~3h / CC: ~30min)** - retained member parity - feed retained member-turn transport from a shared-contract-derived subset
-  - Surfaced by: Workstream 4 - retained follow-up still has a hidden launch dialect
-  - Files: `crates/shell/src/repl/async_repl.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
-  - Verify: `repl_world_first_routing_v1.rs` parity regressions
-
-- [ ] **T5 (P2, human: ~90min / CC: ~15min)** - successor truth - preserve generalized durable attach truth on fork successor copy while clearing only continuity
-  - Surfaced by: Workstream 1 - successor behavior must be explicit for slice 31
+- [ ] **T1 (P1, human: ~2h / CC: ~20min)** — `agent_runtime/` — Add an authoritative host-orchestrator session seed path that persists `HostAttachContract` from `ResolvedLaunchContract` on the first write.
+  - Surfaced by: Step 0 / Phase B — REPL cold start currently persists manifest-derived attach truth.
   - Files: `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agents_cmd.rs`
-  - Verify: successor contract tests
+  - Verify: unit tests for first-write host attach truth plus public-start parity checks.
 
-- [ ] **T6 (P2, human: ~60min / CC: ~10min)** - truth docs - update 29, 30, and 31 to cite the same support matrix and dependency floor
-  - Surfaced by: Workstream 5 - downstream slices should not guess what 29.5 made real
-  - Files: `llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md`, `llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md`, `llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md`
-  - Verify: manual doc cross-check against code and tests
+- [ ] **T2 (P1, human: ~2h / CC: ~20min)** — `repl/` — Make `resolve_host_orchestrator_bootstrap(...)` carry resolved-contract truth and make REPL cold start persist it before runtime launch.
+  - Surfaced by: Phase B — REPL bootstrap still materializes runtime without durable contract authority.
+  - Files: `crates/shell/src/repl/async_repl.rs`
+  - Verify: `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
 
-- [ ] **T7 (P2, human: ~90min / CC: ~15min)** - coverage closeout - add direct regression coverage for overlay merge, capability narrowing, persisted attach authority, and retained-turn parity
-  - Surfaced by: Test Review - multiple critical gaps remain unproven
-  - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/repl_world_first_routing_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
-  - Verify: targeted shell test commands and full package pass
+- [ ] **T3 (P1, human: ~2h / CC: ~15min)** — `dispatch_contract` — Add one bounded overlay helper for persisted attach launch knobs, scope it to reattach-style consumers, and reject broadening attempts.
+  - Surfaced by: Step 0 / Phase A — attach-mode and client-start semantics are too caller-owned today, and fork must not become a broadening loophole.
+  - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+  - Verify: targeted persisted-attach resolver unit tests.
 
-## Validation Commands
+- [ ] **T4 (P1, human: ~1h / CC: ~10min)** — `dispatch_contract` — Remove modern `Policy::default()` fallback from persisted attach resolution and fail closed on missing or invalid policy snapshots.
+  - Surfaced by: Step 0 / Failure modes — missing durable truth currently broadens silently.
+  - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+  - Verify: new unit tests plus `agent_public_control_surface_v1`.
 
-Run at minimum:
+- [ ] **T5 (P1, human: ~90min / CC: ~15min)** — `orchestration_session/control` — Quarantine manifest reconstruction to an explicit legacy-only helper, stop `sync_host_attach_contract(...)` from silently recreating missing modern contracts, and add an explicit successor-baseline derivation path for fork.
+  - Surfaced by: Step 0 / Phase C — compatibility, steady-state semantics, and successor derivation all need clear boundaries.
+  - Files: `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agents_cmd.rs`
+  - Verify: modern fail-closed tests, explicit legacy-path tests, and successor-contract tests.
 
-```bash
-cargo test -p shell dispatch_contract -- --nocapture
-cargo test -p shell agent_public_control_surface_v1 -- --nocapture
-cargo test -p shell repl_world_first_routing_v1 -- --nocapture
-cargo test -p shell agent_successor_contract_ahcsitc0 -- --nocapture
-```
+- [ ] **T6 (P2, human: ~2h / CC: ~20min)** — `shell tests` — Add REPL/public-start parity coverage, attach overlay monotonicity tests, and regression coverage for parked and resumed host sessions.
+  - Surfaced by: Test and validation plan — core authority paths still have coverage holes.
+  - Files: `crates/shell/tests/repl_world_first_routing_v1.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+  - Verify: full targeted test matrix in this plan.
 
-Then run:
-
-```bash
-cargo test -p shell -- --nocapture
-cargo clippy -p shell --all-targets -- -D warnings
-```
-
-Manual validation must prove:
-
-1. a host-scoped resolved launch contract persists attach-relevant truth into `HostAttachContract`;
-2. `reattach`, `turn`, and `fork` consume that durable truth instead of reconstructing permissive defaults;
-3. overlay-backed inventory entries produce materially narrower `effective_policy`;
-4. supported capability narrowing changes later attach and control behavior in the state store;
-5. retained member follow-up turns use the resolved subset path and do not re-run hidden baseline selection.
-
-## Definition of Done
-
-This slice is done only when all of the following are true:
-
-1. `HostAttachContract` is birth-time-derived from resolved host launch truth;
-2. persisted attach resolution no longer hardcodes permissive capability or policy defaults;
-3. validated `policy_overlay` data is merged into resolver output as actual narrowing truth;
-4. the approved capability override family works as narrowing-only and persists where later attach or control flows depend on it;
-5. unsupported override fields fail closed with exact, bounded reasons;
-6. retained member turns consume a shared-contract-derived subset and no longer represent a second hidden dialect;
-7. slices 30 and 31 can cite 29.5 as the truthful contract floor without reopening semantics;
-8. targeted shell tests and the full shell package pass are green;
-9. docs, code comments, and any nearby ASCII diagrams touched by the change match the shipped semantics.
-
-## Completion Summary
-
-- Objective: freeze the shared dispatch contract floor so 30 and 31 can build on truth instead of scaffolding
-- UI scope: none
-- DX scope: strong
-- Locked decisions: bounded capability narrowing implemented now; retained member-turn parity uses a shared-contract-derived subset
-- Architecture focus: one resolver, one durable attach object, one retained-turn vocabulary
-- Main technical gaps closed: durable attach truth, overlay merge truth, capability override truth, retained-turn parity truth
-- Parallelization: 6 lanes, with A plus B parallel first, C plus D partially parallel after that, and final validation last
-- Outcome target: one truthful shared dispatch contract and one truthful durable host-attach contract, with no hidden second dialect left behind
+- [ ] **T7 (P2, human: ~45min / CC: ~10min)** — `docs` — Update 29, 29.75, 30, and 31 wording so every slice describes the same contract floor and dependency order.
+  - Surfaced by: Phase E — downstream docs already point at 29.75 and must stay truthful.
+  - Files: `llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md`, `llm-last-mile/29.75-authoritative-host-attach-truth-and-repl-cold-start-parity.md`, `llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md`, `llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md`, `PLAN.md`
+  - Verify: manual read-through of 29 -> 29.75 -> 30 -> 31.
