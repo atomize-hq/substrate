@@ -40,6 +40,24 @@ This slice must not treat blank prompt as the meaning of either mode.
 3. No hidden bootstrap prompt, fake inbox-consumption prompt, or synthetic warm-up turn may be introduced.
 4. Pending host-side work must remain durable under Substrate session state while no host client is attached.
 
+## Open Architectural Split: Born-Unattached Status Truth
+
+The repo already has landed posture truth for attached-then-detached durable host sessions, but it has not yet fully frozen or implemented the distinct born-unattached host-rooted taxonomy that this slice needs.
+
+Ownership is intentionally split between 30 and 31:
+
+1. 30 owns the minimum pre-attach status floor needed for truthful public world-scoped root start:
+   - a born-unattached host-rooted session must be visible as a valid non-terminal state;
+   - public world follow-up remains fail-closed before host attach;
+   - the public entrypoint must not imply attached ownership when none exists.
+2. 31 owns the full taxonomy and lifecycle semantics:
+   - exact posture/status naming for born-unattached sessions,
+   - the distinction between never-attached and previously-attached-and-parked states,
+   - how pending host-side work affects posture/status,
+   - how continuity attach versus fresh attach and manual versus automatic trigger policy interact with those states.
+
+This slice should therefore consume the minimal truthful floor that 30 establishes and then finish the deeper taxonomy and attach-lifecycle semantics, rather than assuming those details were already fully frozen earlier in the stack.
+
 ## Draft Work Breakdown
 
 ### 1. Define born-unattached host-rooted session behavior

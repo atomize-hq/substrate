@@ -44,6 +44,25 @@ This slice does not finish lazy host attach behavior. 31 owns:
 2. fresh attach versus continuity attach behavior,
 3. operator/status truth for born-unattached sessions with pending host-side work.
 
+## Open Architectural Split: Born-Unattached Status Truth
+
+The repo has already landed durable detached host-session posture truth for attached-then-detached sessions (`parked_resumable` and `awaiting_attention`), but it has not yet fully frozen or implemented a distinct born-unattached host-rooted status taxonomy.
+
+That remaining architecture split is intentionally divided across 30 and 31:
+
+1. 30 must freeze and implement the minimum operator-visible status floor required to ship truthful public `agent start --scope world` behavior:
+   - a born-unattached host-rooted world-start session is a valid non-terminal steady state;
+   - it must not be reported as attached/active ownership theater;
+   - it must not silently collapse into semantics that imply prior attach history if that distinction would be misleading;
+   - detached-world follow-up remains fail-closed until sanctioned host attach occurs.
+2. 31 must freeze and implement the fuller born-unattached taxonomy and lifecycle meaning:
+   - exact posture/status naming,
+   - the distinction between never-attached versus previously-attached-and-parked,
+   - how pending host-side work changes status/posture,
+   - how attach-worker behavior and trigger policy interact with those states.
+
+This slice must therefore define enough pre-attach status truth to make public world-start honest, but it must not overreach into the full lazy-attach taxonomy that belongs to 31.
+
 ## 29.75 Contract Floor This Slice Must Reuse
 
 Before this public surface is promoted, it must inherit the 29.75 closeout floor exactly:
