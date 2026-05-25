@@ -10,6 +10,12 @@ This slice no longer tries to discover the architecture. The validated architect
 4. lazy host attach is a Substrate attach-worker concern, not a prompt trick,
 5. 29 owns the only shared dispatch contract and the only durable host-attach truth.
 
+The 29.5 closeout floor this slice inherits is also fixed:
+
+1. persisted host attach resolution already reuses durable capabilities, attach launch knobs, effective policy, and continuity selector state from `HostAttachContract`,
+2. successor allocation already copies generalized attach truth forward while clearing only continuity-specific state,
+3. retained world-member follow-up turns already avoid hidden baseline re-resolution and therefore must stay orthogonal to lazy host attach.
+
 ## Objective
 
 Allow a host-rooted world session that was born without an attached host execution client to attach one later using real persisted launch truth and real pending context instead of synthetic bootstrap prompts.
@@ -49,7 +55,8 @@ Required direction:
 1. if a valid continuity selector exists, the attach worker may choose continuity attach;
 2. if no continuity selector exists, the attach worker must be able to perform fresh attach from the persisted host attach contract;
 3. attach-mode choice must be explicit and auditable;
-4. neither mode may invent a second durable attach object or re-derive launch truth from the last live participant snapshot.
+4. neither mode may invent a second durable attach object or re-derive launch truth from the last live participant snapshot,
+5. both modes must trust the persisted effective policy and attach-relevant capability truth that 29.5 now stores durably.
 
 ### 3. Define how lazy attach is triggered
 

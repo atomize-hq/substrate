@@ -4,6 +4,14 @@ Status: implementation-ready follow-on slice. This SOW follows [28.5-explicit-co
 
 This slice is not a generic capability-injection exercise. It is the contract-definition slice that turns inventory defaults, dispatch-time overrides, and policy narrowing into one resolved launch contract and one generalized persisted host attach contract that later slices can reuse without guessing.
 
+29.5 closeout has now frozen the shipped contract floor for this SOW:
+
+1. inventory `policy_overlay` is merged into `ResolvedLaunchContract.effective_policy` as restriction-only truth,
+2. dispatch-time capability narrowing is supported only for `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, and only from `true` to `false`,
+3. `session_start`, `llm`, and `mcp_client` remain dispatch-time unsupported and fail closed with field-scoped diagnostics,
+4. persisted host attach launches reuse durable attach capabilities, attach launch knobs, and effective policy instead of ambient defaults,
+5. retained world-member follow-up turns consume a shared-contract-derived parity subset rather than re-running hidden launch selection.
+
 ## Objective
 
 Define and implement one shared internal dispatch contract that:
@@ -279,6 +287,7 @@ Required outcome:
 4. The resolved launch contract is deterministic and explainable.
 5. The already-landed persisted host attach contract seam is generalized so the contract written under the orchestration session and copied across successors comes from the shared dispatch contract.
 6. Human and orchestrator-controlled callers consume the same resolution logic.
+7. Retained world-member follow-up turns use the shared-contract-derived parity subset and do not reopen inventory or config selection semantics.
 
 ## Validation Plan
 
@@ -288,7 +297,9 @@ Run at minimum:
 2. targeted dispatch-resolution tests,
 3. targeted state-store tests covering persisted host attach contract behavior,
 4. parity tests proving equivalent resolution for human and orchestrator-controlled launch requests,
-5. full workspace tests:
+5. retained-member routing tests proving typed world dispatch preserves the persisted resolved runtime subset,
+6. external public-control and successor regressions proving persisted attach capability denial and successor continuity truth,
+7. full workspace tests:
    - `cargo test --workspace -- --nocapture`
 
 Manual validation must prove:
@@ -297,7 +308,8 @@ Manual validation must prove:
 2. allowed overrides narrow the effective launch contract correctly,
 3. denied overrides fail closed with actionable errors,
 4. the persisted host attach contract matches the resolved host launch contract,
-5. the same effective contract is produced for equivalent human and orchestrator-controlled inputs.
+5. the same effective contract is produced for equivalent human and orchestrator-controlled inputs,
+6. retained member follow-up turns preserve resolved backend/protocol/runtime-path truth across reuse and replacement.
 
 ## Docs And Truth Sync
 

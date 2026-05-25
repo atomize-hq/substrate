@@ -44,6 +44,15 @@ This slice does not finish lazy host attach behavior. 31 owns:
 2. fresh attach versus continuity attach behavior,
 3. operator/status truth for born-unattached sessions with pending host-side work.
 
+## 29.5 Contract Floor This Slice Must Reuse
+
+Before this public surface is promoted, it must inherit the already-shipped 29.5 closeout semantics exactly:
+
+1. inventory `policy_overlay` already merges into the resolved `effective_policy`;
+2. the only dispatch-time capability narrowing family currently supported is `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, and only from `true` to `false`;
+3. `session_start`, `llm`, and `mcp_client` remain dispatch-time unsupported and must stay fail closed until a later slice deliberately broadens scope;
+4. retained world-member follow-up turns already consume a shared-contract-derived parity subset, so this slice must not invent a second public world-start follow-up dialect.
+
 ## Draft Work Breakdown
 
 ### 1. Expose explicit scope selection on public `agent start`
@@ -69,7 +78,8 @@ Required direction:
 
 1. user-facing capability flags map onto the same resolved launch contract used by orchestrator-controlled dispatch,
 2. policy-denied flags fail closed,
-3. the command does not invent a CLI-only override model or alternate attach-truth vocabulary.
+3. the command does not invent a CLI-only override model or alternate attach-truth vocabulary,
+4. any public capability flags introduced in this slice must stay inside the already-supported narrowing family unless a later slice explicitly reopens the contract.
 
 ### 4. Preserve current lifecycle boundaries
 
