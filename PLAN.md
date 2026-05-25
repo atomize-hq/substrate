@@ -31,7 +31,7 @@ The implementation direction is therefore locked:
 2. `HostAttachContract` is the only durable attach baseline.
 3. Reattach-style attach callers may only honor that baseline, narrow it where permitted, or select among explicitly baseline-permitted modes when the durable baseline already encodes multiple allowed realizations. They may never replace or broaden it.
 4. Fork is not a caller overlay on the source session. It consumes source durable truth and derives a new successor baseline for a new successor session.
-5. Legacy compatibility, if kept, must be explicit and visibly separate from modern steady-state behavior.
+5. 29.75 is greenfield for durable attach truth: no legacy compatibility helper or manifest-backfill path is part of this slice.
 
 ## Locked Decisions
 
@@ -43,9 +43,7 @@ These are frozen for implementation. Do not keep multiple interpretations open i
 | Birth-time authority | Host-rooted session birth persists attach truth from `ResolvedLaunchContract`, not from manifest defaults | Manifest defaults are runtime materialization detail, not contract authority |
 | REPL cold start posture | REPL host cold start must join the shared dispatch contract family before the first session write | Public start and REPL cold start must stop producing different durable truth for the same backend |
 | Modern missing truth | Missing or invalid durable attach truth fails closed in modern paths | Silent repair through permissive defaults broadens authority and hides corruption |
-| Legacy compatibility | Any manifest-based backfill must be explicit, isolated, and clearly marked as legacy compatibility | Compatibility cannot masquerade as normal steady-state behavior |
-| Modern vs legacy discriminator | The classifier is based on raw serialized field presence at load time, before typed deserialization collapses the distinction into `Option<HostAttachContract>`. A row is legacy only when the serialized session record lacks `host_attach_contract` entirely. A present-but-null, malformed, or invalid `host_attach_contract` is modern durable-state corruption and must fail closed. | This gives implementers one exact classifier that survives deserialization and prevents partially corrupt or newly written sessions from slipping into compatibility mode |
-| Compatibility entrypoint scope | Legacy backfill is opt-in only from explicit migration or repair surfaces. It may not run from ordinary attach resolution, steady-state runtime snapshotting, REPL bootstrap, or normal public control flows. | This prevents one implementer from leaving compatibility reachable in ordinary runtime behavior while another keeps the fail-closed contract intact |
+| Supported persisted-state posture | Supported persisted sessions must contain a present and valid `host_attach_contract` plus valid policy snapshot; absent, null, malformed, or incomplete durable truth fails closed | Greenfield 29.75 does not carry a compatibility classifier or repair surface |
 | Attach overlay semantics | Overlay may honor baseline, narrow it where permitted, or select among explicitly baseline-permitted modes when the durable baseline already encodes multiple allowed realizations; it may not silently broaden or replace baseline semantics | Later callers cannot reinterpret the same durable session ad hoc |
 | `requested_execution_scope` | For persisted attach, execution scope stays baseline-owned and immutable | 29.75 is not reopening scope selection |
 | `host_execution_client_start` | Overlay may keep baseline, narrow `StartNow -> Defer`, or select among explicitly baseline-permitted modes. Because 29.75 does not add multi-mode durable encoding, current 29.75 implementations only exercise honor-or-narrow behavior. | This matches the SOW contract without letting this slice silently grow a second encoding model |
@@ -107,7 +105,7 @@ The minimum honest change set is:
 
 1. Extend REPL bootstrap to compute and retain a `ResolvedLaunchContract`.
 2. Add an explicit host-orchestrator session seed path that accepts durable attach truth up front.
-3. Quarantine `from_manifest(...)` and manifest backfill behind a compatibility-only path.
+3. Quarantine `from_manifest(...)` out of modern persistence and steady-state attach paths entirely.
 4. Centralize persisted attach overlay validation in one helper owned by `resolve_persisted_host_attach_contract(...)`.
 5. Extend unit and integration tests around the exact authority seams above.
 6. Update downstream docs so the dependency floor is truthful.
@@ -274,21 +272,17 @@ This plan makes the encoding rule explicit so 29.75 stays narrow.
 5. Fork does not use this dormant selection allowance. It gets its own explicit successor-baseline derivation rule above.
 6. Any future slice that wants active selection behavior must first introduce and document an explicit durable encoding for multiple permitted realizations. That is not part of 29.75.
 
-### Exact modern-versus-legacy classifier
+### Durable-state validity rule
 
-This plan freezes one exact discriminator so compatibility handling cannot drift.
+This plan freezes one simple greenfield rule so missing truth cannot drift back into repair semantics.
 
-1. The discriminator must be computed from the raw serialized session payload at load time, before normal typed deserialization into `Option<HostAttachContract>`.
-2. A persisted session is **legacy** only when the serialized session record lacks the `host_attach_contract` field entirely.
-3. A persisted session is **modern** as soon as the serialized session record contains a `host_attach_contract` field in any form.
-4. Therefore:
-   - absent `host_attach_contract` may route through an explicit legacy compatibility helper;
-   - present-but-null `host_attach_contract` is corrupted modern durable state and must fail closed;
-   - present-but-malformed `host_attach_contract` is corrupted modern durable state and must fail closed;
-   - present `host_attach_contract` plus missing `effective_policy`, missing required attach fields, or invalid serialized policy is corrupted modern durable state and must fail closed;
-   - compatibility mode may not be entered merely because typed deserialization produced `None` or because a present contract is incomplete.
-5. The explicit legacy compatibility helper may be invoked only from migration or repair tooling, or from similarly explicit recovery commands that are named as compatibility surfaces in code and docs. It may not be reachable from ordinary attach, fork, detached-turn recovery, REPL bootstrap, state-store load in steady-state runtime, or routine control-surface operations.
-6. If future migration work wants a broader discriminator, it must add an explicit persisted version or provenance marker. That is not part of 29.75.
+1. Supported persisted sessions must carry a present and valid `host_attach_contract` and a valid serialized policy snapshot.
+2. Therefore:
+   - absent `host_attach_contract` fails closed;
+   - present-but-null `host_attach_contract` fails closed;
+   - present-but-malformed `host_attach_contract` fails closed;
+   - present `host_attach_contract` plus missing `effective_policy`, missing required attach fields, or invalid serialized policy fails closed.
+3. 29.75 does not introduce or preserve a migration, repair, or compatibility branch for these cases.
 
 ## Engineering Guardrails
 
@@ -297,7 +291,7 @@ This plan freezes one exact discriminator so compatibility handling cannot drift
 1. Do not duplicate public-start persistence logic and REPL persistence logic; the REPL should reuse the same resolved-contract-to-durable-contract semantics as `persist_resolved_start_attach_contract(...)`.
 2. Do not spread attach overlay rules across `dispatch_contract.rs`, `agents_cmd.rs`, and `state_store.rs`; one helper should own the monotonicity rules.
 3. Do not let `RuntimeSelectionDescriptor` become a shadow contract object; it stays a materialization descriptor only.
-4. Keep manifest-derived recovery logic obviously separate from modern steady-state logic, either by naming or by module-local helper boundaries.
+4. Keep manifest-derived construction logic obviously out of modern steady-state logic and attach resolution.
 5. Do not introduce new crates or a second durable persisted model for this slice.
 
 ### Performance constraints
@@ -305,7 +299,7 @@ This plan freezes one exact discriminator so compatibility handling cannot drift
 This is not a throughput-driven slice, but there are still performance constraints:
 
 1. Do not add repeated inventory reload or policy recomputation during steady-state attach; the durable snapshot should make attach cheaper, not more expensive.
-2. Keep compatibility backfill off the hot path for modern sessions.
+2. Do not add raw-payload classification or compatibility-only branching to the hot path.
 3. Avoid repeated serde round-trips beyond the single persisted policy deserialize already required by attach resolution.
 4. Do not add REPL-path logic that re-runs full contract resolution for retained member follow-up turns.
 
@@ -331,7 +325,7 @@ Required changes:
    - invalid overlay attempts fail with field-specific baseline-truth diagnostics.
 3. Replace `effective_policy.unwrap_or_default()` with explicit modern-path validation:
    - valid snapshot -> use it;
-   - absent `host_attach_contract` at the session-record level -> legacy compatibility helper may run only from an explicit migration or repair surface;
+   - absent `host_attach_contract` at the session-record level -> fail closed;
    - present `host_attach_contract` plus missing or invalid snapshot -> fail closed as modern durable-state corruption.
 4. Preserve `field_provenance` truth so diagnostics still explain which fields came from persisted baseline versus accepted narrowing.
 5. Add an explicit successor-derivation path for fork so `agents_cmd` and public control flows do not rely on caller-side broadening of the source session baseline.
@@ -377,7 +371,7 @@ Definition of done:
 1. Equivalent public start and REPL cold start persist equivalent host attach truth for the same backend.
 2. No modern REPL cold-start write hits disk with a manifest-derived attach contract.
 
-### Phase C: Quarantine manifest-era backfill to compatibility-only logic
+### Phase C: Remove manifest-era reconstruction from steady-state logic
 
 Primary files:
 
@@ -389,22 +383,18 @@ Required changes:
 
 1. Keep `HostAttachContract::from_manifest(...)` out of steady-state modern birth paths.
 2. Change `sync_host_attach_contract(...)` so it only refreshes continuity selector state on an existing contract for modern sessions.
-3. Introduce an explicitly named compatibility helper only for persisted session rows that lack `host_attach_contract` entirely, for example `legacy_backfill_host_attach_contract_from_manifest(...)`.
-4. Make the compatibility path opt-in and narrow so tests can distinguish:
-   - legacy rows with no `host_attach_contract`, which may take the explicit compatibility helper only from migration or repair surfaces;
-   - modern rows with a present-but-null, malformed, incomplete, or otherwise invalid `host_attach_contract`, which must fail closed;
-   - loader code must inspect raw serialized presence before deserializing into `Option<HostAttachContract>`.
-5. Ensure persistence helpers in control and parking paths do not silently repair missing durable truth during ordinary runtime snapshots, and ensure ordinary attach or control entrypoints cannot invoke legacy backfill transitively.
+3. Treat absent, null, malformed, incomplete, or otherwise invalid `host_attach_contract` as unsupported/corrupt durable state that fails closed.
+4. Ensure persistence helpers in control and parking paths do not silently repair missing durable truth during ordinary runtime snapshots.
 
 Outputs:
 
-1. One visibly separate legacy compatibility path, if needed at all.
-2. Zero modern steady-state codepaths that recreate authority from manifest defaults.
+1. Zero steady-state codepaths that recreate authority from manifest defaults.
+2. One clear fail-closed posture for unsupported or corrupt persisted attach truth.
 
 Definition of done:
 
 1. Modern missing durable attach truth is observable and rejected.
-2. Any manifest-based reconstruction is clearly labeled legacy compatibility.
+2. Any missing or invalid durable attach truth is observable and rejected.
 
 ### Phase D: Expand unit and integration coverage around the authority seams
 
@@ -427,14 +417,14 @@ Required changes:
 
 Outputs:
 
-1. Unit tests for authoritative persistence, fail-closed behavior, and explicit legacy handling.
+1. Unit tests for authoritative persistence and fail-closed behavior.
 2. Integration tests for REPL/public parity and recovery semantics.
 3. A targeted test matrix that future slices 30 and 31 can trust.
 
 Definition of done:
 
 1. All critical authority seams have direct regression coverage.
-2. Tests distinguish modern fail-closed behavior from explicitly retained legacy behavior.
+2. Tests distinguish supported persisted-state behavior from unsupported or corrupt durable state.
 
 ### Phase E: Keep downstream docs truthful
 
@@ -513,7 +503,7 @@ Legend: `★★★` behavior + edge + error coverage already present, `★★` p
 1. `orchestration_session.rs`
    - host-orchestrator session birth from resolved contract persists authoritative attach truth on the first write;
    - modern `sync_host_attach_contract(...)` does not recreate a missing contract from manifest;
-   - explicit legacy backfill helper, if retained, is separately tested and clearly named.
+   - absent, null, malformed, or incomplete persisted contracts fail closed.
 2. `dispatch_contract.rs`
    - missing modern `effective_policy` fails closed;
    - invalid serialized policy fails closed with clear diagnostics;
@@ -525,15 +515,11 @@ Legend: `★★★` behavior + edge + error coverage already present, `★★` p
    - successor allocation derives and persists a new successor `HostAttachContract`;
    - successor sessions use explicit successor-only handling for continuity-dependent fields rather than inheriting behavior through overlay broadening;
    - all non-successor durable truth carries forward unless an explicit successor-only rule says otherwise.
-4. Modern-versus-legacy classifier tests
-   - rows with no `host_attach_contract` are the only rows eligible for legacy compatibility handling;
-   - rows with present-but-null `host_attach_contract` fail closed as corrupted modern durable state;
-   - rows with malformed `host_attach_contract` fail closed as corrupted modern durable state;
-   - rows with a present but incomplete or otherwise invalid `host_attach_contract` fail closed as corrupted modern durable state;
-   - load-time logic proves the classifier is based on raw serialized field presence rather than post-deserialization `Option` shape.
-5. Compatibility entrypoint-scope tests
-   - ordinary attach, fork, detached-turn recovery, REPL bootstrap, and routine public control flows cannot invoke legacy backfill;
-   - only explicitly named migration or repair surfaces can opt into legacy backfill.
+4. Durable-state validity tests
+   - rows with no `host_attach_contract` fail closed as unsupported/corrupt durable state;
+   - rows with present-but-null `host_attach_contract` fail closed as corrupted durable state;
+   - rows with malformed `host_attach_contract` fail closed as corrupted durable state;
+   - rows with a present but incomplete or otherwise invalid `host_attach_contract` fail closed as corrupted durable state.
 
 ### Required integration tests
 
@@ -573,7 +559,7 @@ Manual validation must prove:
 
 1. A REPL-born host session persists the same attach-relevant truth shape as a public-start-born host session for the same backend.
 2. Later attach planning reuses the full durable baseline from `HostAttachContract`, including attach policy defaults, without regaining `Policy::default()` or manifest-default capabilities.
-3. Legacy compatibility handling, if retained, is isolated and does not masquerade as steady-state semantics.
+3. Missing or invalid persisted durable truth fails closed with no repair or compatibility branch.
 4. Bounded overlay behavior is explicit and auditable, with no caller-side semantic replacement of persisted attach policy.
 5. 30 and 31 can be read straight through after 29.75 without contradicting the actual runtime contract floor.
 
@@ -583,7 +569,7 @@ Manual validation must prove:
 | --- | --- | --- | --- | --- |
 | REPL host cold start | session is persisted with manifest-derived defaults instead of resolved truth | Yes | Yes | Later attach behaves differently from public start |
 | Persisted attach resolution | stored `effective_policy` is missing or corrupt on a session that already has `host_attach_contract` | Yes | Yes | Clear corruption error, not silent permissive attach or accidental legacy fallback |
-| Legacy classification | a row with a present but incomplete `host_attach_contract` is mistakenly treated as legacy | Yes | Yes | Compatibility hole stays open for sessions that should fail closed |
+| Durable-state validation | a row with missing or incomplete `host_attach_contract` is mistakenly accepted or silently repaired | Yes | Yes | Corrupt or unsupported sessions slip past the contract floor |
 | Attach overlay | caller broadens `attach_mode_preference` or `host_execution_client_start` | Yes | Yes | Clear "baseline truth rejected field" error |
 | Fork successor allocation | fork is implemented as a broadening overlay on the source session instead of successor derivation | Yes | Yes | Fork fails unexpectedly or weakens the overlay contract for every other caller |
 | Runtime snapshot sync | missing contract silently recreated from manifest during parking or snapshot write | Yes | Yes | Hidden authority drift that only appears on later resume |
@@ -608,7 +594,7 @@ This plan has real parallelization opportunities, but only after the contract ru
 | --- | --- | --- |
 | A. Freeze attach baseline and overlay rules | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/` | — |
 | B. Thread resolved contract into REPL cold start | `crates/shell/src/repl/`, `crates/shell/src/execution/agent_runtime/` | A plus the shared `orchestration_session.rs` session-seed prerequisite landed from Lane C |
-| C. Quarantine manifest fallback and compatibility path | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/agent_runtime/control.rs` | A |
+| C. Remove manifest fallback from steady-state paths | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/agent_runtime/control.rs` | A |
 | D. Expand unit and integration coverage | `crates/shell/src/execution/agent_runtime/`, `crates/shell/tests/`, `crates/shell/src/repl/` | A for resolver semantics, B and C for parity and recovery cases |
 | E. Align downstream docs | `llm-last-mile/`, repo root planning docs | A complete enough to freeze wording, final pass after B and C |
 
@@ -620,8 +606,8 @@ Reason: this freezes the contract and helper shapes every other lane consumes.
 Lane B: Step B REPL bootstrap wiring plus Step D subset for REPL parity  
 Reason: REPL cold-start work can proceed once the baseline and overlay helper shape is frozen, but it consumes a shared session-seed prerequisite owned outside Lane B.
 
-Lane C: Step C plus the shared `orchestration_session.rs` session-seed prerequisite, then Step D subset for fail-closed and legacy compatibility  
-Reason: compatibility-path quarantine already owns `agent_runtime/` and `orchestration_session.rs`, so it is the right lane to land the shared constructor or seed primitive that Lane B then consumes.
+Lane C: Step C plus the shared `orchestration_session.rs` session-seed prerequisite, then Step D subset for fail-closed persistence validation  
+Reason: steady-state manifest-reconstruction removal already owns `agent_runtime/` and `orchestration_session.rs`, so it is the right lane to land the shared constructor or seed primitive that Lane B then consumes.
 
 Lane D: Step E  
 Reason: doc rewrites can begin once Step A lands conceptually, but final wording waits for B and C behavior to settle.
@@ -629,7 +615,7 @@ Reason: doc rewrites can begin once Step A lands conceptually, but final wording
 ### Execution order
 
 1. Land Lane A first. Nothing else starts until the baseline and overlay semantics are frozen.
-2. After Lane A stabilizes, Lane C lands the shared `orchestration_session.rs` session-seed prerequisite plus any compatibility-path reshaping needed in the same files.
+2. After Lane A stabilizes, Lane C lands the shared `orchestration_session.rs` session-seed prerequisite plus the steady-state reconstruction removal in the same files.
 3. Once that prerequisite is in place, launch the remaining Lane B and Lane C work in parallel worktrees if ownership is still clean.
 4. Merge B and C, then run the full targeted test matrix.
 5. Finish with Lane D once runtime behavior is stable enough that docs can be written once and stay true.
@@ -654,9 +640,8 @@ This slice is complete only when all of the following are true:
 5. Missing durable policy or attach truth fails closed in modern steady-state paths instead of silently broadening through defaults.
 6. Code, tests, and docs all describe the same overlay rules: honor baseline, narrow where permitted, or select among baseline-permitted modes, but never broaden or replace the durable baseline silently.
 7. Fork is implemented as successor-baseline derivation, not as a broadening overlay on the source session.
-8. The only rows eligible for legacy compatibility handling are persisted session records that lack `host_attach_contract` entirely; present-but-invalid durable contracts fail closed as modern corruption.
-9. Legacy compatibility backfill is reachable only from explicit migration or repair surfaces, never from ordinary attach or steady-state runtime behavior.
-10. 30 and 31 can both move forward after 29.75 without reopening baseline attach semantics.
+8. Missing, null, malformed, or incomplete persisted durable attach truth fails closed with no compatibility helper or repair branch in this slice.
+9. 30 and 31 can both move forward after 29.75 without reopening baseline attach semantics.
 
 ## Implementation Tasks
 
@@ -682,10 +667,10 @@ Synthesized from the scope challenge, contract model, and execution plan above. 
   - Files: `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
   - Verify: new unit tests plus `agent_public_control_surface_v1`.
 
-- [ ] **T5 (P1, human: ~90min / CC: ~15min)** — `orchestration_session/control` — Quarantine manifest reconstruction to an explicit legacy-only helper, stop `sync_host_attach_contract(...)` from silently recreating missing modern contracts, and add an explicit successor-baseline derivation path for fork.
-  - Surfaced by: Step 0 / Phase C — compatibility, steady-state semantics, and successor derivation all need clear boundaries.
+- [ ] **T5 (P1, human: ~90min / CC: ~15min)** — `orchestration_session/control` — Remove steady-state manifest reconstruction, stop `sync_host_attach_contract(...)` from silently recreating missing modern contracts, and add an explicit successor-baseline derivation path for fork.
+  - Surfaced by: Step 0 / Phase C — steady-state semantics and successor derivation both need clear fail-closed boundaries.
   - Files: `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agents_cmd.rs`
-  - Verify: modern fail-closed tests, explicit legacy-path tests, and successor-contract tests.
+  - Verify: modern fail-closed tests and successor-contract tests.
 
 - [ ] **T6 (P2, human: ~2h / CC: ~20min)** — `shell tests` — Add REPL/public-start parity coverage, attach overlay monotonicity tests, and regression coverage for parked and resumed host sessions.
   - Surfaced by: Test and validation plan — core authority paths still have coverage holes.
