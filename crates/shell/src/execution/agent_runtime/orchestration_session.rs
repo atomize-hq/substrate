@@ -184,6 +184,7 @@ impl HostAttachContract {
         })
     }
 
+    #[cfg(unix)]
     pub(crate) fn from_resolved_contract(
         resolved: &ResolvedLaunchContract,
         continuity_uaa_session_id: Option<String>,
@@ -788,6 +789,7 @@ mod tests {
             .contains("host_attach_contract requested_execution_scope drifted"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn host_attach_contract_from_resolved_contract_preserves_truth() {
         let resolved = ResolvedLaunchContract {

@@ -1623,6 +1623,7 @@ struct TargetedTurn<'a> {
 
 enum TargetedTurnRoute {
     Host,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     World(MemberDispatchParitySubset),
 }
 
@@ -1690,6 +1691,7 @@ struct MemberDispatchParitySubset {
 }
 
 impl MemberDispatchParitySubset {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn from_descriptor(descriptor: &RuntimeSelectionDescriptor) -> Self {
         Self {
             agent_id: descriptor.agent_id.clone(),
@@ -1701,6 +1703,7 @@ impl MemberDispatchParitySubset {
         }
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn from_participant(
         participant: &AgentRuntimeParticipantRecord,
     ) -> std::result::Result<Self, RuntimeBootstrapFailure> {
@@ -1727,6 +1730,7 @@ impl MemberDispatchParitySubset {
         })
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn to_runtime_selection_descriptor(&self) -> RuntimeSelectionDescriptor {
         RuntimeSelectionDescriptor {
             agent_id: self.agent_id.clone(),
@@ -4155,6 +4159,7 @@ fn select_exact_runtime_descriptor(
     })
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn select_member_runtime_descriptor_for_backend(
     startup_context: &RuntimeOrchestrationContext,
     backend_id: &str,
@@ -4366,6 +4371,7 @@ async fn dispatch_targeted_follow_up_turn(
                     .await?;
             }
         }
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         TargetedTurnRoute::World(parity) => {
             ensure_no_policy_drift(
                 world_session,

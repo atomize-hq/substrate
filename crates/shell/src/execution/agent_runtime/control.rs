@@ -632,6 +632,7 @@ pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_action(
     }
 }
 
+#[cfg(unix)]
 fn rewrite_startup_prompt_envelope_action(
     envelope: &PublicPromptEnvelope,
     action: PublicPromptAction,

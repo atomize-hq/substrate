@@ -1,154 +1,199 @@
 # Plan: Linux Guest RootFS Backend and Guest-Only Linux Provisioning
 
 This is the Phase 2 `PLAN` artifact for:
-- `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
+- `docs/project_management/_archived/next/linux_guest_rootfs_backend/spec.md`
 
 ## Goal
-Turn the approved spec into an implementation approach that is reviewable before tasks or code start. The plan must keep Linux behavior explicit, fail-closed, and host-safe while introducing a real guest userspace path.
+Turn the approved spec into an implementation approach that is reviewable before task breakdown or code starts. The plan must preserve Linux host safety, keep rollout opt-in, and realize the exact storage, readiness, doctor, and provisioning contract defined in `spec.md`.
 
 ## Major Components
 
-### 1. Shell contract and config routing
-- `crates/shell/`
+### 1. Built-in image manifest and verification
+- `crates/world/`
 - Responsibilities:
-  - resolve `world.linux.backend`
-  - resolve `world.linux.image`
-  - enforce provisioning gating and remediation
-  - map failures to stable exit behavior
+  - define the built-in image id `ubuntu-24.04-amd64`
+  - define the pinned OCI reference and digest metadata
+  - verify digest, `/etc/os-release`, and architecture after unpack
 
-### 2. Guest-rootfs state and lifecycle
+### 2. Guest-rootfs storage and lifecycle
 - `crates/world/`
 - `scripts/linux/world-rootfs-warm.sh`
 - Responsibilities:
-  - represent warmed vs missing vs unsupported vs unhealthy guest state
-  - manage immutable base image location
-  - manage persistent writable overlay location
-  - define explicit warm/repair lifecycle
+  - create and repair `/var/lib/substrate/world-rootfs/`
+  - materialize the immutable base image
+  - scaffold generic storage layout without requiring workspace-specific input
+  - preserve overlays during repair
 
-### 3. World execution path
+### 3. Shared readiness evaluator
 - `crates/world/`
 - `crates/world-service/`
-- Responsibilities:
-  - bootstrap guest-backed command execution
-  - support non-PTY and PTY flows
-  - fail explicitly when `guest_rootfs` is selected but unavailable
-
-### 4. Full-isolation rootfs semantics
-- `crates/world/`
-- Responsibilities:
-  - make guest rootfs the effective system root for `world_fs.isolation=full`
-  - prevent host `/usr`, `/etc`, and similar directories from acting as guest system state
-  - fail closed on invariant violations
-
-### 5. Provisioning path
 - `crates/shell/`
+- Responsibilities:
+  - compute one readiness result reused by doctor, provisioning, and runtime remediation
+  - distinguish host-native, ready guest-rootfs, unready guest-rootfs, and unsupported-image states
+
+### 4. Shell contract and config routing
+- `crates/shell/`
+- `crates/world-backend-factory/`
+- Responsibilities:
+  - resolve `world.linux.backend`
+  - resolve `world.linux.image`
+  - apply default-image behavior only for `guest_rootfs`
+  - route `substrate world enable --provision-deps`
+
+### 5. World execution path
 - `crates/world/`
 - `crates/world-service/`
 - Responsibilities:
-  - route `substrate world enable --provision-deps` to guest-only provisioning
-  - install APT packages into persistent guest overlays only
-  - reject `host_native` and unsupported/unready guest images
+  - bootstrap guest-backed non-PTY and PTY execution
+  - enforce fail-closed runtime behavior when guest-rootfs is configured but not ready
 
-### 6. Observability and docs
-- `crates/world-service/`
-- `docs/WORLD.md`
-- `docs/reference/world/deps/README.md`
+### 6. Full-isolation guest-root semantics
+- `crates/world/`
 - Responsibilities:
-  - expose backend/image/readiness truth in doctor output
-  - keep operator docs aligned with actual runtime behavior
+  - make the guest rootfs the effective system root for `world_fs.isolation=full`
+  - ensure host `/usr`, `/etc`, and similar directories do not act as guest system state
+
+### 7. Doctor schema and reporting
+- `crates/world-service/`
+- Responsibilities:
+  - emit additive `world doctor --json` fields for backend, image id, world OS identity, and provisioning readiness
+  - distinguish configured backend from ready or unready state
 
 ## Dependencies
-- Guest-rootfs lifecycle must be defined before backend selection can map to ready vs unready behavior.
-- Backend and image selection must be wired before guest execution can be introduced safely.
-- Guest execution must exist before full-isolation behavior can be re-rooted onto it.
+- Image manifest and verification rules must exist before warm or readiness logic can be trusted.
+- Storage layout and lifecycle rules must exist before shell routing can reliably distinguish ready from unready guest-rootfs.
+- Shared readiness logic must exist before doctor, provisioning, and runtime remediation can stay consistent.
+- Shell/backend selection must be fixed before world execution can safely branch between host-native and guest-rootfs.
+- World execution must exist before full-isolation re-rooting can be validated meaningfully.
 - Full-isolation guest-root behavior must be trustworthy before provisioning is enabled.
-- Observability and docs depend on the runtime contract being settled.
 
 ## Implementation Order
 
-### Step 1: Lock the shared runtime model
-- Define the guest-rootfs state model:
-  - warmed
-  - missing
-  - unsupported image
-  - unhealthy
-- Define where base images and overlays live.
-- Define what the warm script prepares and what it never does implicitly.
+### Step 1: Lock the built-in image contract
+- Define the built-in `ubuntu-24.04-amd64` image manifest shape.
+- Define pinned OCI reference, digest, expected OS identity, and expected architecture.
+- Define post-unpack verification rules.
 
 Why first:
-- all later work depends on one consistent readiness and storage model.
+- warm, readiness, and doctor reporting all depend on a single authoritative image contract.
 
-### Step 2: Wire backend and image selection
-- Add deterministic parsing and validation for:
-  - `world.linux.backend`
-  - `world.linux.image`
-- Enforce:
-  - `host_native` default
-  - no implicit backend switch from image selection
-  - explicit failure for unsupported images
+### Step 2: Implement `/var/lib/substrate/world-rootfs/` layout and warm behavior
+- Create the exact directory layout from the spec.
+- Enforce `root:substrate` ownership and required permissions.
+- Implement idempotent warm behavior:
+  - no-op when healthy
+  - repair missing or damaged image/layout state
+  - preserve healthy overlays
+  - clean incomplete `tmp/` artifacts only
+  - avoid pre-creating workspace-scoped overlays
+- Implement explicit privilege posture through `sudo` or immediate failure.
 
 Why second:
-- execution and provisioning cannot safely branch until selection behavior is fixed.
+- selection and runtime cannot depend on guest-rootfs until the storage model is real.
 
-### Step 3: Introduce guest-rootfs execution
-- Add guest-backed non-PTY execution.
-- Add guest-backed PTY execution.
-- Ensure explicit refusal when `guest_rootfs` is selected but unavailable.
+### Step 3: Implement overlay keying and scope resolution
+- Resolve workspace root canonical path.
+- Derive `ws-<workspace-sha256>` for workspace-scoped overlays.
+- Use `global` when no workspace root exists.
+- Create scope-local overlays lazily on first execution or provisioning for that scope.
+- Reuse the same overlay for execution and provisioning within one scope.
 
 Why third:
-- this proves the backend is real before changing isolation or provisioning semantics around it.
+- persistence, no-cross-workspace contamination, and provisioning semantics depend on exact scope keying.
 
-### Step 4: Re-root full isolation onto the guest rootfs
-- Make `world_fs.isolation=full` use the guest rootfs as the effective system root.
-- Remove dependence on host system directories as the guest system view.
-- Fail closed if the invariant cannot be met.
+### Step 4: Implement the shared readiness evaluator
+- Evaluate:
+  - configured backend
+  - selected image id
+  - built-in image support
+  - base-image presence and verification
+  - `/etc/os-release` verification
+  - architecture match
+  - permissions and directory layout
+- Return structured readiness state reused verbatim by:
+  - doctor
+  - provisioning
+  - runtime remediation
+- Do not fail readiness solely because a scope-local overlay has not yet been created.
 
 Why fourth:
-- isolation is the core safety claim of the backend and must be correct before provisioning becomes useful.
+- this is the contract seam that keeps operator reporting and runtime behavior aligned.
 
-### Step 5: Enable guest-only provisioning
-- Gate Linux provisioning on:
-  - selected `guest_rootfs`
-  - ready guest state
-  - supported Ubuntu/Debian image
-- Install APT packages into the guest overlay only.
-- Keep `host_native` refusal explicit.
+### Step 5: Wire backend and image semantics through shell and backend factory
+- Parse `world.linux.backend`.
+- Parse `world.linux.image`.
+- Apply default-image behavior only when backend is `guest_rootfs`.
+- Ignore image activation for `host_native`.
+- Reject unsupported images deterministically.
 
 Why fifth:
-- provisioning is only valid after execution and isolation semantics are trustworthy.
+- only after readiness exists can the shell route backend behavior without inventing duplicate logic.
 
-### Step 6: Finish doctor, docs, and manual validation flow
-- Add doctor fields for backend, image, OS identity, readiness, and provisioning support.
-- Update operator docs to match the actual warm/provisioning flow.
-- Capture manual validation and smoke coverage.
+### Step 6: Introduce guest-rootfs execution
+- Add guest-backed non-PTY execution.
+- Add guest-backed PTY execution.
+- Refuse execution with shared readiness reasons when guest-rootfs is configured but unavailable.
+
+Why sixth:
+- guest execution must exist before isolation or provisioning can be proven against the real backend.
+
+### Step 7: Re-root full isolation onto the guest rootfs
+- Make `world_fs.isolation=full` use the guest rootfs as the effective system root.
+- Remove dependence on host system directories as the guest system view.
+- Fail closed with exit `5` when invariants break.
+
+Why seventh:
+- isolation is the core safety property that makes guest-rootfs materially different from host-native execution.
+
+### Step 8: Enable `substrate world enable --provision-deps`
+- Gate provisioning on:
+  - `guest_rootfs` selected
+  - built-in image supported
+  - shared readiness true
+- Install packages into the scope-local overlay only.
+- Keep host-native refusal explicit and unchanged.
+
+Why eighth:
+- provisioning is valid only after storage, execution, and isolation guarantees are real.
+
+### Step 9: Finish doctor output, docs, and validation flow
+- Emit the additive doctor fields from the spec.
+- Update docs to match warm, readiness, and provisioning behavior exactly.
+- Add manual validation and smoke coverage for repair, readiness, execution, isolation, and provisioning persistence.
 
 Why last:
-- observability and docs must describe the final runtime behavior, not an intermediate design.
+- docs and validation must describe the final runtime contract, not an earlier design draft.
 
 ## Risks and Mitigation
 
-### Risk: guest state semantics diverge across crates
+### Risk: image verification and runtime behavior drift apart
 - Mitigation:
-  - define one readiness model first
-  - reuse it across shell, world, and world-service
+  - define the built-in image manifest first
+  - make warm and readiness use the same verification rules
+
+### Risk: directory ownership or permissions become inconsistent across repair paths
+- Mitigation:
+  - keep one canonical layout under `/var/lib/substrate/world-rootfs/`
+  - make warm the only repair entrypoint
+  - test repair idempotence explicitly
+
+### Risk: overlays contaminate each other across workspaces
+- Mitigation:
+  - key overlays by image id plus scope
+  - hash canonical workspace roots
+  - test cross-workspace separation explicitly
+
+### Risk: doctor, runtime, and provisioning disagree about readiness
+- Mitigation:
+  - implement one shared readiness evaluator
+  - forbid duplicate probing logic in shell or doctor code paths
 
 ### Risk: full isolation still leaks host system assumptions
 - Mitigation:
   - validate guest `/etc/os-release`
-  - inspect mount/layout behavior in integration tests
+  - inspect mount and root layout in integration tests
   - treat invariant failure as exit `5`
-
-### Risk: provisioning mutates the wrong layer
-- Mitigation:
-  - keep the base image immutable
-  - mutate overlays only
-  - add explicit host-native refusal checks
-
-### Risk: backend selection creates ambiguous invalid states
-- Mitigation:
-  - keep backend and image separate
-  - validate both centrally
-  - define explicit failure modes before tasks start
 
 ### Risk: Linux-specific work regresses other platforms
 - Mitigation:
@@ -158,41 +203,43 @@ Why last:
 ## Parallel vs Sequential Work
 
 ### Must stay sequential
-- Guest state model before backend/image routing
-- Backend/image routing before guest execution
+- Built-in image contract before storage implementation
+- Storage implementation before overlay scope keying
+- Overlay scope keying before shared readiness
+- Shared readiness before shell routing and doctor schema
+- Shell routing before guest execution
 - Guest execution before full-isolation re-rooting
 - Full-isolation re-rooting before provisioning enablement
 
 ### Can run in parallel after prerequisites exist
-- Shell contract tests and world-service readiness plumbing
-- PTY and non-PTY guest execution work
-- Doctor output work and operator-doc drafting
-- Manual playbook drafting and smoke-script authoring
+- Shell config tests and doctor-schema rendering after shared readiness exists
+- PTY and non-PTY execution work after backend bootstrap semantics are stable
+- Warm-script repair tests and storage-permission tests after storage layout is implemented
+- Manual playbook drafting and smoke-script authoring after readiness and provisioning semantics are fixed
 
 ## Verification Checkpoints
 
-### Checkpoint 1: selection and readiness
-- The system can distinguish:
-  - `host_native`
-  - ready `guest_rootfs`
-  - unready `guest_rootfs`
-  - unsupported image
+### Checkpoint 1: image and storage contract
+- The built-in image manifest, verification rules, directory layout, ownership, and permissions behave exactly as specified.
 
-### Checkpoint 2: guest execution
+### Checkpoint 2: scope-local persistence
+- Execution and provisioning reuse one overlay within a scope, and different workspaces do not share overlays.
+
+### Checkpoint 3: readiness consistency
+- Doctor, runtime remediation, and provisioning report the same readiness status and reason for the same configuration.
+
+### Checkpoint 4: guest execution
 - Commands run against guest userspace instead of the host distro userspace.
 
-### Checkpoint 3: full isolation
+### Checkpoint 5: full isolation
 - `world_fs.isolation=full` uses guest-root semantics and fails closed when that invariant breaks.
 
-### Checkpoint 4: provisioning
+### Checkpoint 6: provisioning
 - `substrate world enable --provision-deps` works only for supported ready guest worlds and leaves host package state unchanged.
 
-### Checkpoint 5: operator truthfulness
-- Doctor output and docs reflect the actual backend, image, OS identity, and provisioning readiness.
+### Checkpoint 7: operator truthfulness
+- Doctor output and docs reflect configured backend, active backend kind, image id, OS identity, and provisioning readiness exactly.
 
-## What This Plan Does Not Do Yet
-- It does not break work into task-sized units.
-- It does not assign files per task.
-- It does not start implementation.
-
-Those belong to Phase 3 `TASKS`.
+## Phase 3 Readiness
+- No blocking design questions remain in the spec.
+- Phase 3 can break the work into task-sized units directly from this plan.

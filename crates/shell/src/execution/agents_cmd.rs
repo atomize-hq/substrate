@@ -1153,6 +1153,7 @@ fn build_start_launch_plan(
     })
 }
 
+#[cfg(unix)]
 fn persist_resolved_start_attach_contract(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -1224,6 +1225,7 @@ fn build_attach_launch_plan(
     })
 }
 
+#[cfg(unix)]
 fn build_resumed_turn_launch_plan(
     orchestration_session_id: &str,
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
