@@ -858,10 +858,7 @@ fn orchestration_session_manifest_with_options(
             host_attach_contract_manifest(agent_id, continuity_uaa_session_id)
         }
         Some(None) => Value::Null,
-        None => host_attach_contract_manifest(
-            agent_id,
-            &format!("uaa-{orchestration_session_id}"),
-        ),
+        None => host_attach_contract_manifest(agent_id, &format!("uaa-{orchestration_session_id}")),
     };
     json!({
         "orchestration_session_id": orchestration_session_id,

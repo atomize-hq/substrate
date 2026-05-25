@@ -2660,11 +2660,11 @@ mod tests {
         PublicPromptCommandRequest, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
         PURE_AGENT_PROTOCOL,
     };
-    use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     #[cfg(unix)]
     use super::{
         handle_private_prompt_connection, private_prompt_request_channel, PublicPromptEnvelope,
     };
+    use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind,
         orchestration_session::{

@@ -51,7 +51,6 @@ use crate::execution::agent_runtime::orchestration_session::{
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
-use crate::execution::config_model::AgentExecutionScope;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, materialize_runtime_descriptor,
@@ -73,6 +72,7 @@ use crate::execution::agent_runtime::{
     ResolvedLaunchContract, MEMBER_ROLE, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
     SESSION_HANDLE_SCHEMA_V1,
 };
+use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
 use crate::execution::prompt_fulfillment::{
@@ -8719,7 +8719,9 @@ mod tests {
             assert_eq!(host_attach_contract.backend_id, "cli:codex");
             assert_eq!(host_attach_contract.protocol, PURE_AGENT_PROTOCOL);
             assert_eq!(
-                host_attach_contract.attach_launch_knobs.requested_execution_scope,
+                host_attach_contract
+                    .attach_launch_knobs
+                    .requested_execution_scope,
                 AgentExecutionScope::Host
             );
             assert!(host_attach_contract.capabilities.session_resume);

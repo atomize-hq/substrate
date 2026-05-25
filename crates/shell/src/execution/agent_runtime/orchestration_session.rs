@@ -492,7 +492,9 @@ impl OrchestrationSessionRecord {
         if serde_json::from_value::<substrate_broker::Policy>(contract.effective_policy.clone())
             .is_err()
         {
-            anyhow::bail!("host_attach_contract effective_policy must remain a valid policy snapshot");
+            anyhow::bail!(
+                "host_attach_contract effective_policy must remain a valid policy snapshot"
+            );
         }
 
         match self.posture {
@@ -855,9 +857,8 @@ mod tests {
             contract.attach_launch_knobs.attach_mode_preference,
             HostAttachModePreference::FreshAllowed
         );
-        let persisted_policy: Policy =
-            serde_json::from_value(contract.effective_policy.clone())
-                .expect("deserialize persisted policy");
+        let persisted_policy: Policy = serde_json::from_value(contract.effective_policy.clone())
+            .expect("deserialize persisted policy");
         assert_eq!(
             persisted_policy.agents_allowed_backends,
             vec!["cli:codex".to_string()]

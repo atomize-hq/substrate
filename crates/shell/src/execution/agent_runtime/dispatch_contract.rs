@@ -393,16 +393,14 @@ pub(crate) fn resolve_persisted_host_attach_contract(
         });
     }
 
-    let effective_policy =
-        serde_json::from_value::<Policy>(contract.effective_policy.clone()).map_err(|err| {
-            DispatchResolutionError {
-                kind: DispatchResolutionErrorKind::BaselineIneligible,
-                field: "effective_policy",
-                rejecting_layer: DispatchRejectingLayer::BaselineTruth,
-                reason: format!(
-                    "persisted host attach contract stored an invalid policy snapshot: {err}"
-                ),
-            }
+    let effective_policy = serde_json::from_value::<Policy>(contract.effective_policy.clone())
+        .map_err(|err| DispatchResolutionError {
+            kind: DispatchResolutionErrorKind::BaselineIneligible,
+            field: "effective_policy",
+            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+            reason: format!(
+                "persisted host attach contract stored an invalid policy snapshot: {err}"
+            ),
         })?;
     let attach_launch_knobs = resolve_persisted_attach_launch_knobs(envelope, contract)?;
 
@@ -495,26 +493,32 @@ fn resolve_persisted_attach_launch_knobs(
         }
     };
 
-    let attach_mode_preference = if persisted_attach_mode_rank(
-        envelope.attach_launch_knobs.attach_mode_preference,
-    ) <= persisted_host_attach_mode_rank(contract.attach_launch_knobs.attach_mode_preference)
-    {
-        envelope.attach_launch_knobs.attach_mode_preference
-    } else {
-        return Err(DispatchResolutionError {
-            kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
-            field: "attach_mode_preference",
-            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
-            reason: format!(
-                "persisted attach launch cannot broaden attach mode from {} to {}",
-                persisted_host_attach_mode_label(contract.attach_launch_knobs.attach_mode_preference),
-                persisted_attach_mode_label(envelope.attach_launch_knobs.attach_mode_preference),
-            ),
-        });
-    };
+    let attach_mode_preference =
+        if persisted_attach_mode_rank(envelope.attach_launch_knobs.attach_mode_preference)
+            <= persisted_host_attach_mode_rank(contract.attach_launch_knobs.attach_mode_preference)
+        {
+            envelope.attach_launch_knobs.attach_mode_preference
+        } else {
+            return Err(DispatchResolutionError {
+                kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
+                field: "attach_mode_preference",
+                rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+                reason: format!(
+                    "persisted attach launch cannot broaden attach mode from {} to {}",
+                    persisted_host_attach_mode_label(
+                        contract.attach_launch_knobs.attach_mode_preference
+                    ),
+                    persisted_attach_mode_label(
+                        envelope.attach_launch_knobs.attach_mode_preference
+                    ),
+                ),
+            });
+        };
 
-    if matches!(attach_mode_preference, AttachModePreference::ContinuityRequired)
-        && contract.continuity_uaa_session_id.is_none()
+    if matches!(
+        attach_mode_preference,
+        AttachModePreference::ContinuityRequired
+    ) && contract.continuity_uaa_session_id.is_none()
     {
         return Err(DispatchResolutionError {
             kind: DispatchResolutionErrorKind::MissingRequiredAttachContinuity,
@@ -1416,7 +1420,8 @@ mod tests {
             DispatchBaselineKind::PersistedHostAttach,
             "cli:codex",
         );
-        envelope.attach_launch_knobs.host_execution_client_start = HostExecutionClientStart::StartNow;
+        envelope.attach_launch_knobs.host_execution_client_start =
+            HostExecutionClientStart::StartNow;
         envelope.attach_launch_knobs.attach_mode_preference = AttachModePreference::FreshAllowed;
 
         let err = resolve_persisted_host_attach_contract(&envelope, &contract)

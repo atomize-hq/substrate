@@ -15,11 +15,11 @@ use std::process::{Child, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use substrate_broker::Policy;
 use support::{
     binary_path, ensure_substrate_built, persist_runtime_alert_for_substrate_home,
     substrate_shell_driver,
 };
-use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
 use support::{MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
