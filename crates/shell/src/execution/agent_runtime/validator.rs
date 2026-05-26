@@ -379,6 +379,10 @@ mod tests {
         cli_mode: AgentCliMode,
         capabilities: AgentCapabilitiesV1,
     ) -> AgentInventoryEntryV1 {
+        let test_binary = std::env::current_exe()
+            .expect("current test binary should resolve")
+            .display()
+            .to_string();
         AgentInventoryEntryV1 {
             path: PathBuf::from(format!("{agent_id}.yaml")),
             file: AgentFileV1 {
@@ -390,7 +394,7 @@ mod tests {
                     protocol: protocol.map(str::to_string),
                     execution: AgentExecutionConfigV1 { scope: Some(scope) },
                     cli: Some(AgentCliConfigV1 {
-                        binary: "cargo".to_string(),
+                        binary: test_binary,
                         mode: Some(cli_mode),
                     }),
                     api: None,

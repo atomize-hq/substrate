@@ -95,12 +95,28 @@ fn detect_script_runs_shell_commands() {
 
 #[cfg(windows)]
 #[test]
+#[serial]
 fn detect_script_runs_powershell_commands() {
+    let temp = tempdir().unwrap();
+    let shell_path = temp.path().join("fake-powershell.cmd");
+    fs::write(
+        &shell_path,
+        "@echo off\r\nset \"script=%~4\"\r\nif /I \"%script%\"==\"exit 0\" exit /b 0\r\nif /I \"%script%\"==\"exit 1\" exit /b 1\r\nexit /b 1\r\n",
+    )
+    .unwrap();
+    let prev_shell = env::var_os("SUBSTRATE_MANAGER_INIT_POWERSHELL");
+    env::set_var("SUBSTRATE_MANAGER_INIT_POWERSHELL", &shell_path);
+
     assert_eq!(
         detect_script("exit 0", Platform::Windows).unwrap(),
         Some("script".to_string())
     );
     assert_eq!(detect_script("exit 1", Platform::Windows).unwrap(), None);
+
+    match prev_shell {
+        Some(value) => env::set_var("SUBSTRATE_MANAGER_INIT_POWERSHELL", value),
+        None => env::remove_var("SUBSTRATE_MANAGER_INIT_POWERSHELL"),
+    }
 }
 
 #[test]

@@ -2,8 +2,17 @@ use super::*;
 use std::fs;
 use tempfile::tempdir;
 
+fn running_under_wine() -> bool {
+    std::env::var_os("WINELOADER").is_some()
+}
+
 #[tokio::test]
 async fn test_policy_watcher() {
+    if cfg!(windows) && running_under_wine() {
+        eprintln!("policy watcher: skipping Windows notify backend test under Wine");
+        return;
+    }
+
     let temp = tempdir().unwrap();
     let policy_file = temp.path().join("policy.yaml");
     fs::write(&policy_file, "id: test\nname: Test").unwrap();
@@ -32,6 +41,11 @@ async fn test_policy_watcher() {
 
 #[test]
 fn test_multi_watcher() {
+    if cfg!(windows) && running_under_wine() {
+        eprintln!("multi watcher: skipping Windows notify backend test under Wine");
+        return;
+    }
+
     let temp = tempdir().unwrap();
     let dir = temp.path().join("policies");
     fs::create_dir(&dir).unwrap();

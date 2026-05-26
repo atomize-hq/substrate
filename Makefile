@@ -25,6 +25,10 @@ RUN_TS := $(shell date -u +%Y%m%dT%H%M%SZ)
 # Final combined log will also be in the date folder
 FINAL_LOG := $(LOG_DIR)/__all-crates.$(RUN_TS).log
 
+WIN_TARGET ?= x86_64-pc-windows-msvc
+ENABLE_WIN_PREFLIGHT ?= 0
+PREFLIGHT_WIN_RUN_TESTS ?= 1
+
 .PHONY: tokei-all-crates
 tokei-all-crates:
 	@mkdir -p "$(LOG_DIR)"
@@ -60,6 +64,53 @@ integ-checks:
 
 .PHONY: preflight
 preflight: flightcheck
+
+.PHONY: dev-bootstrap
+dev-bootstrap:
+	@echo "##dev-bootstrap -- host-aware developer bootstrap"
+	@if [ "$${OS:-}" = "Windows_NT" ]; then \
+	  if ! command -v pwsh >/dev/null 2>&1; then \
+	    echo "ERROR: pwsh is required on Windows. Install PowerShell 7 or run scripts/windows/dev-bootstrap.ps1 directly."; \
+	    exit 2; \
+	  fi; \
+	  ENABLE_WIN_PREFLIGHT="$(ENABLE_WIN_PREFLIGHT)" pwsh -File "./scripts/windows/dev-bootstrap.ps1"; \
+	else \
+	  ENABLE_WIN_PREFLIGHT="$(ENABLE_WIN_PREFLIGHT)" bash "./scripts/dev/bootstrap.sh"; \
+	fi
+
+.PHONY: preflight-win
+preflight-win:
+	@echo "##preflight-win -- Linux-host Windows MSVC parity preflight"
+	@echo "##preflight-win -- supplements but does not replace real Windows CI"
+	@if [ "$$(uname -s)" != "Linux" ]; then \
+	  echo "ERROR: preflight-win currently supports Linux hosts only"; \
+	  exit 2; \
+	fi
+	@if ! command -v rustup >/dev/null 2>&1; then \
+	  echo "ERROR: rustup is required"; \
+	  exit 2; \
+	fi
+	@if ! command -v cargo-xwin >/dev/null 2>&1; then \
+	  echo "Installing cargo-xwin..."; \
+	  cargo install --locked cargo-xwin; \
+	fi
+	@if ! command -v clang >/dev/null 2>&1; then \
+	  echo "ERROR: clang is required for cargo-xwin. Run 'make dev-bootstrap ENABLE_WIN_PREFLIGHT=1' and rerun."; \
+	  exit 2; \
+	fi
+	@if [ "$(PREFLIGHT_WIN_RUN_TESTS)" = "1" ] && ! command -v wine >/dev/null 2>&1; then \
+	  echo "ERROR: wine is required to run Windows-target tests. Run 'make dev-bootstrap ENABLE_WIN_PREFLIGHT=1' or rerun with PREFLIGHT_WIN_RUN_TESTS=0."; \
+	  exit 2; \
+	fi
+	rustup target add $(WIN_TARGET)
+	cargo xwin build -p substrate --bin substrate --target $(WIN_TARGET)
+	cargo xwin check --workspace --all-targets --target $(WIN_TARGET)
+	cargo xwin clippy --workspace --all-targets --target $(WIN_TARGET) -- -D warnings
+	@if [ "$(PREFLIGHT_WIN_RUN_TESTS)" = "1" ]; then \
+	  cargo xwin test --workspace --all-targets --target $(WIN_TARGET); \
+	else \
+	  echo "Skipping cargo xwin test because PREFLIGHT_WIN_RUN_TESTS=$(PREFLIGHT_WIN_RUN_TESTS)"; \
+	fi
 
 .PHONY: pre-ci
 pre-ci:

@@ -4,9 +4,26 @@ Building, testing, and contributing to Substrate.
 
 ## Prerequisites
 
-- **Rust 1.74+** - Required for uuid v7 features
+- **Rust 1.89+** - Pinned via `rust-toolchain.toml`
 - **Git** - For version control and submodules
 - **Platform tools** - Platform-specific development dependencies
+
+## Bootstrap
+
+Bootstrap a new developer environment with the host-aware wrapper:
+
+```bash
+make dev-bootstrap
+make dev-bootstrap ENABLE_WIN_PREFLIGHT=1
+```
+
+What it does:
+
+- Linux: installs the standard Substrate development packages, ensures the pinned Rust toolchain, and optionally installs `clang`, `wine`, `cargo-xwin`, and the Windows MSVC target for `make preflight-win`.
+- macOS: installs the standard Homebrew-backed development packages and ensures the pinned Rust toolchain.
+- Windows: ensures `rustup`, `cargo`, and the pinned Rust toolchain, then points you at the Windows dev installer.
+
+`ENABLE_WIN_PREFLIGHT=1` is intentionally Linux-only because the repo’s `make preflight-win` flow is Linux-hosted and supplements, rather than replaces, native Windows CI.
 
 ## Project Structure
 
@@ -97,6 +114,29 @@ cargo clippy -- -D warnings  # Fail on warnings
 cargo clippy --fix           # Auto-fix issues
 cargo clippy --workspace --all-targets -- -D warnings
 ```
+
+### Linux-host Windows parity preflight
+
+Use this when you want an early Windows-target signal from Linux before waiting on the real Windows CI job:
+
+```bash
+make dev-bootstrap ENABLE_WIN_PREFLIGHT=1
+make preflight-win
+```
+
+Prerequisites:
+
+- `cargo-xwin` for `*-pc-windows-msvc` cross-checks
+- `clang` for the Windows MSVC cross toolchain
+- `wine` if you want to run the Windows-target test binaries
+
+If you only want compile and clippy parity from Linux, skip the Windows-target test run:
+
+```bash
+make preflight-win PREFLIGHT_WIN_RUN_TESTS=0
+```
+
+This is a fast preflight, not a replacement for the real Windows runner. PowerShell, `wsl.exe`, named pipes, and other Windows-host behaviors still need native Windows CI.
 
 ### Feature flags and heavy backends (Kuzu)
 

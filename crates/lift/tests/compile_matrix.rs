@@ -16,6 +16,10 @@ use thiserror as _;
 use toml as _;
 use walkdir as _;
 
+fn running_under_wine() -> bool {
+    std::env::var_os("WINELOADER").is_some()
+}
+
 #[cfg(feature = "cli")]
 #[test]
 fn run_cli_is_exposed_when_cli_feature_is_enabled() {
@@ -24,6 +28,11 @@ fn run_cli_is_exposed_when_cli_feature_is_enabled() {
 
 #[test]
 fn crate_compiles_without_default_features() {
+    if cfg!(windows) && running_under_wine() {
+        eprintln!("compile matrix: skipping nested cargo check under Wine");
+        return;
+    }
+
     let workspace_root = workspace_root();
     let target_dir = workspace_root.join("target/lift-seam0-no-default-features");
     let output = Command::new(env!("CARGO"))

@@ -381,8 +381,8 @@ fn cd_bounces_when_caged_without_world() {
         return;
     }
     assert_eq!(
-        env::var("OLDPWD").unwrap(),
-        inside_canon.display().to_string()
+        canonicalize_or(Path::new(&env::var("OLDPWD").unwrap())),
+        canonicalize_or(&inside_canon)
     );
 
     restore_env("SUBSTRATE_WORLD", prev_world);
@@ -418,13 +418,13 @@ fn cd_bounces_when_caged_with_world_enabled() {
     assert!(status.is_some());
 
     assert_eq!(
-        env::current_dir().unwrap(),
-        config.world_root.path,
+        canonicalize_or(&env::current_dir().unwrap()),
+        canonicalize_or(&config.world_root.path),
         "cd bounce should return to cage root when world is enabled"
     );
     assert_eq!(
-        env::var("OLDPWD").unwrap(),
-        inside_canon.display().to_string()
+        canonicalize_or(Path::new(&env::var("OLDPWD").unwrap())),
+        canonicalize_or(&inside_canon)
     );
 
     restore_env("SUBSTRATE_WORLD", prev_world);
@@ -554,7 +554,10 @@ fn cd_allows_uncaged_escape_from_anchor() {
     assert!(status.is_some());
 
     let outside_canon = fs::canonicalize(&outside).unwrap();
-    assert_eq!(env::current_dir().unwrap(), outside_canon);
+    assert_eq!(
+        canonicalize_or(&env::current_dir().unwrap()),
+        canonicalize_or(&outside_canon)
+    );
 
     restore_env("SUBSTRATE_WORLD", prev_world);
     restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);

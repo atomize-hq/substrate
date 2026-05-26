@@ -293,6 +293,8 @@ The repository also ships helper scripts that mirror the production layout while
 using your workspace build artifacts:
 
 ```bash
+make dev-bootstrap                                 # host-aware prerequisite bootstrap
+make dev-bootstrap ENABLE_WIN_PREFLIGHT=1          # Linux-only: add clang/wine/cargo-xwin for make preflight-win
 scripts/substrate/dev-install-substrate.sh --profile debug   # or --profile release
 source ~/.substrate/dev-shim-env.sh                          # refresh PATH/SHIM_ORIGINAL_PATH
 

@@ -911,9 +911,13 @@ mod c0_policy_patch_only_broker_effective_resolution {
     fn ensure_substrate_built() {
         static BUILD_ONCE: OnceLock<()> = OnceLock::new();
         BUILD_ONCE.get_or_init(|| {
+            if existing_substrate_binary_path().is_some() {
+                return;
+            }
             let target_dir = c0_target_dir();
             let cargo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            let status = Command::new("cargo")
+            let cargo_bin = std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
+            let status = Command::new(cargo_bin)
                 .args(["build", "-p", "substrate"])
                 .current_dir(&cargo_root)
                 .env("CARGO_TARGET_DIR", &target_dir)
@@ -937,7 +941,21 @@ mod c0_policy_patch_only_broker_effective_resolution {
             "substrate"
         };
 
-        c0_target_dir().join("debug").join(binary_name)
+        existing_substrate_binary_path()
+            .unwrap_or_else(|| c0_target_dir().join("debug").join(binary_name))
+    }
+
+    fn existing_substrate_binary_path() -> Option<PathBuf> {
+        let binary_name = if cfg!(windows) {
+            "substrate.exe"
+        } else {
+            "substrate"
+        };
+
+        let current_exe = std::env::current_exe().ok()?;
+        let debug_dir = current_exe.parent()?.parent()?;
+        let sibling = debug_dir.join(binary_name);
+        sibling.exists().then_some(sibling)
     }
 
     fn substrate_cmd(tmpdir: &Path) -> Command {
@@ -954,7 +972,7 @@ mod c0_policy_patch_only_broker_effective_resolution {
     }
 
     fn temp_dir(prefix: &str) -> TempDir {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/tests-tmp");
+        let base = std::env::temp_dir().join("substrate-tests-tmp");
         std::fs::create_dir_all(&base).expect("failed to create shared TMPDIR");
         Builder::new()
             .prefix(prefix)
