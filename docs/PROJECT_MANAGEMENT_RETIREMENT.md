@@ -58,8 +58,8 @@ Completed extraction/rewrite slices:
 
 Still remaining before the atomic top-level `packs/**` removal:
 - repo-wide reference scan still finds non-pack-tree references to `docs/project_management/packs/**`
-- the remaining refs are now concentrated in historical/root docs plus a small number of live
-  wrappers that still point at pack-owned artifacts
+- the remaining refs are now concentrated in historical/root docs and in-progress
+  `docs/project_management/**` material rather than live shell wrappers
 
 Validation already completed for the finished slices:
 - `cargo test -p substrate-broker --lib -- --nocapture`
@@ -77,6 +77,8 @@ Validation already completed for the finished slices:
 - scoped reference scans over `Makefile`, `.github/workflows/feature-smoke.yml`, and the targeted
   triad / smoke / CI helper scripts no longer show `docs/project_management/packs/**` or
   `tasks.json` assumptions
+- scoped reference scans over `docs/contracts/gateway/*.md` and `docs/BACKLOG.md` no longer show
+  pack-path backlinks for the stable contract and backlog surfaces cleaned in this slice
 
 ## Current Dependency Classes
 
@@ -98,18 +100,28 @@ Completed retirements/replacements:
 - `scripts/mac/smoke.sh`
   - BEDPM installer conformance mode is now retired instead of shelling through a pack-owned smoke
     wrapper
+- `tests/installers/pkg_manager_detection_smoke.sh`
+  - removed the obsolete assertion that a pack-owned BEDPM smoke wrapper still exists
+- `docs/contracts/gateway/backend-adapter-protocol.md`
+- `docs/contracts/gateway/backend-adapter-schema.md`
+- `docs/contracts/gateway/runtime-parity.md`
+  - removed pack-spec backlinks from stable gateway contract verification surfaces
+- `docs/BACKLOG.md`
+  - removed the remaining direct pack-path context note from the world-sync backlog entry
 
 Remaining dependency surface after the repo-wide scan:
-- `tests/installers/pkg_manager_detection_smoke.sh`
-  - still points at a pack-owned smoke wrapper
 - root and historical docs outside `docs/project_management/packs/**`
-  - examples include `docs/BACKLOG.md`, `llm-last-mile/**`, `FSE_PRE_PLANNING_*`, and archived
-    planning notes that still cite pack paths
+  - examples now concentrate in `llm-last-mile/**`, `FSE_PRE_PLANNING_*`, and archived planning
+    notes that still cite pack paths
+- in-progress `docs/project_management/**` planning and ADR material
+  - these references still need explicit triage as either acceptable retained planning history or
+    blockers that must be repointed before the atomic cut
 
 Disposition:
-- rewrite or retire any still-live scripts/tests
 - classify root/historical docs as either intentional history or blockers that must be rewritten
   before the atomic cut
+- keep narrowing stable/root surfaces first so the remaining scan result is dominated by clearly
+  historical or intentionally retained planning material
 
 ### 2. Rust tests and code that hard-read pack markdown
 
@@ -264,9 +276,10 @@ Remaining follow-up:
 Use this order in the next session:
 
 1. Triage the remaining non-pack-tree references surfaced by the repo-wide scan.
-   - Start with `tests/installers/pkg_manager_detection_smoke.sh`.
-   - Then classify root-level docs such as `docs/BACKLOG.md`, `llm-last-mile/**`, and
-     `FSE_PRE_PLANNING_*` into:
+   - Start with root-level and historical docs such as `llm-last-mile/**` and
+     `FSE_PRE_PLANNING_*`.
+   - Also classify in-progress `docs/project_management/**` references that are outside
+     `packs/**` into:
      - intentional historical notes
      - blockers that still need rewrites
 2. Re-run the repo-wide reference scan after those rewrites.

@@ -65,7 +65,7 @@ Keep concise, actionable, and security-focused.
   - Acceptance: parity with `policy global show` UX; message is shown only when a workspace override applies; docs/help updated if needed.
 
 - **P1 – World-sync continuation (internal git v2: per-command history + compaction)**
-  - Context: `docs/project_management/packs/active/world-sync/` implements host-only `workspace checkpoint`/`workspace rollback` via `.substrate/git/repo.git/` and explicitly does not implement the richer internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
+  - Context: the current workspace-sync implementation provides host-only `workspace checkpoint`/`workspace rollback` via `.substrate/git/repo.git/` and explicitly does not implement the richer internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
   - Work:
     - Record per-command internal git commits for filesystem-mutating commands and persist a mapping (trace span / command id ↔ internal git commit) for review/debug.
     - Add session/checkpoint tagging semantics and user-facing UX for undo/rollback at multiple resolutions (command / checkpoint / session).

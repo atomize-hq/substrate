@@ -182,7 +182,7 @@ Rules:
 
 The implementation and verification surfaces for this contract are expected to stay aligned across:
 
-- `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md`
+- `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - the Unified Agent API capability, extension, run-protocol, and event-envelope specs cited by
   ADR-0041
 - the built-in backend capability and session-handle tests cited by the seam-local schema spec

@@ -67,5 +67,5 @@ The later execution slices must keep the runtime/parity contract aligned across 
 - `crates/world-service/tests/socket_activation.rs`
 - `crates/transport-api-types/src/lib.rs`
 - `crates/transport-api-client/src/lib.rs`
-- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`
+- `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - `docs/WORLD.md`
