@@ -251,6 +251,8 @@ The shell manages transport detection automatically. The only knobs you should n
 - `SUBSTRATE_WORLD_NETFILTER_ENABLE=1`: Host-side input for `scripts/mac/lima-warm.sh`; writes
   `WORLD_NETFILTER_ENABLE=1` into the guest `substrate-world-service.service` unit so requested
   netfilter enforcement can be honored.
+- There are no macOS-only transport override flags in the supported operator surface; transport
+  selection follows the built-in fallback chain automatically.
 
 For a quick guest-env check without reprovisioning, run:
 

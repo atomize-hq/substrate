@@ -4,7 +4,7 @@ This directory is scaffolding: it is intended to hold developer-facing notes abo
 
 Existing related docs (top-level):
 - `docs/WORLD.md`
-- `docs/cross-platform/transport_parity_design.md`
+- `docs/internals/world/transport-parity.md`
 
 Additional internal docs:
 - `docs/internals/world/workspace_sync_filesystem_model.md`

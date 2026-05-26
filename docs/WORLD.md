@@ -304,7 +304,7 @@ Notes
   - The shell probes `/v1/capabilities`; if stale socket is found, it removes it.
   - If the agent isn’t running, the shell attempts to spawn it (Linux dev flow: `target/debug/world-service`).
   - macOS invokes the Lima backend ensure path to boot the VM and wire up its tunnel.
-  - Windows/WSL helper flows are intentionally fail-closed in this slice; see `docs/cross-platform/wsl_world_setup.md`.
+  - Windows/WSL helper flows are intentionally fail-closed in this slice; see `docs/reference/world/platforms/windows-wsl-setup.md`.
 - Fallback
   - With `world_fs.require_world=false`, exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
   - With `world_fs.require_world=true`, world routing failures are treated as hard errors (no host fallback).

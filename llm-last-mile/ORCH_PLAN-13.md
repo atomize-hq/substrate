@@ -507,7 +507,7 @@ Owned files:
 - [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
 - [docs/INSTALLATION.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/INSTALLATION.md)
 - [docs/CONFIGURATION.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/CONFIGURATION.md)
-- [docs/cross-platform/wsl_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/wsl_world_setup.md)
+- [docs/reference/world/platforms/windows-wsl-setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/platforms/windows-wsl-setup.md)
 
 Forbidden files:
 

@@ -61,7 +61,7 @@ open_remediations: []
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/smoke.sh`
   - `docs/reference/config/world.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
   - `docs/reference/world/verification/netfilter_enforcement.md`
 - **Verification**:
   - cross-seam regression coverage for config/routing/doctor invariants

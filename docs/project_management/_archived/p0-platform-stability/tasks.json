@@ -391,7 +391,7 @@
       "description": "Re-run `pwsh -File scripts/windows/wsl-warm.ps1 -WhatIf` on a Windows host with PowerShell 7 to capture the socket-activation provisioning dry-run that was skipped on Linux.",
       "references": [
         "scripts/windows/wsl-warm.ps1",
-        "docs/cross-platform/wsl_world_setup.md",
+        "docs/reference/world/platforms/windows-wsl-setup.md",
         "docs/INSTALLATION.md#windows",
         "docs/project_management/_archived/next/p0-platform-stability/session_log.md"
       ],

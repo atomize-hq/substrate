@@ -83,7 +83,7 @@ Checklist:
 - **Files**:
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/smoke.sh`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
   - `docs/reference/world/verification/netfilter_enforcement.md`
 - **Thread/contract refs**:
   - `THR-03`
