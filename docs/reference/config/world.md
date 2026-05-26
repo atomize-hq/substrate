@@ -104,7 +104,7 @@ Controls whether Substrate forwards a small allowlist of host environment variab
 
 See:
 - Full configuration reference (including env forwarding contract): `docs/CONFIGURATION.md`
-- Planning contract (host-visible hardening): `docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH0-spec.md`
+- This page is the stable host-visible hardening reference.
 
 ### Hardened worlds: `$HOME` is scratch (ephemeral)
 

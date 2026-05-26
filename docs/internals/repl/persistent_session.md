@@ -4,8 +4,9 @@ Substrate’s world-first REPL uses the world-service WebSocket `/v1/stream` “
 protocol (v1) to execute interactive commands while persisting a small amount of state across
 commands (not a long-lived login shell).
 
-This doc is intentionally implementation-focused. For the authoritative project plan/specs, see
-`docs/project_management/_archived/world-first-repl-persistent-pty/`.
+This doc is intentionally implementation-focused and is the stable internal reference for the
+world-first persistent-session REPL behavior that was previously documented only in planning and
+archived pack artifacts.
 
 ## Mental Model
 

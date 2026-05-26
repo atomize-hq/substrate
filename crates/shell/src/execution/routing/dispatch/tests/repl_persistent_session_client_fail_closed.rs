@@ -1,9 +1,7 @@
 //! C2-test: fail-closed host-side persistent session client protocol handling.
 //!
-//! Spec:
-//! - docs/project_management/next/world-first-repl-persistent-pty/C2-spec.md
-//! - docs/project_management/next/world-first-repl-persistent-pty/PROTOCOL.md
-//! - docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md
+//! Reference:
+//! - docs/internals/repl/persistent_session.md
 
 use serde_json::json;
 use world_api::{

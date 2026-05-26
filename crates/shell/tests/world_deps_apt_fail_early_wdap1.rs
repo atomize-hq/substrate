@@ -48,9 +48,9 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
     );
     assert!(
         reference_readme.contains(
-            "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md"
+            "docs/reference/world/deps/provisioning.md"
         ),
-        "expected docs/reference/world/deps/README.md to link to the WDAP1 contract"
+        "expected docs/reference/world/deps/README.md to link to the stable provisioning contract"
     );
     assert!(
         reference_readme.contains("substrate world enable --provision-deps"),
@@ -68,35 +68,13 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
     );
     assert!(
         internals.contains(
-            "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md"
+            "docs/reference/world/deps/provisioning.md"
         ),
-        "expected docs/internals/world/deps.md to link to the WDAP1 contract"
+        "expected docs/internals/world/deps.md to link to the stable provisioning contract"
     );
     assert!(
         internals.contains("substrate world enable --provision-deps"),
         "expected docs/internals/world/deps.md to mention the provisioning workflow"
-    );
-
-    let upstream_contract = read_repo_file(
-        "docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md",
-    );
-    assert!(
-        upstream_contract.contains("#### substrate world deps current install <item_name...>"),
-        "expected upstream contract doc to include the install heading"
-    );
-    assert!(
-        upstream_contract.contains("#### substrate world deps current sync [--dry-run] ..."),
-        "expected upstream contract doc to include the sync heading"
-    );
-    assert!(
-        upstream_contract.contains(
-            "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md"
-        ),
-        "expected upstream contract doc to link to the WDAP1 contract"
-    );
-    assert!(
-        upstream_contract.contains("substrate world enable --provision-deps"),
-        "expected upstream contract doc to mention the provisioning remediation"
     );
 
     let world_doc = read_repo_file("docs/WORLD.md");
@@ -110,9 +88,9 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
     );
     assert!(
         world_doc.contains(
-            "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md"
+            "docs/reference/world/deps/provisioning.md"
         ),
-        "expected docs/WORLD.md to link to the WDAP1 contract"
+        "expected docs/WORLD.md to link to the stable provisioning contract"
     );
 
     let configuration = read_repo_file("docs/CONFIGURATION.md");
@@ -122,9 +100,9 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
     );
     assert!(
         configuration.contains(
-            "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md"
+            "docs/reference/world/deps/provisioning.md"
         ),
-        "expected docs/CONFIGURATION.md to link to the WDAP1 contract"
+        "expected docs/CONFIGURATION.md to link to the stable provisioning contract"
     );
     assert!(
         configuration.contains("substrate world enable --provision-deps"),
@@ -142,21 +120,19 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
     );
     assert!(
         commands.contains(
-            "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md"
+            "docs/reference/world/deps/provisioning.md"
         ),
-        "expected docs/COMMANDS.md to link to the WDAP1 contract"
+        "expected docs/COMMANDS.md to link to the stable provisioning contract"
     );
 
-    let wdap1_contract = read_repo_file(
-        "docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md",
-    );
+    let wdap1_contract = read_repo_file("docs/reference/world/deps/provisioning.md");
     assert!(
         wdap1_contract.contains("unsupported on Windows"),
-        "expected the WDAP1 contract to preserve the Windows runtime guidance"
+        "expected the stable provisioning contract to preserve the Windows runtime guidance"
     );
     assert!(
         wdap1_contract.contains("Substrate will not mutate the host OS"),
-        "expected the WDAP1 contract to preserve the Linux host-native runtime guidance"
+        "expected the stable provisioning contract to preserve the Linux host-native runtime guidance"
     );
 }
 

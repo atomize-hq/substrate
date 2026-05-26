@@ -5,8 +5,7 @@
 The Substrate Trace module (`crates/trace`) provides comprehensive span-based tracing for command execution across the Substrate ecosystem. It captures detailed execution context, policy decisions, and system state to enable command replay, security auditing, and graph-based analysis of command relationships.
 
 Canonical trace schema/correlation vocabulary (Phase 8 cross-cutting spines for LLM/agents/router/workflows):
-- Source of truth: `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md` for the pack-level schema and `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` for the ADR decision record.
-- Phase 8 registry/progress: `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
+- Source of truth: `docs/internals/trace/schema.md` for stable schema details and `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` for the ADR decision record.
 
 ### Key Features
 
@@ -127,7 +126,7 @@ The current runtime already lands these fields on completion spans:
 
 ### World Process Telemetry (`world_process_*`)
 
-`world_process_*` is the canonical subprocess exec/exit telemetry family introduced by ADR-0028. Linux-backed executions emit these records; on other platforms, the contract is degrade-only and is summarized through shell completion fields such as `process_events_status` and `process_events_reason` instead of `world_process_*` records. The authoritative schema and protocol live in [SCHEMA.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md) and [PROTOCOL.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md).
+`world_process_*` is the canonical subprocess exec/exit telemetry family introduced by ADR-0028. Linux-backed executions emit these records; on other platforms, the contract is degrade-only and is summarized through shell completion fields such as `process_events_status` and `process_events_reason` instead of `world_process_*` records. The authoritative schema and protocol now live in [schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/trace/schema.md) and [protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/trace/protocol.md).
 
 Event names:
 - `world_process_start`
