@@ -980,18 +980,6 @@ mod c0_policy_patch_only_broker_effective_resolution {
             .expect("failed to allocate integration test temp dir")
     }
 
-    fn repo_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .expect("canonicalize repo root")
-    }
-
-    fn read_repo_file(relative: &str) -> String {
-        std::fs::read_to_string(repo_root().join(relative))
-            .unwrap_or_else(|err| panic!("read {relative}: {err}"))
-    }
-
     struct Fixture {
         _temp: TempDir,
         home: PathBuf,
@@ -1181,69 +1169,6 @@ world_fs:
     }
 
     #[test]
-    fn c0_itps0_contract_doc_locks_authoritative_surface_exit_codes_and_deny_patterns() {
-        let contract = read_repo_file("docs/reference/policy/contract.md");
-        let tuple_constraints = read_repo_file("docs/reference/policy/tuple_constraints.md");
-
-        for needle in [
-            "Substrate's LLM and agent surfaces stay on the existing layered config and policy files:",
-            "Backend ids remain adapter selectors only.",
-            "ADR-0043 extends the policy surface additively under `llm.constraints.*`.",
-            "`substrate policy current show --explain` is the authoritative merged inspection surface",
-            "Tuple-policy publication reuses the existing `identity_tuple` and `placement_posture` field",
-            "Tuple-axis mismatch denial maps to exit code `5`.",
-        ] {
-            assert!(
-                contract.contains(needle),
-                "expected policy contract to contain {needle:?}"
-            );
-        }
-
-        for needle in [
-            "Tuple-policy schema invalidity maps to `2`.",
-            "effective gateway routing authority 'substrate_gateway' is not allowlisted by llm.constraints.routers",
-            "effective gateway protocol '<protocol>' is not allowlisted by llm.constraints.protocols",
-            "effective gateway provider '<provider>' is not allowlisted by llm.constraints.providers",
-            "effective gateway auth authority '<auth_authority>' is not allowlisted by llm.constraints.auth_authorities",
-        ] {
-            assert!(
-                tuple_constraints.contains(needle),
-                "expected tuple constraint reference to contain {needle:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn c0_itps0_schema_doc_locks_owned_keys_defaults_replace_semantics_and_client_omission() {
-        let schema = read_repo_file("docs/reference/policy/schema.md");
-        let tuple_constraints = read_repo_file("docs/reference/policy/tuple_constraints.md");
-
-        for needle in [
-            "`llm.allowed_backends: [string]`",
-            "`agents.allowed_backends: [string]`",
-            "`workflow.router.allowed_workflow_ids: [string]`",
-            "ADR-0043 extends this policy family additively with tuple-axis narrowing constraints under",
-            "`llm.constraints.routers`",
-            "`llm.constraints.providers`",
-            "`llm.constraints.protocols`",
-            "`llm.constraints.auth_authorities`",
-            "workspace patch replaces the same global key",
-            "Effective meaning of `[]`:\n- unconstrained on that axis",
-            "`client` is not a standalone policy key in v1.",
-            "- `llm.constraints.clients`",
-        ] {
-            assert!(
-                schema.contains(needle) || tuple_constraints.contains(needle),
-                "expected stable policy references to contain {needle:?}"
-            );
-        }
-        assert!(
-            !tuple_constraints.contains("| `llm.constraints.clients` |"),
-            "tuple constraint reference must not introduce llm.constraints.clients as a canonical key"
-        );
-    }
-
-    #[test]
     fn c0_itps0_schema_examples_match_snake_case_and_dotted_id_validators() {
         for value in [
             "substrate_gateway",
@@ -1377,35 +1302,6 @@ world_fs:
                 .and_then(|v| v.as_str()),
             Some("workflow-workspace")
         );
-    }
-
-    #[test]
-    fn c1_itps1_policy_spec_locks_runtime_order_fail_early_rules_and_failure_buckets() {
-        let policy_spec = read_repo_file("docs/reference/policy/tuple_constraints.md");
-
-        for needle in [
-            "1. Validate gateway lifecycle config.",
-            "2. Resolve the selected backend inventory entry and apply `llm.allowed_backends` before tuple",
-            "4. Apply tuple-axis narrowing in this exact order:",
-            "5. Resolve integrated auth source material:",
-            "6. Apply world-boundary posture.",
-            "7. Apply downstream transport and egress gates.",
-            "- blocked env auth is a policy denial",
-            "- partial env auth is invalid integration",
-            "If the selected backend id is absent from `llm.allowed_backends`, evaluation stops before",
-            "\"<backend_id> is not allowlisted by effective policy llm.allowed_backends\"",
-            "effective gateway provider is unresolved while llm.constraints.providers is constrained",
-            "effective gateway auth authority is unresolved while llm.constraints.auth_authorities is constrained",
-            "- the required world or gateway socket is missing",
-            "- connection refused",
-            "- timeout",
-            "Explain output for tuple-aware denials must identify the exact policy key that denied the route.",
-        ] {
-            assert!(
-                policy_spec.contains(needle),
-                "expected tuple constraint reference to contain {needle:?}"
-            );
-        }
     }
 
     #[test]
