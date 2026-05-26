@@ -121,13 +121,68 @@ Curated queued draft ADR:
 
 - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
 
+## Third Cluster: Orchestration and Workflow ADRs
+
+This is the next current ADR cluster after the first contract-heavy promotion and predecessor
+cleanup. It groups the accepted execution/trace contracts that are already implemented plus the
+active queued orchestration/workflow follow-ons that still need restatement before landing.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0017 | `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` | `stable_keeper` | `implemented` | Accepted and materially implemented in REPL/output-routing behavior; still used as a live foundation for orchestration and trace-related work. |
+| ADR-0028 | `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` | `stable_keeper` | `implemented` | Accepted and implemented through the canonical tracing stack and stable trace internals docs. |
+| ADR-0047 | `docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md` | `stable_keeper` | `draft_but_implemented` | Its durable host-session and terminal-delivery posture is already treated as current runtime truth and backed by runtime/test anchors. |
+| ADR-0021 | `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md` | `stable_keeper` | `still_draft` | Still queued architectural input for a future workflow runtime; not implemented and should remain draft. |
+| ADR-0022 | `docs/project_management/adrs/draft/ADR-0022-forge-agent-loop-as-workflow-node.md` | `stable_keeper` | `still_draft` | Still queued as a workflow-node derivative of the broader workflow-engine direction. |
+| ADR-0026 | `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md` | `stable_keeper` | `still_draft` | Queued toolbox work that still needs a rewrite before implementation; active draft, not history. |
+| ADR-0029 | `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md` | `stable_keeper` | `still_draft` | Queued host-router/service direction that remains active architectural input but not landed behavior. |
+| ADR-0044 | `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md` | `stable_keeper` | `still_draft` | Queued successor Agent Hub contract that should remain draft until the orchestration/session stack is restated and landed. |
+| ADR-0045 | `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md` | `stable_keeper` | `still_draft` | Queued toolbox successor contract that depends on the surrounding orchestration and identity work. |
+
+## Promoted In This Slice
+
+The following curated implemented ADRs now exist under `docs/adr/implemented/`:
+
+- `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
+- `docs/adr/implemented/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
+
+The following curated draft ADRs now exist under `docs/adr/draft/`:
+
+- `docs/adr/draft/ADR-0021-substrate-workflow-engine.md`
+- `docs/adr/draft/ADR-0022-forge-agent-loop-as-workflow-node.md`
+- `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
+- `docs/adr/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+- `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+- `docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+
+## Fourth Cluster: Remaining Current ADR Tail
+
+This tail slice captures the remaining current non-provisioning ADRs that still matter after the
+contract-heavy, predecessor, and orchestration/workflow clusters were promoted.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0016 | `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` | `stable_keeper` | `draft_but_implemented` | World-first REPL semantics are already implemented and still anchor later output-routing and tracing work, so this belongs in the implemented tree despite the legacy draft label. |
+| ADR-0019 | `docs/project_management/adrs/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md` | `stable_keeper` | `still_draft` | Still queued UX work around config visibility and scope messaging; active input, not landed behavior. |
+| ADR-0020 | `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md` | `stable_keeper` | `still_draft` | Still queued architecture for full profile snapshots and surface scoping; not implemented and should remain draft. |
+
+## Promoted In This Slice
+
+The following curated implemented ADR now exists under `docs/adr/implemented/`:
+
+- `docs/adr/implemented/ADR-0016-world-first-repl-persistent-pty.md`
+
+The following curated draft ADRs now exist under `docs/adr/draft/`:
+
+- `docs/adr/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+- `docs/adr/draft/ADR-0020-profiles-config-policy-snapshots.md`
+
 ## Next Resume Slice
 
-Live-current prerequisite repointing for the first promoted cluster is now complete. Next,
-continue with:
+The remaining current ADR tail is now classified and promoted. Next, continue with:
 
-1. classify and promote the next current ADR cluster
-2. treat the orchestration / workflow ADRs, including queued toolbox work around ADR-0026, as the
-   next likely cluster rather than returning to the superseded predecessor set
-3. keep provisioning ADRs `ADR-0030` and `ADR-0033` separate until that narrower cluster is
-   explicitly curated
+1. keep provisioning ADRs `ADR-0030` and `ADR-0033` as the next explicit curation slice
+2. after that, narrow any remaining `docs/project_management/**` dependency surface that still
+   points stable readers at retiring namespaces
+3. do not reopen already-curated ADR clusters unless new stable references are discovered

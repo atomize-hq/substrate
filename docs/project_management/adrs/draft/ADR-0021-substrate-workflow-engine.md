@@ -5,6 +5,12 @@
 - Date (UTC): 2026-02-03
 - Owner(s): Substrate maintainers
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0021-substrate-workflow-engine.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/workflow-engine/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -24,10 +30,10 @@
 - Impact Map: `docs/project_management/_archived/next/workflow-engine/impact_map.md` (not created; ADR draft phase)
 - Manual Playbook: `docs/project_management/_archived/next/workflow-engine/manual_testing_playbook.md` (not created; ADR draft phase)
 - Dependency foundations (must remain compatible):
-  - Trace + event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-  - Output routing + attribution: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - Router daemon (workflow triggers, queues, cross-workspace): `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
-  - Host orchestration durable session and inbox contract: `docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
+  - Trace + event foundations: `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - Output routing + attribution: `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - Router daemon (workflow triggers, queues, cross-workspace): `docs/adr/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+  - Host orchestration durable session and inbox contract: `docs/adr/implemented/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
   - Config/policy surface (no new roots): `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
@@ -39,9 +45,9 @@ ADR_BODY_SHA256: 0e7a75f2761d8bab7aa43ea95c05e6ab5eed4da516d7c1fdcce7c489a0e305f
   - New: Substrate can run a user-defined DAG workflow (YAML/JSON) made of heterogeneous nodes (command execution, sub-workflows, composite nodes like Forge) while emitting a single traceable workflow run with per-node spans and replay hooks.
   - Why: make multi-step automation observable/replayable under the same policy+trace model, and provide a stable substrate for “agentic workflows” without coupling to any specific agent framework.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md#L1`
+    - `docs/adr/draft/ADR-0021-substrate-workflow-engine.md#L1`
     - `docs/project_management/_archived/next/workflow-engine/decision_register.md`
-    - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
+    - `docs/adr/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
 
 ## Problem / Context
 - Substrate already provides secure execution, policy enforcement, and trace/replay, but it does not provide a native workflow graph runner.

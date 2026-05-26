@@ -43,20 +43,20 @@
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - Profiles (future; must remain compatible):
-  - `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
+  - `docs/adr/draft/ADR-0020-profiles-config-policy-snapshots.md`
 - Identity / tuple follow-ons (additive; must remain compatible):
   - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
   - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Current successor ADRs that consume this surface:
   - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
-  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+  - `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Historical predecessor ADRs (superseded semantically; useful as origin context only):
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
-  - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+  - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
 - Global JSON mode plan (separate track; do not duplicate):
   - `docs/project_management/packs/draft/json-mode/json_mode_plan.md`
 

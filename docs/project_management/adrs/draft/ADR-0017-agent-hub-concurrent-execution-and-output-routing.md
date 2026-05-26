@@ -6,6 +6,12 @@
 - Date (UTC): 2026-01-25
 - Owner(s): Substrate maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
@@ -40,12 +46,12 @@
 - Phase 8 cross-cutting registry (sequencing umbrella):
   - `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Related ADRs:
-  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/adr/implemented/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
   - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
   - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
-  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+  - `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Historical context:
   - `docs/project_management/_archived/p0-agent-hub-isolation-hardening/`
 - Grounding code references:
@@ -68,9 +74,9 @@ ADR_BODY_SHA256: f0d3b640100a78346549730cb1bb9a2051e2875038315f4f7e1b0ada4cd52ff
     - Structured agent events are rendered via a structured output path and are buffered during PTY passthrough to avoid corrupting TUIs.
   - Why: Agent hub orchestration will run multiple agent CLIs concurrently through adapter-backed, capability-driven execution paths. Without an output contract, concurrent outputs can corrupt terminal state or be mis-attributed, undermining usability and auditability.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md#L78` (this ADR: contract)
+    - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md#L1` (this ADR: contract)
     - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md#L12` (DR-0001: output classes)
-    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md#L89` (PTY passthrough contract)
+    - `docs/adr/implemented/ADR-0016-world-first-repl-persistent-pty.md#L1` (PTY passthrough contract)
     - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
     - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
     - `crates/shell/src/repl/async_repl.rs` (concurrent structured printing today)
@@ -167,7 +173,7 @@ Structured agent events are serialized as a top-level envelope with stable corre
 Authoritative shape and field requirements live in:
 
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008, DR-0009)
-- Phase 8 correlation vocabulary (canonical field names): `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+- Phase 8 correlation vocabulary (canonical field names): `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 Envelope fields (top-level; no nesting required for joinability):
 
@@ -303,7 +309,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
 - Prerequisite integration task IDs: none (ADR-0016 is already implemented; this ADR is self-contained).
 - Dependencies:
   - Depends on ADR-0016’s PTY passthrough and out-of-band PTY output rules for the REPL.
-  - Correlation vocabulary and field names must remain consistent with `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (additive-only alignment).
+  - Correlation vocabulary and field names must remain consistent with `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md` (additive-only alignment).
 
 ## Security / Safety Posture
 

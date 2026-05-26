@@ -5,6 +5,12 @@
 - Date (UTC): 2026-02-05
 - Owner(s): Spenser McConnell (Substrate); Shell maintainers
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/host_event_bus_router_daemon/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -16,10 +22,10 @@
 ## Related Docs
 - Decision Register: `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md`
 - Trace/event foundations:
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - Host orchestration session compatibility:
-  - `docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
+  - `docs/adr/implemented/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
 - FS path semantics & allow/deny matching:
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Config/policy layering model:
@@ -38,9 +44,9 @@ ADR_BODY_SHA256: af9cb004268a0a6cbf00a7981662d531b51f11c2afca77201becae5583feb9d
   - New: A host daemon tails the canonical trace stream and produces policy-gated requests/actions when routing rules match, including cross-workspace routing using an explicit workspace registry under `SUBSTRATE_HOME`.
   - Why: Enable reliable “when A completes, trigger B” workflows and selective file-change triggers without introducing an external broker or bypassing workspace policy boundaries.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
+    - `docs/adr/draft/ADR-0029-host-event-bus-and-router-daemon.md#L1`
     - `docs/project_management/_archived/next/host_event_bus_router_daemon/decision_register.md`
-    - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md#L1`
+    - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md#L1`
     - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md#L1`
 
 ## Problem / Context

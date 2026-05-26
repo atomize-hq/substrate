@@ -30,8 +30,8 @@ clarification layer that precedes later Agent Hub updates and any additive confi
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md`
 - Foundational output/event and trace contracts:
-  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
   - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
@@ -39,7 +39,7 @@ clarification layer that precedes later Agent Hub updates and any additive confi
   - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Follow-on agent orchestration ADRs:
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
-  - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+  - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
 - Supporting evidence:
   - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0005-present-a-single-backend-identity-to-substrate.md`
   - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0006-preserve-an-in-world-compatible-deployment-boundary.md`
@@ -57,8 +57,8 @@ ADR_BODY_SHA256: 51fd84175744539955168c2a9aa657d1fc69c9923a9a84295c22d8697847df2
   - Why: A single backend id is not enough to explain what is actually happening when a host client is pointed at `substrate_gateway`, when the gateway fans out to multiple providers, or when subscription-based auth and API-key auth both exist in the same ecosystem.
   - Links:
     - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
-    - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-    - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+    - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+    - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
     - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
     - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 

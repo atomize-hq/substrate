@@ -6,6 +6,12 @@ Status: Proposed
 
 Owners: Substrate maintainers
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: 5ba8ddfe1acc5eee1ce41582e50bac5f2501cfd3734f47aa5a40c02b9b0a9ca5

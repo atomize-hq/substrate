@@ -61,7 +61,7 @@ The decision is materially implemented and enforced through:
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
-  - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+  - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
 
 ## Historical Note
 

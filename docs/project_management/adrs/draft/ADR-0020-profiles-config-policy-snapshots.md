@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-30
 - Owner(s): Shell maintainers
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0020-profiles-config-policy-snapshots.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directories (impacted):
   - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
@@ -19,7 +25,7 @@
 - Env override taxonomy:
   - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 - World-first REPL (motivation for surface scoping + drift messaging):
-  - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
+  - `docs/adr/implemented/ADR-0016-world-first-repl-persistent-pty.md`
 
 ## Executive Summary (Operator)
 
@@ -31,7 +37,7 @@ ADR_BODY_SHA256: 954c6e25ffe2599ff28304e9a842cae35f5806b60450ee221e4f2fce4909e93
   - Why: provides deterministic, intent-aligned behavior for humans vs agents without multiplying ad-hoc override knobs; improves debuggability by making “what is active?” explicit.
   - Links:
     - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-    - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
+    - `docs/adr/implemented/ADR-0016-world-first-repl-persistent-pty.md`
 
 ## Problem / Context
 - Substrate is used by both:

@@ -5,6 +5,12 @@
 - Date (UTC): 2026-05-09
 - Owner(s): Spenser McConnell (Substrate)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/host-orchestrator-durable-session-and-parked-resumable-ownership/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -29,8 +35,8 @@ This ADR is a lifecycle correction for host orchestration. It does not replace t
   - `crates/shell/src/execution/agent_runtime/state_store.rs`
   - `crates/shell/src/repl/async_repl.rs`
 - Future-compatible workflow/router correlation context:
-  - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
-  - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
+  - `docs/adr/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+  - `docs/adr/draft/ADR-0021-substrate-workflow-engine.md`
   - `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Existing proof surfaces:
   - `crates/shell/tests/agent_public_control_surface_v1.rs`

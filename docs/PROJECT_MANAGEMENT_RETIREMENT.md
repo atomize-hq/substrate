@@ -82,6 +82,12 @@ Still remaining before the atomic top-level `packs/**` removal:
     ADR-0023, ADR-0024, and ADR-0025, plus queued draft ADR-0026
   - ADR-0023, ADR-0024, and ADR-0025 are now curated into `docs/adr/historical/`
   - ADR-0026 is now curated into `docs/adr/draft/` as queued work rather than historical-only
+  - the orchestration/workflow batch is now curated:
+    - implemented ADRs: ADR-0017, ADR-0028, ADR-0047
+    - queued draft ADRs: ADR-0021, ADR-0022, ADR-0026, ADR-0029, ADR-0044, ADR-0045
+  - the remaining current ADR tail is now curated:
+    - implemented ADR: ADR-0016
+    - queued draft ADRs: ADR-0019, ADR-0020
 
 Validation already completed for the finished slices:
 - `cargo test -p substrate-broker --lib -- --nocapture`
@@ -131,12 +137,24 @@ Validation already completed for the finished slices:
   - ADR-0040
   - ADR-0041
 - scoped scans over the current ADR consumer set no longer show old first-cluster draft ADR paths
+- curated implemented ADR files now also exist for:
+  - ADR-0016
+  - ADR-0017
+  - ADR-0028
+  - ADR-0047
 - curated historical ADR files now exist for:
   - ADR-0023
   - ADR-0024
   - ADR-0025
 - curated draft ADR files now exist for:
+  - ADR-0019
+  - ADR-0020
   - ADR-0026
+  - ADR-0021
+  - ADR-0022
+  - ADR-0029
+  - ADR-0044
+  - ADR-0045
 
 ## Current Dependency Classes
 
@@ -377,17 +395,26 @@ Completed in this slice:
 - promoted that predecessor cluster into `docs/adr/historical/`
 - reclassified ADR-0026 as queued and moved it into `docs/adr/draft/`
 - added updated relocation notes on the retained predecessor and queued draft ADRs
+- classified the orchestration/workflow ADR batch
+- promoted implemented ADRs `ADR-0017`, `ADR-0028`, and `ADR-0047` into `docs/adr/implemented/`
+- promoted queued ADRs `ADR-0021`, `ADR-0022`, `ADR-0026`, `ADR-0029`, `ADR-0044`, and
+  `ADR-0045` into `docs/adr/draft/`
+- added relocation notes on the retained project-management copies for that batch
+- classified the remaining current ADR tail
+- promoted implemented ADR `ADR-0016` into `docs/adr/implemented/`
+- promoted queued ADRs `ADR-0019` and `ADR-0020` into `docs/adr/draft/`
+- repointed current ADR references from `ADR-0016` and `ADR-0020` toward the curated namespace
 
 ## Recommended Resume Order
 
 Use this order in the next session:
 
 1. Reclassify and promote the next current ADR cluster.
-   - The likely next slice is the orchestration / workflow cluster, including queued ADR-0026,
-     not the already-curated historical predecessor ADRs.
-2. Keep the provisioning ADR decision around ADR-0030 and ADR-0033 as its own narrower slice.
-3. Continue narrowing the remaining `docs/project_management/**` dependency surface after the
-   current ADR cluster decisions stop pointing stable readers at the retiring namespace.
+   - The next explicit slice is the provisioning ADR pair `ADR-0030` and `ADR-0033`.
+2. Continue narrowing the remaining `docs/project_management/**` dependency surface after the
+   ADR registry stops pointing stable readers at the retiring namespace.
+3. Do not reopen the completed current ADR clusters unless a remaining stable consumer still points
+   at the old copies.
 
 ## Resume Notes
 
@@ -396,8 +423,10 @@ Use this order in the next session:
 - Live ADR-to-ADR prerequisite repointing is complete for the current consumer set, and the
   superseded predecessor cluster has been moved into `docs/adr/historical/` except ADR-0026,
   which is now treated as queued draft work under `docs/adr/draft/`.
-- The next correct move is classification of the next current ADR cluster, not another broad
-  stable-doc extraction pass or a return to the predecessor cluster.
+- The orchestration/workflow batch is now classified and promoted.
+- The remaining current ADR tail is now classified and promoted.
+- The next correct move is the dedicated provisioning ADR slice (`ADR-0030` / `ADR-0033`), not
+  another broad stable-doc extraction pass or a return to already-curated clusters.
 - Treat the repo-wide `docs/project_management/**` cleanup as subordinate to that ADR curation
   milestone; otherwise you risk repeatedly repointing docs toward a namespace that is still meant
   to be retired.

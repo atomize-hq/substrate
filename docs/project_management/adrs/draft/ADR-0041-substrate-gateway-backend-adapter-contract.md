@@ -31,8 +31,8 @@ This ADR is a successor to ADR-0024 and should be read as a contract clarificati
   - `docs/reference/policy/contract.md`
   - `docs/reference/policy/schema.md`
 - Output / event / trace foundations:
-  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway evidence:
   - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0005-present-a-single-backend-identity-to-substrate.md`
   - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0006-preserve-an-in-world-compatible-deployment-boundary.md`

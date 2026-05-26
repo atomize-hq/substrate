@@ -5,6 +5,12 @@
 - Date (UTC): 2026-02-03
 - Owner(s): Substrate maintainers
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0022-forge-agent-loop-as-workflow-node.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/forge/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -23,10 +29,10 @@
 - Impact Map: `docs/project_management/_archived/next/forge/impact_map.md` (not created; ADR draft phase)
 - Manual Playbook: `docs/project_management/_archived/next/forge/manual_testing_playbook.md` (not created; ADR draft phase)
 - Dependency foundations (must remain compatible):
-  - Workflow engine (node executor hook): `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
+  - Workflow engine (node executor hook): `docs/adr/draft/ADR-0021-substrate-workflow-engine.md`
   - LLM gateway front door: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - Backend/provider engines: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
-  - Trace/event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - Trace/event foundations: `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
   - Config/policy surface (no new roots): `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
@@ -38,8 +44,8 @@ ADR_BODY_SHA256: 22f105ab816130a537072cd0fca3a75dec6c106edd965fc161ad57b34d1f22f
   - New: A workflow can include a `forge.run` node that performs bounded iterative refinement (execute → critique → refine → review with retries) under explicit budgets, emitting nested spans/events for observability.
   - Why: keep the general workflow engine simple (DAG scheduling) while enabling advanced looping/leadership behavior as a reusable composite node.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0022-forge-agent-loop-as-workflow-node.md#L1`
-    - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md#L1`
+    - `docs/adr/draft/ADR-0022-forge-agent-loop-as-workflow-node.md#L1`
+    - `docs/adr/draft/ADR-0021-substrate-workflow-engine.md#L1`
     - `docs/project_management/_archived/next/forge/decision_register.md`
 
 ## Problem / Context

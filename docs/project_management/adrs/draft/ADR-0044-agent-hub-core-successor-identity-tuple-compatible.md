@@ -5,6 +5,12 @@
 - Date (UTC): 2026-04-03
 - Owner(s): Spenser McConnell (Substrate)
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/`
 - This ADR is docs-only; no pack files are created by this change.
@@ -25,15 +31,15 @@ This ADR supersedes the older backend-id-centric Agent Hub framing in ADR-0025 a
 - Config/policy foundation:
   - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Event and trace foundations:
-  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
   - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Follow-on orchestration surface:
-  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+  - `docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Historical toolbox predecessor:
-  - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+  - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
 
 ## Executive Summary (Operator)
 
@@ -55,7 +61,7 @@ ADR_BODY_SHA256: d9b8f16acf256bc582ac1cfaaa23cd75f48bc990f7ebe221ee6406763beaea5
   - Links:
     - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
     - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-    - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+    - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 ## Problem / Context
 - ADR-0025 captured the first version of Agent Hub, but that framing predated the identity tuple clarified in ADR-0042 and the policy split clarified in ADR-0043.

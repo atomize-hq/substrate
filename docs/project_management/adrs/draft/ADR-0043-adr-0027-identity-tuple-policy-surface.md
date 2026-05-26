@@ -38,14 +38,14 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md`
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md`
 - Event/trace foundations:
-  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
   - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Follow-on agent orchestration ADRs:
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
-  - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+  - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
 
 ## Executive Summary (Operator)
 

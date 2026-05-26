@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-21
 - Owner(s): Substrate maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0016-world-first-repl-persistent-pty.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/world-first-repl-persistent-pty/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

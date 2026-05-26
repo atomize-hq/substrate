@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-29
 - Owner(s): Shell + World-Agent + World runtime
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/active/world_process_exec_tracing_parity/`
 - Intended branch name(s): `feat/world-process-exec-tracing-parity`

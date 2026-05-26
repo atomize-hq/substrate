@@ -5,6 +5,12 @@
 - Date (UTC): 2026-04-03
 - Owner(s): Spenser McConnell (Substrate)
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/orchestration-toolbox-mcp/`
 - This ADR is docs-only; no pack files are created by this change.
@@ -17,18 +23,18 @@
 This ADR supersedes the older orchestration-toolbox framing in ADR-0026 and should be read together with the tuple, gateway, and Agent Hub successor ADRs.
 
 - Superseded ADR:
-  - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+  - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
 - Identity tuple and deployment posture:
   - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - Tuple-axis policy surface:
   - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Agent Hub successor:
-  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 - Config/policy foundation:
   - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Event and trace foundations:
-  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
   - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
@@ -42,9 +48,9 @@ ADR_BODY_SHA256: 41a4e1478057cd1a67695c503531f4fbcab3f4d08e2b3d896b7bfd8327f0e7d
   - New: toolbox calls are treated as control-plane reads with explicit `client`, `router`, `protocol`, and `backend_id` fields; v1 exposes no mutating tools and no nested LLM semantics.
   - Why: operators need a read-only toolbox that is easy to audit, fail closed, and impossible to confuse with a second execution plane.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+    - `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
     - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-    - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+    - `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 
 ## Problem / Context
 - Substrate needs a host-scoped orchestration toolbox so the orchestrator agent can inspect policy, sessions, traces, and graph views without bespoke SDK coupling.
