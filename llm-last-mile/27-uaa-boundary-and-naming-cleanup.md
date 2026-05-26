@@ -326,7 +326,7 @@ Primary anchors:
 - [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:169)
 - [docs/REPLAY.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/REPLAY.md:82)
 - [docs/reference/env/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/env/contract.md:63)
-- [docs/manual_verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/manual_verification/linux_world_socket.md:12)
+- [docs/reference/world/verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/verification/linux_world_socket.md:12)
 - [docs/cross-platform/mac_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/mac_world_setup.md:108)
 - [docs/cross-platform/wsl_world_troubleshooting.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/wsl_world_troubleshooting.md:163)
 - [ADR-0042](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md:127)
@@ -533,7 +533,7 @@ When this slice lands, the following must be updated together:
 - [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md),
 - [docs/REPLAY.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/REPLAY.md),
 - [docs/reference/env/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/env/contract.md),
-- [docs/manual_verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/manual_verification/linux_world_socket.md),
+- [docs/reference/world/verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/verification/linux_world_socket.md),
 - [docs/cross-platform/mac_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/mac_world_setup.md),
 - [docs/cross-platform/wsl_world_troubleshooting.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/wsl_world_troubleshooting.md),
 - [dist-workspace.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/dist-workspace.toml),

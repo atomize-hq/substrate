@@ -1,1 +1,0 @@
-The parent accepted the authoritative L1 integration at 42636f8eb68fe2e817d973a4896f5c35cfc5b12b, finalized the durable-state schema freeze, recorded accepted_tip_after_G2, and opened the only safe parallel window with L2 and L3 branched from that exact accepted SHA.

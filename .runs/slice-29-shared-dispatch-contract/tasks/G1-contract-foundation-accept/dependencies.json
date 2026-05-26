@@ -1,8 +1,0 @@
-{
-  "depends_on": [
-    "L0-a1-a2-contract-foundation"
-  ],
-  "unblocks": [
-    "L1-a3-durable-attach-freeze"
-  ]
-}

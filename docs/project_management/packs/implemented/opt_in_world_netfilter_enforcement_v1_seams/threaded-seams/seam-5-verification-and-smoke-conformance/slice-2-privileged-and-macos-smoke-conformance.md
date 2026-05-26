@@ -62,7 +62,7 @@ candidate_subslices: []
 - **Outcome**: the seam closeout can cite one concrete privileged verification surface instead of relying on source-only ignored tests.
 - **Files**:
   - `crates/world/src/netfilter.rs`
-  - `docs/manual_verification/netfilter_enforcement.md`
+  - `docs/reference/world/verification/netfilter_enforcement.md`
 - **Thread/contract refs**:
   - `THR-04`
   - `C-02`
@@ -84,7 +84,7 @@ Checklist:
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/smoke.sh`
   - `docs/cross-platform/mac_world_setup.md`
-  - `docs/manual_verification/netfilter_enforcement.md`
+  - `docs/reference/world/verification/netfilter_enforcement.md`
 - **Thread/contract refs**:
   - `THR-03`
   - `THR-05`

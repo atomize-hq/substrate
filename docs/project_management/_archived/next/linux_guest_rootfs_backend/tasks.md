@@ -65,7 +65,7 @@ Phase 1 `spec.md` and Phase 2 `plan.md` were loaded and accepted as the authorit
 - [ ] Task: Add Linux regression, smoke, and manual verification coverage for guest-rootfs.
   - Acceptance: Coverage proves image verification, overlay reuse/separation, readiness consistency, guest execution, full isolation, provisioning persistence, and host-native rejection; manual validation lives in normal doc/smoke surfaces rather than planning-pack artifacts.
   - Verify: `cargo test -p world -- --nocapture`; `cargo test -p world-service -- --nocapture`; `cargo test -p shell -- --nocapture`; `bash docs/project_management/_archived/next/linux_guest_rootfs_backend/smoke/linux-smoke.sh`
-  - Files: new `crates/world/tests/guest_rootfs_integration.rs`, new `crates/world-service/tests/guest_rootfs_execution.rs`, new `crates/shell/tests/world_enable_provision_deps_guest_rootfs.rs`, new `docs/project_management/_archived/next/linux_guest_rootfs_backend/smoke/linux-smoke.sh`, new `docs/manual_verification/linux_guest_rootfs.md`
+  - Files: new `crates/world/tests/guest_rootfs_integration.rs`, new `crates/world-service/tests/guest_rootfs_execution.rs`, new `crates/shell/tests/world_enable_provision_deps_guest_rootfs.rs`, new `docs/project_management/_archived/next/linux_guest_rootfs_backend/smoke/linux-smoke.sh`, new `docs/reference/world/verification/linux_guest_rootfs.md`
 
 Assumptions carried into this breakdown:
 - I assumed the implementation will introduce a dedicated `crates/world/src/guest_rootfs/` module; if the code lands in a different existing Linux-world seam, the ordering still holds.

@@ -1,1 +1,0 @@
-Review L0 against the frozen slice-29 contract criteria, integrate only the accepted lane tip, record accepted_tip_after_G1, and open L1 from that exact authoritative SHA.

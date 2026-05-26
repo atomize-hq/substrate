@@ -373,7 +373,7 @@ Template:
 
 ## [2025-12-02 18:47 UTC] Integration Agent – S1c-integ – Linux socket harness
 - Added `scripts/linux/world-socket-verify.sh`, a sudo-enabled helper that provisions the world-agent socket, captures `world doctor` + `shim-status` JSON, logs `systemctl` state, and optionally runs the uninstall script so operators can document real socket-activation runs.
-- Authored `docs/manual_verification/linux_world_socket.md` with requirements, usage, and artifact descriptions; `docs/WORLD.md` now references the helper near the existing manual verification steps.
+- Authored `docs/reference/world/verification/linux_world_socket.md` with requirements, usage, and artifact descriptions; `docs/WORLD.md` now references the helper near the existing manual verification steps.
 - Harness defaults to storing logs under `artifacts/linux/world-socket-verify-<timestamp>` so future session log entries or PRs can attach the raw JSON for the `world_socket` block.
 
 ## [2025-12-02 18:46 UTC] Integration Agent – R1b-integ – START

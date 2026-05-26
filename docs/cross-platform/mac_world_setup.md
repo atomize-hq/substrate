@@ -180,7 +180,7 @@ This conformance mode creates a temporary no-workspace fixture, sets
 
 Use `--log-dir <dir>` if you want the doctor JSON and command transcripts written to a specific
 artifact directory. For the full operator playbook, including Linux privileged verification and the
-optional named-allowlist walkthrough, see `docs/manual_verification/netfilter_enforcement.md`.
+optional named-allowlist walkthrough, see `docs/reference/world/verification/netfilter_enforcement.md`.
 
 ### Using `substrate host doctor` and `substrate world doctor`
 

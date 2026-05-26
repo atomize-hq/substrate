@@ -171,7 +171,7 @@ Deliberate boundary for later lanes:
   confirm `cap_chown` is present in the service's `CapabilityBoundingSet`/`AmbientCapabilities`
   (overlayfs copy-up may require it to preserve ownership/metadata).
 - Need to hand off a reproducible verification run? Execute `scripts/linux/world-socket-verify.sh`
-  (see `docs/manual_verification/linux_world_socket.md`) to provision the socket, capture
+  (see `docs/reference/world/verification/linux_world_socket.md`) to provision the socket, capture
   doctor/shim-status JSON, and optionally uninstall the units afterward.
 - Provisioning is idempotent; rerun the helper whenever the agent binary
   changes or the units need to be repaired. Set `SUBSTRATE_WORLD_SOCKET` to

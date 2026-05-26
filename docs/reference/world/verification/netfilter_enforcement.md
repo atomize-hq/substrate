@@ -2,7 +2,7 @@
 
 Use this playbook to verify the opt-in world netfilter contract on Linux and macOS. It is the
 operator-facing companion to the three-way gate published in
-[`world.net.filter`](../reference/config/world.md):
+[`world.net.filter`](../../config/world.md):
 
 - `world.net.filter` decides whether the host may request enforcement.
 - policy `net_allowed` decides whether the posture is allow-all, deny-all, or a restrictive allowlist.
@@ -119,7 +119,7 @@ it does not mutate repository or user configuration.
 - inspect `.world.netfilter_status.last_failure_reason`
 - if `world_netfilter_enable_present` is `false`, rerun the Lima warm step with `SUBSTRATE_WORLD_NETFILTER_ENABLE=1`
 - if `requested` is not what you expected, re-check the host gate and policy posture against the three-way gate contract in
-  [`world.md`](../reference/config/world.md)
+  [`world.md`](../../config/world.md)
 
 ## Optional manual restrictive allowlist walkthrough
 

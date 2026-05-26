@@ -1,8 +1,0 @@
-{
-  "depends_on": [
-    "P0-parent-freeze"
-  ],
-  "unblocks": [
-    "G1-contract-foundation-accept"
-  ]
-}

@@ -62,7 +62,7 @@ open_remediations: []
   - `scripts/mac/smoke.sh`
   - `docs/reference/config/world.md`
   - `docs/cross-platform/mac_world_setup.md`
-  - `docs/manual_verification/netfilter_enforcement.md`
+  - `docs/reference/world/verification/netfilter_enforcement.md`
 - **Verification**:
   - cross-seam regression coverage for config/routing/doctor invariants
   - ignored privileged Linux validation for requested isolation and deny-all behavior

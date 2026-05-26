@@ -70,7 +70,7 @@ open_remediations: []
   - `transport-api-types` tests
   - `crates/shell` tests around snapshot builder and routing decisions
   - `crates/world` tests around rule generation
-  - `docs/manual_verification` or related smoke areas
+  - `docs/reference/world/verification` or related smoke areas
 - **Verification**:
   - This seam is itself the verification surface and is now concrete enough to execute.
 - **Risks / unknowns**:

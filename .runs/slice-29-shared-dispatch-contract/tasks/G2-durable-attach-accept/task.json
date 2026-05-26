@@ -1,8 +1,0 @@
-{
-  "task_id": "G2-durable-attach-accept",
-  "status": "completed",
-  "owner": "parent",
-  "accepted_head_sha": "42636f8eb68fe2e817d973a4896f5c35cfc5b12b",
-  "started_at": "2026-05-24T18:35:32Z",
-  "completed_at": "2026-05-24T18:57:05Z"
-}
