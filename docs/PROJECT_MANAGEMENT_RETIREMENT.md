@@ -143,14 +143,18 @@ Current pack sources:
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - draft pack docs under `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/`
 
-Recommended destination:
-- absorb stable policy contract wording into `docs/reference/policy/contract.md`
-- absorb stable schema ownership into a new or expanded doc under `docs/reference/policy/`
-- keep the ADR itself in `docs/project_management/adrs/**` for historical record
+Stable destinations now in place:
+- `docs/reference/policy/contract.md`
+- `docs/reference/policy/schema.md`
+- `docs/reference/policy/tuple_constraints.md`
 
-Required follow-up:
-- rewrite `crates/broker/src/tests.rs`
-- decide which draft-pack assertions remain valid as product contract tests versus planning-process checks to delete
+Completed follow-up:
+- rewrote `crates/broker/src/tests.rs` to lock stable policy references instead of pack docs
+- deleted planning-only broker assertions that were validating slice specs, checkpoint wiring, and promotion packaging rather than product contract
+
+Remaining follow-up:
+- keep the ADRs in `docs/project_management/adrs/**` for historical record until the broader ADR namespace move is addressed
+- repoint downstream ADR and planning references as separate retirement slices rather than treating them as blockers for the stable policy reference itself
 
 ### D. Workspace sync filesystem semantics
 
@@ -196,7 +200,11 @@ Required follow-up:
 
 - any Rust test that validates product behavior by asserting current docs mention the right contract
 - any stable operator or internal doc that cites a pack path as canonical
-- gateway docs and fixture provenance that would otherwise point at deleted top-level packs
+- remaining gateway-local docs and fixture provenance that still point at deleted top-level packs
+  after the completed rewrites in:
+  - `crates/gateway/docs/foundation/**`
+  - `crates/gateway/tests/fixtures/azure_kimi/**`
+  - `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
 
 ## Atomic `packs/**` Retirement Procedure
 

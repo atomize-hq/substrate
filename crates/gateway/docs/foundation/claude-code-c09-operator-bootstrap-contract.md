@@ -23,10 +23,10 @@ It does not define:
 
 This contract is grounded in the landed basis and seam-local planning below:
 
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/seam.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/review.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/slice-1-freeze-claude-code-bootstrap-contract.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/seam.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/review.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/slice-1-freeze-claude-code-bootstrap-contract.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md`
 - `docs/foundation/azure-foundry-c07-runtime-transport-contract.md`
 - `docs/foundation/azure-foundry-c08-operator-verification-contract.md`
 - `docs/foundation/anthropic-messages-c03-contract.md`

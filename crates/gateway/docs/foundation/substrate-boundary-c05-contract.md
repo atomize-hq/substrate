@@ -23,8 +23,8 @@ It does not define:
 
 This contract is grounded in the seam-local boundary note and upstream contracts:
 
-- `docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-5-substrate-compatible-boundary/seam.md`
-- `docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-5-substrate-compatible-boundary/review.md`
+- `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-5-substrate-compatible-boundary/seam.md`
+- `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-5-substrate-compatible-boundary/review.md`
 - `docs/foundation/claude-code-mux-extension-boundary.md`
 - `docs/foundation/anthropic-messages-c03-contract.md`
 - `docs/foundation/planner-executor-c04-policy-contract.md`
@@ -81,4 +81,3 @@ Downstream revalidation is required if any of the following changes:
 - do public docs and config examples avoid planner/executor/provider identity leakage
 - are localhost and `127.0.0.1` clearly framed as development conveniences
 - do the drift guards make identity and deployment regressions explicit
-

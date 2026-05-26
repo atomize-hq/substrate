@@ -25,10 +25,10 @@ This contract is grounded in the seam-local evidence and the landed upstream bas
 
 Repo-grounded anchors:
 
-- `docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-1-azure-foundry-runtime-transport/seam.md`
-- `docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-1-azure-foundry-runtime-transport/review.md`
-- `docs/project_management/packs/active/azure-foundry-provider-transport/threading.md`
-- `docs/project_management/packs/active/azure-foundry-provider-transport/scope_brief.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-1-azure-foundry-runtime-transport/seam.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-1-azure-foundry-runtime-transport/review.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threading.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/scope_brief.md`
 - `docs/foundation/anthropic-messages-c03-contract.md`
 - `docs/foundation/planner-executor-c04-policy-contract.md`
 - `docs/foundation/substrate-boundary-c05-contract.md`

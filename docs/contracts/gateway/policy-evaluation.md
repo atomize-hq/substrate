@@ -44,6 +44,9 @@ Not defined here:
 - config schema ownership already covered elsewhere
 - `client_wiring.*` status-schema detail
 
+Tuple-axis key ownership, runtime ordering, and deny wording for `llm.constraints.*` live in
+`docs/reference/policy/tuple_constraints.md`.
+
 ## Boundary rules
 
 - fail closed when in-world execution is required and no world boundary is available

@@ -47,9 +47,7 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
         "expected docs/reference/world/deps/README.md to include the commands heading"
     );
     assert!(
-        reference_readme.contains(
-            "docs/reference/world/deps/provisioning.md"
-        ),
+        reference_readme.contains("docs/reference/world/deps/provisioning.md"),
         "expected docs/reference/world/deps/README.md to link to the stable provisioning contract"
     );
     assert!(
@@ -67,9 +65,7 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
         "expected docs/internals/world/deps.md to include the runtime fail-early heading"
     );
     assert!(
-        internals.contains(
-            "docs/reference/world/deps/provisioning.md"
-        ),
+        internals.contains("docs/reference/world/deps/provisioning.md"),
         "expected docs/internals/world/deps.md to link to the stable provisioning contract"
     );
     assert!(
@@ -87,9 +83,7 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
         "expected docs/WORLD.md to mention the request profile field"
     );
     assert!(
-        world_doc.contains(
-            "docs/reference/world/deps/provisioning.md"
-        ),
+        world_doc.contains("docs/reference/world/deps/provisioning.md"),
         "expected docs/WORLD.md to link to the stable provisioning contract"
     );
 
@@ -99,9 +93,7 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
         "expected docs/CONFIGURATION.md to include SUBSTRATE_WORLD_REQUEST_PROFILE"
     );
     assert!(
-        configuration.contains(
-            "docs/reference/world/deps/provisioning.md"
-        ),
+        configuration.contains("docs/reference/world/deps/provisioning.md"),
         "expected docs/CONFIGURATION.md to link to the stable provisioning contract"
     );
     assert!(
@@ -119,9 +111,7 @@ fn wdap1_required_docs_reference_the_contract_and_provisioning_workflow() {
         "expected docs/COMMANDS.md to document the --provision-deps flag"
     );
     assert!(
-        commands.contains(
-            "docs/reference/world/deps/provisioning.md"
-        ),
+        commands.contains("docs/reference/world/deps/provisioning.md"),
         "expected docs/COMMANDS.md to link to the stable provisioning contract"
     );
 

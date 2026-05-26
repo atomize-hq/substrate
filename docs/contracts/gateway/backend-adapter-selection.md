@@ -73,6 +73,6 @@ The implementation and verification surfaces for this contract are expected to s
 - `crates/broker/src/effective_policy.rs`
 - `crates/shell/src/execution/config_model.rs`
 - `crates/shell/src/execution/policy_model.rs`
-- `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
-- `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+- `docs/reference/policy/contract.md`
+- `docs/reference/policy/schema.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
