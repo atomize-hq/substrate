@@ -3,7 +3,7 @@ seam_id: SEAM-2
 status: landed
 closeout_version: v1
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/slice-3-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/slice-3-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
@@ -32,7 +32,7 @@ open_remediations: []
   - [gateway/config/default.example.toml](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/config/default.example.toml)
   - [gateway/config/models.example.toml](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/config/models.example.toml)
   - [gateway/src/server/mod.rs](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/server/mod.rs)
-  - [manifest.json](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/evidence/manifest.json)
+  - [manifest.json](crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/evidence/manifest.json)
   - `S1` commit `c9926ce` (`SEAM-2: complete slice-1-freeze-operator-verification-contract`)
   - `S2` commit `96f9a42` (`SEAM-2: complete slice-2-deliver-live-smoke-procedure-and-troubleshooting`)
 - **Contracts published or changed**:

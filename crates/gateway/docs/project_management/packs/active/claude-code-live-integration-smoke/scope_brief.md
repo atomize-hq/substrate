@@ -36,7 +36,7 @@ execution_horizon:
   - a reviewer can explain which artifacts prove the live path works, which artifacts are only orientation, and which failures belong to Claude Code setup versus gateway runtime/config versus Azure transport
   - the pack leaves downstream seam planners with one clear path to make the live integration executable and supportable without inventing new threading rules
 - **Constraints**:
-  - `docs/project_management/packs/active/azure-kimi-claude-gateway` and `docs/project_management/packs/active/azure-foundry-provider-transport` are closeout-backed upstream basis and must be consumed rather than re-planned
+  - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway` and `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport` are closeout-backed upstream basis and must be consumed rather than re-planned
   - `docs/foundation/azure-kimi-c02-normalized-event-contract.md`, `docs/foundation/anthropic-messages-c03-contract.md`, `docs/foundation/planner-executor-c04-policy-contract.md`, `docs/foundation/substrate-boundary-c05-contract.md`, `docs/foundation/substrate-structured-events-c06-contract.md`, `docs/foundation/azure-foundry-c07-runtime-transport-contract.md`, and `docs/foundation/azure-foundry-c08-operator-verification-contract.md` remain authoritative constraints
   - the live verification path must stay capability-oriented and preserve one logical backend identity, even when operators inspect internal routing evidence
   - the smoke path must use Claude Code through the landed Anthropic-compatible gateway route instead of provider-only bypasses

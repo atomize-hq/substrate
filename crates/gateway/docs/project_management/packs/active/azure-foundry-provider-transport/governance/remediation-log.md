@@ -41,7 +41,7 @@ related_seam: SEAM-2
 related_slice: null
 related_thread: THR-07
 related_contract: C-08
-related_artifact: docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
+related_artifact: crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
 severity: blocking
 status: resolved
 owner_seam: SEAM-2
@@ -52,6 +52,6 @@ blocked_targets:
 summary: SEAM-2 could not publish THR-07 until redacted live Azure smoke evidence existed for both Kimi routes.
 required_fix: Capture redacted live Azure `/v1/messages` evidence for both routes and publish THR-07.
 resolution_evidence:
-  - docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/evidence/manifest.json
-  - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
+  - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/evidence/manifest.json
+  - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
 ```

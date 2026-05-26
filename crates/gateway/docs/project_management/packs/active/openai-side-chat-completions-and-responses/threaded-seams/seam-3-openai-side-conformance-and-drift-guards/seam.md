@@ -9,8 +9,8 @@ basis:
   source_seam_brief: ../../seam-3-openai-side-conformance-and-drift-guards.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts:
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
   required_threads:
     - THR-10
     - THR-11
@@ -65,8 +65,8 @@ open_remediations: []
 - **Basis posture**:
   - **Currentness**: `current` (revalidated against landed `SEAM-1` and `SEAM-2` closeout-backed `C-10`, `C-11`, and `C-12` truth)
   - **Upstream closeouts assumed**:
-    - `docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md`
-    - `docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md`
   - **Required threads**: `THR-10`, `THR-11`, `THR-12`, `THR-13`
   - **Stale triggers**:
     - any change to `SEAM-1` or `SEAM-2` public response shapes, error envelope rules, or streaming semantics

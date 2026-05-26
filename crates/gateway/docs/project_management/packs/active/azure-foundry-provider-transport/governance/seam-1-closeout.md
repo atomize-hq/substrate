@@ -3,16 +3,16 @@ seam_id: SEAM-1
 status: landed
 closeout_version: v0
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-1-azure-foundry-runtime-transport/slice-4-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-1-azure-foundry-runtime-transport/slice-4-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
   currentness: current
   upstream_closeouts:
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
   required_threads:
     - THR-06
   stale_triggers:

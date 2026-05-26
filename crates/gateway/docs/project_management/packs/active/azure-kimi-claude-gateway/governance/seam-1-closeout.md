@@ -3,7 +3,7 @@ seam_id: SEAM-1
 status: landed
 closeout_version: v0
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-1-mux-foundation-baseline/slice-4-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-1-mux-foundation-baseline/slice-4-seam-exit-gate.md
   status: passed
   promotion_readiness: blocked
 basis:

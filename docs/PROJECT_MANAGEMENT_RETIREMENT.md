@@ -47,6 +47,8 @@ Completed extraction/rewrite slices:
   - `crates/gateway/docs/foundation/**`
   - `crates/gateway/tests/fixtures/azure_kimi/**`
   - `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
+- gateway-local planning backlink cleanup completed for:
+  - `crates/gateway/docs/project_management/packs/active/**`
 - stale host-visible hardening and persistent-session planning anchors were already cleaned in
   earlier slices
 
@@ -55,8 +57,6 @@ Still remaining before the atomic top-level `packs/**` removal:
   `docs/internals/world/workspace_sync_filesystem_model.md`
 - planning automation and workflow machinery still assume `docs/project_management/packs/**`
 - several tests outside `crates/broker/src/tests.rs` still read pack docs directly
-- gateway-local planning docs under `crates/gateway/docs/project_management/**` remain out of
-  scope for deletion but still need their own backlink cleanup
 
 Validation already completed for the finished slices:
 - `cargo test -p substrate-broker --lib -- --nocapture`
@@ -64,6 +64,8 @@ Validation already completed for the finished slices:
   `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
 - scoped reference scans over stable docs and non-`project_management` gateway docs no longer show
   top-level pack backlinks for the completed ADR-0027 and gateway-foundation slices
+- scoped reference scans over `crates/gateway/docs/project_management/**` no longer show
+  top-level `docs/project_management/packs/**` or old `kimi-claude-adapter` pack backlinks
 
 ## Current Dependency Classes
 
@@ -134,13 +136,16 @@ Completed rewrites:
 - `crates/gateway/docs/foundation/*.md`
 - `crates/gateway/tests/fixtures/azure_kimi/*.json`
 - `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
-
-Remaining dependency surface:
 - `crates/gateway/docs/project_management/packs/active/**`
 
+Remaining dependency surface:
+- none found in the current gateway-local markdown scan; this tree remains out of scope for
+  deletion but is no longer a top-level pack backlink blocker
+
 Disposition:
-- rewrite foundation docs and fixture provenance to stable gateway docs or stable top-level contracts before removing top-level packs
-- do not leave `crates/gateway/**` pointing at deleted top-level pack paths
+- keep gateway-local planning docs in place
+- do not let future edits reintroduce `docs/project_management/packs/**` backlinks from
+  `crates/gateway/**`
 
 ## Extraction Targets Before The Atomic `packs/**` Cut
 
@@ -252,33 +257,25 @@ Required follow-up:
 
 - any Rust test that validates product behavior by asserting current docs mention the right contract
 - any stable operator or internal doc that cites a pack path as canonical
-- remaining gateway-local docs and fixture provenance that still point at deleted top-level packs
-  after the completed rewrites in:
-  - `crates/gateway/docs/foundation/**`
-  - `crates/gateway/tests/fixtures/azure_kimi/**`
-  - `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
+- any future gateway-local planning edits that reintroduce links to deleted top-level pack paths
 
 ## Recommended Resume Order
 
 Use this order in the next session:
 
-1. Finish the remaining gateway-local backlink cleanup under
-   `crates/gateway/docs/project_management/**`.
-   - Goal: remove the remaining dependence on top-level `docs/project_management/packs/**` from
-     gateway-local planning docs without deleting the gateway-local planning tree itself.
-2. Extract the world-sync filesystem semantics into
+1. Extract the world-sync filesystem semantics into
    `docs/internals/world/workspace_sync_filesystem_model.md`.
    - Goal: eliminate another stable-doc blocker that still names pack specs as canonical.
-3. Triage the remaining pack-reading tests:
+2. Triage the remaining pack-reading tests:
    - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
    - `crates/shell/tests/playbook_alignment.rs`
    - `crates/transport-api-types/src/lib.rs`
    - Goal: rewrite to stable docs where appropriate; delete planning-process-only assertions.
-4. Remove or replace planning automation and workflow dependencies:
+3. Remove or replace planning automation and workflow dependencies:
    - `Makefile`
    - `.github/workflows/feature-smoke.yml`
    - triad / smoke / CI helper scripts
-5. Re-run a repo-wide reference scan.
+4. Re-run a repo-wide reference scan.
    - Goal: confirm what still points at `docs/project_management/packs/**` before attempting the
      atomic cut.
 

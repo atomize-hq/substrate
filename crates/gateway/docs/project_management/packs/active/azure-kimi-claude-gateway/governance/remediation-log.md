@@ -39,7 +39,7 @@ related_seam: SEAM-2
 related_slice: null
 related_thread: THR-01
 related_contract: C-01
-related_artifact: docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-1-closeout.md
+related_artifact: crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-1-closeout.md
 severity: blocking
 status: resolved
 owner_seam: SEAM-2
@@ -50,12 +50,12 @@ blocked_targets:
 summary: SEAM-2 horizon promotion was unblocked by recording that THR-01 is already published and that Azure hidden-tool revalidation is owned by SEAM-2 active work instead of SEAM-1 promotion-readiness.
 required_fix: Keep the Azure hidden-tool validation gap explicit as SEAM-2 normalization work and preserve the published C-01 handoff from SEAM-1 without treating the carried gap as a foundation-horizon blocker.
 resolution_evidence:
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-1-closeout.md
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/seam-2-azure-kimi-normalization.md
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/threading.md
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/README.md
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/scope_brief.md
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/seam_map.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-1-closeout.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/seam-2-azure-kimi-normalization.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threading.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/README.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/scope_brief.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/seam_map.md
 ```
 
 ```yaml
@@ -66,7 +66,7 @@ related_seam: SEAM-2
 related_slice: S4
 related_thread: THR-02
 related_contract: C-02
-related_artifact: docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
+related_artifact: crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
 severity: blocking
 status: resolved
 owner_seam: SEAM-2
@@ -82,7 +82,7 @@ required_fix: Extend the SEAM-2 streaming provider boundary so hidden-marker-onl
 resolution_evidence:
   - gateway/src/providers/openai.rs
   - gateway/tests/fixtures/azure_kimi/hidden-markers-k2-thinking-stream.json
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/raw-response.json
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
-  - docs/project_management/packs/active/azure-kimi-claude-gateway/threading.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/raw-response.json
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
+  - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threading.md
 ```

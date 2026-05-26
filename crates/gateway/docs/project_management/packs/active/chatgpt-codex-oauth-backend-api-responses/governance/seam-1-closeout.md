@@ -3,14 +3,14 @@ seam_id: SEAM-1
 status: landed
 closeout_version: v1
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/chatgpt-codex-oauth-backend-api-responses/threaded-seams/seam-1-chatgpt-codex-route-contract-and-stream-native-transport/slice-99-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/chatgpt-codex-oauth-backend-api-responses/threaded-seams/seam-1-chatgpt-codex-route-contract-and-stream-native-transport/slice-99-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
   currentness: current
   upstream_closeouts:
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-3-closeout.md
   required_threads:
     - THR-14
   stale_triggers:

@@ -1,6 +1,6 @@
 # Azure Foundry Provider Transport - seam extraction
 
-Source: `docs/project_management/packs/active/azure-kimi-claude-gateway`, `docs/foundation/*.md`, `docs/adr/*.md`, and current gateway Azure transport anchors under `gateway/`
+Source: `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway`, `docs/foundation/*.md`, `docs/adr/*.md`, and current gateway Azure transport anchors under `gateway/`
 
 This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds for the remaining Azure Foundry runtime-provider work. It is intentionally one level above seam-local decomposition.
 

@@ -61,7 +61,7 @@ flowchart LR
   - `C-10` canonical artifact: `docs/foundation/openai-side-chat-completions-c10-contract.md`
   - `C-12` canonical artifact: `docs/foundation/openai-side-adapter-invariants-c12-contract.md`
 - **Revalidation gate**: `passed`
-  - upstream basis: `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md`, `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
+  - upstream basis: `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md`, `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus

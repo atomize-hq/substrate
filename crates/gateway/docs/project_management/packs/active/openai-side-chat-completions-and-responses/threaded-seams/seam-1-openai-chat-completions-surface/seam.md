@@ -9,8 +9,8 @@ basis:
   source_seam_brief: ../../seam-1-openai-chat-completions-surface.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts:
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
   required_threads:
     - THR-10
     - THR-11
@@ -61,7 +61,7 @@ open_remediations: []
   - publication of the final contract artifacts is seam-exit work; pre-exec readiness depends on seam-local concreteness, not on closeout-backed publication existing already
 - **Basis posture**:
   - **Currentness**: `current`
-  - **Upstream closeouts assumed**: `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md`, `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
+  - **Upstream closeouts assumed**: `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md`, `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
   - **Required threads**: `THR-10`, `THR-11`
   - **Stale triggers**:
     - ADR 0008 changes the supported Chat Completions subset or the reject/ignore posture

@@ -9,10 +9,10 @@ basis:
   source_seam_brief: ../../seam-2-live-session-smoke-verification.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts:
-    - docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
   required_threads:
     - THR-08
   stale_triggers:
@@ -63,10 +63,10 @@ open_remediations: []
 - **Basis posture**:
   - **Currentness**: `current`
   - **Upstream closeouts assumed**:
-    - `docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md`
-    - `docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
   - **Required threads**:
     - `THR-08`
   - **Stale triggers**:

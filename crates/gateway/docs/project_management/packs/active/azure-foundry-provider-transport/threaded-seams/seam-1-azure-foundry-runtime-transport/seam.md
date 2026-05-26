@@ -9,10 +9,10 @@ basis:
   source_seam_brief: ../../seam-1-azure-foundry-runtime-transport.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts:
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
   required_threads:
     - THR-06
   stale_triggers:
@@ -67,10 +67,10 @@ open_remediations: []
 - **Basis posture**:
   - **Currentness**: `current`
   - **Upstream closeouts assumed**:
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-2-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md`
   - **Required threads**: `THR-06`
   - **Stale triggers**:
     - Azure runtime truth changes the required auth header posture, deployment URL shape, or `api-version` semantics

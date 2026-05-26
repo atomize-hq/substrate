@@ -3,16 +3,16 @@ seam_id: SEAM-2
 status: landed
 closeout_version: v1
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/slice-3-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/slice-3-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
   currentness: current
   upstream_closeouts:
-    - docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
   required_threads:
     - THR-08
     - THR-09
@@ -36,10 +36,10 @@ open_remediations: []
 - **Landed evidence**:
   - [claude-code-c10-live-session-smoke-verification-contract.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/claude-code-c10-live-session-smoke-verification-contract.md)
   - [claude-code-c10-live-session-smoke-procedure.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/claude-code-c10-live-session-smoke-procedure.md)
-  - [manifest.json](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/evidence/manifest.json)
-  - [seam.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/seam.md)
-  - [review.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/review.md)
-  - [threading.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md)
+  - [manifest.json](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/evidence/manifest.json)
+  - [seam.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/seam.md)
+  - [review.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/review.md)
+  - [threading.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md)
   - [gateway/README.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/README.md)
   - [gateway/src/router/mod.rs](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/router/mod.rs)
   - [gateway/src/server/mod.rs](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/server/mod.rs)
