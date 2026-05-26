@@ -87,7 +87,7 @@ The local-to-external handoff is explicit:
 
 The implementation and verification surfaces for this contract are expected to stay aligned across:
 
-- `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - `crates/gateway/src/adapter_runtime.rs`
 - `crates/shell/src/execution/prompt_fulfillment.rs`
 - `crates/world-service/src/prompt_fulfillment.rs`

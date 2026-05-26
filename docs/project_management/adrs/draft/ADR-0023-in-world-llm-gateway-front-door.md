@@ -2,7 +2,7 @@
 
 ## Status
 - Status: Draft
-- Supersession note: Architectural intent is superseded by `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`. Keep this ADR only as the original gateway-capability draft and historical context for the archived `llm_gateway_in_world` planning set.
+- Supersession note: Architectural intent is superseded by `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`. Keep this ADR only as the original gateway-capability draft and historical context for the archived `llm_gateway_in_world` planning set.
 - Date (UTC): 2026-02-03
 - Owner(s): Spenser McConnell (Substrate)
 
@@ -16,7 +16,7 @@
 
 ## Related Docs
 - Successor ADR:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - Plan: `docs/project_management/_archived/next/llm_gateway_in_world/plan.md`
 - Tasks: `docs/project_management/_archived/next/llm_gateway_in_world/tasks.json`
 - Spec manifest: `docs/project_management/_archived/next/llm_gateway_in_world/spec_manifest.md`
@@ -31,7 +31,7 @@
 ADR_BODY_SHA256: 3b15c76f976661655bac13323eb5c21a8e7a4c8230bb1907a0f96fe90339d621
 
 Supersession note:
-- Read `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md` as the current architectural source of truth for Substrate versus `substrate-gateway` ownership. This ADR remains useful for the original gateway-capability shape and archived execution planning, but it no longer defines the runtime ownership boundary.
+- Read `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md` as the current architectural source of truth for Substrate versus `substrate-gateway` ownership. This ADR remains useful for the original gateway-capability shape and archived execution planning, but it no longer defines the runtime ownership boundary.
 
 ### Changes (operator-facing)
 - Substrate-owned LLM gateway runs inside the world boundary
@@ -103,7 +103,7 @@ This ADR does not define new config file families or bespoke gateway config file
 
 - Source of truth (config/policy key paths + precedence + defaults):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/reference/policy/schema.md`
 
 Files and locations (existing YAML layering model):
 - Global config patch: `$SUBSTRATE_HOME/config.yaml` (default: `~/.substrate/config.yaml`)

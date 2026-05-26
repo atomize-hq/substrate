@@ -28,3 +28,12 @@ New ADRs should prefer `docs/project_management/adrs/` unless there is a strong 
 
 Legacy ADR locations may still be referenced by older planning artifacts. Use the migration tooling to move them into
 this registry so repo-wide scans can be strict and deterministic.
+
+## Stable Curated ADRs
+
+Curated ADRs that survive the retirement of `docs/project_management/**` now live under:
+
+- `docs/adr/`
+
+Use that tree for stable operator/runtime decision records. Keep this registry for planning-rich,
+historical, or not-yet-curated ADR material.

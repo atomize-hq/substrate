@@ -5,6 +5,12 @@
 - Date (UTC): 2026-02-03
 - Owner(s): Spenser McConnell (Substrate)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -23,8 +29,8 @@
 - CI checkpoints: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
 - Spec manifest: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
 - Specs:
-  - Contract: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
-  - Schema: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - Contract: `docs/reference/policy/contract.md`
+  - Schema: `docs/reference/policy/schema.md`
   - Phase 3a slice: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP0-spec.md`
   - Phase 3b slice: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP1-spec.md`
 - Decision Register: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
@@ -67,8 +73,8 @@ ADR_BODY_SHA256: 36c3baa794d0878fae02ffa4dfa7bb9dbeed355c4aa7e4a0a554df7dd116443
   - Why: Keep Substrate’s enforcement/audit claims accurate and avoid a “second config system” as LLM + agent features land (gateway, CLI backends, agent hub, orchestration toolbox).
   - Links:
     - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md#L1`
-    - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md#L1`
-    - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md#L1`
+    - `docs/reference/policy/contract.md#L1`
+    - `docs/reference/policy/schema.md#L1`
     - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md#L1`
 - Phase 8 additive clarification:
   - This ADR remains the source of truth for config/policy file families, precedence, fail-closed posture, backend allowlists, and host-side secret-read gates.

@@ -7,6 +7,12 @@
 - Date (UTC): 2026-04-02
 - Owner(s): Spenser McConnell (Substrate)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 
 - Feature directory: `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/`
@@ -22,8 +28,8 @@ This ADR is a successor to ADR-0024 and should be read as a contract clarificati
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - Config / policy source of truth:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/reference/policy/contract.md`
+  - `docs/reference/policy/schema.md`
 - Output / event / trace foundations:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`

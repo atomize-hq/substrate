@@ -23,8 +23,8 @@
   - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
 
 ## Related Docs
-- Source contract doc (must remain in parity with this ADR’s contract section):
-  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
+- Stable operator reference (must remain in parity with this ADR’s contract section):
+  - `docs/reference/world/deps/README.md`
 - Planning Pack (execution v4; this feature directory):
   - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/plan.md`
   - `docs/project_management/_archived/next/world-deps-packages-bundles-contract/tasks.json`
@@ -52,7 +52,7 @@ ADR_BODY_SHA256: d66ae560a90cdad0241a8e8fd0557c898d4f3e5596ca3f21a6828c5fda506d1
   - New: `substrate world deps` is driven by an inventory directory model (`$SUBSTRATE_HOME/deps/`, `<workspace_root>/.substrate/deps/`) plus enabled patch keys in YAML (`$SUBSTRATE_HOME/config.yaml`, `<workspace_root>/.substrate/workspace.yaml`), with explicit `current|global|workspace` CLI scopes.
   - Why: makes “what exists / what you want / what is applied” explicit and scriptable; removes misleading “looks like a CLI but isn’t” cases.
   - Links:
-    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
+    - `docs/reference/world/deps/README.md`
     - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
     - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 
@@ -61,7 +61,7 @@ ADR_BODY_SHA256: d66ae560a90cdad0241a8e8fd0557c898d4f3e5596ca3f21a6828c5fda506d1
   - New: `world deps` MUST NOT read (or be influenced by) any legacy world-deps paths; inventory/enabled sources are limited to the new directories/patch files plus built-in defaults.
   - Why: prevents silent drift, hidden overrides, and “it works on one machine” confusion; makes tests enforce the end state.
   - Links:
-    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
+    - `docs/reference/world/deps/README.md`
 
 ## Problem / Context
 - `substrate world deps` needs a stable, predictable, scope-aware contract for declaring and applying in-world dependencies.
@@ -83,7 +83,7 @@ ADR_BODY_SHA256: d66ae560a90cdad0241a8e8fd0557c898d4f3e5596ca3f21a6828c5fda506d1
 ## User Contract (Authoritative)
 
 This section is a direct, parity-preserving conversion of:
-- `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
+- `docs/reference/world/deps/README.md`
 
 It is authoritative; other sections in this ADR must not contradict it.
 

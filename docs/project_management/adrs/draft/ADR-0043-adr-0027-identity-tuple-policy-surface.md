@@ -5,6 +5,12 @@
 - Date (UTC): 2026-04-03
 - Owner(s): Spenser McConnell (Substrate)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -21,8 +27,8 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md`
 - Config/policy foundation:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/reference/policy/contract.md`
+  - `docs/reference/policy/schema.md`
 - Expected planning-pack outputs:
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md`
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json`

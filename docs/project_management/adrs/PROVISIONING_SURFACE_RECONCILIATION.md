@@ -19,12 +19,10 @@ The most authoritative current references are:
   - authoritative operator-facing summary
   - states that runtime `substrate world deps current sync|install` never mutates system packages
   - points missing-package remediation at `substrate world enable --provision-deps`
-- [`docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md)
-  - authoritative contract for APT-backed system-package provisioning
-- [`docs/project_management/packs/implemented/add-non-apt-system-package-provisioning-support/contract.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/implemented/add-non-apt-system-package-provisioning-support/contract.md)
-  - authoritative manager-aware contract for `apt` and `pacman`
-- [`docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md)
-  - authoritative contract for inventory structure, enabled-set resolution, and runtime fail-early posture
+- [`docs/reference/world/deps/provisioning.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/deps/provisioning.md)
+  - authoritative operator-facing contract for provisioning-time mutation, runtime fail-early behavior, and supported backend posture
+- [`docs/internals/world/deps.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/world/deps.md)
+  - authoritative implementation-oriented reference for inventory structure, enabled-set resolution, wrapper behavior, and runtime probe-only posture
 - [`docs/WORLD.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
   - authoritative world/runtime architecture summary for provisioning request profiles
 
@@ -98,7 +96,6 @@ To make the documentation chain consistent end to end, the next updates should b
 If someone wants the current truth quickly, they should read in this order:
 
 1. [`docs/reference/world/deps/README.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/deps/README.md)
-2. [`docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md)
-3. [`docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md)
-4. [`docs/project_management/packs/implemented/add-non-apt-system-package-provisioning-support/contract.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/implemented/add-non-apt-system-package-provisioning-support/contract.md)
-5. The implementing code in [`crates/shell/src/builtins/world_enable/runner.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_enable/runner.rs), [`crates/shell/src/builtins/world_enable/runner/provision_deps.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_enable/runner/provision_deps.rs), and [`crates/shell/src/builtins/world_deps/surfaces.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_deps/surfaces.rs)
+2. [`docs/reference/world/deps/provisioning.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/deps/provisioning.md)
+3. [`docs/internals/world/deps.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/world/deps.md)
+4. The implementing code in [`crates/shell/src/builtins/world_enable/runner.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_enable/runner.rs), [`crates/shell/src/builtins/world_enable/runner/provision_deps.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_enable/runner/provision_deps.rs), and [`crates/shell/src/builtins/world_deps/surfaces.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_deps/surfaces.rs)

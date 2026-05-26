@@ -75,4 +75,4 @@ The implementation and verification surfaces for this contract are expected to s
 - `crates/shell/src/execution/policy_model.rs`
 - `docs/reference/policy/contract.md`
 - `docs/reference/policy/schema.md`
-- `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`

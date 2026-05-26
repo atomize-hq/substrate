@@ -2,7 +2,7 @@
 
 ## Status
 - Status: Draft
-- Supersession note: The architectural intent of this ADR is superseded by `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`, which preserves the stable backend-id / allowlisting contract while replacing the bespoke Substrate-local engine assumption with a gateway-hosted adapter contract.
+- Supersession note: The architectural intent of this ADR is superseded by `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`, which preserves the stable backend-id / allowlisting contract while replacing the bespoke Substrate-local engine assumption with a gateway-hosted adapter contract.
 - Date (UTC): 2026-02-03
 - Owner(s): Spenser McConnell (Substrate)
 
@@ -74,7 +74,7 @@ This ADR MUST use the Phase 3 surface defined by ADR-0027 for:
 
 Sources of truth:
 - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-- `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+- `docs/reference/policy/schema.md`
 
 Config (selection surface; ADR-0027):
 - `llm.enabled: bool`

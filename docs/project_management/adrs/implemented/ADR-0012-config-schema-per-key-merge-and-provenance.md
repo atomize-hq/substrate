@@ -18,7 +18,7 @@
 - Patch files + scope model:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - World-deps consumer contract:
-  - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
+  - `docs/reference/world/deps/README.md`
 - World-deps ADR (consumer workstream; not modified by this ADR):
   - `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 
@@ -32,7 +32,7 @@ ADR_BODY_SHA256: 9f5ad467af8c83056bf9e06e1f6f2b3f1e9be8a58a0f35fc56b832fa957e964
   - Why: enables additive config keys (like `world.deps.enabled`) without creating a second parallel config system or confusing precedence.
   - Links:
     - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-    - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
+    - `docs/reference/world/deps/README.md`
 
 - Schema defines merge behavior per key
   - Existing: patch files imply a single merge rule (“workspace overrides global”) for all keys.

@@ -6,6 +6,12 @@
 - Date (UTC): 2026-04-02
 - Owner(s): Spenser McConnell (Substrate)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -23,8 +29,8 @@ The committed operator contract that downstream slices should treat as live sour
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 - Foundational config/policy surface:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/reference/policy/contract.md`
+  - `docs/reference/policy/schema.md`
 - Committed operator contract:
   - `docs/contracts/gateway/operator-contract.md`
 - Foundational output/routing and trace contracts:

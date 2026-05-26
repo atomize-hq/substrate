@@ -92,7 +92,7 @@ ADR_BODY_SHA256: 24f8f422c1813381e2dc1245e483eb010d765d48d7915186aa94a6da9534bf9
 - This ADR does not define new config file families. It MUST use the Phase 3 config/policy surface defined by ADR-0027.
 - Source of truth (key paths + precedence + defaults):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/reference/policy/schema.md`
 
 - Additive config keys (authoritative):
   - `agents.toolbox.enabled: bool`

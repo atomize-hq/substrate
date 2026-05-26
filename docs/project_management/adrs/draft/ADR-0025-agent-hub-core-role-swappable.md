@@ -131,7 +131,7 @@ Control-plane enablement gates (v1; fail closed):
 - This ADR does not define new config file families. It MUST use the Phase 3 config/policy surface defined by ADR-0027.
 - Source of truth (key paths + precedence + defaults):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/reference/policy/schema.md`
 - Agent backends are registered via the agent inventory directory (one file per backend), per ADR-0027:
   - Global: `$SUBSTRATE_HOME/agents/<agent_id>.yaml` (default `~/.substrate/agents/<agent_id>.yaml`)
   - Workspace: `<workspace_root>/.substrate/agents/<agent_id>.yaml`

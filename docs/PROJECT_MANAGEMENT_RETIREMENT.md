@@ -13,11 +13,15 @@ In scope:
 
 Out of scope for this cut:
 - `crates/gateway/docs/project_management/**`
-- the ADR registry under `docs/project_management/adrs/**`
 
 Current recommendation for ADRs:
-- keep the full ADR registry in place during the pack retirement
-- decide later whether to move or curate ADRs into a new stable `docs/adr/` tree
+- treat ADR curation into a stable `docs/adr/` tree as the next strategic milestone
+- do not blindly move every ADR; curate them first
+- expect some ADRs still labeled `draft` to be effectively implemented and needing promotion or
+  restatement into the stable ADR tree
+- the initial curation policy and first-cluster classification now live in:
+  - `docs/adr/README.md`
+  - `docs/adr/CURATION.md`
 
 ## Constraints
 
@@ -60,6 +64,19 @@ Still remaining before the atomic top-level `packs/**` removal:
 - repo-wide reference scan still finds non-pack-tree references to `docs/project_management/packs/**`
 - the remaining refs are now concentrated in historical/root docs and in-progress
   `docs/project_management/**` material rather than live shell wrappers
+- `llm-last-mile/**` and `FSE_PRE_PLANNING_*` are intentionally deferred for now and should not
+  drive the next slice ordering
+- the highest-value next namespace decision is ADR curation, because repeated backlink cleanup
+  inside `docs/project_management/adrs/**` has diminishing returns while the long-term destination
+  is now known to be `docs/adr/`
+- the curation-policy question is now resolved for the first slice:
+  - use `restate + supersede`, not a blind directory move
+  - promote first-cluster keepers into `docs/adr/implemented/`
+- the first-cluster promotion slice is now complete:
+  - curated implemented ADRs exist for ADR-0027, ADR-0040, ADR-0041, ADR-0042, ADR-0043, and
+    ADR-0046
+  - stable gateway contract docs now point at curated implemented ADRs instead of the old draft
+    project-management paths
 
 Validation already completed for the finished slices:
 - `cargo test -p substrate-broker --lib -- --nocapture`
@@ -79,6 +96,35 @@ Validation already completed for the finished slices:
   `tasks.json` assumptions
 - scoped reference scans over `docs/contracts/gateway/*.md` and `docs/BACKLOG.md` no longer show
   pack-path backlinks for the stable contract and backlog surfaces cleaned in this slice
+- scoped rewrites under `docs/project_management/adrs/**` now point ADR-0027 foundation references
+  at `docs/reference/policy/{contract,schema}.md`, and the provisioning reconciliation note now
+  points at stable world-deps references instead of implemented pack contracts
+- the remaining direct pack-contract citations under `docs/project_management/adrs/**` are now
+  concentrated in draft provisioning ADRs that still cite their own feature-pack contract surfaces
+  (`ADR-0030`, `ADR-0033`)
+- initial gateway-local manifest normalization under
+  `crates/gateway/docs/project_management/**` now uses monorepo-correct
+  `crates/gateway/docs/project_management/packs/**` refs in evidence payloads that previously
+  looked like top-level `docs/project_management/packs/**` backlinks
+- stable ADR scaffolding now exists under:
+  - `docs/adr/`
+  - `docs/adr/implemented/`
+  - `docs/adr/draft/`
+  - `docs/adr/historical/`
+- the first ADR curation ledger now exists at `docs/adr/CURATION.md`
+- the first promoted cluster has been classified as stable keepers:
+  - ADR-0027
+  - ADR-0040
+  - ADR-0041
+  - ADR-0042
+  - ADR-0043
+  - ADR-0046
+- those first-cluster ADRs were classified as `draft_but_implemented` before promotion so their
+  stable curated ADRs could normalize status away from `Draft`
+- curated implemented ADR files now exist for that cluster under `docs/adr/implemented/`
+- stable gateway contract verification docs now reference curated implemented ADR paths for:
+  - ADR-0040
+  - ADR-0041
 
 ## Current Dependency Classes
 
@@ -116,12 +162,18 @@ Remaining dependency surface after the repo-wide scan:
 - in-progress `docs/project_management/**` planning and ADR material
   - these references still need explicit triage as either acceptable retained planning history or
     blockers that must be repointed before the atomic cut
+- `crates/gateway/docs/project_management/**`
+  - remaining hits are mostly gateway-local self-references and planning-pack internals; continue
+    normalizing any monorepo-incorrect `docs/project_management/packs/**` payload refs as they are
+    found
 
 Disposition:
 - classify root/historical docs as either intentional history or blockers that must be rewritten
   before the atomic cut
 - keep narrowing stable/root surfaces first so the remaining scan result is dominated by clearly
   historical or intentionally retained planning material
+- for the current slice ordering, defer `llm-last-mile/**` and `FSE_PRE_PLANNING_*` and focus on
+  `docs/project_management/**` plus gateway-local `project_management/**` cleanup
 
 ### 2. Rust tests and code that hard-read pack markdown
 
@@ -271,28 +323,66 @@ Remaining follow-up:
 - any stable operator or internal doc that cites a pack path as canonical
 - any future gateway-local planning edits that reintroduce links to deleted top-level pack paths
 
+## ADR Curation Milestone
+
+Before the broader `docs/project_management/**` retirement can finish cleanly, curate the ADR set
+that still matters into a stable `docs/adr/` home.
+
+Recommended order:
+
+1. Define ADR keep criteria.
+   - Keep ADRs that are still normative, implemented, referenced by stable docs/code, or still
+     define a current operator/runtime contract.
+2. Classify the ADR set.
+   - Use buckets:
+     - keep as stable ADR
+     - keep as historical only
+     - superseded
+     - draft-but-implemented
+     - draft-and-actually-still-draft
+3. Create the `docs/adr/` structure.
+   - Likely:
+     - `docs/adr/implemented`
+     - `docs/adr/draft`
+     - optional `docs/adr/historical`
+4. Promote the real keepers.
+   - Move or restate the curated ADRs into `docs/adr/**`.
+   - Normalize statuses so “draft but actually implemented” is no longer ambiguous.
+5. Repoint stable references to `docs/adr/**`.
+   - Once stable docs and current contracts point at `docs/adr/**`, the remaining
+     `docs/project_management/adrs/**` content becomes much easier to archive or delete.
+
+Completed in this slice:
+
+- defined keep criteria and migration policy in `docs/adr/README.md`
+- created the stable `docs/adr/{implemented,draft,historical}/` structure
+- classified the first contract-heavy ADR cluster in `docs/adr/CURATION.md`
+- promoted the first contract-heavy ADR cluster into `docs/adr/implemented/`
+- repointed stable gateway contract docs to the curated implemented ADR paths
+- added relocation notes on the legacy project-management ADRs retained for compatibility
+
 ## Recommended Resume Order
 
 Use this order in the next session:
 
-1. Triage the remaining non-pack-tree references surfaced by the repo-wide scan.
-   - Start with root-level and historical docs such as `llm-last-mile/**` and
-     `FSE_PRE_PLANNING_*`.
-   - Also classify in-progress `docs/project_management/**` references that are outside
-     `packs/**` into:
-     - intentional historical notes
-     - blockers that still need rewrites
-2. Re-run the repo-wide reference scan after those rewrites.
-   - Goal: confirm that only intentionally retained historical notes still mention
-     `docs/project_management/packs/**`.
-3. Prepare the atomic `packs/**` deletion once the remaining refs are either rewritten or
-   explicitly accepted as historical holdouts.
+1. Repoint live ADR-to-ADR prerequisite links to the curated implemented ADR paths.
+   - Focus on current, still-live consumers before touching broader planning-pack history.
+2. Reclassify and promote the next ADR cluster.
+   - Keep the provisioning ADR decision around ADR-0030 and ADR-0033 as its own narrower slice.
+3. Continue narrowing the remaining `docs/project_management/**` dependency surface after the
+   stable ADR consumers stop pointing at the retiring namespace.
 
 ## Resume Notes
 
 - Do not start by deleting any pack directories.
-- The next correct move is repo-wide residual-reference triage, not another stable-doc extraction
-  pass.
+- The first-cluster ADR promotion slice is complete.
+- The next correct move is targeted repointing of live ADR-to-ADR prerequisites plus
+  classification of the next cluster, not another broad stable-doc extraction pass.
+- Treat the repo-wide `docs/project_management/**` cleanup as subordinate to that ADR curation
+  milestone; otherwise you risk repeatedly repointing docs toward a namespace that is still meant
+  to be retired.
+- The curation-policy and first-cluster-classification questions are no longer open; use the
+  recorded policy and ledger under `docs/adr/**` rather than re-deciding them in a later session.
 - The top-level `packs/**` tree must be removed in one cut only after:
   - stable docs are repointed,
   - pack-reading tests are rewritten or deleted,

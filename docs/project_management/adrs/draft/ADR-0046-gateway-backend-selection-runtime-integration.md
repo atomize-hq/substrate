@@ -5,6 +5,12 @@
 - Date (UTC): 2026-04-21
 - Owner(s): Spenser McConnell (Substrate)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0046-gateway-backend-selection-runtime-integration.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -20,8 +26,8 @@ This ADR is a thin implementation follow-on to ADR-0041. It keeps the ADR-0041 b
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Config / policy source of truth:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/reference/policy/contract.md`
+  - `docs/reference/policy/schema.md`
 - Existing contract docs this ADR realizes:
   - `docs/contracts/gateway/backend-adapter-selection.md`
   - `docs/contracts/gateway/backend-adapter-protocol.md`
