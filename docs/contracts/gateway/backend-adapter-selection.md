@@ -56,10 +56,10 @@ Concrete rules:
 ## Boundaries
 
 - This contract does not define `status --json` fields. That remains owned by
-  `docs/contracts/substrate-gateway-status-schema.md`.
+  `docs/contracts/gateway/status-schema.md`.
 - This contract does not define policy decision tables or trust-boundary mechanics beyond the
   published selection boundary. That remains owned by
-  `docs/contracts/substrate-gateway-policy-evaluation.md`.
+  `docs/contracts/gateway/policy-evaluation.md`.
 - This contract does not define adapter request/response payloads, capabilities, extension keys,
   session handles, event envelopes, or trace vocabulary.
 - This contract does not widen operator command ownership beyond the existing gateway command family.

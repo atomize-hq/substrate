@@ -174,7 +174,7 @@ Rules:
   schema as long as the published policy precedence and bounded request validation rules stay
   unchanged.
 - This schema does not redefine machine-readable gateway status output. That remains owned by
-  `docs/contracts/substrate-gateway-status-schema.md`.
+  `docs/contracts/gateway/status-schema.md`.
 - This schema does not make backend-specific capability ids, provider quirks, or raw transport
   details part of the stable Substrate-facing contract.
 

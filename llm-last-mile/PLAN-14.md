@@ -39,8 +39,8 @@ The following work is already landed and is not reopened here:
 - host-side auth sourcing and policy enforcement in [crates/shell/src/builtins/world_gateway.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_gateway.rs)
 - typed `integrated_auth` payload validation in [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs)
 - backend selection and integrated gateway runtime binding in [crates/world-agent/src/gateway_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/gateway_runtime.rs)
-- operator command family and exit-code contract in [docs/contracts/substrate-gateway-operator-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-operator-contract.md)
-- policy precedence and fail-closed auth sourcing rules in [docs/contracts/substrate-gateway-policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md)
+- operator command family and exit-code contract in [docs/contracts/gateway/operator-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/operator-contract.md)
+- policy precedence and fail-closed auth sourcing rules in [docs/contracts/gateway/policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md)
 
 ### Exact remaining gap
 
@@ -210,7 +210,7 @@ Expected production surfaces:
 11. `crates/gateway/src/providers/registry.rs`
 12. `crates/gateway/tests/openai_shared_parity.rs`
 13. `crates/shell/tests/world_gateway.rs`
-14. `docs/contracts/substrate-gateway-policy-evaluation.md`
+14. `docs/contracts/gateway/policy-evaluation.md`
 15. `crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md`
 16. `AGENT_ORCHESTRATION_GAP_MATRIX.md`
 
@@ -713,7 +713,7 @@ Files:
 - [crates/world-agent/tests/gateway_runtime_parity.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/gateway_runtime_parity.rs)
 - [crates/gateway/tests/openai_shared_parity.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/tests/openai_shared_parity.rs)
 - [crates/shell/tests/world_gateway.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/world_gateway.rs)
-- [docs/contracts/substrate-gateway-policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md)
+- [docs/contracts/gateway/policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md)
 - [crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md)
 - [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
 

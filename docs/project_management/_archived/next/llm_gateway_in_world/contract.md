@@ -1,7 +1,7 @@
 # contract — llm_gateway_in_world
 
 Historical evidence only. This document preserves the ADR-0023-era operator contract and does not define the current operator boundary.
-The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
+The live operator contract is `docs/contracts/gateway/operator-contract.md`.
 
 Historical inputs:
 - ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`

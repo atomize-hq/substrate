@@ -1,7 +1,7 @@
 # impact_map — llm_gateway_in_world
 
 Historical evidence only. This placeholder impact map preserves ADR-0023-era planning and does not define the current operator boundary.
-The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
+The live operator contract is `docs/contracts/gateway/operator-contract.md`.
 
 Primary components (anticipated):
 - `crates/world-agent` (supervision/transport to in-world gateway)

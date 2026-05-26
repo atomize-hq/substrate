@@ -47,7 +47,7 @@ flowchart TB
 
 - `../../governance/seam-1-closeout.md` publishes the operator boundary consumed by this seam.
 - `../../governance/seam-2-closeout.md` publishes the status-schema and policy threads this seam depends on.
-- The owned runtime/parity contract baseline is not yet concrete enough for execution because both `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md` and `docs/contracts/substrate-gateway-runtime-parity.md` are still missing.
+- The owned runtime/parity contract baseline is not yet concrete enough for execution because both `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md` and `docs/contracts/gateway/runtime-parity.md` are still missing.
 
 ## Pre-exec gate disposition
 

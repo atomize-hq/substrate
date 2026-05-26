@@ -48,7 +48,7 @@ flowchart TB
 - `crates/shell/src/builtins/world_gateway.rs` now validates backend selection pre-dispatch, but request construction still emits `GatewayIntegratedAuthPayloadV1 { cli_codex: ... }`, so the active seam must widen the runtime-owned payload shape without reintroducing shell-owned selection logic.
 - `crates/world-service/src/service.rs` currently narrows `integrated_auth` to `payload.cli_codex.clone()` inside request preparation, which makes the world-service behave as if only one integrated backend can exist.
 - `crates/world-service/src/gateway_runtime.rs` still hard-rejects any default backend other than `cli:codex` and resolves auth handoff only through the Codex-specific path, so adapter lookup and capability gating are not yet implemented as the protocol contract requires.
-- `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `docs/contracts/substrate-gateway-backend-adapter-schema.md` already publish the owned contract baseline for this seam, so the remaining work is landing behavior and tests, not inventing a new contract phase.
+- `docs/contracts/gateway/backend-adapter-protocol.md` and `docs/contracts/gateway/backend-adapter-schema.md` already publish the owned contract baseline for this seam, so the remaining work is landing behavior and tests, not inventing a new contract phase.
 
 ## Pre-exec findings
 

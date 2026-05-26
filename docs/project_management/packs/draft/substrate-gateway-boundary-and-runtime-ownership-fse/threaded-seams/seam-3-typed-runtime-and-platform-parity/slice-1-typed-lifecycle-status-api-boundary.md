@@ -48,8 +48,8 @@ candidate_subslices: []
 - **Dependencies**:
   - `review.md`
   - `../../governance/seam-2-closeout.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 - **Verification**:
   - pass condition: runtime planning can name one authoritative lifecycle/status path without reopening schema or policy truth
 - **Rollout/safety**:

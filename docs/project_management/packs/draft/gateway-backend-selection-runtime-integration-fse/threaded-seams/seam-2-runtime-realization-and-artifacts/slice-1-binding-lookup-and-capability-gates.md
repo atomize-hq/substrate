@@ -57,7 +57,7 @@ open_remediations:
 - **Outcome**:
   - runtime request preparation and binding resolution consume the selected backend id directly rather than treating `cli:codex` as the only integrated binding.
 - **Inputs/outputs**:
-  - Inputs: `THR-01`, `docs/contracts/substrate-gateway-backend-adapter-protocol.md`, `crates/world-service/src/service.rs`, `crates/world-service/src/gateway_runtime.rs`
+  - Inputs: `THR-01`, `docs/contracts/gateway/backend-adapter-protocol.md`, `crates/world-service/src/service.rs`, `crates/world-service/src/gateway_runtime.rs`
   - Outputs: binding-resolution implementation, failure-class updates, targeted tests
 - **Thread/contract refs**:
   - `THR-01`

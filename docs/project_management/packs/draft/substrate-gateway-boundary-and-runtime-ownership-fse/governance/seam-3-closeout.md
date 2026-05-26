@@ -40,7 +40,7 @@ This closeout records the landed SEAM-3 exit state after the typed runtime bound
 - **Landed evidence**:
   - `8c0bd439` - completed S1 typed runtime boundary across shared API types, shared client helpers, world-service gateway routes, and shell gateway consumption/tests
   - `4511b3a5` - completed S2 parity evidence updates in `docs/WORLD.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `crates/transport-api-types/src/lib.rs`
   - `crates/transport-api-client/src/lib.rs`
   - `crates/world-service/src/handlers.rs`

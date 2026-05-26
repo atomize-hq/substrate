@@ -52,8 +52,8 @@ open_remediations: []
 - **Primary interfaces**
   - Inputs:
     - ADR-0046 goals and non-goals
-    - canonical `C-01` in `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - canonical `C-02` in `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - canonical `C-01` in `docs/contracts/gateway/backend-adapter-selection.md`
+    - canonical `C-02` in `docs/contracts/gateway/policy-evaluation.md`
     - shell request construction and validation in `crates/shell/src/builtins/world_gateway.rs`
     - shell lifecycle tests in `crates/shell/tests/world_gateway.rs`
   - Outputs:
@@ -82,8 +82,8 @@ open_remediations: []
 - **Touch surface**:
   - `crates/shell/src/builtins/world_gateway.rs`
   - `crates/shell/tests/world_gateway.rs`
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
   - future subordinate ADR-0046 support docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, if created later
 - **Verification**:
   - `C-01` and `C-02` are already published; this seam verifies shell adoption, not fresh contract publication.
@@ -99,8 +99,8 @@ open_remediations: []
     - `crates/shell/tests/world_gateway.rs` proves the distinction between invalid integration, policy denial, component unavailable, and transient runtime failure where the shell owns that distinction
     - any later subordinate ADR-0046 support docs remain descriptive implementation notes and do not compete with canonical `docs/contracts/` ownership
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 - **Risks / unknowns**:
   - Risk:
     - current shell behavior still special-cases `cli:codex` and does not yet realize generic inventory-backed backend validation

@@ -36,7 +36,7 @@ This slice plans the closeout-backed handoff that `SEAM-3` must consume before p
 
 - Update `../../governance/seam-2-closeout.md` with:
   - landed evidence for `C-03` and `C-04`
-  - canonical artifact paths for `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - canonical artifact paths for `docs/contracts/gateway/backend-adapter-protocol.md` and `docs/contracts/gateway/backend-adapter-schema.md`
   - a `THR-02` publication-state entry captured at closeout time
   - the final local-to-external owner line for ADR-0017 and ADR-0028
   - the adopted capability, extension-key, payload, error, and session-handle schema subset

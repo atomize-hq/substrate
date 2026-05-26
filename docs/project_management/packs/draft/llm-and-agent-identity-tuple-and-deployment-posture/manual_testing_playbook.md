@@ -11,9 +11,9 @@ This pack is semantic and planning-only. Validation is a deterministic cross-doc
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/platform-parity-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/compatibility-spec.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
+- `docs/contracts/gateway/status-schema.md`
+- `docs/contracts/gateway/policy-evaluation.md`
+- `docs/contracts/gateway/runtime-parity.md`
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
@@ -64,7 +64,7 @@ Check:
 - `policy-spec.md` owns routing-hint evaluation, direct-provider gating, and bridge transport-only policy rules.
 - ADR-0043 owns tuple-axis policy keys under `llm.constraints.*` and does not restate tuple meanings as a competing owner.
 - `telemetry-spec.md` owns additive placement of `identity_tuple` and `placement_posture` on status, diagnostics, and trace surfaces.
-- `docs/contracts/substrate-gateway-status-schema.md` remains the owner of the top-level `status --json` envelope and `client_wiring.*`.
+- `docs/contracts/gateway/status-schema.md` remains the owner of the top-level `status --json` envelope and `client_wiring.*`.
 - ADR-0028 remains the owner of canonical trace correlation keys and tuple publication remains additive relative to those keys.
 
 Pass condition:
@@ -177,7 +177,7 @@ rg -n 'host_to_world_bridge|second control plane|second gateway|host gateway' \
 ```bash
 rg -n 'client_wiring|identity_tuple|placement_posture' \
   docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture \
-  docs/contracts/substrate-gateway-status-schema.md
+  docs/contracts/gateway/status-schema.md
 ```
 
 4. Search for stale active or backup references presented as current owners:

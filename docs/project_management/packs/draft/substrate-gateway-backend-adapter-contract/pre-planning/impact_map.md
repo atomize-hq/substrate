@@ -36,9 +36,9 @@ Authoring standards:
 ### Edit
 
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-- `docs/contracts/substrate-gateway-operator-contract.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
+- `docs/contracts/gateway/operator-contract.md`
+- `docs/contracts/gateway/policy-evaluation.md`
+- `docs/contracts/gateway/runtime-parity.md`
 - `docs/WORLD.md`
 - `docs/USAGE.md`
 - `crates/transport-api-types/src/lib.rs`

@@ -42,7 +42,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-01
   related_contract: C-02
-  related_artifact: docs/contracts/substrate-gateway-policy-evaluation.md
+  related_artifact: docs/contracts/gateway/policy-evaluation.md
   severity: medium
   status: resolved
   owner_seam: SEAM-1
@@ -63,7 +63,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-01
   related_contract: C-01
-  related_artifact: docs/contracts/substrate-gateway-backend-adapter-selection.md
+  related_artifact: docs/contracts/gateway/backend-adapter-selection.md
   severity: medium
   status: resolved
   owner_seam: SEAM-1
@@ -84,7 +84,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S01
   related_thread: THR-02
   related_contract: C-03
-  related_artifact: docs/contracts/substrate-gateway-backend-adapter-protocol.md
+  related_artifact: docs/contracts/gateway/backend-adapter-protocol.md
   severity: medium
   status: resolved
   owner_seam: SEAM-2
@@ -104,7 +104,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S01
   related_thread: THR-02
   related_contract: C-04
-  related_artifact: docs/contracts/substrate-gateway-backend-adapter-schema.md
+  related_artifact: docs/contracts/gateway/backend-adapter-schema.md
   severity: medium
   status: resolved
   owner_seam: SEAM-2
@@ -125,7 +125,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S01
   related_thread: THR-03
   related_contract: C-05
-  related_artifact: docs/contracts/substrate-gateway-runtime-parity.md
+  related_artifact: docs/contracts/gateway/runtime-parity.md
   severity: medium
   status: resolved
   owner_seam: SEAM-3
@@ -151,7 +151,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-02
   related_contract: C-04
-  related_artifact: docs/contracts/substrate-gateway-policy-evaluation.md
+  related_artifact: docs/contracts/gateway/policy-evaluation.md
   severity: none
   status: retired
   owner_seam: SEAM-2
@@ -159,5 +159,5 @@ Future remediation entries must use the canonical fields from the extractor gove
   summary: auth-source precedence is already fixed while carrier choice is explicitly deferred by the policy contract, so choosing env-only, file-only, or a stronger secret-channel carrier is not a current pack blocker
   required_fix: none inside the current execution target
   resolution_evidence:
-    - docs/contracts/substrate-gateway-policy-evaluation.md states that auth-source precedence governs handoff content while carrier choice remains separate and current env delivery remains compatible
+    - docs/contracts/gateway/policy-evaluation.md states that auth-source precedence governs handoff content while carrier choice remains separate and current env delivery remains compatible
 ```

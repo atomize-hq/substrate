@@ -34,7 +34,7 @@ This slice plans the closeout-backed handoff that `SEAM-2` and `SEAM-3` must con
 
 - Update `../../governance/seam-1-closeout.md` with:
   - landed evidence for `C-01` and `C-02`
-  - the canonical `C-01` artifact path at `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+  - the canonical `C-01` artifact path at `docs/contracts/gateway/backend-adapter-selection.md`
   - the explicit `C-02` owner line and bounded adapter-visible status field family
   - `THR-01` published-state evidence
   - any review-surface delta or stale triggers discovered during landing

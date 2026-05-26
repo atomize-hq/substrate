@@ -18,7 +18,7 @@ Canonical references:
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 
@@ -99,7 +99,7 @@ Agent-hub control-plane policy evaluation follows this fixed order:
    - when drift is absent, reuse the current shared world
    - when drift is present and `agents.hub.world_restart.on_drift = auto_restart`, restart is permitted and replacement handles must be allocated before more work is dispatched
    - when drift is present and `agents.hub.world_restart.on_drift = fail_closed`, the control plane denies further world-scoped work until an explicit restart path succeeds
-12. If an agent explicitly triggers nested LLM work, stop agent-hub control-plane evaluation and hand the nested request to the gateway policy surface governed by ADR-0043 and `docs/contracts/substrate-gateway-policy-evaluation.md`.
+12. If an agent explicitly triggers nested LLM work, stop agent-hub control-plane evaluation and hand the nested request to the gateway policy surface governed by ADR-0043 and `docs/contracts/gateway/policy-evaluation.md`.
 
 ## Deny taxonomy
 

@@ -23,10 +23,10 @@ Horizon policy for this pack:
   - **Derived consumers**: shell gateway entrypoints, broker/config readers, runtime tests
   - **Thread IDs**: `THR-01`
   - **Definition**: the integrated lifecycle selection boundary over existing config, policy, and inventory inputs: stable backend id selection, backend-id grammar, one-file-per-backend posture, filename/id consistency, deny-by-default allowlisting, and the trusted-input boundary that excludes gateway-local persistence and mutation from authorization.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/backend-adapter-selection.md`
   - **Supporting feature-local surfaces**:
     - future subordinate ADR-0046 support docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, if created later
-  - **Versioning / compat**: canonical publication stays in `docs/contracts/substrate-gateway-backend-adapter-selection.md`; this pack only aligns implementation and any later subordinate ADR-0046 support docs to it.
+  - **Versioning / compat**: canonical publication stays in `docs/contracts/gateway/backend-adapter-selection.md`; this pack only aligns implementation and any later subordinate ADR-0046 support docs to it.
 
 - **Contract ID**: `C-02`
   - **Type**: `permission`
@@ -35,7 +35,7 @@ Horizon policy for this pack:
   - **Derived consumers**: auth material sourcing logic, failure taxonomy, security review
   - **Thread IDs**: `THR-01`
   - **Definition**: the integrated lifecycle policy-evaluation and auth-sourcing boundary: fail-closed posture, host env-read gating, host-credential-read gating, no-host-fallback rules when in-world execution is required, and the precedence rules for authorized auth material.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/policy-evaluation.md`
   - **Supporting feature-local surfaces**:
     - future subordinate ADR-0046 support docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, if created later
   - **Versioning / compat**: reused ADR-0027 keys stay externally owned; this pack aligns implementation and any later subordinate ADR-0046 support docs to the published policy contract rather than reopening it.
@@ -47,10 +47,10 @@ Horizon policy for this pack:
   - **Derived consumers**: world-service service, runtime launch path, lifecycle restart handling
   - **Thread IDs**: `THR-02`
   - **Definition**: the integrated adapter realization protocol after selection succeeds: one binding lookup, required capability gate, auth handoff validation order, adapter-driven config render, launch, readiness, and restart semantics.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/backend-adapter-protocol.md`
   - **Supporting feature-local surfaces**:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
-  - **Versioning / compat**: canonical publication stays in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`; `SEAM-2` must implement it without widening `status --json` or operator commands.
+  - **Versioning / compat**: canonical publication stays in `docs/contracts/gateway/backend-adapter-protocol.md`; `SEAM-2` must implement it without widening `status --json` or operator commands.
 
 - **Contract ID**: `C-04`
   - **Type**: `schema`
@@ -59,7 +59,7 @@ Horizon policy for this pack:
   - **Derived consumers**: shared request types, integrated auth payloads, runtime artifact handling, failure reporting
   - **Thread IDs**: `THR-02`
   - **Definition**: the runtime-owned realization data surfaces needed to support more than `cli:codex`: integrated auth payload shapes, runtime config payloads, managed runtime artifact naming/permission rules, and any shared types required for adapter-driven lifecycle behavior.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/backend-adapter-schema.md`
   - **Supporting feature-local surfaces**:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
@@ -72,14 +72,14 @@ Horizon policy for this pack:
   - **Derived consumers**: validation artifacts, compatibility notes, smoke scripts, downstream rollout review
   - **Thread IDs**: `THR-03`
   - **Definition**: parity and rollout proof for the selected-backend lifecycle: Linux/macOS/Windows validation expectations, `cli:codex` regression floor, explicit unsupported-backend behavior, and later first-additional-backend proof.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-runtime-parity.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/runtime-parity.md`
   - **Supporting feature-local surfaces**:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/platform-parity-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/compatibility-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/manual_testing_playbook.md`
   - **Consumed external authorities**:
-    - `docs/contracts/substrate-gateway-operator-contract.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - `docs/contracts/gateway/operator-contract.md`
+    - `docs/contracts/gateway/policy-evaluation.md`
   - **Versioning / compat**: the runtime-parity contract owns lifecycle/status parity; future additional-backend compatibility publication is deferred until that rollout work actually begins.
 
 ## Thread registry
@@ -91,7 +91,7 @@ Horizon policy for this pack:
   - **Purpose**: make the existing selection and policy contracts executable in repo consumers so runtime realization does not infer truth from the older Codex-only path.
   - **State**: `revalidated`
   - **Revalidation trigger**: selection order, backend inventory rules, allowlist semantics, auth precedence, or policy failure taxonomy changes.
-  - **Satisfied by**: `governance/seam-1-closeout.md` plus evidence that shell, broker, config/policy surfaces, and any later subordinate ADR-0046 support docs align to `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`.
+  - **Satisfied by**: `governance/seam-1-closeout.md` plus evidence that shell, broker, config/policy surfaces, and any later subordinate ADR-0046 support docs align to `docs/contracts/gateway/backend-adapter-selection.md` and `docs/contracts/gateway/policy-evaluation.md`.
   - **Notes**: the canonical contracts were published by `SEAM-1`, and the thread is now `revalidated` because active `SEAM-2` rechecked its basis against `governance/seam-1-closeout.md` and the new seam-local `review.md`.
 
 - **Thread ID**: `THR-02`

@@ -43,7 +43,7 @@ open_remediations:
 - **Dependencies**:
   - none inbound; this is the first producer seam in the pack
 - **Verification**:
-  - compare the seam plan against `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, and `crates/shell/tests/world_gateway.rs`
+  - compare the seam plan against `docs/contracts/gateway/backend-adapter-selection.md`, `docs/contracts/gateway/policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, and `crates/shell/tests/world_gateway.rs`
   - treat the missing non-fse ADR-0046 support-doc files as future subordinate material, not as current evidence required to validate the baseline
 - **Rollout/safety**:
   - preserves fail-closed behavior by preventing the seam from broadening scope into runtime ownership
@@ -56,7 +56,7 @@ open_remediations:
 - **Outcome**:
   - The seam records that `C-01` already fixes selection order, inventory roots, and filename/id invariants, and that SEAM-1 now only needs shell-side adoption and tests.
 - **Inputs/outputs**:
-  - Inputs: `../../threading.md`, `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `crates/shell/src/builtins/world_gateway.rs`
+  - Inputs: `../../threading.md`, `docs/contracts/gateway/backend-adapter-selection.md`, `crates/shell/src/builtins/world_gateway.rs`
   - Outputs: a narrowed SEAM-1 implementation plan and explicit code/test ownership
 - **Thread/contract refs**:
   - `THR-01`
@@ -88,7 +88,7 @@ Checklist:
 - **Outcome**:
   - The seam records that `C-02` already fixes precedence and fail-closed posture, and that SEAM-1 now owns adoption plus evidence.
 - **Inputs/outputs**:
-  - Inputs: `../../threading.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/world_gateway.rs`
+  - Inputs: `../../threading.md`, `docs/contracts/gateway/policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/world_gateway.rs`
   - Outputs: a narrowed SEAM-1 plan for precedence/fail-closed adoption and tests
 - **Thread/contract refs**:
   - `THR-01`

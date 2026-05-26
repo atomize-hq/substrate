@@ -52,7 +52,7 @@ Rules:
 
 The schema boundary is published through:
 - this feature-local spec
-- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/gateway/status-schema.md`
 - later implementation and verification slices
 
 ## Required contract statements

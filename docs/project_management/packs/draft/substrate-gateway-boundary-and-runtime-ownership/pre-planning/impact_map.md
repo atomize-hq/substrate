@@ -241,7 +241,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - status JSON ownership
   - Conflict: yes
   - Resolution (explicit):
-    - Treat the archived pack as historical evidence only; the live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
+    - Treat the archived pack as historical evidence only; the live operator contract is `docs/contracts/gateway/operator-contract.md`.
     - Carry forward only the stable wiring env names and the in-world gateway intent.
     - Do not carry forward Substrate-owned gateway runtime crates, archived command ordering, or archived transport details as current contract.
 

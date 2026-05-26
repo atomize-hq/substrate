@@ -93,17 +93,17 @@ open_remediations: []
   - `docs/WORLD.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, and `C-03`; verification may depend on accepted upstream evidence for command behavior, status schema, and fail-closed policy rules.
-  - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now live in `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md`, and the threaded `S00` owner slice, so the remaining work is execution and publication rather than pre-exec contract discovery.
+  - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now live in `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, `docs/contracts/gateway/runtime-parity.md`, and the threaded `S00` owner slice, so the remaining work is execution and publication rather than pre-exec contract discovery.
   - Later seam-local verification should prove:
     - the typed world-service path is authoritative for lifecycle/status operations
     - shell and shared clients consume the same runtime contract
     - Linux, macOS, and Windows guarantees are explicit and testable
     - provisioning remains correctly deferred outside this pack
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Risks / unknowns**:
   - Risk:
     - typed runtime ownership can drift back toward shell-assembled probing

@@ -55,7 +55,7 @@ open_remediations:
 - **Outcome**:
   - `crates/shell/src/builtins/world_gateway.rs` uses the same ordered decision path as `C-01` from selected backend id through allowlist enforcement before runtime dispatch.
 - **Inputs/outputs**:
-  - Inputs: `S00`, `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `crates/shell/src/builtins/world_gateway.rs`
+  - Inputs: `S00`, `docs/contracts/gateway/backend-adapter-selection.md`, `crates/shell/src/builtins/world_gateway.rs`
   - Outputs: aligned shell selection flow, targeted test updates, and supporting ADR-0046 doc notes
 - **Thread/contract refs**:
   - `THR-01`

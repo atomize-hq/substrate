@@ -97,14 +97,14 @@ open_remediations:
   - This seam produces owned contracts `C-03` and `C-04`.
   - At seam-brief depth, readiness is that the dispatch lifecycle, field inventory, fail-closed capability rules, and ADR-0017 / ADR-0028 handoff lines are concrete enough for seam-local planning and implementation.
   - `SEAM-2` is closed because `THR-02` is now published and the seam-local contract baseline landed in:
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - `docs/contracts/gateway/backend-adapter-protocol.md`
+    - `docs/contracts/gateway/backend-adapter-schema.md`
     - `gateway-backend-adapter-protocol-spec.md`
     - `gateway-backend-adapter-schema-spec.md`
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
+  - `docs/contracts/gateway/status-schema.md`
 - **Risks / unknowns**:
   - Risk:
     - landing could drift away from the now-pinned adopted capability subset, extension-key subset, bounded error shape, or session-handle bounds

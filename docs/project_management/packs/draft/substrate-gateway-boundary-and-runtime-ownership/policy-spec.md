@@ -41,7 +41,7 @@ Not owned here:
 
 The policy boundary is published through:
 - this feature-local spec
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - later implementation and verification slices
 
 ## Required contract statements

@@ -13,7 +13,7 @@ This artifact feeds `gates.pre_exec.review`.
 
 - Can parity proof still silently route unsupported integrated backends through the old `cli:codex` path even after `SEAM-2` published explicit no-fallback runtime behavior?
 - Can `api:openai` be named as the first additional-backend proof target in closeout and live tests, yet remain absent from the platform validation and rollout surfaces this seam is supposed to land?
-- Can Linux/macOS/Windows evidence drift into platform-specific exceptions that contradict the single operator-facing lifecycle/status contract in `docs/contracts/substrate-gateway-runtime-parity.md`?
+- Can Linux/macOS/Windows evidence drift into platform-specific exceptions that contradict the single operator-facing lifecycle/status contract in `docs/contracts/gateway/runtime-parity.md`?
 
 ## R1 - Regression floor and additional-backend matrix that must land
 
@@ -43,13 +43,13 @@ flowchart LR
 
 - `crates/world-service/tests/gateway_runtime_parity.rs` already names `api:openai` and explicit unsupported-backend cases, but the seam still has to make the proof matrix readable and durable enough that closeout can publish `THR-03` without re-reading test internals.
 - `crates/shell/tests/world_gateway.rs` already proves bounded `api_env` emission and explicit unsupported-integrated-backend failures, but this seam still has to align those assertions with rollout and platform evidence rather than treating them as isolated test trivia.
-- `docs/contracts/substrate-gateway-runtime-parity.md` owns lifecycle/status parity semantics already, so rollout proof must attach evidence to that canonical contract instead of inventing a seam-local compatibility taxonomy.
+- `docs/contracts/gateway/runtime-parity.md` owns lifecycle/status parity semantics already, so rollout proof must attach evidence to that canonical contract instead of inventing a seam-local compatibility taxonomy.
 - The active seam references pack-local parity, compatibility, manual-testing, and smoke surfaces that do not yet exist in this pack directory, so execution must create only the minimum evidence surfaces needed to make platform proof and closeout deterministic.
 
 ## Pre-exec findings
 
 - The review gate passes. The seam-local diagrams expose the exact matrix and platform evidence flows that must land before closeout can publish `THR-03`.
-- The contract gate passes. Canonical `C-05` already exists under `docs/contracts/substrate-gateway-runtime-parity.md`, while upstream `C-01` through `C-04` were published and revalidated through `SEAM-1` and `SEAM-2`.
+- The contract gate passes. Canonical `C-05` already exists under `docs/contracts/gateway/runtime-parity.md`, while upstream `C-01` through `C-04` were published and revalidated through `SEAM-1` and `SEAM-2`.
 - Revalidation passes against current repo evidence:
   - `governance/seam-2-closeout.md` publishes `THR-02` and names `api:openai` as the first landed non-`cli:codex` proof target.
   - `crates/transport-api-types/src/lib.rs` still exposes the bounded `api_env` auth facet for `api:openai`.

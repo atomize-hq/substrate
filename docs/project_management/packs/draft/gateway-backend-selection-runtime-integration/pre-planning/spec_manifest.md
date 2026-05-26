@@ -13,13 +13,13 @@ Authoring standards:
 - ADRs:
   - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`
 - External authoritative docs reused by this feature:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
@@ -234,14 +234,14 @@ This manifest does not require `plan.md`, `tasks.json`, kickoff prompts, executi
 
 | Surface | Authoritative doc | What must be explicitly defined |
 | --- | --- | --- |
-| `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as the stable operator command family | `docs/contracts/substrate-gateway-operator-contract.md` | command names, baseline operator meaning, stable entrypoint set, and stable absent-state semantics |
-| `status --json` envelope and `client_wiring.*` field family | `docs/contracts/substrate-gateway-status-schema.md` | field names, field types, and absence semantics |
-| Stable non-secret wiring env outputs `SUBSTRATE_LLM_OPENAI_BASE_URL` and `SUBSTRATE_LLM_ANTHROPIC_BASE_URL` | `docs/contracts/substrate-gateway-operator-contract.md` | env names, non-secret posture, and ownership boundary |
-| Gateway policy-evaluation rules for `llm.gateway.mode`, `llm.fail_closed.routing`, host-to-world secret delivery, and no-host-fallback posture | `docs/contracts/substrate-gateway-policy-evaluation.md` | evaluation meaning, fail-closed posture, and trust boundary |
-| Typed runtime authority, readiness truth, operator-facing parity contract, and hidden transport divergence | `docs/contracts/substrate-gateway-runtime-parity.md` | typed runtime ownership, readiness contract, and transport-divergence boundary |
-| Stable `<kind>:<name>` backend-id grammar and the ordered selection boundary before adapter dispatch | `docs/contracts/substrate-gateway-backend-adapter-selection.md` | backend-id format, selection order, invalid-versus-denied distinction, and trusted-input boundary |
-| General gateway adapter dispatch lifecycle after a backend id has been selected | `docs/contracts/substrate-gateway-backend-adapter-protocol.md` | general lookup, validation, dispatch, and event-translation rules reused by this feature |
-| General gateway adapter capability subset, extension subset, request shape, bounded event/completion shape, and bounded adapter error shape | `docs/contracts/substrate-gateway-backend-adapter-schema.md` | adopted capability ids, extension keys, request envelope, bounded event/completion payloads, and bounded adapter error vocabulary |
+| `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as the stable operator command family | `docs/contracts/gateway/operator-contract.md` | command names, baseline operator meaning, stable entrypoint set, and stable absent-state semantics |
+| `status --json` envelope and `client_wiring.*` field family | `docs/contracts/gateway/status-schema.md` | field names, field types, and absence semantics |
+| Stable non-secret wiring env outputs `SUBSTRATE_LLM_OPENAI_BASE_URL` and `SUBSTRATE_LLM_ANTHROPIC_BASE_URL` | `docs/contracts/gateway/operator-contract.md` | env names, non-secret posture, and ownership boundary |
+| Gateway policy-evaluation rules for `llm.gateway.mode`, `llm.fail_closed.routing`, host-to-world secret delivery, and no-host-fallback posture | `docs/contracts/gateway/policy-evaluation.md` | evaluation meaning, fail-closed posture, and trust boundary |
+| Typed runtime authority, readiness truth, operator-facing parity contract, and hidden transport divergence | `docs/contracts/gateway/runtime-parity.md` | typed runtime ownership, readiness contract, and transport-divergence boundary |
+| Stable `<kind>:<name>` backend-id grammar and the ordered selection boundary before adapter dispatch | `docs/contracts/gateway/backend-adapter-selection.md` | backend-id format, selection order, invalid-versus-denied distinction, and trusted-input boundary |
+| General gateway adapter dispatch lifecycle after a backend id has been selected | `docs/contracts/gateway/backend-adapter-protocol.md` | general lookup, validation, dispatch, and event-translation rules reused by this feature |
+| General gateway adapter capability subset, extension subset, request shape, bounded event/completion shape, and bounded adapter error shape | `docs/contracts/gateway/backend-adapter-schema.md` | adopted capability ids, extension keys, request envelope, bounded event/completion payloads, and bounded adapter error vocabulary |
 | Config file families and precedence for global and workspace config and policy files | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` | file locations, precedence order, and overlay rules |
 | Inventory file family and filename-to-id match rule | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` | file locations, filename rules, and schema-backed identity consistency |
 | `llm.routing.default_backend` key path, type, and default behavior | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` | key path, type, default, and schema constraints |
@@ -290,11 +290,11 @@ These artifacts are required by ADR-0046 validation, but they are not selected a
 No feature-local doc is selected for these classes:
 
 - Gateway operator contract doc
-  - Existing operator command-family semantics already have one owner in `docs/contracts/substrate-gateway-operator-contract.md`.
+  - Existing operator command-family semantics already have one owner in `docs/contracts/gateway/operator-contract.md`.
 - Status-schema spec
-  - Existing machine-readable gateway status surfaces already have one owner in `docs/contracts/substrate-gateway-status-schema.md`.
+  - Existing machine-readable gateway status surfaces already have one owner in `docs/contracts/gateway/status-schema.md`.
 - Standalone gateway policy-evaluation contract
-  - Existing gateway policy-evaluation semantics already have one owner in `docs/contracts/substrate-gateway-policy-evaluation.md`.
+  - Existing gateway policy-evaluation semantics already have one owner in `docs/contracts/gateway/policy-evaluation.md`.
 - Telemetry spec
   - ADR-0046 does not add a new trace field, log field, or structured-event envelope field. Existing trace vocabulary and envelope ownership remain external.
 - Decision register

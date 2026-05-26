@@ -24,7 +24,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: gateway adapter docs, policy review, and any future backend inventory or allowlist validation surfaces
   - **Thread IDs**: `THR-01`
   - **Definition**: the stable `<kind>:<name>` backend-id contract, ordered config/policy/inventory evaluation, and the invalid-selection versus dependency-unavailable versus policy-denied classification used before adapter dispatch.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/backend-adapter-selection.md`
   - **Versioning / compat**: the backend-id grammar, deny-by-default posture, one-backend-id-to-one-adapter-identity rule, and failure taxonomy must remain stable for future `cli:*` and `api:*` adapters.
 
 - **Contract ID**: `C-02`
@@ -34,7 +34,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: `status --json` readers, operator docs, tests, and later gateway capability publication work
   - **Thread IDs**: `THR-01`
   - **Definition**: the publication boundary for any additive adapter-visible gateway status metadata while preserving the existing `status --json` envelope and `client_wiring.*` owner line.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-status-schema.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/status-schema.md`
   - **Versioning / compat**: no new adapter-visible field family may ship without an explicit owner line; existing `status --json` semantics remain externally owned and must stay backward-compatible.
 
 - **Contract ID**: `C-03`
@@ -44,7 +44,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: `substrate-gateway`, shared client helpers, event/trace review, and future adapter harness implementations
   - **Thread IDs**: `THR-02`
   - **Definition**: the selected-backend to adapter-dispatch lifecycle, capability-validation order, request normalization and response emission ordering, and the exact handoff boundary between local adapter translation and externally owned ADR-0017 / ADR-0028 semantics.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/backend-adapter-protocol.md`
   - **Versioning / compat**: unsupported capabilities and extension keys must fail closed, and the protocol may evolve only through explicit versioned contract changes that preserve the stable backend-id boundary.
 
 - **Contract ID**: `C-04`
@@ -54,7 +54,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: adapter implementations, validation artifacts, and any future durable schema publication
   - **Thread IDs**: `THR-02`
   - **Definition**: the adopted Unified Agent API subset for capability advertisement, versioned extension keys, request and response payloads, adapter error objects, and backend-defined session-handle facets.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/backend-adapter-schema.md`
   - **Versioning / compat**: field names, defaults, omission rules, and bounded error detail must stay explicit and additive; session-handle facets remain gateway-contract data rather than Substrate policy input.
 
 ## Thread registry

@@ -76,7 +76,7 @@ open_remediations: []
    - `crates/shell/src/execution/cli.rs`, `crates/shell/src/builtins/mod.rs`, and `crates/shell/src/builtins/world_gateway.rs` enforce one command family and one status entrypoint.
    - `crates/shell/tests/world_gateway.rs` protects command spelling, absent-state behavior, and exit taxonomy.
    - `docs/USAGE.md` matches the contract wording without redefining the machine-readable surface.
-   - the durable contract reference remains `docs/contracts/substrate-gateway-operator-contract.md`.
+   - the durable contract reference remains `docs/contracts/gateway/operator-contract.md`.
 
 #### S00.T1 - Record the concrete operator contract for `C-01`
 

@@ -23,7 +23,7 @@
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/workstream_triage.md`
 - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/gateway/status-schema.md`
 - `docs/TRACE.md`
 
 ## Behavior (authoritative)

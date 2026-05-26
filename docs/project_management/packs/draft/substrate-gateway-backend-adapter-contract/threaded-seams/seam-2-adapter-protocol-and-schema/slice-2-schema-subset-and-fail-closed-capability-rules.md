@@ -65,7 +65,7 @@ Checklist:
 
 - Implement:
   - record the supported capability and extension-key inventory in `../../gateway-backend-adapter-schema-spec.md`
-  - keep `docs/contracts/substrate-gateway-backend-adapter-schema.md` as the durable owner of the adopted subset
+  - keep `docs/contracts/gateway/backend-adapter-schema.md` as the durable owner of the adopted subset
   - record the fail-closed rules for unsupported requests
 - Test:
   - verify every supported item is named explicitly against:

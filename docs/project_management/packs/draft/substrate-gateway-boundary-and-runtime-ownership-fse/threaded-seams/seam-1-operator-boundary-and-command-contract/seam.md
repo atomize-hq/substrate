@@ -64,7 +64,7 @@ open_remediations: []
   - `C-01` is concrete enough for execution because `S00` names the exact command family, status entrypoint rule, stable env semantics, exit taxonomy, ownership table, and the verification surfaces that later slices must update together.
   - The producer seam does not require its own final accepted contract artifact as a pre-exec input; publication and accepted evidence are handled through `S99` and closeout.
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/operator-contract.md`
 - **Basis posture**:
   - Currentness: `current`
   - Upstream closeouts assumed: none
@@ -75,7 +75,7 @@ open_remediations: []
   - Downstream blocked seams: `SEAM-2`, `SEAM-3`, `SEAM-4`
   - Contracts produced: `C-01`
   - Contracts consumed: none
-  - Canonical contract refs: `docs/contracts/substrate-gateway-operator-contract.md`
+  - Canonical contract refs: `docs/contracts/gateway/operator-contract.md`
 
 ## Review bundle
 

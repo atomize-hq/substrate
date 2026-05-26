@@ -64,8 +64,8 @@ open_remediations: []
 - **Verification**:
   - This seam **consumes** published `C-01` and `C-02` from `THR-01`.
   - This seam **owns and realizes** `C-03` and `C-04`, whose canonical baselines already exist under:
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - `docs/contracts/gateway/backend-adapter-protocol.md`
+    - `docs/contracts/gateway/backend-adapter-schema.md`
   - Readiness means execution may start without inventing new upstream contract truth:
     - selected backend id already arrives from shell as a fixed input
     - auth precedence is already pinned by canonical policy docs
@@ -97,10 +97,10 @@ open_remediations: []
     - `C-01`
     - `C-02`
   - Canonical contract refs:
-    - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - `docs/contracts/gateway/backend-adapter-selection.md`
+    - `docs/contracts/gateway/policy-evaluation.md`
+    - `docs/contracts/gateway/backend-adapter-protocol.md`
+    - `docs/contracts/gateway/backend-adapter-schema.md`
 
 ## Review bundle
 

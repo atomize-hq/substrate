@@ -1,7 +1,7 @@
 # spec — llm_gateway_in_world: secret delivery (v1 legacy env injection + v1.1 FD/pipe auth bundle)
 
 Historical evidence only. This spec preserves ADR-0023-era secret delivery planning and does not define the current operator boundary.
-The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
+The live operator contract is `docs/contracts/gateway/operator-contract.md`.
 
 Phase 8 additive upgrade: v1.1 introduces a preferred secret-channel payload + in-world FD/pipe delivery path so secret values do not live in in-world process environments by default (see DR-0018).
 

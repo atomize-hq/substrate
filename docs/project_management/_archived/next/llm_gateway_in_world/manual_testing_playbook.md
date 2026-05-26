@@ -1,7 +1,7 @@
 # Manual testing playbook — llm_gateway_in_world
 
 Historical evidence only. This placeholder manual playbook preserves ADR-0023-era checks and does not define the current operator boundary.
-The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
+The live operator contract is `docs/contracts/gateway/operator-contract.md`.
 
 Intended checks (v1):
 - Fail-closed behavior when `llm.fail_closed.routing=true` and world is unavailable.

@@ -11,7 +11,7 @@ This pack is documentation-driven. Validation is a deterministic contract and wo
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/compatibility-spec.md`
 - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `crates/broker/src/tests.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
 - `crates/shell/tests/world_gateway.rs`

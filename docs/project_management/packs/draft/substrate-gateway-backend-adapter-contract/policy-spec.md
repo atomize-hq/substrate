@@ -6,8 +6,8 @@ keep the C-01 baseline internally consistent.
 
 Canonical references:
 
-- `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/backend-adapter-selection.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 
@@ -59,7 +59,7 @@ These outcomes must remain distinct in docs, code, and tests.
 Evidence already present:
 
 - `crates/broker/src/policy.rs` and `crates/broker/src/effective_policy.rs` enforce backend-id validation
-- `docs/contracts/substrate-gateway-policy-evaluation.md` already separates invalid integration state,
+- `docs/contracts/gateway/policy-evaluation.md` already separates invalid integration state,
   dependency unavailability, and policy denial
 - `crates/shell/tests/world_gateway.rs` and `crates/world-service/tests/gateway_runtime_parity.rs`
   already prove the current unavailable and available status posture

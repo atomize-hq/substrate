@@ -11,10 +11,10 @@ Authoring standards:
 - Spec manifest:
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md`
 - External contract docs scanned:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Adjacent ADRs and packs scanned:
@@ -83,10 +83,10 @@ Canonical slice ids selected for this feature:
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-windows.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ.md`
 - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-- `docs/contracts/substrate-gateway-operator-contract.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
+- `docs/contracts/gateway/operator-contract.md`
+- `docs/contracts/gateway/status-schema.md`
+- `docs/contracts/gateway/policy-evaluation.md`
+- `docs/contracts/gateway/runtime-parity.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - `docs/CONFIGURATION.md`

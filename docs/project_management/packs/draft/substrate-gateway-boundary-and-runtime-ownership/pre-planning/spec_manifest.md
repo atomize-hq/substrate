@@ -15,7 +15,7 @@ Authoring standards:
 - Related authoritative contracts that remain external to this pack:
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/operator-contract.md`
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`

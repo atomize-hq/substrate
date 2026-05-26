@@ -16,7 +16,7 @@ Canonical references:
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/gateway/status-schema.md`
 - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`

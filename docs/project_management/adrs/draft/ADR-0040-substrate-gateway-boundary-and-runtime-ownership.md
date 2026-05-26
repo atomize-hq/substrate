@@ -17,7 +17,7 @@
 This ADR is a successor to ADR-0023 and should be read as an ownership clarification, not a rewrite of the
 underlying gateway capability.
 The committed operator contract that downstream slices should treat as live source of truth is
-`docs/contracts/substrate-gateway-operator-contract.md`.
+`docs/contracts/gateway/operator-contract.md`.
 
 - Superseded intent:
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
@@ -26,7 +26,7 @@ The committed operator contract that downstream slices should treat as live sour
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Committed operator contract:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/operator-contract.md`
 - Foundational output/routing and trace contracts:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`

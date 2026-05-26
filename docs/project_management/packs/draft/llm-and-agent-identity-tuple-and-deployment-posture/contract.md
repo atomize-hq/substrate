@@ -104,9 +104,9 @@ Rendering rules:
 
 - `identity-tuple-schema-spec.md` owns the machine-readable object names `identity_tuple` and `placement_posture`, their field lists, token grammar, and omission rules.
 - `telemetry-spec.md` owns placement and projection of `identity_tuple` and `placement_posture` onto status, diagnostics, and trace surfaces.
-- `docs/contracts/substrate-gateway-status-schema.md` remains the owner of the top-level `status --json` envelope and the `client_wiring.*` field family.
-- `docs/contracts/substrate-gateway-operator-contract.md` remains the owner of the gateway command family and exit-code taxonomy reuse.
-- `docs/contracts/substrate-gateway-policy-evaluation.md` remains the owner of policy evaluation over existing ADR-0027 keys.
+- `docs/contracts/gateway/status-schema.md` remains the owner of the top-level `status --json` envelope and the `client_wiring.*` field family.
+- `docs/contracts/gateway/operator-contract.md` remains the owner of the gateway command family and exit-code taxonomy reuse.
+- `docs/contracts/gateway/policy-evaluation.md` remains the owner of policy evaluation over existing ADR-0027 keys.
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` and `SCHEMA.md` remain the owners of config roots, policy roots, precedence, and backend-id grammar.
 - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` remains the owner of tuple-axis policy keys under `llm.constraints.*`.
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` remains the owner of canonical correlation vocabulary and join keys.

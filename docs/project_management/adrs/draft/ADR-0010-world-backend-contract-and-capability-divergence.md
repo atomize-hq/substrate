@@ -19,9 +19,9 @@
 - LLM + agent config/policy surface: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Gateway boundary and runtime ownership: `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - Gateway backend adapter contract: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-- Gateway operator contract: `docs/contracts/substrate-gateway-operator-contract.md`
-- Gateway policy evaluation contract: `docs/contracts/substrate-gateway-policy-evaluation.md`
-- Gateway runtime and platform parity contract: `docs/contracts/substrate-gateway-runtime-parity.md`
+- Gateway operator contract: `docs/contracts/gateway/operator-contract.md`
+- Gateway policy evaluation contract: `docs/contracts/gateway/policy-evaluation.md`
+- Gateway runtime and platform parity contract: `docs/contracts/gateway/runtime-parity.md`
 - Phase 8 cross-cutting secret/auth registry: `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 
 ## Executive Summary (Operator)

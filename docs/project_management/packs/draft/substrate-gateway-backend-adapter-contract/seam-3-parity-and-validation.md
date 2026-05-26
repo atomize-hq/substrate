@@ -64,7 +64,7 @@ This seam is closed. Its authoritative exit-gate record lives in `./governance/s
     - `C-02`
     - `C-03`
     - `C-04`
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
+    - `docs/contracts/gateway/runtime-parity.md`
     - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
     - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
   - Outputs:
@@ -92,19 +92,19 @@ This seam is closed. Its authoritative exit-gate record lives in `./governance/s
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/compatibility-spec.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/manual_testing_playbook.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/ci_checkpoint_plan.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01` through `C-04`, so verification may depend on accepted upstream evidence for the landed selection, publication, protocol, and schema contracts.
   - At seam-brief depth, readiness is that the parity matrix, compatibility proof, and validation assertions are concrete enough for seam-local planning and implementation.
   - Downstream seam-local review should prove that cross-platform guarantees remain compatible with ADR-0040 and that the compatibility proof keeps ADR-0024 historical rather than active.
   - ADR-0040 is now explicitly confirmed as evidence-only basis for this seam:
     - ADR-0040 remains the owner of the Substrate versus `substrate-gateway` runtime boundary.
-    - ADR-0041 and `docs/contracts/substrate-gateway-runtime-parity.md` carry the downstream consequences this seam must prove.
+    - ADR-0041 and `docs/contracts/gateway/runtime-parity.md` carry the downstream consequences this seam must prove.
     - direct ADR-0040 edits stay out of scope unless landing evidence discovers a concrete runtime-ownership drift.
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
 - **Risks / unknowns**:
   - Risk:
     - landing evidence could still expose a concrete runtime-ownership drift that ADR-0040 and the current runtime-parity contract no longer explain

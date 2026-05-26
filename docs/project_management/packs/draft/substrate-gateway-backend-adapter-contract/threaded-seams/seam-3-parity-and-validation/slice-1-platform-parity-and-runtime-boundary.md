@@ -56,10 +56,10 @@ Define the Linux/macOS/Windows guarantee matrix and the runtime-boundary proof t
 #### S1.T2 - Lock the runtime-boundary proof
 
 - **Outcome**:
-  - parity proof names the runtime-boundary evidence that must align with `docs/contracts/substrate-gateway-runtime-parity.md`.
+  - parity proof names the runtime-boundary evidence that must align with `docs/contracts/gateway/runtime-parity.md`.
 - **Files**:
   - `../../platform-parity-spec.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Acceptance criteria**:
   - no second Substrate control plane is introduced
   - runtime-boundary validation cites upstream truth rather than restating it

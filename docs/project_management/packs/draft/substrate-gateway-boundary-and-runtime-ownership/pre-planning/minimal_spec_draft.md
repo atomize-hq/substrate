@@ -13,7 +13,7 @@
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO0/SGBRO0-spec.md`
 - External source-of-truth ownership remains with:
   - ADR-0027 and `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*` for config and policy schema ownership
-  - `docs/contracts/substrate-gateway-operator-contract.md` for the committed operator boundary wording
+  - `docs/contracts/gateway/operator-contract.md` for the committed operator boundary wording
   - ADR-0017 for structured event routing and output-class separation
   - ADR-0028 for canonical trace vocabulary and correlation semantics
   - ADR-0041 for gateway runtime internals and backend-adapter identity

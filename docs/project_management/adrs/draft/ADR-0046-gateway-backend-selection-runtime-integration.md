@@ -23,11 +23,11 @@ This ADR is a thin implementation follow-on to ADR-0041. It keeps the ADR-0041 b
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Existing contract docs this ADR realizes:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
 - Explicitly deferred follow-ons:
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
   - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`

@@ -31,7 +31,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: operators, shell builtins, docs, and downstream validation artifacts
   - **Thread IDs**: `THR-01`
   - **Definition**: the Substrate-owned operator boundary for `substrate world gateway sync`, `status`, and `restart`, including absent-state behavior, stable wiring entrypoint rules, stable non-secret env outputs, exit-code boundaries, and the durable ownership split against `substrate-gateway`.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-operator-contract.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/operator-contract.md`
   - **Versioning / compat**: command spelling, exit-code mapping, stable env names, and the rule that `status --json` is the machine-readable wiring authority must remain stable; additive operator prose must not redefine these semantics.
 
 - **Contract ID**: `C-02`
@@ -41,7 +41,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: operator docs, tests, and any world-internal clients that consume the stable wiring surface
   - **Thread IDs**: `THR-02`
   - **Definition**: the structured output contract for `substrate world gateway status --json`, including the top-level object shape, `client_wiring.*` field family, non-secret posture, conditional presence rules, and the hard boundary against ADR-0042 additive metadata outside that family.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-status-schema.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/status-schema.md`
   - **Versioning / compat**: field names, omission rules, and `client_wiring.*` semantics must remain compatible; additive fields require downstream revalidation when they touch operator-facing meaning.
 
 - **Contract ID**: `C-03`
@@ -51,7 +51,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: policy explanations, platform parity docs, and manual validation artifacts
   - **Thread IDs**: `THR-03`
   - **Definition**: the gateway-integration decision flow over existing ADR-0027 inputs, including fail-closed in-world placement, host secret sourcing and host-to-world secret delivery boundaries, distinction between invalid integration state and dependency unavailability, and the ban on trusting gateway-local config/admin/persistence as policy inputs.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/policy-evaluation.md`
   - **Versioning / compat**: reused key paths stay externally owned, but the decision taxonomy and no-host-fallback rule must remain stable; changes require runtime and docs revalidation.
 
 - **Contract ID**: `C-04`
@@ -61,7 +61,7 @@ Horizon policy for this extracted pack:
   - **Derived consumers**: shell builtins, shared agent API clients, parity docs, and quality-gate evidence
   - **Thread IDs**: `THR-04`
   - **Definition**: the typed world-service lifecycle/status contract and the Linux/macOS/Windows parity guarantees that let CLI behavior stay stable without raw exec probing or platform-specific operator contracts.
-  - **Canonical contract ref**: `docs/contracts/substrate-gateway-runtime-parity.md`
+  - **Canonical contract ref**: `docs/contracts/gateway/runtime-parity.md`
   - **Versioning / compat**: endpoint ownership, lifecycle/status semantics, allowed divergence, and required validation evidence must stay synchronized across host and backend consumers.
 
 ## Thread registry
@@ -103,7 +103,7 @@ Horizon policy for this extracted pack:
   - **Purpose**: publish the typed lifecycle/status transport and parity evidence contract that cross-doc validation and quality-gate work will lock in.
   - **State**: `revalidated`
   - **Revalidation trigger**: typed world-service endpoint shape, shell/client integration path, allowed divergence list, or Linux/macOS/Windows evidence requirements change.
-  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/substrate-gateway-runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-service` cases self-skipped outside Linux/VM support. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff for the active conformance seam.
+  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/gateway/runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-service` cases self-skipped outside Linux/VM support. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff for the active conformance seam.
   - **Notes**: this thread now carries the revalidated typed lifecycle/status and parity-evidence contract into `SEAM-4`. Provisioning changes remain out of scope for this pack and were not pulled into the published contract.
 
 ## Dependency graph

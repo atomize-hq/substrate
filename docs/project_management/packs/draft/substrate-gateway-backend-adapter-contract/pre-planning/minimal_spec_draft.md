@@ -28,10 +28,10 @@ Authority boundaries for this feature:
 - `policy-spec.md` is the downstream single owner for adapter selection, allowlist gating, and trusted-input boundaries.
 - `gateway-backend-adapter-protocol-spec.md` and `gateway-backend-adapter-schema-spec.md` are the downstream single owners for adapter lifecycle, payload, capability, error, and session-handle boundary details.
 - `platform-parity-spec.md` and `compatibility-spec.md` are the downstream single owners for parity and rollout guarantees.
-- `docs/contracts/substrate-gateway-operator-contract.md` remains the owner for the `substrate world gateway status`, `sync`, and `restart` command family.
-- `docs/contracts/substrate-gateway-status-schema.md` remains the owner for the existing `status --json` envelope and existing `client_wiring.*` family.
-- `docs/contracts/substrate-gateway-policy-evaluation.md` remains the owner for gateway/world placement evaluation and host-to-world secret delivery posture.
-- `docs/contracts/substrate-gateway-runtime-parity.md` remains the owner for the general gateway lifecycle runtime-parity surface.
+- `docs/contracts/gateway/operator-contract.md` remains the owner for the `substrate world gateway status`, `sync`, and `restart` command family.
+- `docs/contracts/gateway/status-schema.md` remains the owner for the existing `status --json` envelope and existing `client_wiring.*` family.
+- `docs/contracts/gateway/policy-evaluation.md` remains the owner for gateway/world placement evaluation and host-to-world secret delivery posture.
+- `docs/contracts/gateway/runtime-parity.md` remains the owner for the general gateway lifecycle runtime-parity surface.
 - ADR-0027 and the implemented `llm_and_agent_config_policy_surface` pack remain the owners for backend-id grammar, inventory locations, config roots, policy roots, and allowlist storage.
 - ADR-0017 remains the owner for structured event envelope semantics.
 - ADR-0028 remains the owner for canonical trace vocabulary and correlation semantics.
@@ -159,8 +159,8 @@ Baseline seam count from `spec_manifest.md`: 3 draft seams. This draft keeps tha
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 
 ### Seam 2
 
@@ -173,7 +173,7 @@ Baseline seam count from `spec_manifest.md`: 3 draft seams. This draft keeps tha
   - `contract.md`
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/status-schema.md`
 
 ### Seam 3
 
@@ -185,5 +185,5 @@ Baseline seam count from `spec_manifest.md`: 3 draft seams. This draft keeps tha
   - `compatibility-spec.md`
   - `manual_testing_playbook.md`
   - `pre-planning/ci_checkpoint_plan.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`

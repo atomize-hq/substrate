@@ -67,7 +67,7 @@ Checklist:
 
 - Implement:
   - document the ordered lifecycle and fail-closed checkpoints in `../../gateway-backend-adapter-protocol-spec.md`
-  - keep `docs/contracts/substrate-gateway-backend-adapter-protocol.md` as the durable owner of the lifecycle boundary
+  - keep `docs/contracts/gateway/backend-adapter-protocol.md` as the durable owner of the lifecycle boundary
   - document which upstream selection outputs are consumed as fixed inputs
 - Test:
   - compare the order against the seam review diagrams and pre-planning alignment notes

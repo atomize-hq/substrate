@@ -14,9 +14,9 @@ Canonical references:
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/policy-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/runtime-parity.md`
+- `docs/contracts/gateway/status-schema.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`
@@ -34,9 +34,9 @@ Owned here:
 
 Not owned here:
 
-- the operator command family or exit taxonomy from `docs/contracts/substrate-gateway-operator-contract.md`
-- the `status --json` envelope or `client_wiring.*` field family from `docs/contracts/substrate-gateway-status-schema.md`
-- routing-hint evaluation, tuple-axis constraint semantics, or host credential-read gates from `policy-spec.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, and ADR-0043
+- the operator command family or exit taxonomy from `docs/contracts/gateway/operator-contract.md`
+- the `status --json` envelope or `client_wiring.*` field family from `docs/contracts/gateway/status-schema.md`
+- routing-hint evaluation, tuple-axis constraint semantics, or host credential-read gates from `policy-spec.md`, `docs/contracts/gateway/policy-evaluation.md`, and ADR-0043
 - the object names, field grammar, and omission rules from `identity-tuple-schema-spec.md`
 - backend-id grammar or backend-selection realization from ADR-0027, ADR-0041, or ADR-0046
 
@@ -51,9 +51,9 @@ Not owned here:
 
 | Platform | Tuple and posture guarantee | Allowed hidden divergence | Verification anchor |
 | --- | --- | --- | --- |
-| Linux | `identity_tuple` and `placement_posture` keep the ADR-0042 meanings, token grammar, omission rules, and router/posture invariants unchanged. | Direct Unix socket transport, cgroup or namespace wiring, and Linux provisioning mechanics may differ under the hood. | `contract.md`, `identity-tuple-schema-spec.md`, `policy-spec.md`, `telemetry-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md` |
-| macOS | `identity_tuple` and `placement_posture` keep the same meanings, token grammar, omission rules, and router/posture invariants as Linux. | Lima-backed guest transport, forwarding, and warm-flow mechanics may differ under the hood. | `contract.md`, `identity-tuple-schema-spec.md`, `policy-spec.md`, `telemetry-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md` |
-| Windows | `identity_tuple` and `placement_posture` keep the same meanings, token grammar, omission rules, and router/posture invariants as Linux. | WSL-backed transport, named-pipe or TCP bridge mechanics, and Windows warm-flow mechanics may differ under the hood. | `contract.md`, `identity-tuple-schema-spec.md`, `policy-spec.md`, `telemetry-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md` |
+| Linux | `identity_tuple` and `placement_posture` keep the ADR-0042 meanings, token grammar, omission rules, and router/posture invariants unchanged. | Direct Unix socket transport, cgroup or namespace wiring, and Linux provisioning mechanics may differ under the hood. | `contract.md`, `identity-tuple-schema-spec.md`, `policy-spec.md`, `telemetry-spec.md`, `docs/contracts/gateway/runtime-parity.md` |
+| macOS | `identity_tuple` and `placement_posture` keep the same meanings, token grammar, omission rules, and router/posture invariants as Linux. | Lima-backed guest transport, forwarding, and warm-flow mechanics may differ under the hood. | `contract.md`, `identity-tuple-schema-spec.md`, `policy-spec.md`, `telemetry-spec.md`, `docs/contracts/gateway/runtime-parity.md` |
+| Windows | `identity_tuple` and `placement_posture` keep the same meanings, token grammar, omission rules, and router/posture invariants as Linux. | WSL-backed transport, named-pipe or TCP bridge mechanics, and Windows warm-flow mechanics may differ under the hood. | `contract.md`, `identity-tuple-schema-spec.md`, `policy-spec.md`, `telemetry-spec.md`, `docs/contracts/gateway/runtime-parity.md` |
 
 ## Shared invariants
 
@@ -90,9 +90,9 @@ Parity review for this pack consumes these surfaces:
   - `policy-spec.md`
   - `telemetry-spec.md`
 - durable external authorities:
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
   - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`

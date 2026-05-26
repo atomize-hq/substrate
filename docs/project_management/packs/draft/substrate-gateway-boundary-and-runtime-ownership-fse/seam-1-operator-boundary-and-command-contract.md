@@ -100,7 +100,7 @@ open_remediations: []
     - exit `2`, `3`, `4`, and `5` are distinguished cleanly
     - the stable env names and `status --json` authority rule stay synchronized
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/operator-contract.md`
 - **Risks / unknowns**:
   - Risk:
     - archived planning still carries alternate command ordering and older ownership assumptions

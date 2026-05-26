@@ -58,9 +58,9 @@ open_remediations: []
     - `pre-planning/spec_manifest.md`
     - `pre-planning/impact_map.md`
     - ADR-0027 and the implemented config/policy pack
-    - `docs/contracts/substrate-gateway-operator-contract.md`
-    - `docs/contracts/substrate-gateway-status-schema.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - `docs/contracts/gateway/operator-contract.md`
+    - `docs/contracts/gateway/status-schema.md`
+    - `docs/contracts/gateway/policy-evaluation.md`
   - Outputs:
     - `C-01`
     - `C-02`
@@ -92,14 +92,14 @@ open_remediations: []
 - **Verification**:
   - This seam produces owned contracts `C-01` and `C-02`.
   - At seam-brief depth, readiness means the stable backend-id semantics, ordered selection inputs, failure buckets, and `status --json` publication boundary are concrete enough for execution without inventing a second owner.
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md` is now the canonical `C-01` baseline.
+  - `docs/contracts/gateway/backend-adapter-selection.md` is now the canonical `C-01` baseline.
   - `C-02` now resolves to a narrower v1 decision: no additive adapter-visible `status --json` field family is currently published beyond the existing `status` plus `client_wiring.*` schema, and any future additive family requires an explicit status-schema owner update before code changes.
   - With the seam exit now closed and `THR-01` published from closeout, this seam no longer sits in the forward planning window.
   - Downstream seam-local review should verify that one selected backend id maps to one adapter identity, that the failure buckets stay fail-closed, and that any adapter-visible status subset stays inside a single explicit owner line.
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 - **Risks / unknowns**:
   - Risk:
     - a future attempt to publish adapter-visible `status --json` metadata could drift from the current v1 boundary if it widens the schema without an explicit status-schema owner update

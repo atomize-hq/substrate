@@ -36,7 +36,7 @@ unsupported-backend behavior remaining explicit and no-fallback.
 - **Source artifact**: `../threaded-seams/seam-3-parity-validation-and-rollout/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
   - canonical contract baseline:
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
+    - `docs/contracts/gateway/runtime-parity.md`
   - landed automated parity evidence:
     - `crates/world-service/tests/gateway_runtime_parity.rs`
       - `gateway_openai_sync_makes_status_available_and_is_idempotent`

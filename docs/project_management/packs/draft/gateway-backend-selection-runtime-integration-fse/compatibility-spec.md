@@ -23,7 +23,7 @@ Not owned here:
 
 ## Compatibility posture
 
-- Existing operator workflows remain compatible with `docs/contracts/substrate-gateway-runtime-parity.md`.
+- Existing operator workflows remain compatible with `docs/contracts/gateway/runtime-parity.md`.
 - `cli:codex` remains the regression floor.
 - `api:openai` is the first additional backend proof target reflected in rollout framing.
 - Unsupported integrated backends are explicit negative cases and do not silently fall back to `cli:codex`.
@@ -35,7 +35,7 @@ This document consumes, but does not redefine, the following upstream evidence:
 
 - automated parity evidence from the runtime and shell test suites
 - platform validation evidence from the Linux, macOS, and Windows proof surfaces
-- the canonical runtime-parity contract in `docs/contracts/substrate-gateway-runtime-parity.md`
+- the canonical runtime-parity contract in `docs/contracts/gateway/runtime-parity.md`
 
 ## Invariants
 

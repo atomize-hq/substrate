@@ -100,10 +100,10 @@ open_remediations: []
     - docs/CONFIGURATION, docs/USAGE, docs/WORLD, and docs/TRACE reflect the same truth
     - `plan.md`, `tasks.json`, and checkpoint boundaries match the accepted planning spine and landed seam ordering
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Risks / unknowns**:
   - Risk:
     - docs and quality-gate artifacts can lag the landed contract wording even when implementation is correct

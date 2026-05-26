@@ -96,8 +96,8 @@ open_remediations: []
     - ADR-0042 additive metadata stays out of the owned field family
     - invalid integration state, dependency unavailability, and policy denial are distinguished cleanly
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 - **Risks / unknowns**:
   - Risk:
     - the machine-readable status shape can drift away from the operator contract or from later shared client types

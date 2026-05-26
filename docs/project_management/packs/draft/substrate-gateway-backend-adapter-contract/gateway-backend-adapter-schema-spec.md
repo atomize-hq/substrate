@@ -1,7 +1,7 @@
 # Gateway Backend Adapter Schema Spec
 
 This spec is the seam-local execution baseline for `C-04`. The durable contract text for this
-surface lives in `docs/contracts/substrate-gateway-backend-adapter-schema.md`.
+surface lives in `docs/contracts/gateway/backend-adapter-schema.md`.
 
 ## Adopted Unified Agent API Subset
 
@@ -165,7 +165,7 @@ Pinned rules:
 
 ### Doc surfaces that define the landed schema baseline
 
-- `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+- `docs/contracts/gateway/backend-adapter-schema.md`
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md`
 
 ### Runtime-adjacent adoption surfaces to verify against when implementation lands

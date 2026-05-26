@@ -10,7 +10,7 @@ Owned here:
 - the additive rollout and compatibility story for existing operator workflows
 - the historical-evidence-only treatment of ADR-0024
 - the evidence-only treatment of ADR-0040 as consumed through ADR-0041 and
-  `docs/contracts/substrate-gateway-runtime-parity.md`
+  `docs/contracts/gateway/runtime-parity.md`
 - the explicit "no second control plane" invariant for this seam
 
 Not owned here:
@@ -42,7 +42,7 @@ Not owned here:
 
 - ADR-0040 remains the prerequisite boundary evidence for runtime ownership.
 - This seam consumes ADR-0040 through ADR-0041 and
-  `docs/contracts/substrate-gateway-runtime-parity.md`, not by reopening ADR-0040 as a direct touch
+  `docs/contracts/gateway/runtime-parity.md`, not by reopening ADR-0040 as a direct touch
   surface.
 - Direct ADR-0040 edits remain out of scope unless landing evidence exposes a concrete owner-line
   mismatch that the current boundary no longer explains.
@@ -58,4 +58,4 @@ Not owned here:
 ## Acceptance check
 
 This document is complete only if it can be read as a consumer of ADR-0024, ADR-0040, ADR-0041, and
-`docs/contracts/substrate-gateway-runtime-parity.md` without becoming a shadow contract for any of them.
+`docs/contracts/gateway/runtime-parity.md` without becoming a shadow contract for any of them.

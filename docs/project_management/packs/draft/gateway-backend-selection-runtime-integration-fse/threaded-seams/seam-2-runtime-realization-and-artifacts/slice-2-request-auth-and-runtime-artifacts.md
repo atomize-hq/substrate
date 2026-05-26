@@ -59,7 +59,7 @@ open_remediations:
 - **Outcome**:
   - request preparation supports more than `cli_codex` while preserving the policy-owned precedence boundary from `THR-01`.
 - **Inputs/outputs**:
-  - Inputs: `docs/contracts/substrate-gateway-backend-adapter-schema.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/transport-api-types/src/lib.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/world-service/src/service.rs`
+  - Inputs: `docs/contracts/gateway/backend-adapter-schema.md`, `docs/contracts/gateway/policy-evaluation.md`, `crates/transport-api-types/src/lib.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/world-service/src/service.rs`
   - Outputs: widened shared types, backend-aware request construction, bounded auth validation, test coverage
 - **Thread/contract refs**:
   - `THR-01`

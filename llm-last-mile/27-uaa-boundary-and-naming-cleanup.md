@@ -43,7 +43,7 @@ The following keep their current upstream meaning and are not renamed here:
 
 - crates.io package `unified-agent-api`
 - Rust import name `agent_api`
-- adopted capability/schema ids such as `agent_api.run`, `agent_api.session.resume.v1`, and `agent_api.session.handle.v1` documented in [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21)
+- adopted capability/schema ids such as `agent_api.run`, `agent_api.session.resume.v1`, and `agent_api.session.handle.v1` documented in [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21)
 - surfaced internal correlation fields such as `internal.uaa_session_id` / `uaa_session_id`, which remain internal and correctly describe upstream session-handle identity in [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:120) and [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md:210)
 
 This slice does not rename upstream `agent_api` under any spelling. The rename target is only the pre-UAA local transport naming.
@@ -90,7 +90,7 @@ This SOW assumes the following are already true and are not being redesigned her
 - `crates/shell` already depends on the real external Unified Agent API as `agent_api` in [crates/shell/Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml:61).
 - `crates/world-agent` also already depends on the real external Unified Agent API for member runtime launch/control.
 - `world-api` already owns the abstract world backend contract and is not part of this rename.
-- The local typed host↔world transport remains a separate boundary documented today in [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237) and [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md:21), even though those docs still use the old pre-cleanup names.
+- The local typed host↔world transport remains a separate boundary documented today in [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237) and [docs/contracts/gateway/runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/runtime-parity.md:21), even though those docs still use the old pre-cleanup names.
 - The public session/control contract is already frozen around `orchestration_session_id` plus exact `backend_id`; public callers do not target `participant_id`, `active_session_handle_id`, or `internal.uaa_session_id` as documented in [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:116).
 - `backend_id` remains the adapter/allowlist identity only; this slice does not reopen provider/auth/protocol overloading questions already settled in [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md:147).
 
@@ -121,7 +121,7 @@ That drift now costs more than it did earlier, because the codebase contains bot
 This repo already uses real upstream UAA semantics:
 
 - external crate import `agent_api` in [crates/shell/Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml:61),
-- adopted `agent_api.*` capability/schema ids in [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21),
+- adopted `agent_api.*` capability/schema ids in [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21),
 - and surfaced internal `uaa_session_id` semantics in [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md:214).
 
 Those are not the things being renamed here.
@@ -131,7 +131,7 @@ Those are not the things being renamed here.
 The local transport boundary is already explicit in implementation:
 
 - transport/client/schema crates under [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml:55),
-- typed transport ownership in [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md:21),
+- typed transport ownership in [docs/contracts/gateway/runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/runtime-parity.md:21),
 - and the `world-agent` socket API boundary in [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237).
 
 The ambiguity is naming, not architectural absence. The misleading names are specifically:
@@ -187,7 +187,7 @@ Primary anchors:
 - [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:67)
 - [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237)
 - [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md:184)
-- [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21)
+- [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21)
 
 Required outcome:
 
@@ -348,7 +348,7 @@ Primary anchors:
 
 - [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:120)
 - [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md:214)
-- [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21)
+- [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21)
 
 Required outcome:
 

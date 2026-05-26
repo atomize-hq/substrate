@@ -29,7 +29,7 @@ This artifact feeds `gates.pre_exec.review`.
 - Contract consumption is concrete enough to plan because the seam consumes accepted upstream truth rather than owning a new public contract baseline.
 - ADR-0040 posture is now explicit:
   - ADR-0040 remains the prerequisite boundary owner for Substrate versus `substrate-gateway` runtime ownership.
-  - `SEAM-3` consumes that owner line through ADR-0041 and `docs/contracts/substrate-gateway-runtime-parity.md` instead of reopening ADR-0040 as a direct touch surface.
+  - `SEAM-3` consumes that owner line through ADR-0041 and `docs/contracts/gateway/runtime-parity.md` instead of reopening ADR-0040 as a direct touch surface.
   - The seam should reopen ADR-0040 only if landing evidence uncovers a concrete ownership drift that the current owner line no longer explains.
 - `REM-004` is resolved by recording that evidence-only posture in seam-local planning, so it no longer blocks `status: exec-ready`.
 

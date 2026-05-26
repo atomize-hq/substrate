@@ -16,9 +16,9 @@ Owned here:
 
 Not owned here:
 
-- the operator command family or exit taxonomy already owned by `docs/contracts/substrate-gateway-operator-contract.md`
-- the `status --json` envelope or `client_wiring.*` field family already owned by `docs/contracts/substrate-gateway-status-schema.md`
-- fail-closed policy, secret delivery, or trust-boundary rules already owned by `docs/contracts/substrate-gateway-policy-evaluation.md`
+- the operator command family or exit taxonomy already owned by `docs/contracts/gateway/operator-contract.md`
+- the `status --json` envelope or `client_wiring.*` field family already owned by `docs/contracts/gateway/status-schema.md`
+- fail-closed policy, secret delivery, or trust-boundary rules already owned by `docs/contracts/gateway/policy-evaluation.md`
 - provisioning changes, warm-flow orchestration, or gateway-internal provider/planner/executor behavior
 
 ## Required platforms
@@ -53,7 +53,7 @@ Not owned here:
 
 - **Doc publication surfaces**:
   - this feature-local parity spec
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Code surfaces that later slices must implement against**:
   - `crates/world-service/src/lib.rs`
   - `crates/transport-api-types/src/lib.rs`

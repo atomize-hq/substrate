@@ -54,7 +54,7 @@ Make the owned protocol/schema bundle concrete enough that downstream seams can 
 - **Outcome**:
   - the seam-owned protocol surfaces state the deterministic adapter-dispatch lifecycle, fail-closed order, and the exact handoff boundary to ADR-0017 and ADR-0028.
 - **Files**:
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
   - `../../gateway-backend-adapter-protocol-spec.md`
   - `../../pre-planning/spec_manifest.md`
 - **Thread/contract refs**:
@@ -71,7 +71,7 @@ Make the owned protocol/schema bundle concrete enough that downstream seams can 
 Checklist:
 
 - Implement:
-  - author the deterministic dispatch-lifecycle baseline in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+  - author the deterministic dispatch-lifecycle baseline in `docs/contracts/gateway/backend-adapter-protocol.md`
   - mirror the execution baseline and owner checklist in `../../gateway-backend-adapter-protocol-spec.md`
   - pin the exact owner-line handoff to ADR-0017 and ADR-0028 without widening those external owners
 - Test:
@@ -87,7 +87,7 @@ Checklist:
 - **Outcome**:
   - the seam-owned schema surfaces state the exact adopted Unified Agent API subset for capability advertisement, extension keys, request/response payloads, bounded adapter errors, and session-handle facets.
 - **Files**:
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
   - `../../gateway-backend-adapter-schema-spec.md`
   - `../../pre-planning/spec_manifest.md`
 - **Thread/contract refs**:
@@ -104,7 +104,7 @@ Checklist:
 Checklist:
 
 - Implement:
-  - record the adopted schema subset and omission rules in `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - record the adopted schema subset and omission rules in `docs/contracts/gateway/backend-adapter-schema.md`
   - mirror the exact adopted capability ids, extension keys, bounded error shape, and session-handle facet in `../../gateway-backend-adapter-schema-spec.md`
 - Test:
   - compare the proposed subset against the Unified Agent API evidence set and current gateway docs

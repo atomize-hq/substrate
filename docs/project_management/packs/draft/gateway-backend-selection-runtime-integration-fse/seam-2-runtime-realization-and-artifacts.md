@@ -57,8 +57,8 @@ open_remediations: []
   - Inputs:
     - `C-01`
     - `C-02`
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - `docs/contracts/gateway/backend-adapter-protocol.md`
+    - `docs/contracts/gateway/backend-adapter-schema.md`
     - current world-service runtime manager behavior in `crates/world-service/src/gateway_runtime.rs`
     - current shell-side integrated auth construction in `crates/shell/src/builtins/world_gateway.rs`
     - current lifecycle request shape in `crates/transport-api-types/src/lib.rs`
@@ -70,7 +70,7 @@ open_remediations: []
 - **Key invariants / rules**:
   - one selected backend resolves to one integrated adapter binding
   - capability gating, auth validation, config render, launch, and readiness must have one fixed order
-  - auth precedence is already owned by `docs/contracts/substrate-gateway-policy-evaluation.md`: complete allowlisted env auth is primary, host credential files are fallback-only when env auth is absent, and partial env auth fails closed
+  - auth precedence is already owned by `docs/contracts/gateway/policy-evaluation.md`: complete allowlisted env auth is primary, host credential files are fallback-only when env auth is absent, and partial env auth fails closed
   - current env-compatible delivery remains acceptable for this seam; execution must not block on a secret-channel redesign
   - runtime artifact semantics must be explicit implementation behavior rather than side effects of the current Codex-specific launch path
   - this seam must consume, not redefine, `SEAM-1` selection/policy truth
@@ -93,13 +93,13 @@ open_remediations: []
   - `crates/world-service/src/gateway_runtime.rs`
   - `crates/world-service/src/service.rs`
   - `crates/transport-api-types/src/lib.rs`
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
 - **Verification**:
   - This seam consumes canonical contracts `C-01`, `C-02`, `C-03`, and `C-04`. The repo already has durable contract truth for adapter lookup ordering, capability/error taxonomy, and auth-source precedence; this seam should execute against that truth instead of reopening it.
   - Current pre-exec gate posture is:
     - `review: passed` because seam-local execution planning and review now live under `threaded-seams/seam-2-runtime-realization-and-artifacts/`.
-    - `contract: passed` because `docs/contracts/substrate-gateway-backend-adapter-protocol.md`, `docs/contracts/substrate-gateway-backend-adapter-schema.md`, and `docs/contracts/substrate-gateway-policy-evaluation.md` already cover lookup order, capability gating, bounded error kinds, and env-primary/file-fallback auth precedence.
+    - `contract: passed` because `docs/contracts/gateway/backend-adapter-protocol.md`, `docs/contracts/gateway/backend-adapter-schema.md`, and `docs/contracts/gateway/policy-evaluation.md` already cover lookup order, capability gating, bounded error kinds, and env-primary/file-fallback auth precedence.
     - `revalidation: passed` because `SEAM-1` published `THR-01`, the new seam-local review rechecked the active basis against that closeout, and current repo evidence still shows the exact Codex-only runtime gaps this seam is planned to land.
   - Later seam-local verification should prove:
     - selected non-Codex backends no longer disappear behind the current `cli:codex` checks in `crates/shell/src/builtins/world_gateway.rs` and `crates/world-service/src/gateway_runtime.rs`
@@ -109,10 +109,10 @@ open_remediations: []
     - managed artifacts have fixed roots, names, permissions, and inspectability rules
     - restart preserves the selected backend contract instead of re-deriving behavior ad hoc
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
 - **Risks / unknowns**:
   - Risk:
     - the current request and runtime types only expose `cli_codex`, so widening the integrated path can accidentally entrench one-off variants instead of one adapter-owned shape

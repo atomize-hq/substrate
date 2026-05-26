@@ -94,7 +94,7 @@ That split is still cohesive. `SEAM-1` owns the prerequisite contract truth, `SE
   - `compatibility-spec.md`
   - `manual_testing_playbook.md`
   - `pre-planning/ci_checkpoint_plan.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - **Natural boundary**:
   - This seam is cross-seam proof and drift prevention. It does not own selection semantics or adapter payload shape.

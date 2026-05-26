@@ -53,8 +53,8 @@ open_remediations: []
 - **Touch surface**:
   - `crates/shell/src/builtins/world_gateway.rs`
   - `crates/shell/tests/world_gateway.rs`
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
   - any future ADR-0046 support docs created under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, which must remain subordinate to canonical `docs/contracts/` truth
 - **Verification**:
   - This seam **consumes** published `C-01` and `C-02` and turns them into shell behavior plus evidence.
@@ -65,8 +65,8 @@ open_remediations: []
     - `resolve_integrated_auth_payload` plus `resolve_cli_codex_integrated_auth` enforce env-primary/file-fallback/no-mixed-source auth precedence
     - shell-side tests prove the distinction between invalid integration, policy denial, transient runtime failure, and component unavailable where the shell owns that classification
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 - **Basis posture**:
   - Currentness:
     - `current` because `SEAM-1` has no inbound closeout dependency and the seam plan still matches the latest extracted pack state plus the current shell implementation evidence.
@@ -88,8 +88,8 @@ open_remediations: []
   - Contracts consumed:
     - no pack-owned consumed contracts; ADR-0040, ADR-0041, and existing config-policy docs are basis authorities only
   - Canonical contract refs:
-    - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - `docs/contracts/gateway/backend-adapter-selection.md`
+    - `docs/contracts/gateway/policy-evaluation.md`
 
 ## Review bundle
 

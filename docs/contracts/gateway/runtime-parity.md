@@ -23,9 +23,9 @@ Concrete rules:
 - Prompt-bearing shell/world orchestration paths that consume integrated gateway bindings must enter the gateway-owned runtime seam (`crates/gateway/src/adapter_runtime.rs`) through their bridge layers, not through duplicated shell-local or world-local backend-registration tables.
 - Non-isolated gateway lifecycle/status flows must not depend on reusable session-world creation or recovery when no world-backed isolation is required for the gateway runtime. In that posture, the typed runtime surface may use a stable synthetic runtime identity derived from the effective lifecycle binding inputs.
 - Isolated gateway lifecycle/status flows must continue to require a real compatible world/session identity and any required world-backed attachment primitives.
-- `substrate world gateway status --json` remains governed by `docs/contracts/substrate-gateway-status-schema.md`; this contract may not widen the JSON field list or redefine `client_wiring.*`.
-- Policy placement, fail-closed routing, secret delivery, and trust-boundary rules remain governed by `docs/contracts/substrate-gateway-policy-evaluation.md`.
-- The operator command family and exit taxonomy remain governed by `docs/contracts/substrate-gateway-operator-contract.md`, including exit `4` for the required gateway/world component unavailable posture.
+- `substrate world gateway status --json` remains governed by `docs/contracts/gateway/status-schema.md`; this contract may not widen the JSON field list or redefine `client_wiring.*`.
+- Policy placement, fail-closed routing, secret delivery, and trust-boundary rules remain governed by `docs/contracts/gateway/policy-evaluation.md`.
+- The operator command family and exit taxonomy remain governed by `docs/contracts/gateway/operator-contract.md`, including exit `4` for the required gateway/world component unavailable posture.
 - Linux, macOS, and Windows must present one operator-facing lifecycle/status contract even when the underlying world transport differs.
 - This contract governs lifecycle/status semantics for whichever integrated backends the
   implementation and compatibility surfaces currently support; it does not itself promote a

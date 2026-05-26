@@ -20,7 +20,7 @@
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/policy-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
+- `docs/contracts/gateway/runtime-parity.md`
 - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`

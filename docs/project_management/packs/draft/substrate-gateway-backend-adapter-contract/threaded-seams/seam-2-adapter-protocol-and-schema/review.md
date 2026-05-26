@@ -56,8 +56,8 @@ flowchart TB
 - The seam is safe to activate and decompose because the consumed upstream contract truth is now landed and current.
 - Review is concrete enough to falsify the intended lifecycle, schema, and owner-line shape.
 - The contract gate is now satisfied:
-  - `C-03` is pinned by `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `../../gateway-backend-adapter-protocol-spec.md`.
-  - `C-04` is pinned by `docs/contracts/substrate-gateway-backend-adapter-schema.md` and `../../gateway-backend-adapter-schema-spec.md`.
+  - `C-03` is pinned by `docs/contracts/gateway/backend-adapter-protocol.md` and `../../gateway-backend-adapter-protocol-spec.md`.
+  - `C-04` is pinned by `docs/contracts/gateway/backend-adapter-schema.md` and `../../gateway-backend-adapter-schema-spec.md`.
 - `REM-002` and `REM-003` remain open only as non-blocking execution and closeout tracking; they no longer block `status: exec-ready`.
 
 ## Pre-exec gate disposition

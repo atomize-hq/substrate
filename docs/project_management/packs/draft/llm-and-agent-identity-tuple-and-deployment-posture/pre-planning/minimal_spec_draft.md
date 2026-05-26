@@ -28,10 +28,10 @@ Authority boundaries for this feature:
 - `platform-parity-spec.md` owns Linux, macOS, and Windows parity guarantees and the rule that `host_to_world_bridge` does not change in-world `net_allowed` governance.
 - `compatibility-spec.md` owns overloaded-backend-label retirement posture and rollout proof for new docs and diagnostics.
 - `manual_testing_playbook.md` owns deterministic doc-alignment validation and example-based review.
-- `docs/contracts/substrate-gateway-operator-contract.md` remains the owner for the existing gateway command family.
-- `docs/contracts/substrate-gateway-status-schema.md` remains the owner for the published `status --json` envelope and `client_wiring.*` field family.
-- `docs/contracts/substrate-gateway-policy-evaluation.md` remains the owner for gateway placement evaluation, fail-closed routing semantics, and host-to-world secret-delivery posture.
-- `docs/contracts/substrate-gateway-runtime-parity.md` remains the owner for general gateway lifecycle parity.
+- `docs/contracts/gateway/operator-contract.md` remains the owner for the existing gateway command family.
+- `docs/contracts/gateway/status-schema.md` remains the owner for the published `status --json` envelope and `client_wiring.*` field family.
+- `docs/contracts/gateway/policy-evaluation.md` remains the owner for gateway placement evaluation, fail-closed routing semantics, and host-to-world secret-delivery posture.
+- `docs/contracts/gateway/runtime-parity.md` remains the owner for general gateway lifecycle parity.
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` and `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` remain the owners for config roots, policy roots, key paths, precedence, and backend-id grammar.
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` remains the owner for canonical trace vocabulary and correlation keys.
 - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` remains the owner for tuple-axis policy keys under `llm.constraints.*`.
@@ -147,8 +147,8 @@ Accepted draft slice count: `3`
   - likely owned or touched surfaces:
     - `contract.md`
     - `identity-tuple-schema-spec.md`
-    - `docs/contracts/substrate-gateway-operator-contract.md`
-    - `docs/contracts/substrate-gateway-status-schema.md`
+    - `docs/contracts/gateway/operator-contract.md`
+    - `docs/contracts/gateway/status-schema.md`
     - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
     - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 
@@ -158,10 +158,10 @@ Accepted draft slice count: `3`
   - likely owned or touched surfaces:
     - `policy-spec.md`
     - `telemetry-spec.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - `docs/contracts/gateway/policy-evaluation.md`
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
     - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
-    - `docs/contracts/substrate-gateway-status-schema.md`
+    - `docs/contracts/gateway/status-schema.md`
     - `docs/TRACE.md`
 
 - slice_id: `LAITDP2`
@@ -172,7 +172,7 @@ Accepted draft slice count: `3`
     - `compatibility-spec.md`
     - `manual_testing_playbook.md`
     - `pre-planning/ci_checkpoint_plan.md`
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
+    - `docs/contracts/gateway/runtime-parity.md`
     - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
     - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 

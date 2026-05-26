@@ -37,8 +37,8 @@ Keep the now-recorded v1 status owner line aligned while repairing the stale ADR
 
 - `S00` defines the contract bundle and target owner surfaces
 - external authorities:
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 
@@ -49,8 +49,8 @@ Keep the now-recorded v1 status owner line aligned while repairing the stale ADR
 - **Files**:
   - `../../contract.md`
   - `../../policy-spec.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
 - **Thread/contract refs**:
   - `THR-01`
   - `C-02`

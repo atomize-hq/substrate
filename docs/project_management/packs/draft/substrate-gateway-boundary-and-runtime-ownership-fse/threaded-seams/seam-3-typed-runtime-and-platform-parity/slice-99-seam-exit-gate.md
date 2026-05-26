@@ -43,5 +43,5 @@ open_remediations: []
 - **Verification**:
   - rerun targeted runtime, parity, docs, and test checks cited by the implementation slices
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Review surface refs**: `review.md`

@@ -65,7 +65,7 @@ open_remediations: []
 - **Verification**:
   - This seam **consumes** published `C-01`, `C-02`, `C-03`, and `C-04` from `THR-01` and `THR-02`.
   - This seam **owns and realizes** `C-05`, whose canonical baseline already exists under:
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
+    - `docs/contracts/gateway/runtime-parity.md`
   - Readiness means execution may start without inventing new upstream truth:
     - `SEAM-2` closeout already names `api:openai` as the first landed non-`cli:codex` proof target
     - live shell, world-service, and shared request/auth surfaces still expose `api:openai`, `api_env`, and explicit unsupported-backend behavior
@@ -100,11 +100,11 @@ open_remediations: []
     - `C-03`
     - `C-04`
   - Canonical contract refs:
-    - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
+    - `docs/contracts/gateway/backend-adapter-selection.md`
+    - `docs/contracts/gateway/policy-evaluation.md`
+    - `docs/contracts/gateway/backend-adapter-protocol.md`
+    - `docs/contracts/gateway/backend-adapter-schema.md`
+    - `docs/contracts/gateway/runtime-parity.md`
 
 ## Review bundle
 

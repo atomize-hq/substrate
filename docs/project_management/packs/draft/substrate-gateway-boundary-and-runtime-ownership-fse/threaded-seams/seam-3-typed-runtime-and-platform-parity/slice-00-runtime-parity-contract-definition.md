@@ -52,7 +52,7 @@ open_remediations:
   - `../../governance/seam-1-closeout.md`
   - `../../governance/seam-2-closeout.md`
 - **Verification**:
-  - the contract-definition bundle must map directly to `platform-parity-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md`, seam-local review, and later runtime/parity implementation surfaces
+  - the contract-definition bundle must map directly to `platform-parity-spec.md`, `docs/contracts/gateway/runtime-parity.md`, seam-local review, and later runtime/parity implementation surfaces
 - **Rollout/safety**:
   - keep provisioning out of scope and keep raw exec probing out of the operator contract
 - **Review surface refs**: `review.md` R1 and R2
@@ -83,7 +83,7 @@ These are the binding contract statements this seam must implement and later pub
 
 - **Doc surfaces to publish and keep aligned**:
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Code surfaces that must land against this contract**:
   - `crates/world-service/src/lib.rs`
   - `crates/transport-api-types/src/lib.rs`
@@ -109,7 +109,7 @@ These are the binding contract statements this seam must implement and later pub
 - **Outcome**: `C-04` is concrete in both the feature-local parity spec and the durable contract mirror.
 - **Inputs/outputs**:
   - Inputs: `../../threading.md`, `../../governance/seam-1-closeout.md`, `../../governance/seam-2-closeout.md`, `docs/WORLD.md`, `docs/INSTALLATION.md`, and the current shell/world-service transport surfaces
-  - Outputs: aligned `platform-parity-spec.md` and `docs/contracts/substrate-gateway-runtime-parity.md`
+  - Outputs: aligned `platform-parity-spec.md` and `docs/contracts/gateway/runtime-parity.md`
 - **Thread/contract refs**: `THR-04`, `C-04`
 - **Acceptance criteria**:
   - the typed runtime authority boundary is explicit

@@ -38,7 +38,7 @@ That means the integrated path currently satisfies policy and lifecycle requirem
 
 - [ADR-0023](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md:72) records the additive upgrade from legacy env injection to FD/pipe auth-bundle delivery.
 - [ADR-0040](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md:82) keeps host-to-world secret delivery explicitly Substrate-owned.
-- [Substrate Gateway Policy Evaluation](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md:33) already says the carrier should move away from env-based delivery by default.
+- [Substrate Gateway Policy Evaluation](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md:33) already says the carrier should move away from env-based delivery by default.
 - [DR-0018](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/_archived/next/llm_gateway_in_world/decision_register.md:683) explicitly selects the auth-bundle FD/pipe direction.
 - [Secrets Delivery Channel Rubric](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md:36) says FD/pipe is the default when Substrate spawns both endpoints.
 
@@ -104,8 +104,8 @@ This is the exact seam that must change.
 
 ### Operator and policy contracts that must remain true
 
-- [docs/contracts/substrate-gateway-operator-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-operator-contract.md:7)
-- [docs/contracts/substrate-gateway-policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md:25)
+- [docs/contracts/gateway/operator-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/operator-contract.md:7)
+- [docs/contracts/gateway/policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md:25)
 
 This SOW must preserve those contracts while changing only the durable secret carrier between `world-agent` and the in-world gateway process.
 
@@ -258,7 +258,7 @@ This slice should not move secret sourcing into the gateway or into gateway-loca
 
 ### 5. Preserve invalid-integration, dependency-unavailable, and policy-denial distinctions
 
-The current gateway policy contract already requires those buckets to remain distinct in [docs/contracts/substrate-gateway-policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md:38).
+The current gateway policy contract already requires those buckets to remain distinct in [docs/contracts/gateway/policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md:38).
 
 The auth-bundle work must preserve that separation for cases such as:
 

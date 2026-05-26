@@ -44,8 +44,8 @@ Ownership split:
 
 ## Boundaries
 
-- This document does not define the `status --json` field list; that contract is owned by `docs/contracts/substrate-gateway-status-schema.md`.
-- This document does not define policy decision tables or trust-boundary logic; that contract is owned by `docs/contracts/substrate-gateway-policy-evaluation.md`.
+- This document does not define the `status --json` field list; that contract is owned by `docs/contracts/gateway/status-schema.md`.
+- This document does not define policy decision tables or trust-boundary logic; that contract is owned by `docs/contracts/gateway/policy-evaluation.md`.
 - This document does not define runtime transport, endpoint shapes, or parity details.
 - The later-slice proof surfaces for this contract are:
   - `crates/shell/src/execution/cli.rs`

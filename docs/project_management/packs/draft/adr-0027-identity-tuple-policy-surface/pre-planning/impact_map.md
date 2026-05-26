@@ -51,7 +51,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/CONFIGURATION.md`
 - `docs/USAGE.md`
 - `docs/TRACE.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `docs/reference/policy/contract.md`
 - `docs/reference/policy/README.md`
 - `crates/shell/src/execution/policy_cmd.rs`

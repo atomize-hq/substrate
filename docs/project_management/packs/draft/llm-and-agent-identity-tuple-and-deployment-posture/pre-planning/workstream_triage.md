@@ -226,11 +226,11 @@
 
 - The host-only router identity conflict around `direct_provider_path` remains open.
 - The absence semantics for `provider` and `auth_authority` remain open for pre-provider-selection paths and for pure-agent follow-on flows.
-- The exact status and diagnostics field family for tuple publication outside `client_wiring.*` remains open against `docs/contracts/substrate-gateway-status-schema.md`.
+- The exact status and diagnostics field family for tuple publication outside `client_wiring.*` remains open against `docs/contracts/gateway/status-schema.md`.
 - The exact trace field family and field placement remains open against ADR-0028.
 - The boundary line with ADR-0044 and ADR-0045 for pure-agent and toolbox tuple publication remains open.
 - WSL scope remains a follow-up until downstream runtime review names the concrete surface set.
-- High-churn boundary: additive tuple publication across `telemetry-spec.md`, `docs/contracts/substrate-gateway-status-schema.md`, ADR-0028, and the typed-model surface named in `impact_map.md`.
+- High-churn boundary: additive tuple publication across `telemetry-spec.md`, `docs/contracts/gateway/status-schema.md`, ADR-0028, and the typed-model surface named in `impact_map.md`.
 - High-churn boundary: compatibility and rollout wording across `compatibility-spec.md`, ADR-0040, ADR-0041, and ADR-0046.
 
 ## Slice skeleton recommendations

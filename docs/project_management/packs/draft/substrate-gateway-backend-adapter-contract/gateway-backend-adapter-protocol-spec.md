@@ -1,7 +1,7 @@
 # Gateway Backend Adapter Protocol Spec
 
 This spec is the seam-local execution baseline for `C-03`. The durable contract text for this
-surface lives in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`.
+surface lives in `docs/contracts/gateway/backend-adapter-protocol.md`.
 
 ## Scope
 
@@ -65,7 +65,7 @@ topology, not contract truth.
 
 ### Doc surfaces that define the landed protocol baseline
 
-- `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+- `docs/contracts/gateway/backend-adapter-protocol.md`
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 

@@ -60,7 +60,7 @@ open_remediations: []
     - `C-02`
     - `C-03`
     - `C-04`
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
+    - `docs/contracts/gateway/runtime-parity.md`
     - current parity tests in `crates/world-service/tests/gateway_runtime_parity.rs`
     - current shell command-path tests in `crates/shell/tests/world_gateway.rs`
   - Outputs:
@@ -97,10 +97,10 @@ open_remediations: []
   - `crates/world-service/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
 - **Verification**:
-  - This seam consumes upstream contracts `C-01`, `C-02`, `C-03`, and `C-04` plus the existing lifecycle/status parity contract in `docs/contracts/substrate-gateway-runtime-parity.md`.
+  - This seam consumes upstream contracts `C-01`, `C-02`, `C-03`, and `C-04` plus the existing lifecycle/status parity contract in `docs/contracts/gateway/runtime-parity.md`.
   - Current pre-exec gate posture is:
     - `review: passed` because seam-local proof planning, falsification questions, and the parity/rollout review bundle now exist under `threaded-seams/seam-3-parity-validation-and-rollout/`.
-    - `contract: passed` because the operator/runtime parity surface is already owned by `docs/contracts/substrate-gateway-runtime-parity.md`, and unsupported-backend/no-fallback behavior is already implied by the existing selection/runtime contracts. This seam should validate those truths in code and smoke evidence rather than wait for a new compatibility contract.
+    - `contract: passed` because the operator/runtime parity surface is already owned by `docs/contracts/gateway/runtime-parity.md`, and unsupported-backend/no-fallback behavior is already implied by the existing selection/runtime contracts. This seam should validate those truths in code and smoke evidence rather than wait for a new compatibility contract.
     - `revalidation: passed` because `governance/seam-2-closeout.md` publishes `THR-02`, names `api:openai` as the first landed non-Codex proof target, and the live runtime/test surfaces still expose `api_env`, `api:openai`, and explicit unsupported-backend behavior exactly where this seam expects to verify them.
   - Later seam-local verification should prove:
     - `cli:codex` remains non-regressed
@@ -109,11 +109,11 @@ open_remediations: []
     - rollout posture does not rely on widened status or tuple surfaces
     - smoke/manual evidence matches the existing operator/runtime parity contracts rather than an invented seam-local compatibility taxonomy
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Risks / unknowns**:
   - Risk:
     - parity work can overfit to one `api:openai` proof path and stop exercising the explicit unsupported-backend posture that must remain visible

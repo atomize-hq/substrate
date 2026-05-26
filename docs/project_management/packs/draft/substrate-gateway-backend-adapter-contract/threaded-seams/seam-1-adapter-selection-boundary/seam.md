@@ -65,7 +65,7 @@ open_remediations:
 - **Verification**:
   - This seam **produces** `C-01` and `C-02`.
   - Readiness means the owned-contract baseline is concrete enough that downstream seams can execute against one backend-id truth, one failure taxonomy, and one status-publication boundary without reopening ADR-0027, the gateway operator contract, or the status schema owner line.
-  - The canonical `C-01` text now lives at `docs/contracts/substrate-gateway-backend-adapter-selection.md`.
+  - The canonical `C-01` text now lives at `docs/contracts/gateway/backend-adapter-selection.md`.
   - `C-02` is narrowed to the current v1 publication boundary: no additive adapter-visible `status --json` field family is published beyond `status` and `client_wiring.*`, and any future additive family requires an explicit status-schema update first.
 - **Basis posture**:
   - Currentness:

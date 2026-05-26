@@ -42,10 +42,10 @@ execution_horizon:
 - **External systems / dependencies**:
   - `substrate-gateway`
   - ADR-0027, ADR-0040, ADR-0017, ADR-0028
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - Unified Agent API evidence from `unified-agent-api`
   - gateway boundary evidence from `kimi-claude-adapter`
 - **Known unknowns / risks**:

@@ -26,7 +26,7 @@ Authoring standards:
   - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 
 ## Touch set (explicit)
 
@@ -66,7 +66,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `docs/CONFIGURATION.md`
 - `docs/USAGE.md`
 - `docs/TRACE.md`

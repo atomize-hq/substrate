@@ -33,8 +33,8 @@ This closeout records the realized `SEAM-2` handoff and publishes `THR-02` for d
 
 - **Source artifact**: `../threaded-seams/seam-2-adapter-protocol-and-schema/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threaded-seams/seam-2-adapter-protocol-and-schema/seam.md`

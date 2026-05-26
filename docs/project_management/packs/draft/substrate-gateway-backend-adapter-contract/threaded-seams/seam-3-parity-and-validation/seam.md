@@ -65,13 +65,13 @@ This seam is closed. Its authoritative exit-gate record lives in `../../governan
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/compatibility-spec.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/manual_testing_playbook.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/ci_checkpoint_plan.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Verification**:
   - This seam consumes `C-01` through `C-04` from `../../governance/seam-1-closeout.md` and `../../governance/seam-2-closeout.md`.
   - `THR-01` and `THR-02` are now published inbound threads for this seam.
   - ADR-0040 now stays explicit evidence-only basis for this seam:
     - ADR-0040 remains the owner of the Substrate versus `substrate-gateway` runtime boundary.
-    - ADR-0041 and `docs/contracts/substrate-gateway-runtime-parity.md` carry the downstream consequences that this seam must prove.
+    - ADR-0041 and `docs/contracts/gateway/runtime-parity.md` carry the downstream consequences that this seam must prove.
     - direct ADR-0040 edits stay out of scope unless landing evidence uncovers a concrete owner-line mismatch.
 
 ## Review bundle

@@ -29,7 +29,7 @@ This is the seam-exit closeout for the committed operator boundary contract. The
 - **Source artifact**: `../threaded-seams/seam-1-operator-boundary-and-command-contract/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
   - Feature-local contract publication: `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/contract.md`
-  - Durable operator contract publication: `docs/contracts/substrate-gateway-operator-contract.md`
+  - Durable operator contract publication: `docs/contracts/gateway/operator-contract.md`
   - Thread publication: `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership-fse/threading.md` (`THR-01`)
   - Runtime/readback surfaces confirming the landed contract:
     - `crates/shell/src/execution/cli.rs`

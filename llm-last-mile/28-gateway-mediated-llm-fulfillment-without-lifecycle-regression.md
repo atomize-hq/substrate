@@ -64,12 +64,12 @@ This SOW assumes the following are already true and must be reused rather than r
 1. The gateway ownership split is already fixed in repo truth:
    - Substrate owns policy evaluation, world placement, lifecycle control, host-to-world secret delivery, operator UX, and canonical tracing.
    - `substrate-gateway` owns the in-world front door, adapter dispatch, and backend/provider internals.
-   - Primary anchors: [docs/contracts/substrate-gateway-operator-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-operator-contract.md), [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md), and [ADR-0040](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md).
+   - Primary anchors: [docs/contracts/gateway/operator-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/operator-contract.md), [docs/contracts/gateway/runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/runtime-parity.md), and [ADR-0040](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md).
 2. Stable backend selection is already a landed contract:
    - backend ids remain stable `<kind>:<name>`,
    - allowlisting happens before adapter dispatch,
    - unsupported-but-well-formed backend ids remain a dependency/runtime-unavailable problem rather than an excuse to reuse another adapter.
-   - Primary anchors: [docs/contracts/substrate-gateway-backend-adapter-selection.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-selection.md) and [docs/contracts/substrate-gateway-backend-adapter-protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-protocol.md).
+   - Primary anchors: [docs/contracts/gateway/backend-adapter-selection.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-selection.md) and [docs/contracts/gateway/backend-adapter-protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-protocol.md).
 3. Integrated auth already has a real secure carrier:
    - host-side auth payload synthesis already exists,
    - world-service already converts that payload into an inherited FD auth bundle,
@@ -182,10 +182,10 @@ Required outcome:
 
 Primary anchors:
 
-- [docs/contracts/substrate-gateway-backend-adapter-selection.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-selection.md)
-- [docs/contracts/substrate-gateway-backend-adapter-protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-protocol.md)
-- [docs/contracts/substrate-gateway-policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md)
-- [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md)
+- [docs/contracts/gateway/backend-adapter-selection.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-selection.md)
+- [docs/contracts/gateway/backend-adapter-protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-protocol.md)
+- [docs/contracts/gateway/policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md)
+- [docs/contracts/gateway/runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/runtime-parity.md)
 
 Required outcome:
 
@@ -292,14 +292,14 @@ When this slice closes, update the truth/docs that would otherwise keep describi
 
 1. [llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md)
 2. [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
-3. [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md)
-4. [docs/contracts/substrate-gateway-backend-adapter-protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-protocol.md)
+3. [docs/contracts/gateway/runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/runtime-parity.md)
+4. [docs/contracts/gateway/backend-adapter-protocol.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-protocol.md)
 5. [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md)
 
 Review and update if needed, but do not reopen their core ownership/lifecycle rules:
 
-1. [docs/contracts/substrate-gateway-backend-adapter-selection.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-selection.md)
-2. [docs/contracts/substrate-gateway-policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md)
+1. [docs/contracts/gateway/backend-adapter-selection.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-selection.md)
+2. [docs/contracts/gateway/policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md)
 3. [ADR-0040](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md)
 4. [ADR-0041](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md)
 

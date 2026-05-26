@@ -50,10 +50,10 @@ open_remediations: []
   - trace documentation preserves Substrate-owned canonical tracing authority
 - **Dependencies**:
   - `review.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `../../governance/seam-1-closeout.md`
   - `../../governance/seam-2-closeout.md`
   - `../../governance/seam-3-closeout.md`

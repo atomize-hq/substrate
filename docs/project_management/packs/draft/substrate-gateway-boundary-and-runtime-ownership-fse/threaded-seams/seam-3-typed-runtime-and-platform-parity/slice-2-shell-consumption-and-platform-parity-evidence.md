@@ -49,8 +49,8 @@ candidate_subslices: []
   - `review.md`
   - `../../governance/seam-1-closeout.md`
   - `../../governance/seam-2-closeout.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Verification**:
   - pass condition: parity planning can describe one operator-facing runtime contract and one evidence model across Linux, macOS, and Windows
 - **Rollout/safety**:

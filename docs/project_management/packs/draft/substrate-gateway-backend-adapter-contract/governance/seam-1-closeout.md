@@ -31,8 +31,8 @@ This closeout records the landed `SEAM-1` exit gate after the dedicated `S99` se
 
 - **Source artifact**: `../threaded-seams/seam-1-adapter-selection-boundary/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/status-schema.md`
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threading.md`
 - **Contracts published or changed**: `C-01`, `C-02`

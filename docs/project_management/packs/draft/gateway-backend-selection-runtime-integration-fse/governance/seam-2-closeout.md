@@ -34,8 +34,8 @@ unsupported and unbound backends explicit with no fallback.
 - **Source artifact**: `../threaded-seams/seam-2-runtime-realization-and-artifacts/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
   - canonical contract truth remains the primary baseline for `C-03` and `C-04`:
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - `docs/contracts/gateway/backend-adapter-protocol.md`
+    - `docs/contracts/gateway/backend-adapter-schema.md`
   - landed runtime and shell evidence on the current tree:
     - `crates/transport-api-types/src/lib.rs` now defines a closed backend-neutral `api_env` auth facet beside `cli_codex`, hardens `GatewayLifecycleRequestV1` with `deny_unknown_fields`, and validates backend/facet coherence before runtime execution.
     - `crates/world-service/src/service.rs` now uses the shared request/auth validator, preserves selected-backend continuity, and exposes the Linux-only runtime inspection helpers that the parity suite exercises as a real integration test.

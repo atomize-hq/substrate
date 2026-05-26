@@ -46,9 +46,9 @@ Make the owned contract bundle concrete enough that downstream seams can cite on
 #### S00.T1 - Create the canonical `C-01` backend-selection baseline
 
 - **Outcome**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md` exists and states the stable backend-id semantics, ordered evaluation inputs, one-id-to-one-adapter rule, and failure taxonomy before dispatch.
+  - `docs/contracts/gateway/backend-adapter-selection.md` exists and states the stable backend-id semantics, ordered evaluation inputs, one-id-to-one-adapter rule, and failure taxonomy before dispatch.
 - **Files**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
   - `../../contract.md`
   - `../../policy-spec.md`
 - **Thread/contract refs**:
@@ -78,8 +78,8 @@ Checklist:
 - **Files**:
   - `../../contract.md`
   - `../../policy-spec.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
 - **Thread/contract refs**:
   - `THR-01`
   - `C-02`

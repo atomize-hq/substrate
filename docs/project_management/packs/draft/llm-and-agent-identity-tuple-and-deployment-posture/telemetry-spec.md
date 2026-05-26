@@ -8,14 +8,14 @@ Owner standard:
 - This spec is authoritative for additive publication of `identity_tuple` and `placement_posture` on gateway status, diagnostics, and trace surfaces introduced by ADR-0042.
 - This spec owns field placement, emission rules, omission rules, and redaction posture for those two objects.
 - This spec does not redefine the object shapes from `identity-tuple-schema-spec.md`.
-- This spec does not redefine the owned `status` or `client_wiring.*` fields from `docs/contracts/substrate-gateway-status-schema.md`.
+- This spec does not redefine the owned `status` or `client_wiring.*` fields from `docs/contracts/gateway/status-schema.md`.
 - This spec does not redefine the canonical correlation keys from ADR-0028.
 
 Canonical references:
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
-- `docs/contracts/substrate-gateway-operator-contract.md`
+- `docs/contracts/gateway/status-schema.md`
+- `docs/contracts/gateway/operator-contract.md`
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - `docs/TRACE.md`
 

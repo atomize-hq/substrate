@@ -43,7 +43,7 @@ open_remediations: []
   - re-run the targeted CLI/docs/test checks cited by `S1` and `S2`
   - verify ADR and pack-root publication surfaces in `S3` match the landed operator contract
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/gateway/operator-contract.md`
 - **Review surface refs**: `../../review_surfaces.md`
 
 #### S99.T1 - Record `C-01` and `THR-01` publication in closeout

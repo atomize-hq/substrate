@@ -5,12 +5,12 @@ It consumes the landed contracts below and does not redefine them.
 
 ## Contracts consumed
 
-- `docs/contracts/substrate-gateway-operator-contract.md` - operator command family and exit taxonomy
-- `docs/contracts/substrate-gateway-status-schema.md` - machine-readable gateway status wiring surface
-- `docs/contracts/substrate-gateway-policy-evaluation.md` - policy evaluation and trust boundary
+- `docs/contracts/gateway/operator-contract.md` - operator command family and exit taxonomy
+- `docs/contracts/gateway/status-schema.md` - machine-readable gateway status wiring surface
+- `docs/contracts/gateway/policy-evaluation.md` - policy evaluation and trust boundary
 - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` - event-envelope owner line
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` - canonical trace vocabulary owner line
-- `docs/contracts/substrate-gateway-runtime-parity.md` - typed runtime boundary and platform parity
+- `docs/contracts/gateway/runtime-parity.md` - typed runtime boundary and platform parity
 
 ## One-owner-per-surface audit
 

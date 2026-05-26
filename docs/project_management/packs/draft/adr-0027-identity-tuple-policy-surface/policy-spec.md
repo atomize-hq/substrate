@@ -19,7 +19,7 @@ Canonical references:
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tuple-policy-schema-spec.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`

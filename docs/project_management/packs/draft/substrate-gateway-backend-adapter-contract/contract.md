@@ -6,9 +6,9 @@ protocol, payload, or parity detail.
 
 Canonical references:
 
-- `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
-- `docs/contracts/substrate-gateway-operator-contract.md`
+- `docs/contracts/gateway/backend-adapter-selection.md`
+- `docs/contracts/gateway/status-schema.md`
+- `docs/contracts/gateway/operator-contract.md`
 
 ## Contract baseline
 
@@ -27,9 +27,9 @@ Canonical references:
   Substrate authorization inputs or selection inputs.
 - No additive adapter-visible `status --json` field family is published by this seam in v1.
   The currently published machine-readable surface remains the existing `status` plus
-  `client_wiring.*` schema owned by `docs/contracts/substrate-gateway-status-schema.md`.
+  `client_wiring.*` schema owned by `docs/contracts/gateway/status-schema.md`.
 - Any future additive adapter-visible status metadata requires an explicit update to
-  `docs/contracts/substrate-gateway-status-schema.md` before code or tests widen
+  `docs/contracts/gateway/status-schema.md` before code or tests widen
   `GatewayLifecycleResponseV1`.
 
 ## Verification plan
@@ -45,8 +45,8 @@ Evidence already present:
 Execution checklist for landing this seam:
 
 - Update docs:
-  - keep this file aligned with `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - keep the status-boundary statement aligned with `docs/contracts/substrate-gateway-status-schema.md`
+  - keep this file aligned with `docs/contracts/gateway/backend-adapter-selection.md`
+  - keep the status-boundary statement aligned with `docs/contracts/gateway/status-schema.md`
 - Add or update tests:
   - extend `crates/broker/src/policy/tests.rs` when backend-id grammar or invalid-selection rules change
   - extend `crates/shell/tests/world_gateway.rs` if gateway status output is widened after the schema owner is updated

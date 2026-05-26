@@ -1,6 +1,6 @@
 # Substrate World: Architecture, Behavior, and Operations (Linux & macOS)
 
-This document describes the world execution model, transport topology, and validation evidence used by Substrate. It is descriptive context for `docs/contracts/substrate-gateway-runtime-parity.md`, `docs/contracts/substrate-gateway-operator-contract.md`, and `docs/contracts/substrate-gateway-status-schema.md`; it does not redefine those operator contracts.
+This document describes the world execution model, transport topology, and validation evidence used by Substrate. It is descriptive context for `docs/contracts/gateway/runtime-parity.md`, `docs/contracts/gateway/operator-contract.md`, and `docs/contracts/gateway/status-schema.md`; it does not redefine those operator contracts.
 
 Status: Linux host-native and macOS Lima-backed worlds are the supported provisioning paths in this slice. Windows/WSL helper scripts are intentionally fail-closed until their placement contract matches the Linux-first runtime contract.
 

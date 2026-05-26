@@ -22,7 +22,7 @@ Not owned here:
 
 The evidence surfaces in this slice consume, rather than redefine:
 
-- `docs/contracts/substrate-gateway-runtime-parity.md`
+- `docs/contracts/gateway/runtime-parity.md`
 - the automated parity matrix established in slice 1
 
 That upstream proof already covers the `cli:codex` regression floor and the landed `api:openai` parity path.

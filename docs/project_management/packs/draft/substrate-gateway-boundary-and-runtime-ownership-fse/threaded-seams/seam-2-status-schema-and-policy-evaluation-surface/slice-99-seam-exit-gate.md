@@ -43,6 +43,6 @@ open_remediations: []
 - **Verification**:
   - rerun targeted schema, policy, docs, and test checks cited by the implementation slices
 - **Canonical contract refs**:
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
 - **Review surface refs**: `review.md`

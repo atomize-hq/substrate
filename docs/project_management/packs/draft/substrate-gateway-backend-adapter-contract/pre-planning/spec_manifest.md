@@ -15,10 +15,10 @@ Authoring standards:
 - ADRs:
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - External authoritative docs reused by this feature:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
@@ -212,11 +212,11 @@ This manifest does not require `plan.md`, `tasks.json`, kickoff prompts, executi
 
 | Surface                                                                                                                                                                  | Authoritative doc                                                                                                         | What must be explicitly defined                                                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as operator entrypoints | `docs/contracts/substrate-gateway-operator-contract.md`                                                                   | command family, operator meaning, stable entrypoint status, and gateway lifecycle exit-code baseline |
-| Human-readable gateway availability and wiring discovery posture                                                                                                         | `docs/contracts/substrate-gateway-operator-contract.md`                                                                   | operator-visible wording, stable wiring discovery posture, and absent-state contract                 |
-| `status --json` top-level envelope and `client_wiring.*` field family                                                                                                    | `docs/contracts/substrate-gateway-status-schema.md`                                                                       | field names, field types, and absence semantics                                                      |
-| Gateway/world placement evaluation and host-to-world secret delivery boundary                                                                                            | `docs/contracts/substrate-gateway-policy-evaluation.md`                                                                   | gateway policy-evaluation rules that ADR-0041 reuses without redefining                              |
-| Gateway lifecycle runtime parity and hidden transport divergence                                                                                                         | `docs/contracts/substrate-gateway-runtime-parity.md`                                                                      | typed runtime boundary and general gateway lifecycle parity                                          |
+| `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as operator entrypoints | `docs/contracts/gateway/operator-contract.md`                                                                   | command family, operator meaning, stable entrypoint status, and gateway lifecycle exit-code baseline |
+| Human-readable gateway availability and wiring discovery posture                                                                                                         | `docs/contracts/gateway/operator-contract.md`                                                                   | operator-visible wording, stable wiring discovery posture, and absent-state contract                 |
+| `status --json` top-level envelope and `client_wiring.*` field family                                                                                                    | `docs/contracts/gateway/status-schema.md`                                                                       | field names, field types, and absence semantics                                                      |
+| Gateway/world placement evaluation and host-to-world secret delivery boundary                                                                                            | `docs/contracts/gateway/policy-evaluation.md`                                                                   | gateway policy-evaluation rules that ADR-0041 reuses without redefining                              |
+| Gateway lifecycle runtime parity and hidden transport divergence                                                                                                         | `docs/contracts/gateway/runtime-parity.md`                                                                      | typed runtime boundary and general gateway lifecycle parity                                          |
 | Config file families and precedence for config and policy patches                                                                                                        | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`                               | file locations and precedence order                                                                  |
 | Backend inventory file family and filename-to-id matching                                                                                                                | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`                                 | inventory locations, filename/id matching rule, and strictness                                       |
 | `llm.routing.default_backend` key path, type, default, and `<kind>:<name>` syntax                                                                                        | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`                                 | schema rule and default                                                                              |
@@ -257,11 +257,11 @@ This manifest does not require `plan.md`, `tasks.json`, kickoff prompts, executi
 No feature-local doc is selected for these classes:
 
 - Gateway operator contract doc
-  - Existing gateway operator surfaces already have one owner in `docs/contracts/substrate-gateway-operator-contract.md`.
+  - Existing gateway operator surfaces already have one owner in `docs/contracts/gateway/operator-contract.md`.
 - Status-schema spec
-  - Existing machine-readable gateway status surfaces already have one owner in `docs/contracts/substrate-gateway-status-schema.md`.
+  - Existing machine-readable gateway status surfaces already have one owner in `docs/contracts/gateway/status-schema.md`.
 - Gateway runtime parity contract
-  - Existing lifecycle and hidden-transport parity surfaces already have one owner in `docs/contracts/substrate-gateway-runtime-parity.md`.
+  - Existing lifecycle and hidden-transport parity surfaces already have one owner in `docs/contracts/gateway/runtime-parity.md`.
 - Env-vars spec
   - ADR-0041 does not add a new env-var family. Existing stable wiring env vars remain owned by the gateway operator contract.
 - Telemetry spec

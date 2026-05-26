@@ -51,7 +51,7 @@ Additional remediation rules for this pack:
   resolution_evidence:
     - `8c0bd439` landed the S1 typed runtime boundary across `crates/transport-api-types/src/lib.rs`, `crates/transport-api-client/src/lib.rs`, `crates/world-service/src/handlers.rs`, `crates/world-service/src/service.rs`, `crates/shell/src/builtins/world_gateway.rs`, and the corresponding runtime parity and shell gateway tests
     - `4511b3a5` landed the S2 parity evidence update in `docs/WORLD.md` without widening the operator contract
-    - `docs/contracts/substrate-gateway-runtime-parity.md` remains the durable canonical `C-04` contract without planning IDs
+    - `docs/contracts/gateway/runtime-parity.md` remains the durable canonical `C-04` contract without planning IDs
     - `cargo test -p transport-api-client -- --nocapture` passed `13/13` tests plus `0` doc tests on the current tree
     - `cargo test -p world-service --test gateway_runtime_parity -- --nocapture` completed successfully on the current tree; the `3/3` target-local route-shape tests passed and the runtime-dependent service cases self-skipped on this host after `WorldService::new()` reported Linux/VM-only support
     - `cargo test -p shell --test world_gateway -- --nocapture` passed `8/8` tests on the current tree

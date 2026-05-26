@@ -55,7 +55,7 @@ open_remediations:
 - **Outcome**:
   - shell auth-resolution logic and tests match the published precedence rule exactly.
 - **Inputs/outputs**:
-  - Inputs: `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, supporting ADR-0046 policy/env-var docs
+  - Inputs: `docs/contracts/gateway/policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, supporting ADR-0046 policy/env-var docs
   - Outputs: aligned policy text and shell-side auth-source handling
 - **Thread/contract refs**:
   - `THR-01`

@@ -72,11 +72,11 @@ The local-to-external handoff is explicit:
 ## Boundaries
 
 - This contract does not redefine the stable backend-id grammar or allowlist order. That remains
-  owned by `docs/contracts/substrate-gateway-backend-adapter-selection.md`.
+  owned by `docs/contracts/gateway/backend-adapter-selection.md`.
 - This contract consumes the upstream invalid-selection, dependency-unavailable, and policy-denial
   buckets; adapter lookup must not reinterpret backend-id grammar or allowlist policy locally.
 - This contract does not widen the machine-readable status boundary. That remains owned by
-  `docs/contracts/substrate-gateway-status-schema.md`.
+  `docs/contracts/gateway/status-schema.md`.
 - This contract does not define provider-specific routing strategy, planner/executor role splits,
   raw SSE framing, or provider error payloads as public contract truth.
 - Repository topology is not part of the protocol contract. Moving the gateway into the Substrate

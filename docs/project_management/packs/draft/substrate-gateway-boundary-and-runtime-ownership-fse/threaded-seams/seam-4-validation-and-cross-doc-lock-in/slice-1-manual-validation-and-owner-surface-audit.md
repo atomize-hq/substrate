@@ -51,10 +51,10 @@ open_remediations: []
   - `../../governance/seam-1-closeout.md`
   - `../../governance/seam-2-closeout.md`
   - `../../governance/seam-3-closeout.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - **Verification**:
   - pass condition: the manual playbook can be read as a contract-consumption checklist without inventing new ownership language
 - **Rollout/safety**:

@@ -58,7 +58,7 @@ open_remediations: []
     - cross-doc/manual-playbook lock-in and checkpoint wiring
 - **Touch surface**:
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `crates/world-service/src/handlers.rs`
   - `crates/world-service/src/service.rs`
   - `crates/transport-api-types/src/lib.rs`
@@ -67,7 +67,7 @@ open_remediations: []
   - `docs/WORLD.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, and `C-03`; those inputs are now published by `../../governance/seam-1-closeout.md` and `../../governance/seam-2-closeout.md`.
-  - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now exist in `S00`, `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, and `docs/contracts/substrate-gateway-runtime-parity.md`, so the remaining work is runtime implementation and publication evidence rather than pre-exec contract definition.
+  - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now exist in `S00`, `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, and `docs/contracts/gateway/runtime-parity.md`, so the remaining work is runtime implementation and publication evidence rather than pre-exec contract definition.
   - Later seam-local verification should prove:
     - the typed world-service path is authoritative for lifecycle/status operations
     - shell and shared clients consume the same runtime contract

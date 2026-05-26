@@ -73,8 +73,8 @@ open_remediations:
   - This seam **produces** `C-03` and `C-04`.
   - The exact adopted Unified Agent API subset and the local-to-external ADR-0017 / ADR-0028 owner line are now concrete enough to execute without post-exec invention.
   - The durable contract baselines now live at:
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - `docs/contracts/gateway/backend-adapter-protocol.md`
+    - `docs/contracts/gateway/backend-adapter-schema.md`
   - The seam-local execution baselines now live at:
     - `../../gateway-backend-adapter-protocol-spec.md`
     - `../../gateway-backend-adapter-schema-spec.md`

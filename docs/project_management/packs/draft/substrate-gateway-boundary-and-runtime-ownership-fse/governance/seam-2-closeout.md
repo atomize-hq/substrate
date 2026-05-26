@@ -36,9 +36,9 @@ This closeout records the landed SEAM-2 exit state after the schema and policy s
   - `b1de7e51` - completed S00 contract-definition work for the seam boundary and durable contract mirrors
   - `407eacf9` - completed S1 status-schema boundary and `client_wiring.*` publication
   - `2dddf13d` - completed S2 policy-evaluation and trust-boundary publication
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/contract.md`
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/gateway-status-schema-spec.md`
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/policy-spec.md`

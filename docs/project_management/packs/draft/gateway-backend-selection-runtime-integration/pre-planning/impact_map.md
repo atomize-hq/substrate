@@ -11,13 +11,13 @@ Authoring standards:
 - Spec manifest:
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/pre-planning/spec_manifest.md`
 - External contract docs scanned:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/backend-adapter-selection.md`
+  - `docs/contracts/gateway/backend-adapter-protocol.md`
+  - `docs/contracts/gateway/backend-adapter-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/runtime-parity.md`
 - Adjacent ADRs and packs scanned:
   - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
@@ -58,9 +58,9 @@ Authoring standards:
 
 ### Edit
 - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`
-- `docs/contracts/substrate-gateway-operator-contract.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
+- `docs/contracts/gateway/operator-contract.md`
+- `docs/contracts/gateway/policy-evaluation.md`
+- `docs/contracts/gateway/runtime-parity.md`
 - `docs/CONFIGURATION.md`
 - `docs/USAGE.md`
 - `crates/transport-api-types/src/lib.rs`
@@ -92,8 +92,8 @@ Authoring standards:
   - `crates/shell/tests/world_gateway.rs` cases that treat `api:openai` as a generic available status path must move to the new classification matrix: supported backend, blocked backend, invalid backend, missing inventory, missing adapter, and missing auth.
 - Contradiction risks:
   - Silent collapse back to the Codex template would violate ADR-0046 and ADR-0041.
-  - A backend-specific command fork would violate the operator contract in `docs/contracts/substrate-gateway-operator-contract.md`.
-  - Any additive `status --json` field family without a schema-owner update would violate `docs/contracts/substrate-gateway-status-schema.md`.
+  - A backend-specific command fork would violate the operator contract in `docs/contracts/gateway/operator-contract.md`.
+  - Any additive `status --json` field family without a schema-owner update would violate `docs/contracts/gateway/status-schema.md`.
 
 ### Inventory-backed selection creates a new filesystem and discoverability dependency
 - Direct impact:
@@ -105,7 +105,7 @@ Authoring standards:
   - `crates/world-service/src/service.rs` and `crates/world-service/src/gateway_runtime.rs` must agree on where inventory lookup happens so `status`, `sync`, and `restart` share one resolution order.
 - Contradiction risks:
   - The current repo documents agent inventory roots and deps inventory roots, but it does not publish backend inventory roots. Leaving that gap open would make the ADR claim inventory-backed realization without an operator discoverability path.
-  - Treating gateway-local config files as the inventory source would violate `docs/contracts/substrate-gateway-policy-evaluation.md`.
+  - Treating gateway-local config files as the inventory source would violate `docs/contracts/gateway/policy-evaluation.md`.
 
 ### Auth handoff stops being Codex-only and becomes backend-aware
 - Direct impact:
@@ -230,5 +230,5 @@ Authoring standards:
 ## Follow-ups
 - Pin the first supported non-`cli:codex` integrated backend id. That decision tightens `crates/gateway/src/auth/`, `crates/gateway/src/providers/`, and `crates/gateway/tests/` from directory-prefix entries to exact files.
 - Define the exact backend inventory roots and filename rules in `filesystem-semantics-spec.md`, then mirror that wording in `docs/CONFIGURATION.md`.
-- Keep `status --json` unchanged unless the status-schema owner explicitly widens `docs/contracts/substrate-gateway-status-schema.md`.
+- Keep `status --json` unchanged unless the status-schema owner explicitly widens `docs/contracts/gateway/status-schema.md`.
 - Keep tuple metadata and tuple-axis policy keys out of this feature-local doc set. Route those surfaces through ADR-0042 and ADR-0043 only.

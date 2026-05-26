@@ -12,7 +12,7 @@ Owner standard:
 Canonical references:
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md`
-- `docs/contracts/substrate-gateway-policy-evaluation.md`
+- `docs/contracts/gateway/policy-evaluation.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
@@ -127,7 +127,7 @@ Policy evaluation for tuple-aware routing follows this order:
 
 - Invalid integration state, dependency unavailability, and policy denial remain separate outcomes.
 - This spec fixes the tuple-aware decision points that feed those existing buckets.
-- `docs/contracts/substrate-gateway-policy-evaluation.md` remains the owner of the final bucket taxonomy and operator explanation boundary.
+- `docs/contracts/gateway/policy-evaluation.md` remains the owner of the final bucket taxonomy and operator explanation boundary.
 
 ## Acceptance criteria
 

@@ -12,10 +12,10 @@ Authoring standards:
 - ADRs:
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - External authoritative docs reused by this feature:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
+  - `docs/contracts/gateway/policy-evaluation.md`
+  - `docs/contracts/gateway/runtime-parity.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -124,10 +124,10 @@ Full planning will create or refine these docs:
 
 | Surface | Authoritative doc | What must be explicitly defined |
 | --- | --- | --- |
-| `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as existing operator entrypoints | `docs/contracts/substrate-gateway-operator-contract.md` | command family, stable operator meaning, and baseline exit-code taxonomy for the gateway boundary |
-| `status --json` top-level envelope and `client_wiring.*` field family | `docs/contracts/substrate-gateway-status-schema.md` | top-level JSON shape, `status`, `client_wiring.*`, and absence semantics for the published wiring surface |
-| Gateway policy-evaluation flow over `llm.gateway.mode`, `llm.fail_closed.routing`, `llm.secrets.env_allowed`, and `agents.host_credentials.read.allowed_backends` | `docs/contracts/substrate-gateway-policy-evaluation.md` | fail-closed routing, secret-source precedence, trusted-input boundary, and policy outcome classes |
-| Gateway runtime lifecycle parity and hidden transport divergence | `docs/contracts/substrate-gateway-runtime-parity.md` | typed runtime boundary, lifecycle/status parity, and hidden transport divergence list |
+| `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as existing operator entrypoints | `docs/contracts/gateway/operator-contract.md` | command family, stable operator meaning, and baseline exit-code taxonomy for the gateway boundary |
+| `status --json` top-level envelope and `client_wiring.*` field family | `docs/contracts/gateway/status-schema.md` | top-level JSON shape, `status`, `client_wiring.*`, and absence semantics for the published wiring surface |
+| Gateway policy-evaluation flow over `llm.gateway.mode`, `llm.fail_closed.routing`, `llm.secrets.env_allowed`, and `agents.host_credentials.read.allowed_backends` | `docs/contracts/gateway/policy-evaluation.md` | fail-closed routing, secret-source precedence, trusted-input boundary, and policy outcome classes |
+| Gateway runtime lifecycle parity and hidden transport divergence | `docs/contracts/gateway/runtime-parity.md` | typed runtime boundary, lifecycle/status parity, and hidden transport divergence list |
 | Config and policy file families, patch locations, and precedence order | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` | file locations, precedence order, and the deny-by-default policy posture already in force |
 | Existing key-path definitions for `llm.gateway.mode`, `llm.fail_closed.routing`, `llm.secrets.env_allowed`, and `agents.host_credentials.read.allowed_backends` | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` | key paths, types, defaults, and merge strategy |
 | Backend id format and the rule that backend ids stay adapter/runtime selectors rather than tuple substitutes | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` | `<kind>:<name>` format and the non-equivalence boundary against tuple semantics |

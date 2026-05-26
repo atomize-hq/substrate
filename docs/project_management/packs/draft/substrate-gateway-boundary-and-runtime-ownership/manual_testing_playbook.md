@@ -5,10 +5,10 @@ It is a consumer of the landed contracts below and does not redefine them.
 
 ## Contracts consumed
 
-- `docs/contracts/substrate-gateway-operator-contract.md` - operator command family and exit taxonomy
-- `docs/contracts/substrate-gateway-status-schema.md` - machine-readable gateway status wiring surface
-- `docs/contracts/substrate-gateway-policy-evaluation.md` - policy evaluation and trust boundary
-- `docs/contracts/substrate-gateway-runtime-parity.md` - typed runtime boundary and platform parity
+- `docs/contracts/gateway/operator-contract.md` - operator command family and exit taxonomy
+- `docs/contracts/gateway/status-schema.md` - machine-readable gateway status wiring surface
+- `docs/contracts/gateway/policy-evaluation.md` - policy evaluation and trust boundary
+- `docs/contracts/gateway/runtime-parity.md` - typed runtime boundary and platform parity
 
 ## One-owner-per-surface audit
 
@@ -16,7 +16,7 @@ Use this checklist to confirm each operator-visible surface has one landed owner
 
 ### 1) Operator command family
 
-Validate that the gateway command family is owned only by `docs/contracts/substrate-gateway-operator-contract.md`.
+Validate that the gateway command family is owned only by `docs/contracts/gateway/operator-contract.md`.
 
 Check:
 - The playbook treats `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as one operator surface.
@@ -31,7 +31,7 @@ Pass condition:
 
 ### 2) Machine-readable status wiring
 
-Validate that the JSON wiring surface is owned only by `docs/contracts/substrate-gateway-status-schema.md`.
+Validate that the JSON wiring surface is owned only by `docs/contracts/gateway/status-schema.md`.
 
 Check:
 - `substrate world gateway status --json` is treated as the authoritative machine-readable wiring discovery surface.
@@ -44,7 +44,7 @@ Pass condition:
 
 ### 3) Policy evaluation and trust boundary
 
-Validate that policy and trust boundary rules are owned only by `docs/contracts/substrate-gateway-policy-evaluation.md`.
+Validate that policy and trust boundary rules are owned only by `docs/contracts/gateway/policy-evaluation.md`.
 
 Check:
 - The playbook keeps fail-closed behavior, host-to-world secret delivery, and trust-boundary rules under the policy contract.
@@ -57,7 +57,7 @@ Pass condition:
 
 ### 4) Runtime and platform parity
 
-Validate that typed lifecycle/status runtime behavior and platform parity are owned only by `docs/contracts/substrate-gateway-runtime-parity.md`.
+Validate that typed lifecycle/status runtime behavior and platform parity are owned only by `docs/contracts/gateway/runtime-parity.md`.
 
 Check:
 - The playbook treats shell and world-service runtime interaction as a typed boundary, not raw probing or log scraping.

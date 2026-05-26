@@ -16,7 +16,7 @@ Canonical references:
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/compatibility-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/gateway/status-schema.md`
 - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - `docs/TRACE.md`
 
