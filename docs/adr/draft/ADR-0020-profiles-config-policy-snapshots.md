@@ -34,8 +34,8 @@ stable contract.
 
 When implementation is ready, it should be restated against:
 
-- `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
+- `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/adr/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 - `docs/adr/implemented/ADR-0016-world-first-repl-persistent-pty.md`
 
 ## Draft Note

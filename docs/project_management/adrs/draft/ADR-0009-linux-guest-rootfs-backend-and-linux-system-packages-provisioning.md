@@ -16,8 +16,8 @@
 
 ## Related Docs
 - Prior ADR (world-deps install-class and provisioning posture): `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
-- Current provisioning surface: `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
-- Future non-APT guest-image routing context: `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
+- Current provisioning surface: `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
+- Future non-APT guest-image routing context: `docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
 - Future backend capability alignment: `docs/project_management/adrs/draft/ADR-0010-world-backend-contract-and-capability-divergence.md`
 - Prior hardening track (full cage / Landlock): `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 - World architecture: `docs/WORLD.md`
@@ -46,7 +46,7 @@ ADR_BODY_SHA256: 056a47bf1016afd1fc53a0b8ec7bf419da811ee3b7bdcf0ce77abca92cc5b87
   - Why: preserves the ADR-0002 / ADR-0030 threat model while making guest-backed Linux provisioning possible.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md#user-contract-authoritative`
-    - `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md#user-contract-authoritative`
+    - `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
     - `docs/reference/world/deps/README.md#provisioning-contract`
 
 ## Problem / Context

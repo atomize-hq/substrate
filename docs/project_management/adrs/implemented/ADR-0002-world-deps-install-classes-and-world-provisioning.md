@@ -1,5 +1,23 @@
 # ADR-0002: World-Deps Install Classes + Provisioning-Time System Packages
 
+> NOTICE (2026-05-26)
+>
+> This ADR remains useful historical framing for world-deps install classes, but it is stale on
+> the current provisioning command surface and enabled-set model.
+>
+> Current readers should use:
+> - `docs/reference/world/deps/README.md`
+> - `docs/reference/world/deps/provisioning.md`
+> - `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
+> - `docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
+>
+> Superseded details in this ADR include:
+> - `substrate world deps provision`
+>   - replaced by `substrate world enable --provision-deps`
+> - `world-deps.selection.yaml`
+>   - replaced by inventory directories plus `world.deps.enabled` patch keys under
+>     `$SUBSTRATE_HOME/config.yaml` and `<workspace_root>/.substrate/workspace.yaml`
+
 Status: Accepted
 
 Last updated: 2025-12-24

@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-14
 - Owner(s): Shell maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directories (impacted):
   - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
@@ -16,7 +22,7 @@
 
 ## Related Docs
 - Patch files + scope model:
-  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - World-deps consumer contract:
   - `docs/reference/world/deps/README.md`
 - World-deps ADR (consumer workstream; not modified by this ADR):
@@ -31,7 +37,7 @@ ADR_BODY_SHA256: 9f5ad467af8c83056bf9e06e1f6f2b3f1e9be8a58a0f35fc56b832fa957e964
   - New: `current show --explain` supports keys whose effective value is derived from multiple layers (e.g. global + workspace), and reports those contributing sources deterministically.
   - Why: enables additive config keys (like `world.deps.enabled`) without creating a second parallel config system or confusing precedence.
   - Links:
-    - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+    - `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
     - `docs/reference/world/deps/README.md`
 
 - Schema defines merge behavior per key
@@ -39,7 +45,7 @@ ADR_BODY_SHA256: 9f5ad467af8c83056bf9e06e1f6f2b3f1e9be8a58a0f35fc56b832fa957e964
   - New: patch files remain the container format, but the schema defines the effective merge strategy per key; most keys remain “replace”, while selected keys are explicitly “merge”.
   - Why: keeps patch files simple while allowing a small number of keys to be intentionally additive and still explainable.
   - Links:
-    - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+    - `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 
 ## Problem / Context
 - ADR-0008 establishes:

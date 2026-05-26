@@ -88,9 +88,8 @@ The following curated ADRs now exist under `docs/adr/implemented/`:
 - This ledger does not yet classify the full ADR registry.
 - The legacy project-management ADR files remain in place with relocation notes; this slice does
   not yet archive or delete those historical source files.
-- This ledger does not yet decide the final disposition of provisioning ADRs `ADR-0030` and
-  `ADR-0033`; they remain separate because their pack-owned contract references may still be
-  intentional until that narrower provisioning cluster is curated.
+- This ledger still leaves the broader `docs/project_management/**` dependency cleanup for later
+  retirement slices after current ADR curation is complete.
 
 ## Second Cluster: Superseded Gateway and Agent-Hub Predecessors
 
@@ -178,11 +177,57 @@ The following curated draft ADRs now exist under `docs/adr/draft/`:
 - `docs/adr/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
 - `docs/adr/draft/ADR-0020-profiles-config-policy-snapshots.md`
 
+## Fifth Cluster: Provisioning-Time System-Package ADRs
+
+This slice curates the remaining current provisioning ADR pair. Both decisions are already
+implemented in the world-deps operator contract, runtime fail-early behavior, inventory schema,
+and guest-world provisioning flow, so they belong in the implemented tree rather than in a
+long-lived draft bucket.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0030 | `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md` | `stable_keeper` | `draft_but_implemented` | The explicit `substrate world enable --provision-deps` contract, runtime fail-early posture, and no-host-mutation guarantee are already implemented and documented in stable world-deps references. |
+| ADR-0033 | `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md` | `stable_keeper` | `draft_but_implemented` | Manager-aware provisioning and `install.method=pacman` are already implemented in the inventory/runtime stack and stable world-deps docs, so this ADR is no longer only queued rationale. |
+
+## Promoted In This Slice
+
+The following curated implemented ADRs now exist under `docs/adr/implemented/`:
+
+- `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
+- `docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
+
+## Sixth Cluster: Config and Policy Foundation ADRs
+
+This slice curates the already-implemented config and policy foundation ADRs that stable operator
+and internals docs still use as current semantic anchors.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0003 | `docs/project_management/adrs/implemented/ADR-0003-policy-and-config-mental-model-simplification.md` | `stable_keeper` | `implemented` | Stable config docs still depend on its canonical file-name, workspace, and terminology model. |
+| ADR-0005 | `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md` | `stable_keeper` | `implemented` | The current config/env precedence contract is already exposed in stable config and env docs. |
+| ADR-0006 | `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md` | `stable_keeper` | `implemented` | The supported env-variable contract and inventory still depend on its taxonomy and override split. |
+| ADR-0008 | `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md` | `stable_keeper` | `implemented` | It defines the shared patch-file scope model that current config, policy, and world-deps docs still rely on. |
+| ADR-0012 | `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md` | `stable_keeper` | `implemented` | Current config and world-deps docs rely on its merge-strategy and provenance contract. |
+| ADR-0013 | `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` | `stable_keeper` | `implemented` | Stable policy and config docs depend on broker-canonical patch-only policy resolution semantics. |
+
+## Promoted In This Slice
+
+The following curated implemented ADRs now exist under `docs/adr/implemented/`:
+
+- `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
+- `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+- `docs/adr/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
+- `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `docs/adr/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `docs/adr/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+
 ## Next Resume Slice
 
-The remaining current ADR tail is now classified and promoted. Next, continue with:
+The remaining current ADR tail, provisioning slice, and config/policy foundation slice are now
+classified and promoted. Next, continue with:
 
-1. keep provisioning ADRs `ADR-0030` and `ADR-0033` as the next explicit curation slice
-2. after that, narrow any remaining `docs/project_management/**` dependency surface that still
+1. curate the remaining world/runtime foundation ADRs that stable docs or code still treat as
+   current semantic anchors
+2. narrow any remaining `docs/project_management/**` dependency surface that still
    points stable readers at retiring namespaces
 3. do not reopen already-curated ADR clusters unless new stable references are discovered

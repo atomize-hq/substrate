@@ -7,10 +7,18 @@ Use it for ADRs that still explain current Substrate behavior after
 
 Current curated set:
 
+- `ADR-0003-policy-and-config-mental-model-simplification.md`
+- `ADR-0005-workspace-config-precedence-over-env.md`
+- `ADR-0006-env-var-taxonomy-and-override-split.md`
+- `ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+- `ADR-0012-config-schema-per-key-merge-and-provenance.md`
+- `ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - `ADR-0016-world-first-repl-persistent-pty.md`
 - `ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - `ADR-0028-in-world-process-execution-tracing-parity.md`
 - `ADR-0027-llm-and-agent-config-policy-surface.md`
+- `ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
+- `ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
 - `ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - `ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - `ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`

@@ -6,6 +6,12 @@
 - Date (UTC): 2026-02-21
 - Owner(s): ASSUMPTION: Shell maintainers; World backend maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 
 - Feature directory: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/` (ASSUMPTION: new pack)
@@ -21,7 +27,7 @@
 - Internals (current behavior notes): `docs/internals/world/deps.md`
 - Pack-root manager-aware contract: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/contract.md`
 - Inventory layering / enabled resolution / non-system-package behavior: `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
-- Provisioning-time system packages (APT baseline): `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
+- Provisioning-time system packages (APT baseline): `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
 - Linux guest-rootfs roadmap context (system packages on Linux): `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
 - Operator reference: `docs/reference/world/deps/README.md`
 - Plan: `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/plan.md`

@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-02
 - Owner(s): spenser
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/policy_and_config_precedence/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -15,7 +21,7 @@
   - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`
 
 ## Related Docs
-- Prior ADR (baseline semantics): `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
+- Prior ADR (baseline semantics): `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
 - Plan: `docs/project_management/_archived/policy_and_config_precedence/plan.md`
 - Tasks: `docs/project_management/_archived/policy_and_config_precedence/tasks.json`
 - Specs:
@@ -35,8 +41,8 @@ ADR_BODY_SHA256: 8d172cf13539c74060f84605af8f9b244d7b5ffc6d4c4413b0db0126b882876
   - New: When a workspace exists, `.substrate/workspace.yaml` takes precedence over `SUBSTRATE_*` env exports for all config keys; env vars still apply when not in a workspace (and CLI flags remain highest precedence).
   - Why: Prevent “global config → env.sh → env overrides workspace config” confusion and eliminate the effective-precedence footgun caused by stable export scripts.
   - Links:
-    - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md#L255` (effective config precedence in ADR-0003)
-    - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md#L605` (env scripts and `env.sh` purpose)
+    - `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md` (effective config precedence baseline)
+    - `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md` (env script ownership baseline)
     - `crates/shell/src/execution/config_model.rs#L220` (current effective-config merge order)
     - `docs/project_management/_archived/policy_and_config_precedence/PCP0-spec.md` (implementation slice; authoritative acceptance criteria)
 

@@ -5,6 +5,12 @@
 - Date (UTC): 2026-02-21
 - Owner(s): ASSUMPTION: Shell maintainers; World backend maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/world-deps-apt-provisioning/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

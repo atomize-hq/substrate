@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-04
 - Owner(s): spenser
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/env_var_taxonomy_and_override_split/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
@@ -18,8 +24,8 @@
 
 ## Related Docs
 - Prior ADRs:
-  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md`
 - Plan: `docs/project_management/_archived/env_var_taxonomy_and_override_split/plan.md`
 - Tasks: `docs/project_management/_archived/env_var_taxonomy_and_override_split/tasks.json`
 - Session log: `docs/project_management/_archived/env_var_taxonomy_and_override_split/session_log.md`
@@ -42,8 +48,8 @@ ADR_BODY_SHA256: 5a5e7ad83f9a3cfa6067168e0ee16e031321d3b1d056b7ee36055ad05a507cb
   - New: Exported state variables remain `SUBSTRATE_*`, but config resolution stops treating those state exports as override inputs. Operator override inputs move to a dedicated namespace: `SUBSTRATE_OVERRIDE_*`.
   - Why: Prevent confusion and eliminate the dual-use ambiguity where “cached state exports” look like intentional overrides.
   - Links:
-    - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md#L608` (`env.sh` / `manager_env.sh` ownership model)
-    - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md#L33` (prior mitigation for workspace vs env)
+    - `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md` (`env.sh` / `manager_env.sh` ownership model)
+    - `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md` (prior mitigation for workspace vs env)
     - `crates/shell/src/execution/env_scripts.rs` (exported state generation)
     - `crates/shell/src/execution/config_model.rs#L220` (effective config resolution)
     - `docs/ENVIRONMENT_VARIABLES.md` (canonical taxonomy + catalog)

@@ -21,6 +21,10 @@ The most authoritative current references are:
   - points missing-package remediation at `substrate world enable --provision-deps`
 - [`docs/reference/world/deps/provisioning.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/deps/provisioning.md)
   - authoritative operator-facing contract for provisioning-time mutation, runtime fail-early behavior, and supported backend posture
+- [`docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md)
+  - curated stable ADR for the explicit provisioning-time system-package posture
+- [`docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md)
+  - curated stable ADR for manager-aware system-package provisioning
 - [`docs/internals/world/deps.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/world/deps.md)
   - authoritative implementation-oriented reference for inventory structure, enabled-set resolution, wrapper behavior, and runtime probe-only posture
 - [`docs/WORLD.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
@@ -67,29 +71,28 @@ These documents are still useful for understanding why the system evolved the wa
   - historical planning/archive material
   - stale on both command surface and selection model
 - [`docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md)
-  - still valuable as the rationale for the explicit provisioning-time workflow
+  - planning-rich historical source for the same decision
   - includes option analysis for the older `substrate world deps provision` command
-  - authoritative direction in this ADR is still `substrate world enable --provision-deps`, not the rejected option text
 
 ## Relationship between the ADR chain
 
 - [`ADR-0002`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md) is best treated as historical framing, not as the current command contract.
 - [`ADR-0011`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md) is the stronger source for today’s inventory and enabled-set model.
-- [`ADR-0030`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md) defines the explicit provisioning-time posture that the current implementation follows.
-- [`ADR-0033`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0033-routing-weasel.md) extends that provisioning surface to manager-aware routing for `pacman` as well as `apt`.
+- [`ADR-0030`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md) defines the explicit provisioning-time posture that the current implementation follows.
+- [`ADR-0033`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md) extends that provisioning surface to manager-aware routing for `pacman` as well as `apt`.
 - [`ADR-0009`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md) extends the existing `world enable --provision-deps` contract for future Linux guest-rootfs support; it must not reintroduce `world deps provision`.
 
 ## What should be updated next
 
 To make the documentation chain consistent end to end, the next updates should be:
 
-1. Add an explicit supersession note to [`ADR-0002`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md) stating that:
-   - the current provisioning command is `substrate world enable --provision-deps`
-   - the current enabled-set model comes from the packages/bundles contract rather than `world-deps.selection.yaml`
+1. `ADR-0002` now carries an explicit supersession note that points current readers at
+   `substrate world enable --provision-deps`, the stable world-deps docs, and the curated ADRs.
 2. Update any lingering non-archived docs that still say `substrate world deps provision` to `substrate world enable --provision-deps`, unless they are intentionally discussing rejected historical options.
 3. Update any lingering non-archived docs that still present `world-deps.selection.yaml` as current operator truth.
 4. Keep archived materials archived; do not “fix” them into looking current unless they are explicitly being revived.
-5. If the team wants `ADR-0030`, `ADR-0031`, `ADR-0032`, `ADR-0033`, and `ADR-0035` treated as fully landed, move or restate them in a way that matches their implemented status instead of leaving them only under `draft/`.
+5. `ADR-0030` and `ADR-0033` are now curated into `docs/adr/implemented/`; any future cleanup should
+   treat the project-management copies as historical source rather than the stable ADR home.
 
 ## Practical reading order
 

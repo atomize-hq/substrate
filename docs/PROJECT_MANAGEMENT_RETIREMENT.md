@@ -110,9 +110,9 @@ Validation already completed for the finished slices:
 - scoped rewrites under `docs/project_management/adrs/**` now point ADR-0027 foundation references
   at `docs/reference/policy/{contract,schema}.md`, and the provisioning reconciliation note now
   points at stable world-deps references instead of implemented pack contracts
-- the remaining direct pack-contract citations under `docs/project_management/adrs/**` are now
-  concentrated in draft provisioning ADRs that still cite their own feature-pack contract surfaces
-  (`ADR-0030`, `ADR-0033`)
+- the provisioning ADR pair `ADR-0030` and `ADR-0033` is now curated into
+  `docs/adr/implemented/`, and current planning readers have been repointed toward the curated
+  namespace
 - initial gateway-local manifest normalization under
   `crates/gateway/docs/project_management/**` now uses monorepo-correct
   `crates/gateway/docs/project_management/packs/**` refs in evidence payloads that previously
@@ -404,16 +404,24 @@ Completed in this slice:
 - promoted implemented ADR `ADR-0016` into `docs/adr/implemented/`
 - promoted queued ADRs `ADR-0019` and `ADR-0020` into `docs/adr/draft/`
 - repointed current ADR references from `ADR-0016` and `ADR-0020` toward the curated namespace
+- classified the provisioning ADR pair
+- promoted implemented ADRs `ADR-0030` and `ADR-0033` into `docs/adr/implemented/`
+- repointed current provisioning ADR references toward the curated namespace
+- classified the config/policy foundation ADR batch
+- promoted implemented ADRs `ADR-0003`, `ADR-0005`, `ADR-0006`, `ADR-0008`, `ADR-0012`, and
+  `ADR-0013` into `docs/adr/implemented/`
+- repointed stable config/env readers and current draft ADR references toward the curated namespace
 
 ## Recommended Resume Order
 
 Use this order in the next session:
 
-1. Reclassify and promote the next current ADR cluster.
-   - The next explicit slice is the provisioning ADR pair `ADR-0030` and `ADR-0033`.
+1. Curate the remaining world/runtime foundation ADRs that stable docs or code still treat as
+   current semantic anchors.
 2. Continue narrowing the remaining `docs/project_management/**` dependency surface after the
    ADR registry stops pointing stable readers at the retiring namespace.
-3. Do not reopen the completed current ADR clusters unless a remaining stable consumer still points
+3. Keep current stable-reader rewrites ahead of broad historical cleanup.
+4. Do not reopen the completed current ADR clusters unless a remaining stable consumer still points
    at the old copies.
 
 ## Resume Notes
@@ -425,8 +433,12 @@ Use this order in the next session:
   which is now treated as queued draft work under `docs/adr/draft/`.
 - The orchestration/workflow batch is now classified and promoted.
 - The remaining current ADR tail is now classified and promoted.
-- The next correct move is the dedicated provisioning ADR slice (`ADR-0030` / `ADR-0033`), not
-  another broad stable-doc extraction pass or a return to already-curated clusters.
+- The dedicated provisioning ADR slice (`ADR-0030` / `ADR-0033`) is now complete.
+- The config/policy foundation ADR slice (`ADR-0003`, `ADR-0005`, `ADR-0006`, `ADR-0008`,
+  `ADR-0012`, `ADR-0013`) is now complete.
+- The next correct move is curating the remaining world/runtime foundation ADRs and continuing to
+  narrow the remaining `docs/project_management/**` dependency surface, not reopening
+  already-curated ADR clusters.
 - Treat the repo-wide `docs/project_management/**` cleanup as subordinate to that ADR curation
   milestone; otherwise you risk repeatedly repointing docs toward a namespace that is still meant
   to be retired.

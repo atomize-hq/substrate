@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-17
 - Owner(s): Shell/Broker maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directories (impacted):
   - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)
@@ -17,9 +23,9 @@
 
 ## Related Docs
 - Baseline scope/file contract:
-  - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
+  - `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
 - Provenance + per-key merge strategy semantics (add-on to ADR-0008):
-  - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+  - `docs/adr/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - Decision Register (this body of work):
   - `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/decision_register.md`
 - Current (stale) operator docs that must be updated as part of this work:
@@ -40,7 +46,7 @@ Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-p
     - `crates/broker/src/policy.rs#L401`
     - `crates/shell/src/execution/policy_model.rs#L243`
     - `crates/shell/src/execution/routing/dispatch/exec.rs#L111`
-    - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
+    - `docs/adr/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
     - `docs/CONFIGURATION.md#L174`
 
 - Workspace disable marker is honored by the broker

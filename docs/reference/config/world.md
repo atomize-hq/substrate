@@ -130,6 +130,6 @@ Implementation notes live in: `docs/internals/world/deps.md`.
 - Config file locations and precedence: `docs/reference/config/contract.md`
 - Full configuration reference (including env overrides and exported state): `docs/CONFIGURATION.md`
 - Workspace definition and precedence model:
-  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md`
 - World filesystem isolation and policy model: `docs/WORLD.md`
