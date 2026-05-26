@@ -13,11 +13,10 @@ Purpose:
 Usage:
   scripts/ci-audit/ci_audit_record.sh \
     --ledger-path <path> \
-    --kind <ci-testing|feature-smoke> \
+    --kind ci-testing \
     --orch-branch <ref> \
     --run-id <id> \
     --tested-sha <sha> \
-    [--feature-dir <path>] \
     [--required-platforms <csv>] \
     [--mode <string>] \
     [--repo <owner/repo>] \
@@ -43,7 +42,6 @@ KIND=""
 ORCH_BRANCH=""
 RUN_ID=""
 TESTED_SHA=""
-FEATURE_DIR=""
 REQUIRED_PLATFORMS_OVERRIDE=""
 MODE=""
 REPO=""
@@ -56,7 +54,6 @@ while [[ $# -gt 0 ]]; do
         --orch-branch) ORCH_BRANCH="${2:-}"; shift 2 ;;
         --run-id) RUN_ID="${2:-}"; shift 2 ;;
         --tested-sha) TESTED_SHA="${2:-}"; shift 2 ;;
-        --feature-dir) FEATURE_DIR="${2:-}"; shift 2 ;;
         --required-platforms) REQUIRED_PLATFORMS_OVERRIDE="${2:-}"; shift 2 ;;
         --mode) MODE="${2:-}"; shift 2 ;;
         --repo) REPO="${2:-}"; shift 2 ;;
@@ -73,8 +70,9 @@ done
 [[ -n "${TESTED_SHA}" ]] || die "Missing --tested-sha"
 
 case "${KIND}" in
-    ci-testing|feature-smoke) ;;
-    *) die "Invalid --kind: ${KIND} (expected ci-testing or feature-smoke)" ;;
+    ci-testing) ;;
+    feature-smoke) die "feature-smoke audit recording was retired with project-management pack automation" ;;
+    *) die "Invalid --kind: ${KIND} (expected ci-testing)" ;;
 esac
 
 require_cmd gh
@@ -88,18 +86,8 @@ fi
 required_platforms_csv=""
 if [[ -n "${REQUIRED_PLATFORMS_OVERRIDE}" ]]; then
     required_platforms_csv="${REQUIRED_PLATFORMS_OVERRIDE}"
-elif [[ "${KIND}" == "ci-testing" ]]; then
-    required_platforms_csv="linux,macos,windows"
 else
-    if [[ -n "${FEATURE_DIR}" ]]; then
-        [[ -f "${FEATURE_DIR}/tasks.json" ]] || die "Missing ${FEATURE_DIR}/tasks.json"
-        required_platforms_csv="$(jq -r '.meta.behavior_platforms_required // [] | join(",")' "${FEATURE_DIR}/tasks.json")"
-        if [[ -z "${required_platforms_csv}" ]]; then
-            required_platforms_csv="linux,macos,windows"
-        fi
-    else
-        required_platforms_csv="linux,macos,windows"
-    fi
+    required_platforms_csv="linux,macos,windows"
 fi
 
 to_set_json() {
@@ -120,19 +108,6 @@ derive_passed_platforms() {
                 "Lint & Test (ubuntu-"*")") echo linux ;;
                 "Lint & Test (macos-"*")") echo macos ;;
                 "Lint & Test (windows-"*")") echo windows ;;
-            esac
-        done | sort -u
-    else
-        jq -r '
-          .[]
-          | select(.conclusion=="success")
-          | .name
-        ' <<<"${jobs_json}" | while IFS= read -r name; do
-            case "${name}" in
-                linux_*) echo linux ;;
-                macos_*) echo macos ;;
-                windows_*) echo windows ;;
-                wsl) echo wsl ;;
             esac
         done | sort -u
     fi
@@ -202,4 +177,3 @@ echo "CONCLUSION=${conclusion}"
 echo "TESTED_SHA=${TESTED_SHA}"
 echo "REQUIRED_PLATFORMS=${required_platforms_csv}"
 echo "PASSED_PLATFORMS=$(jq -r '.passed_platforms | join(",")' <<<"${entry}")"
-

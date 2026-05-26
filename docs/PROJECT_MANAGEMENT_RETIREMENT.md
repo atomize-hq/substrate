@@ -57,28 +57,38 @@ Completed extraction/rewrite slices:
   earlier slices
 
 Still remaining before the atomic top-level `packs/**` removal:
-- planning automation and workflow machinery still assume `docs/project_management/packs/**`
-- several tests outside `crates/broker/src/tests.rs` still read pack docs directly
+- repo-wide reference scan still finds non-pack-tree references to `docs/project_management/packs/**`
+- the remaining refs are now concentrated in historical/root docs plus a small number of live
+  wrappers that still point at pack-owned artifacts
 
 Validation already completed for the finished slices:
 - `cargo test -p substrate-broker --lib -- --nocapture`
 - targeted world-deps test rewrites are present in
   `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
+- `cargo test -p shell --test world_deps_apt_fail_early_wdap1 -- --nocapture`
+- `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+- `cargo test -p transport-api-types --lib -- --nocapture`
 - scoped reference scans over stable docs and non-`project_management` gateway docs no longer show
   top-level pack backlinks for the completed ADR-0027 and gateway-foundation slices
 - scoped reference scans over `crates/gateway/docs/project_management/**` no longer show
   top-level `docs/project_management/packs/**` or old `kimi-claude-adapter` pack backlinks
 - scoped reference scans over `docs/reference/**` and `docs/internals/**` no longer show
   top-level world-sync or host-visible hardening pack backlinks
+- scoped reference scans over `Makefile`, `.github/workflows/feature-smoke.yml`, and the targeted
+  triad / smoke / CI helper scripts no longer show `docs/project_management/packs/**` or
+  `tasks.json` assumptions
 
 ## Current Dependency Classes
 
 ### 1. Tooling and automation that assume `packs/**` exists
 
+Completed retirements/replacements:
 - `Makefile`
-  - planning scaffolding, validation, triad execution, archive helpers, and feature smoke dispatch all assume `docs/project_management/packs/...`
+  - retired the pack-driven planning, feature-smoke, scaffolding, and triad entrypoints behind
+    explicit failure stubs instead of pack-path validation
 - `.github/workflows/feature-smoke.yml`
-  - workflow input model and smoke-script discovery depend on feature pack directories and `tasks.json`
+  - replaced with a retirement workflow that fails fast instead of discovering feature-pack smoke
+    scripts
 - `scripts/e2e/triad_e2e_phase1.sh`
 - `scripts/e2e/triad_e2e_phase2.sh`
 - `scripts/e2e/triad_e2e_all.sh`
@@ -86,31 +96,37 @@ Validation already completed for the finished slices:
 - `scripts/ci-audit/ci_audit.sh`
 - `scripts/ci-audit/ci_audit_record.sh`
 - `scripts/mac/smoke.sh`
+  - BEDPM installer conformance mode is now retired instead of shelling through a pack-owned smoke
+    wrapper
+
+Remaining dependency surface after the repo-wide scan:
+- `tests/installers/pkg_manager_detection_smoke.sh`
+  - still points at a pack-owned smoke wrapper
+- root and historical docs outside `docs/project_management/packs/**`
+  - examples include `docs/BACKLOG.md`, `llm-last-mile/**`, `FSE_PRE_PLANNING_*`, and archived
+    planning notes that still cite pack paths
 
 Disposition:
-- delete if triad/planning-pack orchestration is dead
-- otherwise replace with non-pack infrastructure before the pack cut
+- rewrite or retire any still-live scripts/tests
+- classify root/historical docs as either intentional history or blockers that must be rewritten
+  before the atomic cut
 
 ### 2. Rust tests and code that hard-read pack markdown
 
-- `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
-  - rewritten to the stable world-deps provisioning docs; keep as an example of the desired end
-    state for other tests
-- `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
-  - asserts successor compatibility, parity, and manual validation playbooks
-- `crates/shell/tests/playbook_alignment.rs`
-  - recursively scans `docs/project_management/packs/**/manual_testing_playbook.md`
-- `crates/transport-api-types/src/lib.rs`
-  - test reads a manual testing playbook under a draft pack
-
 Completed:
 - `crates/broker/src/tests.rs`
-  - ADR-0027 contract tests now lock stable policy docs under `docs/reference/policy/**`
-  - planning-only slice/checkpoint/promote-pack assertions were deleted rather than migrated
+  - planning-only slice/checkpoint/promote-pack assertions were deleted
+- `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
+  - markdown-coupled doc-contract assertions were deleted
+- `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+  - markdown-coupled successor doc assertions were deleted
+- `crates/shell/tests/playbook_alignment.rs`
+  - deleted
+- `crates/transport-api-types/src/lib.rs`
+  - manual playbook evidence assertion was deleted
 
-Disposition:
-- rewrite when the source-of-truth doc survives in a stable home
-- delete when the test only protected planning-pack process mechanics
+Remaining dependency surface:
+- none currently identified in Rust tests under `crates/**`
 
 ### 3. Stable docs that still point at pack files
 
@@ -236,14 +252,10 @@ Remaining follow-up:
 
 ### Delete candidates
 
-- planning-pack scaffolding and triad automation in `Makefile` if the planning system is fully dead
-- feature-smoke workflow and helper scripts if they only exist for planning packs
-- `crates/shell/tests/playbook_alignment.rs` if no stable replacement playbook corpus is needed
 - Python tests under `docs/project_management/system/scripts/planning/tests/` if the planning scripts are retired rather than relocated
 
 ### Rewrite candidates
 
-- any Rust test that validates product behavior by asserting current docs mention the right contract
 - any stable operator or internal doc that cites a pack path as canonical
 - any future gateway-local planning edits that reintroduce links to deleted top-level pack paths
 
@@ -251,23 +263,23 @@ Remaining follow-up:
 
 Use this order in the next session:
 
-1. Triage the remaining pack-reading tests:
-   - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
-   - `crates/shell/tests/playbook_alignment.rs`
-   - `crates/transport-api-types/src/lib.rs`
-   - Goal: rewrite to stable docs where appropriate; delete planning-process-only assertions.
-2. Remove or replace planning automation and workflow dependencies:
-   - `Makefile`
-   - `.github/workflows/feature-smoke.yml`
-   - triad / smoke / CI helper scripts
-3. Re-run a repo-wide reference scan.
-   - Goal: confirm what still points at `docs/project_management/packs/**` before attempting the
-     atomic cut.
+1. Triage the remaining non-pack-tree references surfaced by the repo-wide scan.
+   - Start with `tests/installers/pkg_manager_detection_smoke.sh`.
+   - Then classify root-level docs such as `docs/BACKLOG.md`, `llm-last-mile/**`, and
+     `FSE_PRE_PLANNING_*` into:
+     - intentional historical notes
+     - blockers that still need rewrites
+2. Re-run the repo-wide reference scan after those rewrites.
+   - Goal: confirm that only intentionally retained historical notes still mention
+     `docs/project_management/packs/**`.
+3. Prepare the atomic `packs/**` deletion once the remaining refs are either rewritten or
+   explicitly accepted as historical holdouts.
 
 ## Resume Notes
 
 - Do not start by deleting any pack directories.
-- The next correct move is still extraction/rewrite work.
+- The next correct move is repo-wide residual-reference triage, not another stable-doc extraction
+  pass.
 - The top-level `packs/**` tree must be removed in one cut only after:
   - stable docs are repointed,
   - pack-reading tests are rewritten or deleted,
