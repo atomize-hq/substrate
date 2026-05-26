@@ -26,6 +26,45 @@ Current recommendation for ADRs:
 - CI, Make targets, smoke scripts, and Rust tests must stop depending on pack paths before the cut.
 - Gateway-local planning docs are not being retired in this effort, but they currently link back into top-level packs and will need rewrites to avoid broken references.
 
+## Current State
+
+Completed extraction/rewrite slices:
+- trace schema/protocol ownership moved into:
+  - `docs/internals/trace/schema.md`
+  - `docs/internals/trace/protocol.md`
+  - with stable trace docs repointed from pack-backed sources
+- world-deps provisioning contract moved into:
+  - `docs/reference/world/deps/provisioning.md`
+  - with `docs/WORLD.md`, `docs/CONFIGURATION.md`, `docs/COMMANDS.md`,
+    `docs/reference/world/deps/README.md`, and `docs/internals/world/deps.md` repointed
+- ADR-0027 / ADR-0043 stable policy references moved into:
+  - `docs/reference/policy/contract.md`
+  - `docs/reference/policy/schema.md`
+  - `docs/reference/policy/tuple_constraints.md`
+  - with stable gateway contracts repointed and `crates/broker/src/tests.rs` rewritten to lock
+    stable docs instead of pack docs
+- gateway backlink cleanup completed for:
+  - `crates/gateway/docs/foundation/**`
+  - `crates/gateway/tests/fixtures/azure_kimi/**`
+  - `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
+- stale host-visible hardening and persistent-session planning anchors were already cleaned in
+  earlier slices
+
+Still remaining before the atomic top-level `packs/**` removal:
+- workspace-sync filesystem semantics are still owned by pack docs and still referenced from
+  `docs/internals/world/workspace_sync_filesystem_model.md`
+- planning automation and workflow machinery still assume `docs/project_management/packs/**`
+- several tests outside `crates/broker/src/tests.rs` still read pack docs directly
+- gateway-local planning docs under `crates/gateway/docs/project_management/**` remain out of
+  scope for deletion but still need their own backlink cleanup
+
+Validation already completed for the finished slices:
+- `cargo test -p substrate-broker --lib -- --nocapture`
+- targeted world-deps test rewrites are present in
+  `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
+- scoped reference scans over stable docs and non-`project_management` gateway docs no longer show
+  top-level pack backlinks for the completed ADR-0027 and gateway-foundation slices
+
 ## Current Dependency Classes
 
 ### 1. Tooling and automation that assume `packs/**` exists
@@ -48,10 +87,9 @@ Disposition:
 
 ### 2. Rust tests and code that hard-read pack markdown
 
-- `crates/broker/src/tests.rs`
-  - contract tests for `adr-0027-identity-tuple-policy-surface`
 - `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
-  - asserts world-deps provisioning references and contract wording
+  - rewritten to the stable world-deps provisioning docs; keep as an example of the desired end
+    state for other tests
 - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
   - asserts successor compatibility, parity, and manual validation playbooks
 - `crates/shell/tests/playbook_alignment.rs`
@@ -59,28 +97,26 @@ Disposition:
 - `crates/transport-api-types/src/lib.rs`
   - test reads a manual testing playbook under a draft pack
 
+Completed:
+- `crates/broker/src/tests.rs`
+  - ADR-0027 contract tests now lock stable policy docs under `docs/reference/policy/**`
+  - planning-only slice/checkpoint/promote-pack assertions were deleted rather than migrated
+
 Disposition:
 - rewrite when the source-of-truth doc survives in a stable home
 - delete when the test only protected planning-pack process mechanics
 
 ### 3. Stable docs that still point at pack files
 
-These are the highest-priority extraction blockers because they treat pack docs as current truth:
-
+Completed stable-doc rewrites:
 - `docs/TRACE.md`
-  - references `active/world_process_exec_tracing_parity/SCHEMA.md`
-  - references `active/world_process_exec_tracing_parity/PROTOCOL.md`
-  - references `packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - `docs/WORLD.md`
-  - references world-deps provisioning pack contracts
 - `docs/CONFIGURATION.md`
-  - references world-deps provisioning pack contracts
 - `docs/COMMANDS.md`
-  - references world-deps provisioning pack contracts
 - `docs/reference/world/deps/README.md`
-  - references world-deps provisioning pack contracts
 - `docs/internals/world/deps.md`
-  - references world-deps provisioning pack contracts
+
+Remaining stable-doc blockers that still treat pack docs as current truth:
 - `docs/reference/config/world.md`
   - references `world-deps-host-visible-hardening/WDH0-spec.md`
 - `docs/internals/world/workspace_sync_filesystem_model.md`
@@ -94,9 +130,12 @@ Disposition:
 
 Although `crates/gateway/docs/project_management/**` is out of scope for retirement, it currently depends on top-level pack closeouts, seam docs, and evidence paths.
 
-Notable dependency surfaces:
+Completed rewrites:
 - `crates/gateway/docs/foundation/*.md`
 - `crates/gateway/tests/fixtures/azure_kimi/*.json`
+- `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
+
+Remaining dependency surface:
 - `crates/gateway/docs/project_management/packs/active/**`
 
 Disposition:
@@ -111,14 +150,18 @@ Current pack sources:
 - `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md`
 - `docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md`
 
-Recommended destination:
-- merge schema ownership into `docs/internals/trace/schema.md`
-- merge protocol ownership into `docs/internals/trace/README.md` or a new sibling under `docs/internals/trace/`
+Stable destinations now in place:
+- `docs/internals/trace/schema.md`
+- `docs/internals/trace/protocol.md`
 
-Required follow-up:
-- rewrite `docs/TRACE.md`
-- rewrite `docs/internals/trace/README.md`
-- remove any tests or comments that still name the pack path as authoritative
+Completed follow-up:
+- rewrote `docs/TRACE.md`
+- rewrote `docs/internals/trace/README.md`
+- removed stable-doc dependency on pack-backed schema/protocol ownership
+
+Remaining follow-up:
+- keep ADR-0028 in `docs/project_management/adrs/**` for historical record
+- clean any downstream ADR/planning references separately from the stable trace surface itself
 
 ### B. World-deps provisioning contract
 
@@ -127,14 +170,19 @@ Current pack sources:
 - `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`
 - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
 
-Recommended destination:
-- move operator-facing contract material into `docs/reference/world/deps/README.md`
-- move implementation/background material into `docs/internals/world/deps.md`
-- if needed, add a dedicated stable doc under `docs/reference/world/deps/`
+Stable destinations now in place:
+- `docs/reference/world/deps/provisioning.md`
+- `docs/reference/world/deps/README.md`
+- `docs/internals/world/deps.md`
 
-Required follow-up:
-- rewrite `docs/WORLD.md`, `docs/CONFIGURATION.md`, and `docs/COMMANDS.md`
-- rewrite `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
+Completed follow-up:
+- rewrote `docs/WORLD.md`, `docs/CONFIGURATION.md`, and `docs/COMMANDS.md`
+- rewrote `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
+
+Remaining follow-up:
+- keep downstream ADR/planning references separate from the stable provisioning contract
+- verify any still-dirty worktree state in `crates/shell/tests/world_deps_apt_fail_early_wdap1.rs`
+  before using it as a resume point in a new session
 
 ### C. ADR-0027 implemented policy contract/schema surfaces
 
@@ -169,6 +217,10 @@ Recommended destination:
 
 Required follow-up:
 - rewrite the internal world docs that currently cite those pack specs
+
+Current recommendation:
+- make this the next stable-doc extraction slice after the gateway-local backlink cleanup, because
+  it is now one of the clearest remaining product-doc blockers before pack deletion
 
 ### E. Host-visible hardening references
 
@@ -206,6 +258,40 @@ Required follow-up:
   - `crates/gateway/tests/fixtures/azure_kimi/**`
   - `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
 
+## Recommended Resume Order
+
+Use this order in the next session:
+
+1. Finish the remaining gateway-local backlink cleanup under
+   `crates/gateway/docs/project_management/**`.
+   - Goal: remove the remaining dependence on top-level `docs/project_management/packs/**` from
+     gateway-local planning docs without deleting the gateway-local planning tree itself.
+2. Extract the world-sync filesystem semantics into
+   `docs/internals/world/workspace_sync_filesystem_model.md`.
+   - Goal: eliminate another stable-doc blocker that still names pack specs as canonical.
+3. Triage the remaining pack-reading tests:
+   - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+   - `crates/shell/tests/playbook_alignment.rs`
+   - `crates/transport-api-types/src/lib.rs`
+   - Goal: rewrite to stable docs where appropriate; delete planning-process-only assertions.
+4. Remove or replace planning automation and workflow dependencies:
+   - `Makefile`
+   - `.github/workflows/feature-smoke.yml`
+   - triad / smoke / CI helper scripts
+5. Re-run a repo-wide reference scan.
+   - Goal: confirm what still points at `docs/project_management/packs/**` before attempting the
+     atomic cut.
+
+## Resume Notes
+
+- Do not start by deleting any pack directories.
+- The next correct move is still extraction/rewrite work.
+- The top-level `packs/**` tree must be removed in one cut only after:
+  - stable docs are repointed,
+  - pack-reading tests are rewritten or deleted,
+  - automation stops assuming pack directories exist,
+  - and gateway-local backlinks have been cleaned far enough to avoid broken references.
+
 ## Atomic `packs/**` Retirement Procedure
 
 1. Extract all surviving normative content out of `docs/project_management/packs/**`.
@@ -224,15 +310,7 @@ After `packs/**` is gone:
 - prune `_archived/**` to the minimum historical set worth keeping
 - decide whether to keep the ADR registry where it is or move it into a non-project-management namespace
 
-## First Safe Implementation Slice
+## Historical Note
 
-The safest first execution slice is:
-
-1. extract the world-deps provisioning contract into stable docs
-2. rewrite the stable docs and WDAP1 Rust test to those new locations
-3. re-run tests
-
-Reason:
-- it has a contained set of references
-- it already has stable destination candidates
-- it removes one of the largest live blockers before the atomic pack cut
+The original first safe implementation slice was the world-deps provisioning extraction. That
+slice is now complete and should not be treated as the next step when resuming this work.
