@@ -49,12 +49,14 @@ Completed extraction/rewrite slices:
   - `crates/gateway/docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md`
 - gateway-local planning backlink cleanup completed for:
   - `crates/gateway/docs/project_management/packs/active/**`
+- workspace-sync filesystem semantics completed in:
+  - `docs/internals/world/workspace_sync_filesystem_model.md`
+  - with stable path, diff, direction, conflict, safety-rail, and clear semantics absorbed out of
+    the pack specs
 - stale host-visible hardening and persistent-session planning anchors were already cleaned in
   earlier slices
 
 Still remaining before the atomic top-level `packs/**` removal:
-- workspace-sync filesystem semantics are still owned by pack docs and still referenced from
-  `docs/internals/world/workspace_sync_filesystem_model.md`
 - planning automation and workflow machinery still assume `docs/project_management/packs/**`
 - several tests outside `crates/broker/src/tests.rs` still read pack docs directly
 
@@ -66,6 +68,8 @@ Validation already completed for the finished slices:
   top-level pack backlinks for the completed ADR-0027 and gateway-foundation slices
 - scoped reference scans over `crates/gateway/docs/project_management/**` no longer show
   top-level `docs/project_management/packs/**` or old `kimi-claude-adapter` pack backlinks
+- scoped reference scans over `docs/reference/**` and `docs/internals/**` no longer show
+  top-level world-sync or host-visible hardening pack backlinks
 
 ## Current Dependency Classes
 
@@ -117,16 +121,14 @@ Completed stable-doc rewrites:
 - `docs/COMMANDS.md`
 - `docs/reference/world/deps/README.md`
 - `docs/internals/world/deps.md`
+- `docs/internals/world/workspace_sync_filesystem_model.md`
 
 Remaining stable-doc blockers that still treat pack docs as current truth:
-- `docs/reference/config/world.md`
-  - references `world-deps-host-visible-hardening/WDH0-spec.md`
-- `docs/internals/world/workspace_sync_filesystem_model.md`
-  - references `world-sync` spec documents
+- none currently identified under `docs/reference/**` or `docs/internals/**`
 
 Disposition:
-- extract the normative content into `docs/reference/**`, `docs/contracts/**`, or `docs/internals/**`
-- then rewrite these references to the new stable locations
+- keep stable-doc scans in the validation loop so pack backlinks are not reintroduced while the
+  remaining tests and automation are retired
 
 ### 4. Gateway docs that link to top-level packs
 
@@ -216,33 +218,19 @@ Current pack sources:
 - `docs/project_management/packs/implemented/world-sync/WS2-spec.md`
 - `docs/project_management/packs/implemented/world-sync/WS5-spec.md`
 
-Recommended destination:
-- absorb normative filesystem semantics into `docs/internals/world/workspace_sync_filesystem_model.md`
-- create stable reference docs only if the content is operator-facing
+Stable destination now in place:
+- `docs/internals/world/workspace_sync_filesystem_model.md`
 
-Required follow-up:
-- rewrite the internal world docs that currently cite those pack specs
+Completed follow-up:
+- absorbed the stable Linux filesystem semantics into
+  `docs/internals/world/workspace_sync_filesystem_model.md`
+- removed the internal-doc dependency on the world-sync pack specs
+- kept the operator-facing surface in `docs/reference/cli/workspace_sync.md` rather than creating
+  another stable reference page
 
-Current recommendation:
-- make this the next stable-doc extraction slice after the gateway-local backlink cleanup, because
-  it is now one of the clearest remaining product-doc blockers before pack deletion
-
-### E. Host-visible hardening references
-
-Current pack sources:
-- `docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH0-spec.md`
-
-Current code comments still reference old `next/` paths:
-- `crates/world/src/guard.rs`
-- `crates/common/src/world_exec_guard.rs`
-- `crates/world-service/src/world_exec_guard.rs`
-- `crates/shell/src/execution/routing/dispatch/tests/repl_persistent_session_client_fail_closed.rs`
-
-Recommended destination:
-- replace stale planning-path comments with stable doc anchors under `docs/reference/config/` or `docs/internals/world/`
-
-Required follow-up:
-- update comments and any tests relying on those comments as documentation anchors
+Remaining follow-up:
+- none for the stable-doc dependency itself; the remaining blockers now sit in tests and
+  automation rather than `docs/reference/**` or `docs/internals/**`
 
 ## Delete Or Rewrite Checklist Before Pack Removal
 
@@ -263,19 +251,16 @@ Required follow-up:
 
 Use this order in the next session:
 
-1. Extract the world-sync filesystem semantics into
-   `docs/internals/world/workspace_sync_filesystem_model.md`.
-   - Goal: eliminate another stable-doc blocker that still names pack specs as canonical.
-2. Triage the remaining pack-reading tests:
+1. Triage the remaining pack-reading tests:
    - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
    - `crates/shell/tests/playbook_alignment.rs`
    - `crates/transport-api-types/src/lib.rs`
    - Goal: rewrite to stable docs where appropriate; delete planning-process-only assertions.
-3. Remove or replace planning automation and workflow dependencies:
+2. Remove or replace planning automation and workflow dependencies:
    - `Makefile`
    - `.github/workflows/feature-smoke.yml`
    - triad / smoke / CI helper scripts
-4. Re-run a repo-wide reference scan.
+3. Re-run a repo-wide reference scan.
    - Goal: confirm what still points at `docs/project_management/packs/**` before attempting the
      atomic cut.
 
