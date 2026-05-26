@@ -838,7 +838,9 @@ mod tests {
             message.contains("failed to resolve allowed domain")
                 || message.contains("failed to lookup address information")
                 || message.contains("resolved to no addresses")
-                || message.contains("No such host is known"),
+                || message.contains("No such host is known")
+                || message.contains("Host not found.")
+                || message.contains("os error 11001"),
             "unexpected error: {message}"
         );
     }

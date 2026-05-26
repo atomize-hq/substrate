@@ -564,10 +564,13 @@ mod tests {
     use std::collections::HashMap;
     #[cfg(target_os = "linux")]
     use std::sync::RwLock;
+    #[cfg(target_os = "linux")]
     use std::sync::{mpsc, Arc};
+    #[cfg(target_os = "linux")]
     use std::time::Duration;
     use tempfile::tempdir;
 
+    #[cfg(target_os = "linux")]
     fn shared_owner_spec(action: SharedWorldOwnerAction) -> SharedWorldOwnerSpec {
         SharedWorldOwnerSpec {
             orchestration_session_id: "orch_123".into(),
@@ -575,6 +578,7 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn shared_world_spec(
         project_dir: &std::path::Path,
         action: SharedWorldOwnerAction,
@@ -660,6 +664,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn replace_success_commits_new_active_and_finalizes_old_world() {
         let temp = tempdir().unwrap();
         let root_dir = temp.path().join("world-root");
@@ -718,6 +723,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn replace_failure_rolls_back_old_world_and_cleans_partial_root() {
         let temp = tempdir().unwrap();
         let root_dir = temp.path().join("world-root");
@@ -790,6 +796,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn shared_owner_branch_waits_on_backend_mutex() {
         let temp = tempdir().unwrap();
         let root_dir = temp.path().join("world-root");

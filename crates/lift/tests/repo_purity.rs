@@ -25,6 +25,19 @@ mod kernel {
 #[path = "../src/repo/mod.rs"]
 mod repo;
 
+fn running_under_wine() -> bool {
+    std::env::var_os("WINELOADER").is_some()
+}
+
+fn skip_git_fixture_tests_under_wine() -> bool {
+    if cfg!(windows) && running_under_wine() {
+        eprintln!("repo purity: skipping git fixture setup under Wine");
+        true
+    } else {
+        false
+    }
+}
+
 struct TempDir {
     path: PathBuf,
 }
@@ -180,6 +193,10 @@ fn worktree_snapshot_survives_source_mutation_and_deletion() {
 
 #[test]
 fn gitrev_snapshot_survives_head_advance_and_worktree_mutation() {
+    if skip_git_fixture_tests_under_wine() {
+        return;
+    }
+
     let repo_root = init_git_repo("repo-purity-gitrev");
     write_file(
         &repo_root.path().join("src/lib.rs"),

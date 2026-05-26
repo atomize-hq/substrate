@@ -25,6 +25,19 @@ mod kernel {
 #[path = "../src/repo/mod.rs"]
 mod repo;
 
+fn running_under_wine() -> bool {
+    std::env::var_os("WINELOADER").is_some()
+}
+
+fn skip_git_fixture_tests_under_wine() -> bool {
+    if cfg!(windows) && running_under_wine() {
+        eprintln!("repo git snapshot: skipping git fixture setup under Wine");
+        true
+    } else {
+        false
+    }
+}
+
 struct TempDir {
     path: PathBuf,
 }
@@ -151,6 +164,10 @@ fn commit_all(repo_root: &Path, message: &str) {
 
 #[test]
 fn gitrev_snapshot_reads_the_committed_tree_not_dirty_worktree_state() {
+    if skip_git_fixture_tests_under_wine() {
+        return;
+    }
+
     let repo_root = init_git_repo("repo-gitrev-dirty-worktree");
     write_file(
         &repo_root.path().join("Cargo.toml"),
@@ -192,6 +209,10 @@ fn gitrev_snapshot_reads_the_committed_tree_not_dirty_worktree_state() {
 
 #[test]
 fn clean_worktree_and_gitrev_snapshots_have_matching_inventory_and_fingerprint() {
+    if skip_git_fixture_tests_under_wine() {
+        return;
+    }
+
     let repo_root = init_git_repo("repo-gitrev-parity");
     write_file(
         &repo_root.path().join("Cargo.toml"),
@@ -244,6 +265,10 @@ fn clean_worktree_and_gitrev_snapshots_have_matching_inventory_and_fingerprint()
 
 #[test]
 fn gitrev_snapshot_rejects_revisions_that_resolve_to_blobs() {
+    if skip_git_fixture_tests_under_wine() {
+        return;
+    }
+
     let repo_root = init_git_repo("repo-gitrev-object-kind");
     write_file(
         &repo_root.path().join("src/lib.rs"),
@@ -273,6 +298,10 @@ fn gitrev_snapshot_rejects_revisions_that_resolve_to_blobs() {
 #[cfg(unix)]
 #[test]
 fn gitrev_followed_symlinks_still_compose_with_typed_excludes() {
+    if skip_git_fixture_tests_under_wine() {
+        return;
+    }
+
     use std::os::unix::fs::symlink;
 
     let repo_root = init_git_repo("repo-gitrev-follow-ignore-typed");
@@ -302,6 +331,10 @@ fn gitrev_followed_symlinks_still_compose_with_typed_excludes() {
 #[cfg(unix)]
 #[test]
 fn gitrev_followed_symlinks_compose_with_directory_glob_excludes() {
+    if skip_git_fixture_tests_under_wine() {
+        return;
+    }
+
     use std::os::unix::fs::symlink;
 
     let repo_root = init_git_repo("repo-gitrev-follow-ignore-dir-glob");
@@ -334,6 +367,10 @@ fn gitrev_followed_symlinks_compose_with_directory_glob_excludes() {
 #[cfg(unix)]
 #[test]
 fn gitrev_followed_symlinks_compose_with_directory_slash_glob_excludes() {
+    if skip_git_fixture_tests_under_wine() {
+        return;
+    }
+
     use std::os::unix::fs::symlink;
 
     let repo_root = init_git_repo("repo-gitrev-follow-ignore-dir-slash-glob");

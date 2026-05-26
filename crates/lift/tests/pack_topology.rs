@@ -27,6 +27,22 @@ mod kernel {
 #[path = "../src/pack/mod.rs"]
 mod pack;
 
+fn running_under_wine() -> bool {
+    std::env::var_os("WINELOADER").is_some()
+}
+
+fn normalize_display_path(path: impl AsRef<str>) -> String {
+    let mut normalized = path.as_ref().replace('\\', "/");
+
+    if cfg!(windows) && running_under_wine() {
+        if let Some(stripped) = normalized.strip_prefix("Z:") {
+            normalized = stripped.to_owned();
+        }
+    }
+
+    normalized
+}
+
 #[test]
 fn builtin_profile_resolves_builtin_topology_refs() {
     let compiler = pack::PackCompiler::new();
@@ -77,12 +93,12 @@ fn file_backed_profile_resolves_relative_topology_refs() {
     assert_eq!(boundary.header.id.as_str(), "acme/boundaries");
     assert_eq!(component.header.id.as_str(), "acme/components");
     assert_eq!(
-        boundary.header.origin.display(),
-        boundary_fixture_display_path()
+        normalize_display_path(boundary.header.origin.display()),
+        normalize_display_path(boundary_fixture_display_path())
     );
     assert_eq!(
-        component.header.origin.display(),
-        component_fixture_display_path()
+        normalize_display_path(component.header.origin.display()),
+        normalize_display_path(component_fixture_display_path())
     );
 }
 
