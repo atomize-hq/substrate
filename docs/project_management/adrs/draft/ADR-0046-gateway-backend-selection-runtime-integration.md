@@ -22,10 +22,10 @@
 This ADR is a thin implementation follow-on to ADR-0041. It keeps the ADR-0041 backend-id contract intact and defines how Substrate realizes that contract in the integrated gateway lifecycle for more than `cli:codex`.
 
 - Prerequisite boundary and contract ADRs:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Config / policy source of truth:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/reference/policy/contract.md`
   - `docs/reference/policy/schema.md`
 - Existing contract docs this ADR realizes:
@@ -35,8 +35,8 @@ This ADR is a thin implementation follow-on to ADR-0041. It keeps the ADR-0041 b
   - `docs/contracts/gateway/operator-contract.md`
   - `docs/contracts/gateway/status-schema.md`
 - Explicitly deferred follow-ons:
-  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+  - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Expected planning-pack outputs:
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/plan.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/tasks.json`
@@ -66,9 +66,9 @@ ADR_BODY_SHA256: 0c49fe896ae4eebf17fad20a6079dffa13006612a50c40496f0edec500ad843
   - New: this ADR limits itself to realizing ADR-0041 selection, adapter lookup, capability gating, and integrated runtime generation, while deferring tuple-axis policy, additive status-schema widening, and stronger secret transport redesign to their owning ADRs.
   - Why: this keeps the active implementation seam small enough to plan and land without reopening adjacent semantic surfaces.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-    - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-    - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+    - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+    - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+    - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
     - `crates/shell/src/execution/config_model.rs#L215`
     - `crates/shell/src/execution/policy_model.rs#L68`
 

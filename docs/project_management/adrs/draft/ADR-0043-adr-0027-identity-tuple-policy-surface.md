@@ -22,11 +22,11 @@
 This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file families and extends the policy surface so operators can express the ADR-0042 identity model clearly without overloading backend ids.
 
 - Semantic model:
-  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md`
 - Config/policy foundation:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/reference/policy/contract.md`
   - `docs/reference/policy/schema.md`
 - Expected planning-pack outputs:
@@ -41,8 +41,8 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Follow-on agent orchestration ADRs:
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
   - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
@@ -56,10 +56,10 @@ ADR_BODY_SHA256: ab38102c3d0c2de20c9a6ae9236523c865e18cb9b3966725e2e4f93b9c42245
   - New: Substrate adds tuple-axis narrowing constraints under `llm.constraints` so operators can separately constrain `router`, `provider`, `protocol`, and `auth_authority` while keeping backend ids as adapter/backend gates only.
   - Why: This removes the last ambiguity from the operator model without inventing new files or collapsing the router, client, provider, and auth authority into one label.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-    - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-    - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-    - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+    - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+    - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
+    - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+    - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 
 ## Problem / Context
 - ADR-0042 establishes the semantic identity tuple:

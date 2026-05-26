@@ -5,3 +5,7 @@ yet.
 
 It is intentionally narrower than `docs/project_management/adrs/draft/`, which also contains
 planning-heavy ADRs that may never be promoted here.
+
+Current curated draft ADRs:
+
+- `ADR-0026-orchestration-toolbox-mcp.md`

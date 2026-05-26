@@ -27,7 +27,7 @@
   - LLM gateway front door: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - Backend/provider engines: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
   - Trace/event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-  - Config/policy surface (no new roots): `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - Config/policy surface (no new roots): `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
 

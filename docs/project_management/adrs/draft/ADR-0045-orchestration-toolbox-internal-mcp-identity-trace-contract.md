@@ -19,19 +19,19 @@ This ADR supersedes the older orchestration-toolbox framing in ADR-0026 and shou
 - Superseded ADR:
   - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
 - Identity tuple and deployment posture:
-  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - Tuple-axis policy surface:
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+  - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Agent Hub successor:
   - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 - Config/policy foundation:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Event and trace foundations:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 
 ## Executive Summary (Operator)
 
@@ -43,7 +43,7 @@ ADR_BODY_SHA256: 41a4e1478057cd1a67695c503531f4fbcab3f4d08e2b3d896b7bfd8327f0e7d
   - Why: operators need a read-only toolbox that is easy to audit, fail closed, and impossible to confuse with a second execution plane.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
-    - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+    - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
     - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 
 ## Problem / Context

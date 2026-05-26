@@ -28,7 +28,7 @@ The committed operator contract that downstream slices should treat as live sour
 - Superseded intent:
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 - Foundational config/policy surface:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/reference/policy/contract.md`
   - `docs/reference/policy/schema.md`
 - Committed operator contract:

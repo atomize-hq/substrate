@@ -16,8 +16,8 @@
 This ADR is a lifecycle correction for host orchestration. It does not replace the existing public caller surfaces; it clarifies what those surfaces bind to and what runtime durability they require.
 
 - Foundational runtime / ownership ADRs:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - Public caller-surface and execution-plan context:
   - `llm-last-mile/PLAN-22.md`
   - `llm-last-mile/ORCH_PLAN-22.md`

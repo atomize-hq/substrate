@@ -6,6 +6,12 @@
 - Owner(s): Spenser McConnell (Substrate)
 - Superseded by: `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 
+## Curated Historical ADR
+
+- Current curated historical ADR: `docs/adr/historical/ADR-0025-agent-hub-core-role-swappable.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/agent_hub_core/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

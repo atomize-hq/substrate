@@ -45,11 +45,11 @@
 - Profiles (future; must remain compatible):
   - `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
 - Identity / tuple follow-ons (additive; must remain compatible):
-  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+  - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Current successor ADRs that consume this surface:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
   - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
   - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Historical predecessor ADRs (superseded semantically; useful as origin context only):
@@ -72,7 +72,7 @@ ADR_BODY_SHA256: 36c3baa794d0878fae02ffa4dfa7bb9dbeed355c4aa7e4a0a554df7dd116443
     - with explicit schemas, precedence, and fail-closed behavior.
   - Why: Keep Substrate’s enforcement/audit claims accurate and avoid a “second config system” as LLM + agent features land (gateway, CLI backends, agent hub, orchestration toolbox).
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md#L1`
+    - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md#L1`
     - `docs/reference/policy/contract.md#L1`
     - `docs/reference/policy/schema.md#L1`
     - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md#L1`

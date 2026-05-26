@@ -6,6 +6,12 @@
 - Owner(s): Spenser McConnell (Substrate)
 - Superseded by: `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 
+## Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
+- This project-management file remains the planning-rich source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/orchestration_mcp_toolbox/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

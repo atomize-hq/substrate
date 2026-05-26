@@ -25,9 +25,9 @@
 This ADR is a successor to ADR-0024 and should be read as a contract clarification for the gateway adapter layer, not as a redefinition of the gateway boundary itself.
 
 - Boundary / runtime ownership prerequisite:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - Config / policy source of truth:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/reference/policy/contract.md`
   - `docs/reference/policy/schema.md`
 - Output / event / trace foundations:
@@ -46,7 +46,7 @@ This ADR is a successor to ADR-0024 and should be read as a contract clarificati
 - Handoff evidence:
   - `.codex/handoffs/2026-04-02-144618-substrate-gateway-architecture-alignment.md`
 - Follow-on boundary ADR:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 
 ## Executive Summary (Operator)
 
@@ -60,7 +60,7 @@ ADR_BODY_SHA256: 10d71a701199e24edda589d0bac6e8edcaf6c56de561e07c59b90aec3102f0d
   - Why: This keeps backend identity stable, avoids coupling policy to provider implementation details, and matches the runtime ownership split clarified in ADR-0040.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
-    - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+    - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
     - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0013-agent-api-backend-harness.md`
     - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0015-unified-agent-api-session-extensions.md`
     - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0017-unified-agent-api-session-thread-id-surfacing.md`
@@ -245,8 +245,8 @@ ADR_BODY_SHA256: 10d71a701199e24edda589d0bac6e8edcaf6c56de561e07c59b90aec3102f0d
 ### Manual validation
 
 - Compare this ADR against:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
   - the unified-agent-api UAA ADRs
   - the gateway boundary evidence in `kimi-claude-adapter`
 - Confirm there is no remaining ambiguity about who owns:

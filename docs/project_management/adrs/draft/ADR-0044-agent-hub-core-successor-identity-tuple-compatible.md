@@ -19,17 +19,17 @@ This ADR supersedes the older backend-id-centric Agent Hub framing in ADR-0025 a
 - Superseded ADR:
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
 - Identity tuple and deployment posture:
-  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - Tuple-axis policy surface:
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+  - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Config/policy foundation:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Event and trace foundations:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Follow-on orchestration surface:
   - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Historical toolbox predecessor:
@@ -45,16 +45,16 @@ ADR_BODY_SHA256: d9b8f16acf256bc582ac1cfaaa23cd75f48bc990f7ebe221ee6406763beaea5
   - Why: operators need to know whether they are approving a runtime adapter, a routing authority, or an upstream model provider, and those are not the same thing.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
-    - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-    - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+    - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+    - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 
 - Separate pure agent-run identity from nested gateway-backed LLM identity
   - Existing: backend ids and trace attribution can be read as if they imply provider, auth authority, and protocol all at once.
   - New: pure agent runs expose `client`, `router`, `protocol`, and `backend_id`; `provider` and `auth_authority` are absent unless the agent triggers a nested LLM request through `substrate_gateway`.
   - Why: this keeps operator approval and audit output readable when a host orchestrator dispatches a world-scoped member agent that later calls an LLM.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-    - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+    - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+    - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 ## Problem / Context

@@ -77,6 +77,11 @@ Still remaining before the atomic top-level `packs/**` removal:
     ADR-0046
   - stable gateway contract docs now point at curated implemented ADRs instead of the old draft
     project-management paths
+  - live ADR-to-ADR prerequisite repointing for non-superseded current consumers is now complete
+  - the remaining old first-cluster draft-path refs are confined to superseded predecessor ADRs
+    ADR-0023, ADR-0024, and ADR-0025, plus queued draft ADR-0026
+  - ADR-0023, ADR-0024, and ADR-0025 are now curated into `docs/adr/historical/`
+  - ADR-0026 is now curated into `docs/adr/draft/` as queued work rather than historical-only
 
 Validation already completed for the finished slices:
 - `cargo test -p substrate-broker --lib -- --nocapture`
@@ -125,6 +130,13 @@ Validation already completed for the finished slices:
 - stable gateway contract verification docs now reference curated implemented ADR paths for:
   - ADR-0040
   - ADR-0041
+- scoped scans over the current ADR consumer set no longer show old first-cluster draft ADR paths
+- curated historical ADR files now exist for:
+  - ADR-0023
+  - ADR-0024
+  - ADR-0025
+- curated draft ADR files now exist for:
+  - ADR-0026
 
 ## Current Dependency Classes
 
@@ -360,24 +372,32 @@ Completed in this slice:
 - promoted the first contract-heavy ADR cluster into `docs/adr/implemented/`
 - repointed stable gateway contract docs to the curated implemented ADR paths
 - added relocation notes on the legacy project-management ADRs retained for compatibility
+- repointed live ADR-to-ADR prerequisite links for the non-superseded current consumer set
+- classified the superseded predecessor cluster (`ADR-0023` through `ADR-0025`)
+- promoted that predecessor cluster into `docs/adr/historical/`
+- reclassified ADR-0026 as queued and moved it into `docs/adr/draft/`
+- added updated relocation notes on the retained predecessor and queued draft ADRs
 
 ## Recommended Resume Order
 
 Use this order in the next session:
 
-1. Repoint live ADR-to-ADR prerequisite links to the curated implemented ADR paths.
-   - Focus on current, still-live consumers before touching broader planning-pack history.
-2. Reclassify and promote the next ADR cluster.
-   - Keep the provisioning ADR decision around ADR-0030 and ADR-0033 as its own narrower slice.
+1. Reclassify and promote the next current ADR cluster.
+   - The likely next slice is the orchestration / workflow cluster, including queued ADR-0026,
+     not the already-curated historical predecessor ADRs.
+2. Keep the provisioning ADR decision around ADR-0030 and ADR-0033 as its own narrower slice.
 3. Continue narrowing the remaining `docs/project_management/**` dependency surface after the
-   stable ADR consumers stop pointing at the retiring namespace.
+   current ADR cluster decisions stop pointing stable readers at the retiring namespace.
 
 ## Resume Notes
 
 - Do not start by deleting any pack directories.
 - The first-cluster ADR promotion slice is complete.
-- The next correct move is targeted repointing of live ADR-to-ADR prerequisites plus
-  classification of the next cluster, not another broad stable-doc extraction pass.
+- Live ADR-to-ADR prerequisite repointing is complete for the current consumer set, and the
+  superseded predecessor cluster has been moved into `docs/adr/historical/` except ADR-0026,
+  which is now treated as queued draft work under `docs/adr/draft/`.
+- The next correct move is classification of the next current ADR cluster, not another broad
+  stable-doc extraction pass or a return to the predecessor cluster.
 - Treat the repo-wide `docs/project_management/**` cleanup as subordinate to that ADR curation
   milestone; otherwise you risk repeatedly repointing docs toward a namespace that is still meant
   to be retired.

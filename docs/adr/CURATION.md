@@ -92,11 +92,42 @@ The following curated ADRs now exist under `docs/adr/implemented/`:
   `ADR-0033`; they remain separate because their pack-owned contract references may still be
   intentional until that narrower provisioning cluster is curated.
 
+## Second Cluster: Superseded Gateway and Agent-Hub Predecessors
+
+This is the next bounded cluster after live-consumer prerequisite repointing because these ADRs
+still carry legacy backlinks but are no longer the active architectural truth.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0023 | `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md` | `superseded` | `still_draft` | Its gateway-capability intent is preserved historically, but the current runtime ownership split now lives in ADR-0040 and the adapter boundary in ADR-0041. |
+| ADR-0024 | `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md` | `superseded` | `still_draft` | The stable backend-id and allowlisting goals survived, but the Substrate-local engine framing was replaced by the gateway-owned adapter contract in ADR-0041. |
+| ADR-0025 | `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md` | `superseded` | `still_draft` | The core Agent Hub direction remains relevant, but the newer successor ADRs changed the identity and backend semantics enough that this draft is historical, not current truth. |
+
+## Promoted In This Slice
+
+The following curated historical ADRs now exist under `docs/adr/historical/`:
+
+- `docs/adr/historical/ADR-0023-in-world-llm-gateway-front-door.md`
+- `docs/adr/historical/ADR-0024-cli-backend-provider-engine.md`
+- `docs/adr/historical/ADR-0025-agent-hub-core-role-swappable.md`
+
+## Queued Draft: ADR-0026
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0026 | `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md` | `stable_keeper` | `still_draft` | The toolbox concept is still queued work rather than settled history. It has not been landed, and when implementation is ready it should be rewritten against the later orchestration, identity, and trace semantics rather than treated as an already-closed predecessor. |
+
+Curated queued draft ADR:
+
+- `docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md`
+
 ## Next Resume Slice
 
-Next, continue with:
+Live-current prerequisite repointing for the first promoted cluster is now complete. Next,
+continue with:
 
-1. repoint live ADR-to-ADR prerequisite links that should follow the curated implemented paths
-2. classify and promote the next ADR cluster
+1. classify and promote the next current ADR cluster
+2. treat the orchestration / workflow ADRs, including queued toolbox work around ADR-0026, as the
+   next likely cluster rather than returning to the superseded predecessor set
 3. keep provisioning ADRs `ADR-0030` and `ADR-0033` separate until that narrower cluster is
    explicitly curated

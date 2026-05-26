@@ -23,7 +23,7 @@ This ADR is a semantic lock for operator-facing identity and deployment posture.
 clarification layer that precedes later Agent Hub updates and any additive config/policy updates.
 
 - Foundational config/policy surface:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/reference/policy/contract.md`
   - `docs/reference/policy/schema.md`
 - Semantic planning pack:
@@ -33,10 +33,10 @@ clarification layer that precedes later Agent Hub updates and any additive confi
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 - Gateway ownership and adapter contracts:
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Additive policy follow-on:
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+  - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Follow-on agent orchestration ADRs:
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
   - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
@@ -56,11 +56,11 @@ ADR_BODY_SHA256: 51fd84175744539955168c2a9aa657d1fc69c9923a9a84295c22d8697847df2
   - New: Substrate treats these as distinct semantic fields: `client`, `router`, `provider`, `auth_authority`, and `protocol`.
   - Why: A single backend id is not enough to explain what is actually happening when a host client is pointed at `substrate_gateway`, when the gateway fans out to multiple providers, or when subscription-based auth and API-key auth both exist in the same ecosystem.
   - Links:
-    - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+    - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
     - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-    - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-    - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+    - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+    - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 
 ## Problem / Context
 - The current architecture has multiple, orthogonal choices that operators need to understand independently:
@@ -176,9 +176,9 @@ Non-negotiable interpretation:
 ### Config
 - This ADR introduces no new config files and no new config keys.
 - Source of truth for config/policy files, precedence, and fail-closed semantics remains:
-  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Router/provider/protocol/auth-authority policy constraints are introduced additively by:
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+  - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Placement posture is expressed via existing config/policy:
   - `llm.gateway.mode: in_world|host_only`
   - `llm.fail_closed.routing` (no host fallback when true)

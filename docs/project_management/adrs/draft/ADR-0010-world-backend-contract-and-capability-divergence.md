@@ -16,9 +16,9 @@
 - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - ADR standard/template: `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
 - Secrets delivery channel rubric: `docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
-- LLM + agent config/policy surface: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-- Gateway boundary and runtime ownership: `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-- Gateway backend adapter contract: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- LLM + agent config/policy surface: `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
+- Gateway boundary and runtime ownership: `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+- Gateway backend adapter contract: `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Gateway operator contract: `docs/contracts/gateway/operator-contract.md`
 - Gateway policy evaluation contract: `docs/contracts/gateway/policy-evaluation.md`
 - Gateway runtime and platform parity contract: `docs/contracts/gateway/runtime-parity.md`

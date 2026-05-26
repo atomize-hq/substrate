@@ -28,7 +28,7 @@
   - Output routing + attribution: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - Router daemon (workflow triggers, queues, cross-workspace): `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
   - Host orchestration durable session and inbox contract: `docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
-  - Config/policy surface (no new roots): `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - Config/policy surface (no new roots): `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
 

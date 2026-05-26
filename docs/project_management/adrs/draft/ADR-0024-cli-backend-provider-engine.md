@@ -6,6 +6,12 @@
 - Date (UTC): 2026-02-03
 - Owner(s): Spenser McConnell (Substrate)
 
+## Curated Historical ADR
+
+- Current curated historical ADR: `docs/adr/historical/ADR-0024-cli-backend-provider-engine.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/llm_cli_backend_engine/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
