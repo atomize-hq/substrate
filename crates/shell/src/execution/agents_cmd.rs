@@ -6,10 +6,12 @@ use crate::execution::agent_inventory::{
 use crate::execution::agent_runtime::control::request_private_stop;
 use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
-    load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
-    persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
-    reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
-    run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
+    load_public_prompt_source, mark_orchestration_session_failed,
+    persist_hidden_owner_helper_launch_plan, persist_runtime_snapshots,
+    persist_runtime_stop_closeout, persist_world_binding_authority,
+    public_prompt_rendered_exit_code, reconcile_hidden_owner_helper_start_timeout,
+    remove_hidden_owner_helper_launch_plan, run_public_prompt_command,
+    wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
     HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
     PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
@@ -27,7 +29,10 @@ use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
-use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
+use crate::execution::agent_runtime::session::{
+    AgentRuntimeParticipantWorldBinding, AgentRuntimeReplacementParticipantInit,
+    AgentRuntimeSessionState,
+};
 #[cfg(unix)]
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
@@ -54,6 +59,13 @@ use crate::execution::cli::{
 use crate::execution::config_model::{
     self, AgentExecutionScope, AgentToolboxBindTransport, CliConfigOverrides, SubstrateConfig,
 };
+#[cfg(target_os = "linux")]
+use crate::execution::policy_snapshot;
+#[cfg(target_os = "linux")]
+use crate::execution::{
+    build_agent_client_and_member_dispatch_request, MemberDispatchTransportRequest,
+    ReplPersistentSessionClient, ReplSessionStartParams,
+};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -63,6 +75,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use substrate_broker::Policy;
@@ -70,6 +83,11 @@ use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
 #[cfg(unix)]
 use tokio::runtime::Builder as TokioRuntimeBuilder;
+#[cfg(target_os = "linux")]
+use transport_api_types::{
+    ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1, SharedWorldOwnerAction,
+    SharedWorldOwnerSpec,
+};
 use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = 1;
 #[cfg(unix)]
@@ -379,6 +397,7 @@ struct HostStartLaunchPlan {
 #[derive(Debug)]
 struct WorldStartSessionBirthPlan {
     requested_world_contract: ResolvedLaunchContract,
+    descriptor: RuntimeSelectionDescriptor,
     session: OrchestrationSessionRecord,
 }
 
@@ -402,6 +421,13 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         store
             .persist_orchestration_session(&world_birth.session)
             .map_err(runtime_start_error)?;
+        #[cfg(target_os = "linux")]
+        launch_world_start_member_and_persist_binding(
+            &store,
+            &world_birth.session,
+            &world_birth.descriptor,
+        )
+        .map_err(runtime_start_error)?;
         return render_agent_control_result(
             args.json,
             &AgentControlResultJson {
@@ -1306,9 +1332,12 @@ fn build_world_start_session_birth_plan(
                 host_backend_id
             ))
         })?;
+    let descriptor = materialize_runtime_descriptor(&requested_world_contract)
+        .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
 
     Ok(WorldStartSessionBirthPlan {
         requested_world_contract,
+        descriptor,
         session: OrchestrationSessionRecord::new_deferred_host_attach(
             Uuid::now_v7().to_string(),
             Uuid::now_v7().to_string(),
@@ -1316,6 +1345,278 @@ fn build_world_start_session_birth_plan(
             host_attach_contract,
         ),
     })
+}
+
+#[cfg(target_os = "linux")]
+fn launch_world_start_member_and_persist_binding(
+    store: &AgentRuntimeStateStore,
+    session: &OrchestrationSessionRecord,
+    descriptor: &RuntimeSelectionDescriptor,
+) -> Result<()> {
+    let rt = TokioRuntimeBuilder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to initialize world-start launch runtime")?;
+    rt.block_on(async {
+        launch_world_start_member_and_persist_binding_async(store, session, descriptor).await
+    })
+}
+
+#[cfg(target_os = "linux")]
+async fn launch_world_start_member_and_persist_binding_async(
+    store: &AgentRuntimeStateStore,
+    session: &OrchestrationSessionRecord,
+    descriptor: &RuntimeSelectionDescriptor,
+) -> Result<()> {
+    use http_body_util::BodyExt as _;
+
+    let orchestration_session = Arc::new(Mutex::new(session.clone()));
+    let requested_cwd = session.workspace_root.clone();
+    let requested_path = PathBuf::from(&requested_cwd);
+    let resolved = policy_snapshot::resolve_policy_snapshot_for_cwd(requested_path.as_path())
+        .context("policy snapshot (public world start)")?;
+    let world_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+        resolved.snapshot,
+        requested_path.as_path(),
+    )
+    .context("world network policy (public world start)")?;
+    let world_network = policy_snapshot::request_world_network_routing(&world_network_policy);
+    let (mut start_params, _inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
+        requested_cwd,
+        requested_path.as_path(),
+        world_network_policy.snapshot,
+        world_network,
+    )
+    .context("failed to build shared-world session start parameters")?;
+    start_params.shared_world = Some(SharedWorldOwnerSpec {
+        orchestration_session_id: session.orchestration_session_id.clone(),
+        action: SharedWorldOwnerAction::AttachOrCreate,
+    });
+
+    let world_client = ReplPersistentSessionClient::start_with(start_params, Arc::new(|_| {}))
+        .await
+        .context("failed to open authoritative shared world for public world start")?;
+    let ready = world_client.ready().clone();
+    let authoritative_binding = ready.shared_world.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "runtime_start_failed: shared world ready frame omitted authoritative binding proof"
+        )
+    })?;
+    let world_binding = crate::execution::agent_runtime::control::PersistedWorldBinding {
+        world_id: authoritative_binding.world_id.clone(),
+        world_generation: authoritative_binding.world_generation,
+    };
+    persist_world_binding_authority(store, &orchestration_session, Some(&world_binding))
+        .context("failed to persist authoritative world binding for public world start")?;
+
+    let participant_id = format!("ash_{}", Uuid::now_v7());
+    let orchestrator_participant_id = format!("ash_deferred_{}", Uuid::now_v7());
+    let run_id = Uuid::now_v7().to_string();
+    let lease_token = Uuid::now_v7().to_string();
+    let mut manifest = AgentRuntimeParticipantRecord::new_member_participant(
+        descriptor,
+        session.orchestration_session_id.clone(),
+        participant_id.clone(),
+        orchestrator_participant_id,
+        None,
+        Some(AgentRuntimeParticipantWorldBinding {
+            world_id: world_binding.world_id.clone(),
+            world_generation: world_binding.world_generation,
+        }),
+        lease_token,
+    )
+    .context("failed to construct world-start member participant state")?;
+    manifest.internal.latest_run_id = Some(run_id.clone());
+    persist_runtime_snapshots(
+        store,
+        &orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
+            .clone(),
+        &manifest,
+    )
+    .context("failed to persist world-start member participant allocation")?;
+
+    let request = MemberDispatchTransportRequest {
+        orchestration_session_id: session.orchestration_session_id.clone(),
+        participant_id: participant_id.clone(),
+        orchestrator_participant_id: manifest
+            .handle
+            .orchestrator_participant_id
+            .clone()
+            .expect("new member participants must include orchestrator_participant_id"),
+        parent_participant_id: manifest.handle.parent_participant_id.clone(),
+        resumed_from_participant_id: manifest.handle.resumed_from_participant_id.clone(),
+        backend_id: descriptor.backend_id.clone(),
+        protocol: descriptor.protocol.clone(),
+        run_id,
+        world_id: world_binding.world_id.clone(),
+        world_generation: world_binding.world_generation,
+        initial_prompt: None,
+        backend_kind: match descriptor.backend_kind {
+            crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind::Codex => {
+                MemberRuntimeBackendKindV1::Codex
+            }
+            crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind::ClaudeCode => {
+                MemberRuntimeBackendKindV1::ClaudeCode
+            }
+        },
+        binary_path: descriptor.binary_path.display().to_string(),
+    };
+
+    let (client, request, _agent_id) = build_agent_client_and_member_dispatch_request(&request)
+        .context("failed to build shared-contract member dispatch request")?;
+    let response = client
+        .execute_stream(request)
+        .await
+        .context("failed to start world-scoped member control stream for public world start")?;
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    let mut span_id: Option<String> = None;
+    let mut ready_seen = false;
+    let mut exit_code: Option<i32> = None;
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.context("failed to read world-start member control stream frame")?;
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+
+        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=pos).collect();
+            if line.len() <= 1 {
+                continue;
+            }
+            let payload = &line[..line.len() - 1];
+            if payload.is_empty() {
+                continue;
+            }
+            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
+                .context("failed to decode world-start member control stream frame")?;
+            match frame {
+                ExecuteStreamFrame::Start {
+                    span_id: stream_span_id,
+                } => span_id = Some(stream_span_id),
+                ExecuteStreamFrame::Event { event } => {
+                    if ready_seen {
+                        continue;
+                    }
+                    if let Some(session_handle_id) =
+                        extract_public_world_start_session_handle_id(Some(&event.data))
+                    {
+                        manifest.set_uaa_session_id(session_handle_id.to_string());
+                        manifest.mark_runtime_ownership_retained();
+                        manifest.transition_state(AgentRuntimeSessionState::Ready);
+                        manifest.touch_heartbeat();
+                        persist_runtime_snapshots(
+                            store,
+                            &orchestration_session
+                                .lock()
+                                .expect("orchestration session mutex poisoned")
+                                .clone(),
+                            &manifest,
+                        )
+                        .context("failed to persist world-start member readiness")?;
+                        ready_seen = true;
+                        if let Some(span_id) = span_id.as_ref() {
+                            client
+                                .cancel_execute(ExecuteCancelRequestV1 {
+                                    span_id: span_id.clone(),
+                                    sig: "INT".to_string(),
+                                })
+                                .await
+                                .context(
+                                    "failed to cancel world-start member control stream after readiness",
+                                )?;
+                        }
+                    }
+                }
+                ExecuteStreamFrame::Exit { exit, .. } => {
+                    exit_code = Some(exit);
+                }
+                ExecuteStreamFrame::Error { message } => {
+                    anyhow::bail!(
+                        "runtime_start_failed: world-start member control stream failed: {message}"
+                    );
+                }
+                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
+            }
+        }
+    }
+    let _ = world_client.close().await;
+
+    if !ready_seen {
+        mark_orchestration_session_failed(
+            store,
+            &orchestration_session,
+            "world-scoped member runtime exited before retained ownership could be established",
+        );
+        anyhow::bail!(
+            "runtime_start_failed: world-scoped member runtime exited before retained ownership could be established"
+        );
+    }
+
+    match exit_code {
+        Some(0 | 129 | 130 | 131 | 143) => {
+            manifest.transition_state(AgentRuntimeSessionState::Stopped);
+            manifest.mark_terminal_state("world-scoped member session stopped");
+            persist_runtime_snapshots(
+                store,
+                &orchestration_session
+                    .lock()
+                    .expect("orchestration session mutex poisoned")
+                    .clone(),
+                &manifest,
+            )
+            .context("failed to persist world-start member shutdown")?;
+            Ok(())
+        }
+        Some(exit) => {
+            mark_orchestration_session_failed(
+                store,
+                &orchestration_session,
+                format!("world-scoped member runtime exited with status {exit}"),
+            );
+            anyhow::bail!(
+                "runtime_start_failed: world-scoped member runtime exited with status {exit}"
+            );
+        }
+        None => {
+            mark_orchestration_session_failed(
+                store,
+                &orchestration_session,
+                "world-scoped member runtime stream ended without an exit frame",
+            );
+            anyhow::bail!(
+                "runtime_start_failed: world-scoped member runtime stream ended without an exit frame"
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn extract_public_world_start_session_handle_id(data: Option<&serde_json::Value>) -> Option<&str> {
+    let value = data?;
+    if value.get("schema").and_then(serde_json::Value::as_str)
+        == Some(crate::execution::agent_runtime::SESSION_HANDLE_SCHEMA_V1)
+    {
+        return value
+            .get("session")
+            .and_then(serde_json::Value::as_object)
+            .and_then(|session| session.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.trim().is_empty());
+    }
+
+    value
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .filter(|event_type| matches!(*event_type, "thread.started" | "turn.started"))?;
+    value
+        .get("thread_id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|id| !id.trim().is_empty())
 }
 
 #[cfg(unix)]

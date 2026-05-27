@@ -3856,6 +3856,60 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
     fixture.init_workspace();
     fixture.write_runtime_inventory(true);
 
+    #[cfg(target_os = "linux")]
+    let output = {
+        let socket_home = tempfile::Builder::new()
+            .prefix("sac-world-start-")
+            .tempdir_in("/tmp")
+            .expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+            &socket_path,
+            StreamBehavior::Normal,
+            vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-public-world-start".to_string(),
+                exit_code_on_cancel: 130,
+            }],
+        );
+        let records = server.records();
+        let output = fixture
+            .command()
+            .current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .args([
+                "agent",
+                "start",
+                "--backend",
+                "cli:claude_code",
+                "--scope",
+                "world",
+                "--prompt",
+                "hello",
+                "--json",
+            ])
+            .output()
+            .expect("run public world start");
+        let guard = records.lock().expect("lock world-service records");
+        assert_eq!(
+            guard.persistent_start_sessions.len(),
+            1,
+            "world-scoped root start must open exactly one shared-world session: {guard:#?}"
+        );
+        assert_eq!(
+            guard.member_dispatch_requests.len(),
+            1,
+            "world-scoped root start must launch exactly one retained world member: {guard:#?}"
+        );
+        assert_eq!(
+            guard.execute_cancel_requests.len(),
+            1,
+            "world-scoped root start must cleanly cancel the temporary retained world member bootstrap: {guard:#?}"
+        );
+        drop(guard);
+        output
+    };
+
+    #[cfg(target_os = "macos")]
     let output = fixture.run(&[
         "agent",
         "start",
@@ -3932,6 +3986,18 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
             .and_then(Value::as_str),
         None
     );
+    #[cfg(target_os = "linux")]
+    assert_eq!(
+        persisted_session.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "linux world-scoped root start must persist the authoritative world_id from the shared-world launch seam"
+    );
+    #[cfg(target_os = "linux")]
+    assert_eq!(
+        persisted_session.get("world_generation").and_then(Value::as_u64),
+        Some(0),
+        "linux world-scoped root start must persist the authoritative world_generation from the shared-world launch seam"
+    );
     let participants_dir = fixture
         .substrate_home
         .join("run/agent-hub/sessions")
@@ -3948,9 +4014,53 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
                 .count()
         })
         .unwrap_or(0);
+    #[cfg(target_os = "linux")]
+    assert_eq!(
+        participant_files, 1,
+        "linux world-scoped root start must persist the launched member participant record"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        let participants =
+            session_participant_manifests(&fixture.substrate_home, orchestration_session_id);
+        assert_eq!(
+            participants.len(),
+            1,
+            "expected exactly one persisted world member manifest"
+        );
+        let participant = &participants[0];
+        assert_eq!(
+            participant.get("role").and_then(Value::as_str),
+            Some("member")
+        );
+        assert_eq!(
+            participant
+                .pointer("/execution/scope")
+                .and_then(Value::as_str),
+            Some("world")
+        );
+        assert_eq!(
+            participant.get("backend_id").and_then(Value::as_str),
+            Some("cli:claude_code")
+        );
+        assert_eq!(
+            participant.get("state").and_then(Value::as_str),
+            Some("stopped"),
+            "the temporary retained world member should shut down cleanly after authoritative launch proof is recorded"
+        );
+        assert_eq!(
+            participant.get("world_id").and_then(Value::as_str),
+            Some("wld_stub_0001")
+        );
+        assert_eq!(
+            participant.get("world_generation").and_then(Value::as_u64),
+            Some(0)
+        );
+    }
+    #[cfg(target_os = "macos")]
     assert_eq!(
         participant_files, 0,
-        "deferred world start must not persist an attached host participant at birth"
+        "pre-Linux-parity world start must keep deferring participant launch on macOS in this slice"
     );
 }
 
@@ -3961,6 +4071,41 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
     fixture.init_workspace();
     fixture.write_runtime_inventory(true);
 
+    #[cfg(target_os = "linux")]
+    let output = {
+        let socket_home = tempfile::Builder::new()
+            .prefix("sac-world-start-shape-")
+            .tempdir_in("/tmp")
+            .expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let _server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+            &socket_path,
+            StreamBehavior::Normal,
+            vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-public-world-start-shape".to_string(),
+                exit_code_on_cancel: 130,
+            }],
+        );
+        fixture
+            .command()
+            .current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .args([
+                "agent",
+                "start",
+                "--backend",
+                "cli:claude_code",
+                "--scope",
+                "world",
+                "--prompt",
+                "hello",
+                "--json",
+            ])
+            .output()
+            .expect("run public world start")
+    };
+
+    #[cfg(target_os = "macos")]
     let output = fixture.run(&[
         "agent",
         "start",
