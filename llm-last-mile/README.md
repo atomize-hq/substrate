@@ -85,7 +85,7 @@ The original packet stops before public control-plane productization. The follow
 - [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](./29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
   - Landed shared dispatch-contract truth: one internal dispatch contract now resolves inventory-backed and persisted-attach-backed baselines, persists generalized `HostAttachContract` truth, and keeps human plus orchestrator-controlled dispatch on the same semantics.
 - [30-public-world-scoped-agent-start-and-capability-flags.md](./30-public-world-scoped-agent-start-and-capability-flags.md)
-  - Draft follow-on: public world-scoped `agent start` depends on the slice 29 contract and keeps durable authority host-rooted.
+  - Landed Linux-first public world-start slice: `substrate agent start --scope world` now keeps durable authority host-rooted, supports public capability narrowing through `--disable-capability` / `--disable-cap`, surfaces `born_unattached` before any host attach occurs, and keeps pre-attach world follow-up fail closed.
 - [31-lazy-host-attach-for-host-rooted-world-start.md](./31-lazy-host-attach-for-host-rooted-world-start.md)
   - Draft follow-on: later attach must reuse the persisted slice 29 host-attach truth for explicit continuity or fresh attach modes.
 

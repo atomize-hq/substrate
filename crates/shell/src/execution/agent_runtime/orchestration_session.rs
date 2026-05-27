@@ -68,6 +68,7 @@ pub(crate) struct StartupPromptRecord {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum OrchestrationSessionPosture {
     ActiveAttached,
+    BornUnattached,
     #[default]
     ParkedResumable,
     AwaitingAttention,
@@ -368,7 +369,7 @@ impl OrchestrationSessionRecord {
             world_generation: None,
             invalidation_reason: None,
             closed_at: None,
-            posture: OrchestrationSessionPosture::ParkedResumable,
+            posture: OrchestrationSessionPosture::BornUnattached,
             posture_changed_at: now,
             attached_participant_id: None,
             pending_inbox_count: 0,
@@ -539,6 +540,17 @@ impl OrchestrationSessionRecord {
                     anyhow::bail!("active_attached posture requires attached_participant_id");
                 }
             }
+            OrchestrationSessionPosture::BornUnattached => {
+                if self.active_participant_id().is_some() {
+                    anyhow::bail!("born_unattached posture must clear active_session_handle_id");
+                }
+                if self.attached_participant_id.is_some() {
+                    anyhow::bail!("born_unattached posture must clear attached_participant_id");
+                }
+                if self.pending_inbox_count > 0 {
+                    anyhow::bail!("born_unattached posture cannot retain pending inbox items");
+                }
+            }
             OrchestrationSessionPosture::ParkedResumable => {
                 if self.attached_participant_id.is_some() {
                     anyhow::bail!("parked_resumable posture must clear attached_participant_id");
@@ -659,7 +671,12 @@ impl OrchestrationSessionRecord {
         if self.pending_inbox_count > 0 {
             OrchestrationSessionPosture::AwaitingAttention
         } else {
-            OrchestrationSessionPosture::ParkedResumable
+            match self.posture {
+                OrchestrationSessionPosture::BornUnattached => {
+                    OrchestrationSessionPosture::BornUnattached
+                }
+                _ => OrchestrationSessionPosture::ParkedResumable,
+            }
         }
     }
 }
@@ -750,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    fn deferred_host_attach_session_starts_parked_without_attached_owner() {
+    fn deferred_host_attach_session_starts_born_unattached_without_attached_owner() {
         let manifest = manifest();
         let contract = HostAttachContract::from_manifest_for_test(&manifest)
             .expect("host attach contract for deferred session");
@@ -762,10 +779,7 @@ mod tests {
         );
 
         assert_eq!(session.state, OrchestrationSessionState::Active);
-        assert_eq!(
-            session.posture,
-            OrchestrationSessionPosture::ParkedResumable
-        );
+        assert_eq!(session.posture, OrchestrationSessionPosture::BornUnattached);
         assert_eq!(session.active_participant_id(), None);
         assert_eq!(session.attached_participant_id(), None);
         assert_eq!(session.shell_owner_pid, 0);

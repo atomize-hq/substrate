@@ -2742,6 +2742,103 @@ fn agent_status_json_surfaces_parked_resumable_fields_from_parent_session_truth(
 }
 
 #[test]
+fn agent_status_json_surfaces_born_unattached_fields_for_world_started_session_truth() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_runtime_participant(
+        &fixture,
+        "ash_world_birth_member",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
+        RuntimeParticipantOptions::world_member(
+            "stopped",
+            false,
+            "2026-04-05T00:00:04Z",
+            "world-born-1",
+            7,
+            "ash_deferred_world_birth",
+        ),
+    );
+    write_orchestration_session_with_manifest_options(
+        &fixture,
+        OrchestrationSessionManifestSpec {
+            agent_id: "claude_code",
+            orchestration_session_id: "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
+            active_session_handle_id: None,
+            state: "active",
+            ts: "2026-04-05T00:00:04Z",
+            world_binding: Some(("world-born-1", 7)),
+        },
+        OrchestrationSessionManifestOptions {
+            posture: Some("born_unattached"),
+            attached_participant_id: Some(None),
+            pending_inbox_count: Some(0),
+            last_parked_at: Some(Some("2026-04-05T00:00:04Z")),
+            last_attention_at: Some(None),
+            parked_reason: Some(Some("host attach deferred")),
+            host_attach_contract: None,
+        },
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should surface born-unattached world-start sessions: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let born_unattached = find_session_by_agent_and_orchestration_session(
+        sessions,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
+    );
+    assert_eq!(
+        born_unattached
+            .pointer("/source_kind")
+            .and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
+        born_unattached
+            .pointer("/execution/scope")
+            .and_then(Value::as_str),
+        Some("world")
+    );
+    assert_eq!(
+        born_unattached.pointer("/role").and_then(Value::as_str),
+        Some("member")
+    );
+    assert_eq!(
+        born_unattached.pointer("/posture").and_then(Value::as_str),
+        Some("born_unattached")
+    );
+    assert!(
+        born_unattached.get("participant_id").is_none(),
+        "born-unattached status rows must not imply a live authoritative participant: {born_unattached}"
+    );
+    assert!(
+        born_unattached
+            .pointer("/attached_participant_id")
+            .is_some_and(Value::is_null),
+        "born-unattached rows must preserve null attached_participant_id from session truth: {born_unattached}"
+    );
+    assert_eq!(
+        born_unattached.pointer("/world_id").and_then(Value::as_str),
+        Some("world-born-1")
+    );
+    assert_eq!(
+        born_unattached
+            .pointer("/world_generation")
+            .and_then(Value::as_u64),
+        Some(7)
+    );
+}
+
+#[test]
 fn agent_status_json_surfaces_awaiting_attention_fields_from_parent_session_truth() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();

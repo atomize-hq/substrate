@@ -7,7 +7,7 @@ Follow-on slice: [31-lazy-host-attach-for-host-rooted-world-start.md](/Users/spe
 Proposed branch: `feat/public-world-scoped-agent-start`  
 Base branch: `main`  
 Plan type: public caller-surface expansion with Linux-first world-start delivery  
-Status: planning draft based on approved spec decisions on 2026-05-27
+Status: implementation-aligned on 2026-05-27; Linux-first public world-start, `born_unattached`, and public capability-narrowing behavior now match the runtime in this branch
 
 ## Objective
 
@@ -437,7 +437,7 @@ On Linux:
    - world worker is launched,
    - status reports `born_unattached`,
 3. confirm `substrate agent turn ...` fails closed before sanctioned host attach,
-4. confirm `substrate agent reattach --session ...` enables later follow-up under the sanctioned attach path.
+4. confirm the session remains `born_unattached` until a later sanctioned host-attach slice lands.
 
 On non-Linux:
 

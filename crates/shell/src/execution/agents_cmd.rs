@@ -418,6 +418,10 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
 
     if let StartLaunchPlan::WorldBirth(world_birth) = start_plan {
         let _ = prompt;
+        #[cfg(not(target_os = "linux"))]
+        anyhow::bail!(config_model::user_error(
+            "unsupported_platform_or_posture: public world-scoped root start is supported on Linux only in this slice"
+        ));
         store
             .persist_orchestration_session(&world_birth.session)
             .map_err(runtime_start_error)?;
@@ -3207,17 +3211,68 @@ fn live_participant_status_projection(
     }
 }
 
+fn born_unattached_status_projection(
+    session: &AgentRuntimeSessionRecord,
+) -> Option<SessionProjection> {
+    let anchor =
+        crate::execution::agent_runtime::state_store::born_unattached_status_anchor(session)?;
+    let world_id = session.session.world_id.clone()?;
+    let world_generation = session.session.world_generation?;
+    let last_event_ts = session.session.last_active_at.max(anchor.last_status_at());
+    Some(SessionProjection {
+        last_event_ts,
+        session: StatusSessionJson {
+            orchestration_session_id: session.session.orchestration_session_id.clone(),
+            participant_id: None,
+            agent_id: anchor.handle.agent_id.clone(),
+            source_kind: "live_runtime",
+            backend_id: anchor.handle.backend_id.clone(),
+            client: anchor.handle.agent_id.clone(),
+            router: PURE_AGENT_ROUTER.to_string(),
+            protocol: anchor.handle.protocol.clone(),
+            execution: ExecutionScopeJson { scope: "world" },
+            role: Some(anchor.handle.role.clone()),
+            posture: Some(orchestration_session_posture_label(session.session.posture).to_string()),
+            attached_participant_id: session.session.attached_participant_id.clone(),
+            pending_inbox_count: Some(session.session.pending_inbox_count),
+            last_event_at: last_event_ts.to_rfc3339(),
+            world_id: Some(world_id),
+            world_generation: Some(world_generation),
+        },
+        source: SessionProjectionSource {
+            identity: StatusIdentityKey {
+                orchestration_session_id: session.session.orchestration_session_id.clone(),
+                agent_id: anchor.handle.agent_id.clone(),
+                execution_scope: "world",
+                participant_id: None,
+            },
+            run_id: anchor.internal.latest_run_id.clone(),
+            ts: last_event_ts,
+            is_world_scoped: true,
+            has_top_level_world_id: true,
+            has_top_level_world_generation: true,
+        },
+    })
+}
+
 fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<SessionProjection> {
-    session
+    let mut projections = session
         .status_visible_participants()
         .into_iter()
         .map(|participant| live_participant_status_projection(&session.session, &participant))
-        .collect()
+        .collect::<Vec<_>>();
+    if projections.is_empty() {
+        if let Some(projection) = born_unattached_status_projection(session) {
+            projections.push(projection);
+        }
+    }
+    projections
 }
 
 fn orchestration_session_posture_label(posture: OrchestrationSessionPosture) -> &'static str {
     match posture {
         OrchestrationSessionPosture::ActiveAttached => "active_attached",
+        OrchestrationSessionPosture::BornUnattached => "born_unattached",
         OrchestrationSessionPosture::ParkedResumable => "parked_resumable",
         OrchestrationSessionPosture::AwaitingAttention => "awaiting_attention",
         OrchestrationSessionPosture::Terminal => "terminal",
@@ -4266,6 +4321,10 @@ mod tests {
             AgentExecutionScope::World
         );
         assert_eq!(plan.session.orchestrator_backend_id, "cli:codex");
+        assert_eq!(
+            plan.session.posture,
+            OrchestrationSessionPosture::BornUnattached
+        );
         assert_eq!(plan.session.active_participant_id(), None);
         assert_eq!(plan.session.attached_participant_id(), None);
         let attach_contract = plan
@@ -4283,7 +4342,7 @@ mod tests {
             attach_contract.attach_launch_knobs.host_execution_client_start,
             crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::Defer
         );
-        assert_eq!(attach_contract.capabilities.session_stop, false);
+        assert!(!attach_contract.capabilities.session_stop);
         plan.session
             .validate_persisted_invariants()
             .expect("world-born session invariants");
@@ -4310,6 +4369,10 @@ mod tests {
         };
         assert_eq!(plan.requested_world_contract.backend_id, "cli:claude_code");
         assert_eq!(plan.session.orchestrator_backend_id, "cli:codex");
+        assert_eq!(
+            plan.session.posture,
+            OrchestrationSessionPosture::BornUnattached
+        );
         assert_eq!(plan.session.active_participant_id(), None);
         assert_eq!(plan.session.attached_participant_id(), None);
     }

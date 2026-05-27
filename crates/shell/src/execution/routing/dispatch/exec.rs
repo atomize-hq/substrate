@@ -153,6 +153,31 @@ fn required_world_backend_unavailable_error(reason: &str) -> anyhow::Error {
     )
 }
 
+fn shell_escape_for_command(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    if raw.contains('\'') {
+        format!("'{}'", raw.replace('\'', "'\"'\"'"))
+    } else {
+        format!("'{raw}'")
+    }
+}
+
+fn bash_startup_source_prefix(config: &ShellConfig) -> Option<String> {
+    if config.no_world {
+        return None;
+    }
+
+    let startup_path = if config.preexec_available {
+        config.bash_preexec_path.as_path()
+    } else {
+        config.manager_env_path.as_path()
+    };
+    let startup_path = shell_escape_for_command(startup_path);
+    Some(format!(
+        "if [[ -f {startup_path} ]]; then source {startup_path}; fi; "
+    ))
+}
+
 fn exit_status_from_code(code: i32) -> ExitStatus {
     #[cfg(unix)]
     {
@@ -1519,6 +1544,11 @@ fn execute_external(
         cmd.arg("/C").arg(cmd_command);
     } else {
         // Unix shells (bash, sh, zsh, etc.)
+        if is_bash {
+            if let Some(prefix) = bash_startup_source_prefix(config) {
+                command_for_shell = format!("{prefix}{command_for_shell}");
+            }
+        }
         if config.ci_mode && !config.no_exit_on_error && is_bash {
             command_for_shell = format!("set -euo pipefail; {command_for_shell}");
         }

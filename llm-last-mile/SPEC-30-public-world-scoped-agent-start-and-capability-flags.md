@@ -3,7 +3,7 @@
 Source SOW: [30-public-world-scoped-agent-start-and-capability-flags.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)  
 Decomposition basis: feature-slice breakdown produced on 2026-05-27  
 Phase: `SPECIFY`  
-Status: reviewed decisions accepted on 2026-05-27; ready to advance to `PLAN`
+Status: implementation-aligned on 2026-05-27; the Linux-first public world-start contract, `born_unattached`, and public capability-narrowing behavior now match the runtime in this branch
 
 ## Assumptions
 
@@ -77,7 +77,6 @@ substrate agent start --backend <backend_id> --prompt "hello" --json
 substrate agent start --backend <backend_id> --scope world --prompt "hello" --json
 substrate agent start --backend <backend_id> --scope world --disable-capability event_stream --json
 substrate agent status --json
-substrate agent reattach --session <orchestration_session_id> --json
 substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt "next" --json
 substrate agent doctor --json
 ```

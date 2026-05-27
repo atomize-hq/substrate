@@ -6240,7 +6240,9 @@ fn build_parked_host_runtime_snapshots(
         OrchestrationSessionPosture::AwaitingAttention => {
             parked_orchestration.mark_awaiting_attention();
         }
-        OrchestrationSessionPosture::ActiveAttached | OrchestrationSessionPosture::Terminal => {
+        OrchestrationSessionPosture::ActiveAttached
+        | OrchestrationSessionPosture::BornUnattached
+        | OrchestrationSessionPosture::Terminal => {
             unreachable!("detached host parking only normalizes to parked or attention posture")
         }
     }

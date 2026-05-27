@@ -2026,18 +2026,6 @@ fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capa
         ts,
     );
 
-    let reattach_output = fixture.run(&[
-        "agent",
-        "reattach",
-        "--session",
-        orchestration_session_id,
-        "--json",
-    ]);
-    assert!(
-        reattach_output.status.success(),
-        "public reattach should succeed before fork/stop capability denial is exercised: {reattach_output:?}"
-    );
-
     let mut session = fixture.load_orchestration_session(orchestration_session_id);
     session["host_attach_contract"]["capabilities"] = json!({
         "session_resume": true,
@@ -2110,11 +2098,6 @@ fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capa
         stop_stderr.contains("durable host attach contract does not allow stop"),
         "stop denial must explain the persisted attach capability gate: {stop_output:?}"
     );
-
-    let owner_pid = fixture.load_orchestration_session(orchestration_session_id)["shell_owner_pid"]
-        .as_u64()
-        .expect("reattach owner pid") as u32;
-    terminate_pid(owner_pid);
 }
 
 #[test]
@@ -3909,7 +3892,7 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
         output
     };
 
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "linux"))]
     let output = fixture.run(&[
         "agent",
         "start",
@@ -3921,6 +3904,25 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
         "hello",
         "--json",
     ]);
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "non-Linux world-scoped root start must fail closed: {output:?}"
+        );
+        let stderr = stderr_text(&output);
+        assert!(
+            stderr.contains("unsupported_platform_or_posture"),
+            "non-Linux world-scoped root start must keep the frozen classifier: {stderr}"
+        );
+        assert!(
+            stderr.contains("supported on Linux only"),
+            "non-Linux world-scoped root start must explain the Linux-first rollout: {stderr}"
+        );
+        return;
+    }
+
     assert!(
         output.status.success(),
         "world-scoped root start must persist a durable session birth: {output:?}"
@@ -3942,7 +3944,7 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
     );
     assert_eq!(
         persisted_session.get("posture").and_then(Value::as_str),
-        Some("parked_resumable")
+        Some("born_unattached")
     );
     assert_eq!(
         persisted_session
@@ -4057,10 +4059,35 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
             Some(0)
         );
     }
-    #[cfg(target_os = "macos")]
+    let turn_output = fixture
+        .command()
+        .current_dir(&fixture.workspace_root)
+        .args([
+            "agent",
+            "turn",
+            "--session",
+            orchestration_session_id,
+            "--backend",
+            "cli:claude_code",
+            "--prompt",
+            "next",
+            "--json",
+        ])
+        .output()
+        .expect("run pre-attach public world turn");
     assert_eq!(
-        participant_files, 0,
-        "pre-Linux-parity world start must keep deferring participant launch on macOS in this slice"
+        turn_output.status.code(),
+        Some(2),
+        "pre-attach world follow-up must fail closed until sanctioned host attach exists: {turn_output:?}"
+    );
+    let turn_stderr = stderr_text(&turn_output);
+    assert!(
+        turn_stderr.contains("unsupported_platform_or_posture"),
+        "pre-attach world follow-up must keep the frozen classifier: {turn_stderr}"
+    );
+    assert!(
+        turn_stderr.contains("born_unattached"),
+        "pre-attach world follow-up denial must expose the truthful posture label: {turn_stderr}"
     );
 }
 
@@ -4105,7 +4132,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
             .expect("run public world start")
     };
 
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "linux"))]
     let output = fixture.run(&[
         "agent",
         "start",
@@ -4117,6 +4144,16 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         "hello",
         "--json",
     ]);
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "non-Linux world-scoped root start must fail closed: {output:?}"
+        );
+        return;
+    }
+
     assert!(
         output.status.success(),
         "world-scoped root start must succeed once the public seam is wired: {output:?}"

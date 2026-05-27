@@ -942,6 +942,13 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id
             );
         }
+        if record.session.posture == OrchestrationSessionPosture::BornUnattached {
+            anyhow::bail!(
+                "unsupported_platform_or_posture: orchestration session {} backend {} is born_unattached and cannot accept follow-up turns before sanctioned host attach",
+                orchestration_session_id,
+                backend_id
+            );
+        }
 
         let authoritative =
             resolve_authoritative_session_control(&record, orchestration_session_id)?;
@@ -1807,11 +1814,24 @@ impl AgentRuntimeStateStore {
                     }
                 },
                 None => {
-                    warnings.push(format!(
-                        "active orchestration session {} is missing authoritative orchestrator participant linkage",
-                        session.orchestration_session_id
-                    ));
-                    false
+                    if session.posture == OrchestrationSessionPosture::BornUnattached
+                        && born_unattached_status_anchor(&AgentRuntimeSessionRecord {
+                            session: session.clone(),
+                            participants: participants.clone(),
+                            warnings: Vec::new(),
+                            has_authoritative_parent,
+                            complete: false,
+                        })
+                        .is_some()
+                    {
+                        true
+                    } else {
+                        warnings.push(format!(
+                            "active orchestration session {} is missing authoritative orchestrator participant linkage",
+                            session.orchestration_session_id
+                        ));
+                        false
+                    }
                 }
             }
         };
@@ -2483,6 +2503,24 @@ fn validate_runtime_contract(
 
     let Some(authoritative_participant_id) = session_authoritative_participant_id(session) else {
         if session.state == OrchestrationSessionState::Active
+            && session.posture == OrchestrationSessionPosture::BornUnattached
+        {
+            if born_unattached_status_anchor(&AgentRuntimeSessionRecord {
+                session: session.clone(),
+                participants: participants.to_vec(),
+                warnings: Vec::new(),
+                has_authoritative_parent: true,
+                complete: false,
+            })
+            .is_some()
+            {
+                return Ok(());
+            }
+            anyhow::bail!(
+                "born_unattached session requires authoritative world member launch proof"
+            );
+        }
+        if session.state == OrchestrationSessionState::Active
             && session.posture == OrchestrationSessionPosture::ActiveAttached
         {
             anyhow::bail!("active_attached session is missing authoritative participant linkage");
@@ -2512,6 +2550,9 @@ fn validate_runtime_contract(
                 anyhow::bail!("active_attached session requires attached host participant truth");
             }
         }
+        OrchestrationSessionPosture::BornUnattached => {
+            anyhow::bail!("born_unattached sessions must not retain an authoritative participant");
+        }
         OrchestrationSessionPosture::ParkedResumable => {
             if !participant.is_resume_eligible() {
                 anyhow::bail!("parked_resumable session requires resume-eligible host participant");
@@ -2528,6 +2569,32 @@ fn validate_runtime_contract(
     }
 
     Ok(())
+}
+
+pub(crate) fn born_unattached_status_anchor(
+    record: &AgentRuntimeSessionRecord,
+) -> Option<AgentRuntimeParticipantRecord> {
+    let session = &record.session;
+    if session.posture != OrchestrationSessionPosture::BornUnattached
+        || session.state != OrchestrationSessionState::Active
+    {
+        return None;
+    }
+
+    let world_id = session.world_id.as_deref()?;
+    let world_generation = session.world_generation?;
+    record
+        .participants
+        .iter()
+        .filter(|participant| {
+            participant.handle.role == MEMBER_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::World
+                && participant.handle.orchestration_session_id == session.orchestration_session_id
+                && participant.handle.world_id.as_deref() == Some(world_id)
+                && participant.handle.world_generation == Some(world_generation)
+        })
+        .max_by(|left, right| left.last_status_at().cmp(&right.last_status_at()))
+        .cloned()
 }
 
 #[cfg(test)]
