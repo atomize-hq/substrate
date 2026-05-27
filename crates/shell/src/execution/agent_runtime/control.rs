@@ -576,22 +576,44 @@ where
 }
 
 #[cfg(unix)]
-pub(crate) fn run_hidden_owner_helper_startup_prompt_stream(
-    listener: StartupPromptTransportListener,
-    json: bool,
-) -> Result<()> {
-    run_hidden_owner_helper_startup_prompt_stream_with_action(
-        listener,
-        json,
-        PublicPromptAction::Start,
-    )
-}
-
-#[cfg(unix)]
 pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_action(
     listener: StartupPromptTransportListener,
     json: bool,
     action: PublicPromptAction,
+) -> Result<()> {
+    run_hidden_owner_helper_startup_prompt_stream_with_projection(
+        listener,
+        json,
+        action,
+        None,
+        None,
+    )
+}
+
+#[cfg(unix)]
+pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
+    listener: StartupPromptTransportListener,
+    json: bool,
+    action: PublicPromptAction,
+    backend_id: &str,
+    scope: AgentExecutionScope,
+) -> Result<()> {
+    run_hidden_owner_helper_startup_prompt_stream_with_projection(
+        listener,
+        json,
+        action,
+        Some(backend_id),
+        Some(scope),
+    )
+}
+
+#[cfg(unix)]
+fn run_hidden_owner_helper_startup_prompt_stream_with_projection(
+    listener: StartupPromptTransportListener,
+    json: bool,
+    action: PublicPromptAction,
+    backend_id_override: Option<&str>,
+    scope_override: Option<AgentExecutionScope>,
 ) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -609,7 +631,12 @@ pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_action(
             ) {
                 saw_terminal = true;
             }
-            let rewritten = rewrite_startup_prompt_envelope_action(envelope, action);
+            let rewritten = rewrite_startup_prompt_envelope_action(
+                envelope,
+                action,
+                backend_id_override,
+                scope_override,
+            );
             renderer.render(&rewritten)
         })
         .await
@@ -640,6 +667,8 @@ pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_action(
 fn rewrite_startup_prompt_envelope_action(
     envelope: &PublicPromptEnvelope,
     action: PublicPromptAction,
+    backend_id_override: Option<&str>,
+    scope_override: Option<AgentExecutionScope>,
 ) -> PublicPromptEnvelope {
     match envelope {
         PublicPromptEnvelope::Accepted {
@@ -653,9 +682,9 @@ fn rewrite_startup_prompt_envelope_action(
             version: *version,
             action,
             orchestration_session_id: orchestration_session_id.clone(),
-            backend_id: backend_id.clone(),
+            backend_id: backend_id_override.unwrap_or(backend_id.as_str()).to_string(),
             participant_id: participant_id.clone(),
-            scope: scope.clone(),
+            scope: scope_override.map(scope_label).unwrap_or(scope.as_str()).to_string(),
         },
         PublicPromptEnvelope::Completed {
             version,
@@ -667,11 +696,11 @@ fn rewrite_startup_prompt_envelope_action(
             state,
             warnings,
             ..
-        } => PublicPromptEnvelope::Completed {
+            } => PublicPromptEnvelope::Completed {
             version: *version,
             action,
             orchestration_session_id: orchestration_session_id.clone(),
-            backend_id: backend_id.clone(),
+            backend_id: backend_id_override.unwrap_or(backend_id.as_str()).to_string(),
             participant_id: participant_id.clone(),
             turn_outcome: turn_outcome.clone(),
             session_posture: *session_posture,

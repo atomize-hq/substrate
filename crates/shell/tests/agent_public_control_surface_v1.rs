@@ -1883,9 +1883,11 @@ fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults(
         output.status.success(),
         "workspace world default should route omitted scope through the world-backed path: {output:?}"
     );
-    let start_json = parse_json_output(&output);
+    let records = parse_ndjson_output(&output);
+    let accepted = find_ndjson_record(&records, "accepted");
+    let start_json = find_ndjson_record(&records, "completed");
     assert_eq!(
-        start_json.get("scope").and_then(Value::as_str),
+        accepted.get("scope").and_then(Value::as_str),
         Some("world")
     );
     assert_eq!(
@@ -4017,7 +4019,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
 
 #[test]
 #[serial]
-fn public_root_start_world_scope_persists_deferred_host_attach_session() {
+fn public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(true);
@@ -4063,13 +4065,13 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
         );
         assert_eq!(
             guard.member_dispatch_requests.len(),
-            1,
-            "world-scoped root start must launch exactly one retained world member: {guard:#?}"
+            0,
+            "world-scoped root start must not create a first world-member conversation: {guard:#?}"
         );
         assert_eq!(
             guard.execute_cancel_requests.len(),
-            1,
-            "world-scoped root start must cleanly cancel the temporary retained world member bootstrap: {guard:#?}"
+            0,
+            "world-scoped root start must not bootstrap and cancel a temporary world member: {guard:#?}"
         );
         drop(guard);
         output
@@ -4108,18 +4110,52 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
 
     assert!(
         output.status.success(),
-        "world-scoped root start must persist a durable session birth: {output:?}"
+        "world-scoped root start must succeed through the host-first startup path: {output:?}"
     );
-    let start_json = parse_json_output(&output);
-    assert!(
-        start_json.get("participant_id").is_none(),
-        "deferred world start must not manufacture an attached host owner: {start_json}"
+    let start_records = parse_ndjson_output(&output);
+    let start_accepted = find_ndjson_record(&start_records, "accepted");
+    let start_json = find_ndjson_record(&start_records, "completed");
+    assert_eq!(
+        start_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "world-scoped root start must stream acceptance before completion: {start_records:?}"
     );
-    assert_empty_warnings(&start_json);
+    assert_eq!(
+        start_accepted.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
+    );
+    assert_eq!(
+        start_accepted.get("scope").and_then(Value::as_str),
+        Some("world")
+    );
+    assert_eq!(start_json.get("action").and_then(Value::as_str), Some("start"));
+    assert_eq!(
+        start_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
+    );
+    assert_eq!(
+        start_json.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        start_json.get("session_posture").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        start_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_empty_warnings(start_json);
 
     let orchestration_session_id = start_json["orchestration_session_id"]
         .as_str()
         .expect("start session id");
+    let participant_id = start_json["participant_id"]
+        .as_str()
+        .expect("start participant id");
     let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
     assert_eq!(
         persisted_session.get("state").and_then(Value::as_str),
@@ -4127,25 +4163,26 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
     );
     assert_eq!(
         persisted_session.get("posture").and_then(Value::as_str),
-        Some("born_unattached")
+        Some("active_attached")
     );
     assert_eq!(
         persisted_session
             .get("active_session_handle_id")
             .and_then(Value::as_str),
-        None
+        Some(participant_id)
     );
     assert_eq!(
         persisted_session
             .get("attached_participant_id")
             .and_then(Value::as_str),
-        None
+        Some(participant_id)
     );
-    assert_eq!(
+    assert!(
         persisted_session
             .get("shell_owner_pid")
-            .and_then(Value::as_u64),
-        Some(0)
+            .and_then(Value::as_u64)
+            .is_some_and(|pid| pid > 0),
+        "world-scoped root start must persist a live host owner pid: {persisted_session}"
     );
     assert_eq!(
         persisted_session
@@ -4157,19 +4194,19 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
         persisted_session
             .pointer("/host_attach_contract/attach_launch_knobs/host_execution_client_start")
             .and_then(Value::as_str),
-        Some("defer")
+        Some("start_now")
     );
     assert_eq!(
         persisted_session
             .pointer("/host_attach_contract/continuity_uaa_session_id")
             .and_then(Value::as_str),
-        None
+        Some("thread-test")
     );
     assert_eq!(
         persisted_session
             .pointer("/startup_prompt/state")
             .and_then(Value::as_str),
-        None
+        Some("completed")
     );
     #[cfg(target_os = "linux")]
     assert_eq!(
@@ -4202,7 +4239,7 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
     #[cfg(target_os = "linux")]
     assert_eq!(
         participant_files, 1,
-        "linux world-scoped root start must persist the launched member participant record"
+        "linux world-scoped root start must persist exactly one host orchestrator participant"
     );
     #[cfg(target_os = "linux")]
     {
@@ -4211,37 +4248,47 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
         assert_eq!(
             participants.len(),
             1,
-            "expected exactly one persisted world member manifest"
+            "expected exactly one persisted host orchestrator manifest"
         );
         let participant = &participants[0];
         assert_eq!(
             participant.get("role").and_then(Value::as_str),
-            Some("member")
+            Some("orchestrator")
         );
         assert_eq!(
             participant
                 .pointer("/execution/scope")
                 .and_then(Value::as_str),
-            Some("world")
+            Some("host")
         );
         assert_eq!(
             participant.get("backend_id").and_then(Value::as_str),
-            Some("cli:claude_code")
+            Some("cli:codex")
         );
-        assert_eq!(
+        assert_ne!(
             participant.get("state").and_then(Value::as_str),
             Some("stopped"),
-            "the temporary retained world member should shut down cleanly after authoritative launch proof is recorded"
+            "host-first root start must leave the retained orchestrator live"
         );
         assert_eq!(
-            participant.get("world_id").and_then(Value::as_str),
-            Some("wld_stub_0001")
-        );
-        assert_eq!(
-            participant.get("world_generation").and_then(Value::as_u64),
-            Some(0)
+            participant.pointer("/internal/uaa_session_id").and_then(Value::as_str),
+            Some("thread-test")
         );
     }
+    let start_args = fixture.read_fake_codex_args(1);
+    assert!(
+        start_args.iter().any(|arg| arg == "exec"),
+        "world-scoped root start must still launch the host orchestrator through exec: {start_args:?}"
+    );
+    assert!(
+        !start_args.iter().any(|arg| arg == "resume"),
+        "world-scoped root start must not resume a pre-existing host session: {start_args:?}"
+    );
+    let start_stdin = fixture.read_fake_codex_stdin(1);
+    assert!(
+        start_stdin.contains("hello"),
+        "the inaugural prompt must ride the host orchestrator startup exec stdin payload: {start_stdin:?}"
+    );
     let turn_output = fixture
         .command()
         .current_dir(&fixture.workspace_root)
@@ -4261,16 +4308,16 @@ fn public_root_start_world_scope_persists_deferred_host_attach_session() {
     assert_eq!(
         turn_output.status.code(),
         Some(2),
-        "pre-attach world follow-up must fail closed until sanctioned host attach exists: {turn_output:?}"
+        "world follow-up must fail closed until the host allocates a world backend slot: {turn_output:?}"
     );
     let turn_stderr = stderr_text(&turn_output);
     assert!(
-        turn_stderr.contains("unsupported_platform_or_posture"),
-        "pre-attach world follow-up must keep the frozen classifier: {turn_stderr}"
+        turn_stderr.contains("backend_not_in_session"),
+        "world follow-up must fail because no world member slot exists yet: {turn_stderr}"
     );
     assert!(
-        turn_stderr.contains("born_unattached"),
-        "pre-attach world follow-up denial must expose the truthful posture label: {turn_stderr}"
+        !turn_stderr.contains("born_unattached"),
+        "host-first world start must not report the old born_unattached posture: {turn_stderr}"
     );
 }
 
@@ -4341,7 +4388,9 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         output.status.success(),
         "world-scoped root start must succeed once the public seam is wired: {output:?}"
     );
-    let start_json = parse_json_output(&output);
+    let records = parse_ndjson_output(&output);
+    let accepted = find_ndjson_record(&records, "accepted");
+    let start_json = find_ndjson_record(&records, "completed");
     assert!(
         start_json.get("source_orchestration_session_id").is_none(),
         "new world-root births must not advertise a source session: {start_json}"
@@ -4355,7 +4404,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         Some("cli:claude_code")
     );
     assert_eq!(
-        start_json.get("scope").and_then(Value::as_str),
+        accepted.get("scope").and_then(Value::as_str),
         Some("world")
     );
     assert_eq!(

@@ -6,9 +6,8 @@ use crate::execution::agent_inventory::{
 use crate::execution::agent_runtime::control::request_private_stop;
 use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
-    load_public_prompt_source, mark_orchestration_session_failed,
-    persist_hidden_owner_helper_launch_plan, persist_runtime_snapshots,
-    persist_runtime_stop_closeout, persist_world_binding_authority,
+    load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
+    persist_runtime_stop_closeout, PersistedWorldBinding,
     public_prompt_rendered_exit_code, reconcile_hidden_owner_helper_start_timeout,
     remove_hidden_owner_helper_launch_plan, run_public_prompt_command,
     wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
@@ -22,16 +21,16 @@ use crate::execution::agent_runtime::control::{
     private_stop_transport_path, reconcile_resumed_public_turn_detach_timeout,
     reconcile_start_prompt_completion_timeout,
     register_hidden_owner_helper_startup_prompt_listener,
-    run_hidden_owner_helper_startup_prompt_stream,
-    run_hidden_owner_helper_startup_prompt_stream_with_action, HiddenOwnerHelperStartupPromptPlan,
+    run_hidden_owner_helper_startup_prompt_stream_with_action,
+    run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
+    HiddenOwnerHelperStartupPromptPlan,
 };
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
 use crate::execution::agent_runtime::session::{
-    AgentRuntimeParticipantWorldBinding, AgentRuntimeReplacementParticipantInit,
-    AgentRuntimeSessionState,
+    AgentRuntimeReplacementParticipantInit,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
@@ -63,7 +62,6 @@ use crate::execution::config_model::{
 use crate::execution::policy_snapshot;
 #[cfg(target_os = "linux")]
 use crate::execution::{
-    build_agent_client_and_member_dispatch_request, MemberDispatchTransportRequest,
     ReplPersistentSessionClient, ReplSessionStartParams,
 };
 use anyhow::{Context, Result};
@@ -75,7 +73,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use substrate_broker::Policy;
@@ -84,10 +82,7 @@ use substrate_common::{AgentEvent, PlacementExecution};
 #[cfg(unix)]
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 #[cfg(target_os = "linux")]
-use transport_api_types::{
-    ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1, SharedWorldOwnerAction,
-    SharedWorldOwnerSpec,
-};
+use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = 1;
 #[cfg(unix)]
@@ -388,22 +383,17 @@ struct AgentControlResultJson<'a> {
     source_orchestration_session_id: Option<&'a str>,
 }
 
+#[derive(Clone, Debug)]
+struct StartPromptPublicIdentity {
+    backend_id: String,
+    scope: AgentExecutionScope,
+}
+
+#[derive(Debug)]
 struct HostStartLaunchPlan {
     helper_plan: HiddenOwnerHelperLaunchPlan,
     resolved_contract: ResolvedLaunchContract,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-struct WorldStartSessionBirthPlan {
-    requested_world_contract: ResolvedLaunchContract,
-    descriptor: RuntimeSelectionDescriptor,
-    session: OrchestrationSessionRecord,
-}
-
-enum StartLaunchPlan {
-    Host(HostStartLaunchPlan),
-    WorldBirth(WorldStartSessionBirthPlan),
+    public_identity: StartPromptPublicIdentity,
 }
 
 fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
@@ -414,44 +404,45 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
-    let start_plan = build_start_launch_plan(args, &context)?;
+    let mut start_plan = build_start_launch_plan(args, &context)?;
 
-    if let StartLaunchPlan::WorldBirth(world_birth) = start_plan {
-        let _ = prompt;
+    if start_plan.public_identity.scope == AgentExecutionScope::World {
         #[cfg(not(target_os = "linux"))]
-        anyhow::bail!(config_model::user_error(
-            "unsupported_platform_or_posture: public world-scoped root start is supported on Linux only in this slice"
-        ));
-        store
-            .persist_orchestration_session(&world_birth.session)
-            .map_err(runtime_start_error)?;
+        {
+            let _ = prompt;
+            anyhow::bail!(config_model::user_error(
+                "unsupported_platform_or_posture: public world-scoped root start is supported on Linux only in this slice"
+            ));
+        }
         #[cfg(target_os = "linux")]
-        launch_world_start_member_and_persist_binding(
-            &store,
-            &world_birth.session,
-            &world_birth.descriptor,
-        )
-        .map_err(runtime_start_error)?;
-        return render_agent_control_result(
-            args.json,
-            &AgentControlResultJson {
-                action: "start",
-                orchestration_session_id: &world_birth.session.orchestration_session_id,
-                backend_id: &world_birth.requested_world_contract.backend_id,
-                scope: "world",
-                state: "active",
-                warnings: Vec::new(),
-                participant_id: None,
-                source_orchestration_session_id: None,
-            },
-        );
+        {
+            let world_binding = establish_public_world_start_binding(
+                start_plan.helper_plan.orchestration_session_id(),
+                &start_plan.helper_plan.session.workspace_root,
+            )
+            .map_err(runtime_start_error)?;
+            start_plan.helper_plan.session.world_id = Some(world_binding.world_id);
+            start_plan.helper_plan.session.world_generation = Some(world_binding.world_generation);
+        }
     }
-    let StartLaunchPlan::Host(HostStartLaunchPlan {
+
+    let HostStartLaunchPlan {
         helper_plan,
         resolved_contract,
-    }) = start_plan
-    else {
-        unreachable!("world-start plans return early");
+        public_identity,
+    } = start_plan;
+
+    let public_backend_id = public_identity.backend_id.clone();
+    let public_scope = public_identity.scope;
+
+    let stream_start_result = |listener| {
+        run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
+            listener,
+            args.json,
+            PublicPromptAction::Start,
+            &public_backend_id,
+            public_scope,
+        )
     };
 
     #[cfg(not(unix))]
@@ -480,11 +471,12 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         });
 
         let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
-        match run_hidden_owner_helper_startup_prompt_stream(startup_listener, args.json) {
-            Ok(()) => wait_for_start_prompt_completion_normalization(
+        match stream_start_result(startup_listener) {
+            Ok(()) => wait_for_start_completion_for_scope(
                 &store,
                 &receipt.orchestration_session_id,
                 &receipt.participant_id,
+                public_scope,
             )
             .and_then(|()| {
                 persist_resolved_start_attach_contract(
@@ -514,12 +506,12 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                 });
                 let retry_receipt =
                     launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
-                run_hidden_owner_helper_startup_prompt_stream(retry_listener, args.json)
-                    .map_err(normalize_public_prompt_error)?;
-                wait_for_start_prompt_completion_normalization(
+                stream_start_result(retry_listener).map_err(normalize_public_prompt_error)?;
+                wait_for_start_completion_for_scope(
                     &store,
                     &retry_receipt.orchestration_session_id,
                     &retry_receipt.participant_id,
+                    public_scope,
                 )
                 .and_then(|()| {
                     persist_resolved_start_attach_contract(
@@ -622,6 +614,27 @@ fn stabilize_hidden_owner_helper_start_return(
 }
 
 #[cfg(unix)]
+fn wait_for_start_completion_for_scope(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    public_scope: AgentExecutionScope,
+) -> Result<()> {
+    match public_scope {
+        AgentExecutionScope::Host => wait_for_start_prompt_completion_normalization(
+            store,
+            orchestration_session_id,
+            participant_id,
+        ),
+        AgentExecutionScope::World => wait_for_start_prompt_attached_readiness(
+            store,
+            orchestration_session_id,
+            participant_id,
+        ),
+    }
+}
+
+#[cfg(unix)]
 fn wait_for_start_prompt_completion_normalization(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -668,6 +681,53 @@ fn wait_for_start_prompt_completion_normalization(
                 .unwrap_or_else(|| "session_missing".to_string());
             anyhow::bail!(
                 "timed out waiting for detached start normalization after startup prompt completion for orchestration session {} ({snapshot_summary})",
+                orchestration_session_id,
+            );
+        }
+
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+}
+
+#[cfg(unix)]
+fn wait_for_start_prompt_attached_readiness(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<()> {
+    let readiness_started_at = std::time::Instant::now();
+    loop {
+        match store.classify_hidden_owner_helper_launch_readiness(
+            orchestration_session_id,
+            participant_id,
+            true,
+        )? {
+            HiddenOwnerHelperLaunchReadiness::ReadyAttached => return Ok(()),
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(posture) => {
+                anyhow::bail!(
+                    "runtime_start_failed: world-backed public start detached before returning (orchestration session {} normalized to {:?} instead of remaining attached through start return)",
+                    orchestration_session_id,
+                    posture
+                );
+            }
+            HiddenOwnerHelperLaunchReadiness::Pending => {}
+        }
+
+        if readiness_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            let snapshot_summary = store
+                .load_orchestration_session(orchestration_session_id)?
+                .map(|session| {
+                    format!(
+                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
+                        session.state,
+                        session.posture,
+                        session.attached_participant_id,
+                        session.shell_owner_pid,
+                    )
+                })
+                .unwrap_or_else(|| "session_missing".to_string());
+            anyhow::bail!(
+                "timed out waiting for attached start readiness after startup prompt completion for orchestration session {} ({snapshot_summary})",
                 orchestration_session_id,
             );
         }
@@ -1234,14 +1294,10 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
 fn build_start_launch_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
-) -> Result<StartLaunchPlan> {
+) -> Result<HostStartLaunchPlan> {
     match resolve_requested_start_scope(args, context)? {
-        AgentExecutionScope::Host => {
-            build_host_start_launch_plan(args, context).map(StartLaunchPlan::Host)
-        }
-        AgentExecutionScope::World => {
-            build_world_start_session_birth_plan(args, context).map(StartLaunchPlan::WorldBirth)
-        }
+        AgentExecutionScope::Host => build_host_start_launch_plan(args, context),
+        AgentExecutionScope::World => build_world_start_session_birth_plan(args, context),
     }
 }
 
@@ -1322,6 +1378,10 @@ fn build_host_start_launch_plan(
             source_orchestration_session_id: None,
         },
         resolved_contract: resolved,
+        public_identity: StartPromptPublicIdentity {
+            backend_id: backend_id.to_string(),
+            scope: AgentExecutionScope::Host,
+        },
     })
 }
 
@@ -1339,7 +1399,7 @@ fn build_world_start_host_attach_dispatch_envelope(
         capability_overrides: build_start_capability_overrides(&args.disable_capability),
         attach_launch_knobs: AttachLaunchKnobs {
             requested_execution_scope: AgentExecutionScope::Host,
-            host_execution_client_start: HostExecutionClientStart::Defer,
+            host_execution_client_start: HostExecutionClientStart::StartNow,
             attach_mode_preference: AttachModePreference::ContinuityRequired,
         },
         has_prompt_payload: false,
@@ -1350,7 +1410,7 @@ fn build_world_start_host_attach_dispatch_envelope(
 fn build_world_start_session_birth_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
-) -> Result<WorldStartSessionBirthPlan> {
+) -> Result<HostStartLaunchPlan> {
     let backend_id = require_start_backend_id(args)?;
 
     let cwd = current_dir();
@@ -1400,46 +1460,58 @@ fn build_world_start_session_birth_plan(
                 host_backend_id
             ))
         })?;
-    let descriptor = materialize_runtime_descriptor(&requested_world_contract)
+    let descriptor = materialize_runtime_descriptor(&host_attach_resolved)
         .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
 
-    Ok(WorldStartSessionBirthPlan {
-        requested_world_contract,
-        descriptor,
-        session: OrchestrationSessionRecord::new_deferred_host_attach(
-            Uuid::now_v7().to_string(),
-            Uuid::now_v7().to_string(),
-            cwd.display().to_string(),
-            host_attach_contract,
-        ),
+    let orchestration_session_id = Uuid::now_v7().to_string();
+    Ok(HostStartLaunchPlan {
+        helper_plan: HiddenOwnerHelperLaunchPlan {
+            mode: OwnerHelperMode::Start,
+            descriptor: (&descriptor).into(),
+            session: HiddenOwnerHelperSessionPlan {
+                orchestration_session_id,
+                shell_trace_session_id: Uuid::now_v7().to_string(),
+                workspace_root: cwd.display().to_string(),
+                world_id: None,
+                world_generation: None,
+            },
+            participant: HiddenOwnerHelperParticipantPlan {
+                participant_id: format!("ash_{}", Uuid::now_v7()),
+                lease_token: Uuid::now_v7().to_string(),
+                run_id: Uuid::now_v7().to_string(),
+                resumed_from_participant_id: None,
+                internal_uaa_session_id: None,
+            },
+            host_attach_contract: Some(host_attach_contract),
+            startup_prompt: None,
+            source_orchestration_session_id: None,
+        },
+        resolved_contract: host_attach_resolved,
+        public_identity: StartPromptPublicIdentity {
+            backend_id: requested_world_contract.backend_id,
+            scope: AgentExecutionScope::World,
+        },
     })
 }
 
 #[cfg(target_os = "linux")]
-fn launch_world_start_member_and_persist_binding(
-    store: &AgentRuntimeStateStore,
-    session: &OrchestrationSessionRecord,
-    descriptor: &RuntimeSelectionDescriptor,
-) -> Result<()> {
+fn establish_public_world_start_binding(
+    orchestration_session_id: &str,
+    workspace_root: &str,
+) -> Result<PersistedWorldBinding> {
     let rt = TokioRuntimeBuilder::new_current_thread()
         .enable_all()
         .build()
         .context("failed to initialize world-start launch runtime")?;
-    rt.block_on(async {
-        launch_world_start_member_and_persist_binding_async(store, session, descriptor).await
-    })
+    rt.block_on(async { establish_public_world_start_binding_async(orchestration_session_id, workspace_root).await })
 }
 
 #[cfg(target_os = "linux")]
-async fn launch_world_start_member_and_persist_binding_async(
-    store: &AgentRuntimeStateStore,
-    session: &OrchestrationSessionRecord,
-    descriptor: &RuntimeSelectionDescriptor,
-) -> Result<()> {
-    use http_body_util::BodyExt as _;
-
-    let orchestration_session = Arc::new(Mutex::new(session.clone()));
-    let requested_cwd = session.workspace_root.clone();
+async fn establish_public_world_start_binding_async(
+    orchestration_session_id: &str,
+    workspace_root: &str,
+) -> Result<PersistedWorldBinding> {
+    let requested_cwd = workspace_root.to_string();
     let requested_path = PathBuf::from(&requested_cwd);
     let resolved = policy_snapshot::resolve_policy_snapshot_for_cwd(requested_path.as_path())
         .context("policy snapshot (public world start)")?;
@@ -1457,7 +1529,7 @@ async fn launch_world_start_member_and_persist_binding_async(
     )
     .context("failed to build shared-world session start parameters")?;
     start_params.shared_world = Some(SharedWorldOwnerSpec {
-        orchestration_session_id: session.orchestration_session_id.clone(),
+        orchestration_session_id: orchestration_session_id.to_string(),
         action: SharedWorldOwnerAction::AttachOrCreate,
     });
 
@@ -1470,221 +1542,12 @@ async fn launch_world_start_member_and_persist_binding_async(
             "runtime_start_failed: shared world ready frame omitted authoritative binding proof"
         )
     })?;
-    let world_binding = crate::execution::agent_runtime::control::PersistedWorldBinding {
+    let world_binding = PersistedWorldBinding {
         world_id: authoritative_binding.world_id.clone(),
         world_generation: authoritative_binding.world_generation,
     };
-    persist_world_binding_authority(store, &orchestration_session, Some(&world_binding))
-        .context("failed to persist authoritative world binding for public world start")?;
-
-    let participant_id = format!("ash_{}", Uuid::now_v7());
-    let orchestrator_participant_id = format!("ash_deferred_{}", Uuid::now_v7());
-    let run_id = Uuid::now_v7().to_string();
-    let lease_token = Uuid::now_v7().to_string();
-    let mut manifest = AgentRuntimeParticipantRecord::new_member_participant(
-        descriptor,
-        session.orchestration_session_id.clone(),
-        participant_id.clone(),
-        orchestrator_participant_id,
-        None,
-        Some(AgentRuntimeParticipantWorldBinding {
-            world_id: world_binding.world_id.clone(),
-            world_generation: world_binding.world_generation,
-        }),
-        lease_token,
-    )
-    .context("failed to construct world-start member participant state")?;
-    manifest.internal.latest_run_id = Some(run_id.clone());
-    persist_runtime_snapshots(
-        store,
-        &orchestration_session
-            .lock()
-            .expect("orchestration session mutex poisoned")
-            .clone(),
-        &manifest,
-    )
-    .context("failed to persist world-start member participant allocation")?;
-
-    let request = MemberDispatchTransportRequest {
-        orchestration_session_id: session.orchestration_session_id.clone(),
-        participant_id: participant_id.clone(),
-        orchestrator_participant_id: manifest
-            .handle
-            .orchestrator_participant_id
-            .clone()
-            .expect("new member participants must include orchestrator_participant_id"),
-        parent_participant_id: manifest.handle.parent_participant_id.clone(),
-        resumed_from_participant_id: manifest.handle.resumed_from_participant_id.clone(),
-        backend_id: descriptor.backend_id.clone(),
-        protocol: descriptor.protocol.clone(),
-        run_id,
-        world_id: world_binding.world_id.clone(),
-        world_generation: world_binding.world_generation,
-        initial_prompt: None,
-        backend_kind: match descriptor.backend_kind {
-            crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind::Codex => {
-                MemberRuntimeBackendKindV1::Codex
-            }
-            crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind::ClaudeCode => {
-                MemberRuntimeBackendKindV1::ClaudeCode
-            }
-        },
-        binary_path: descriptor.binary_path.display().to_string(),
-    };
-
-    let (client, request, _agent_id) = build_agent_client_and_member_dispatch_request(&request)
-        .context("failed to build shared-contract member dispatch request")?;
-    let response = client
-        .execute_stream(request)
-        .await
-        .context("failed to start world-scoped member control stream for public world start")?;
-
-    let mut body = std::pin::pin!(response.into_body());
-    let mut buffer = Vec::new();
-    let mut span_id: Option<String> = None;
-    let mut ready_seen = false;
-    let mut exit_code: Option<i32> = None;
-    while let Some(frame) = body.as_mut().frame().await {
-        let frame = frame.context("failed to read world-start member control stream frame")?;
-        let Some(data) = frame.data_ref() else {
-            continue;
-        };
-        buffer.extend_from_slice(data);
-
-        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
-            let line: Vec<u8> = buffer.drain(..=pos).collect();
-            if line.len() <= 1 {
-                continue;
-            }
-            let payload = &line[..line.len() - 1];
-            if payload.is_empty() {
-                continue;
-            }
-            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
-                .context("failed to decode world-start member control stream frame")?;
-            match frame {
-                ExecuteStreamFrame::Start {
-                    span_id: stream_span_id,
-                } => span_id = Some(stream_span_id),
-                ExecuteStreamFrame::Event { event } => {
-                    if ready_seen {
-                        continue;
-                    }
-                    if let Some(session_handle_id) =
-                        extract_public_world_start_session_handle_id(Some(&event.data))
-                    {
-                        manifest.set_uaa_session_id(session_handle_id.to_string());
-                        manifest.mark_runtime_ownership_retained();
-                        manifest.transition_state(AgentRuntimeSessionState::Ready);
-                        manifest.touch_heartbeat();
-                        persist_runtime_snapshots(
-                            store,
-                            &orchestration_session
-                                .lock()
-                                .expect("orchestration session mutex poisoned")
-                                .clone(),
-                            &manifest,
-                        )
-                        .context("failed to persist world-start member readiness")?;
-                        ready_seen = true;
-                        if let Some(span_id) = span_id.as_ref() {
-                            client
-                                .cancel_execute(ExecuteCancelRequestV1 {
-                                    span_id: span_id.clone(),
-                                    sig: "INT".to_string(),
-                                })
-                                .await
-                                .context(
-                                    "failed to cancel world-start member control stream after readiness",
-                                )?;
-                        }
-                    }
-                }
-                ExecuteStreamFrame::Exit { exit, .. } => {
-                    exit_code = Some(exit);
-                }
-                ExecuteStreamFrame::Error { message } => {
-                    anyhow::bail!(
-                        "runtime_start_failed: world-start member control stream failed: {message}"
-                    );
-                }
-                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
-            }
-        }
-    }
     let _ = world_client.close().await;
-
-    if !ready_seen {
-        mark_orchestration_session_failed(
-            store,
-            &orchestration_session,
-            "world-scoped member runtime exited before retained ownership could be established",
-        );
-        anyhow::bail!(
-            "runtime_start_failed: world-scoped member runtime exited before retained ownership could be established"
-        );
-    }
-
-    match exit_code {
-        Some(0 | 129 | 130 | 131 | 143) => {
-            manifest.transition_state(AgentRuntimeSessionState::Stopped);
-            manifest.mark_terminal_state("world-scoped member session stopped");
-            persist_runtime_snapshots(
-                store,
-                &orchestration_session
-                    .lock()
-                    .expect("orchestration session mutex poisoned")
-                    .clone(),
-                &manifest,
-            )
-            .context("failed to persist world-start member shutdown")?;
-            Ok(())
-        }
-        Some(exit) => {
-            mark_orchestration_session_failed(
-                store,
-                &orchestration_session,
-                format!("world-scoped member runtime exited with status {exit}"),
-            );
-            anyhow::bail!(
-                "runtime_start_failed: world-scoped member runtime exited with status {exit}"
-            );
-        }
-        None => {
-            mark_orchestration_session_failed(
-                store,
-                &orchestration_session,
-                "world-scoped member runtime stream ended without an exit frame",
-            );
-            anyhow::bail!(
-                "runtime_start_failed: world-scoped member runtime stream ended without an exit frame"
-            );
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn extract_public_world_start_session_handle_id(data: Option<&serde_json::Value>) -> Option<&str> {
-    let value = data?;
-    if value.get("schema").and_then(serde_json::Value::as_str)
-        == Some(crate::execution::agent_runtime::SESSION_HANDLE_SCHEMA_V1)
-    {
-        return value
-            .get("session")
-            .and_then(serde_json::Value::as_object)
-            .and_then(|session| session.get("id"))
-            .and_then(serde_json::Value::as_str)
-            .filter(|id| !id.trim().is_empty());
-    }
-
-    value
-        .get("type")
-        .and_then(serde_json::Value::as_str)
-        .filter(|event_type| matches!(*event_type, "thread.started" | "turn.started"))?;
-    value
-        .get("thread_id")
-        .and_then(serde_json::Value::as_str)
-        .filter(|id| !id.trim().is_empty())
+    Ok(world_binding)
 }
 
 #[cfg(unix)]
@@ -4410,7 +4273,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn world_start_session_birth_plan_creates_deferred_host_attach_session() {
+    fn world_start_launch_plan_builds_host_helper_with_world_visible_identity() {
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -4424,21 +4287,19 @@ mod tests {
         let plan = build_world_start_session_birth_plan(&world_start_args(), &context)
             .expect("world session birth plan");
 
-        assert_eq!(plan.requested_world_contract.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
         assert_eq!(
-            plan.requested_world_contract.execution_scope,
+            plan.public_identity.scope,
             AgentExecutionScope::World
         );
-        assert_eq!(plan.session.orchestrator_backend_id, "cli:codex");
         assert_eq!(
-            plan.session.posture,
-            OrchestrationSessionPosture::BornUnattached
+            plan.helper_plan.descriptor.backend_id,
+            "cli:codex"
         );
-        assert_eq!(plan.session.active_participant_id(), None);
-        assert_eq!(plan.session.attached_participant_id(), None);
         let attach_contract = plan
-            .session
-            .host_attach_contract()
+            .helper_plan
+            .host_attach_contract
+            .as_ref()
             .expect("persisted attach contract");
         assert_eq!(attach_contract.backend_id, "cli:codex");
         assert_eq!(
@@ -4449,17 +4310,16 @@ mod tests {
         );
         assert_eq!(
             attach_contract.attach_launch_knobs.host_execution_client_start,
-            crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::Defer
+            crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::StartNow
         );
         assert!(!attach_contract.capabilities.session_stop);
-        plan.session
-            .validate_persisted_invariants()
-            .expect("world-born session invariants");
+        assert_eq!(plan.helper_plan.session.world_id, None);
+        assert_eq!(plan.helper_plan.session.world_generation, None);
     }
 
     #[test]
     #[serial]
-    fn build_start_launch_plan_routes_world_scope_to_deferred_session_birth() {
+    fn build_start_launch_plan_routes_world_scope_to_host_helper_path() {
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -4473,17 +4333,9 @@ mod tests {
         let plan = build_start_launch_plan(&world_start_args(), &context)
             .expect("world start launch plan");
 
-        let StartLaunchPlan::WorldBirth(plan) = plan else {
-            panic!("world scope must route through deferred session birth");
-        };
-        assert_eq!(plan.requested_world_contract.backend_id, "cli:claude_code");
-        assert_eq!(plan.session.orchestrator_backend_id, "cli:codex");
-        assert_eq!(
-            plan.session.posture,
-            OrchestrationSessionPosture::BornUnattached
-        );
-        assert_eq!(plan.session.active_participant_id(), None);
-        assert_eq!(plan.session.attached_participant_id(), None);
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
     }
 
     #[test]
@@ -4507,14 +4359,9 @@ mod tests {
         let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
             .expect("omitted scope launch plan");
 
-        let StartLaunchPlan::WorldBirth(plan) = plan else {
-            panic!("workspace default world scope must route through deferred session birth");
-        };
-        assert_eq!(plan.requested_world_contract.backend_id, "cli:claude_code");
-        assert_eq!(
-            plan.requested_world_contract.execution_scope,
-            AgentExecutionScope::World
-        );
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
     }
 
     #[test]
@@ -4538,9 +4385,6 @@ mod tests {
         let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
             .expect("omitted scope launch plan");
 
-        let StartLaunchPlan::Host(plan) = plan else {
-            panic!("global default host scope must route through eager host attach");
-        };
         assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code");
         assert_eq!(
             plan.resolved_contract.execution_scope,

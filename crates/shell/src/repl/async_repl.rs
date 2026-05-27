@@ -3031,6 +3031,16 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
         let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
             .map_err(|failure| anyhow!(failure.message))?;
+        let initial_world_binding = match (
+            plan.session.world_id.as_ref(),
+            plan.session.world_generation,
+        ) {
+            (Some(world_id), Some(world_generation)) => Some(PersistedWorldBinding {
+                world_id: world_id.clone(),
+                world_generation,
+            }),
+            _ => None,
+        };
         let initial_prompt = plan.startup_prompt.as_ref().map(|startup_prompt| {
             InitialExecPromptPlan::StartupPrompt {
                 prompt: startup_prompt.prompt_text.clone(),
@@ -3039,7 +3049,7 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         });
         let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
             Some(prepared),
-            None,
+            initial_world_binding.as_ref(),
             initial_prompt,
             matches!(plan.mode, OwnerHelperMode::Attach),
             true,

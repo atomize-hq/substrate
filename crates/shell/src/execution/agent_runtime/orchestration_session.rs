@@ -345,6 +345,7 @@ impl OrchestrationSessionRecord {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn new_deferred_host_attach(
         orchestration_session_id: String,
         shell_trace_session_id: String,
