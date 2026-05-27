@@ -2268,12 +2268,9 @@ fn public_turn_authoritative_candidates(
         }
     }
 
-    let Some(world_id) = record.session.world_id.as_deref() else {
+    if record.session.world_id.is_none() || record.session.world_generation.is_none() {
         return candidates;
-    };
-    let Some(world_generation) = record.session.world_generation else {
-        return candidates;
-    };
+    }
 
     candidates.extend(
         record
@@ -2281,14 +2278,9 @@ fn public_turn_authoritative_candidates(
             .iter()
             .filter(|participant| {
                 participant.handle.backend_id == backend_id
-                    && participant.handle.orchestration_session_id
-                        == record.session.orchestration_session_id
-                    && participant.handle.role == MEMBER_ROLE
-                    && participant.handle.execution.scope == AgentExecutionScope::World
                     && participant.handle.orchestrator_participant_id.as_deref()
                         == active_participant_id
-                    && participant.handle.world_id.as_deref() == Some(world_id)
-                    && participant.handle.world_generation == Some(world_generation)
+                    && participant.matches_authoritative_parent_world_binding(&record.session)
             })
             .cloned()
             .map(|participant| PublicTurnTargetCandidate {
@@ -2581,18 +2573,10 @@ pub(crate) fn born_unattached_status_anchor(
         return None;
     }
 
-    let world_id = session.world_id.as_deref()?;
-    let world_generation = session.world_generation?;
     record
         .participants
         .iter()
-        .filter(|participant| {
-            participant.handle.role == MEMBER_ROLE
-                && participant.handle.execution.scope == AgentExecutionScope::World
-                && participant.handle.orchestration_session_id == session.orchestration_session_id
-                && participant.handle.world_id.as_deref() == Some(world_id)
-                && participant.handle.world_generation == Some(world_generation)
-        })
+        .filter(|participant| participant.matches_authoritative_parent_world_binding(session))
         .max_by(|left, right| left.last_status_at().cmp(&right.last_status_at()))
         .cloned()
 }

@@ -2338,6 +2338,130 @@ fn agent_toolbox_surfaces_stay_orchestrator_anchored_when_live_member_exists() {
 }
 
 #[test]
+fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_is_missing() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        "ash_turn_parent_missing",
+        "2026-04-07T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        Some("ash_turn_parent_missing"),
+        "2026-04-07T00:00:01Z",
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_member_missing",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-07T00:00:02Z",
+            "wld_member_missing_0001",
+            7,
+            "ash_turn_parent_missing",
+        ),
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "turn must fail closed before dispatch when the authoritative parent world binding is absent: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("stale_linkage"),
+        "missing authoritative parent world binding must fail with stale_linkage rather than silently reviving the member runtime: {stderr}"
+    );
+    assert!(
+        stderr.contains("no longer has an authoritative retained turn target"),
+        "missing authoritative parent world binding must explain why the retained world member is unusable: {stderr}"
+    );
+}
+
+#[test]
+fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_mismatches_member() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        "ash_turn_parent_mismatch",
+        "2026-04-07T00:00:01Z",
+    );
+    write_active_orchestration_session_with_world_binding(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        Some("ash_turn_parent_mismatch"),
+        "2026-04-07T00:00:01Z",
+        "wld_parent_binding_0001",
+        7,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_member_mismatch",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-07T00:00:02Z",
+            "wld_member_binding_9999",
+            7,
+            "ash_turn_parent_mismatch",
+        ),
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "turn must fail closed before dispatch when the member world binding no longer matches the authoritative parent session: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("stale_linkage"),
+        "mismatched authoritative world binding must fail with stale_linkage: {stderr}"
+    );
+    assert!(
+        stderr.contains("no longer has an authoritative retained turn target"),
+        "mismatched authoritative world binding must explain why the retained world member cannot be reused: {stderr}"
+    );
+}
+
+#[test]
 fn agent_status_selected_host_row_stays_unchanged_when_parent_session_has_world_binding() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
