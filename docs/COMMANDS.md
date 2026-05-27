@@ -74,6 +74,14 @@ Once you type `graph`, `host`, `world`, `config`, `policy`, `workspace`, `shim`,
 | `substrate graph status` | — | — | Baseline mock backend status. |
 | `substrate graph what-changed <SPAN_ID>` | `span_id` (string) | `--limit <N>` | Exercise different limits plus anchor/caging toggles. |
 
+### `workspace` Subcommand
+
+| Invocation | Positional Arguments | Subcommand Flags | Notes |
+| --- | --- | --- | --- |
+| `substrate workspace sync` | — | `--dry-run`, `--direction <from_world|from_host|both>`, `--conflict-policy <prefer_host|prefer_world|abort>`, `--exclude <PATTERN>`, `--verbose` | Reconciles or applies pending world changes. Stable contract: `docs/reference/cli/workspace_sync.md`. |
+| `substrate workspace checkpoint` | — | `--message <TEXT>`, `--verbose` | Records a workspace snapshot into Substrate's internal history store. Stable contract: `docs/reference/cli/workspace_history.md`. |
+| `substrate workspace rollback <target>` | `target` (`last` or a checkpoint id) | `--force`, `--verbose` | Restores a workspace snapshot from Substrate's internal history store. Stable contract: `docs/reference/cli/workspace_history.md`. |
+
 ### world Subcommand
 
 | Invocation | Positional Arguments | Subcommand Flags | Notes |

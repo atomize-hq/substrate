@@ -370,8 +370,10 @@ Completed follow-up:
 - absorbed the stable Linux filesystem semantics into
   `docs/internals/world/workspace_sync_filesystem_model.md`
 - removed the internal-doc dependency on the world-sync pack specs
-- kept the operator-facing surface in `docs/reference/cli/workspace_sync.md` rather than creating
-  another stable reference page
+- kept the operator-facing sync surface in `docs/reference/cli/workspace_sync.md`
+- published the workspace-history contract in `docs/reference/cli/workspace_history.md`
+- published the internal checkpoint/rollback store model in
+  `docs/internals/world/workspace_internal_git_model.md`
 
 Remaining follow-up:
 - none for the stable-doc dependency itself; the remaining blockers now sit in tests and
@@ -422,9 +424,12 @@ in three buckets:
     - `docs/adr/implemented/ADR-0046-gateway-backend-selection-runtime-integration.md`
 - workspace sync pack contract:
   - `docs/project_management/packs/implemented/world-sync/contract.md`
+  - `docs/project_management/packs/implemented/world-sync/internal-git-spec.md`
   - stable home:
     - `docs/reference/cli/workspace_sync.md`
+    - `docs/reference/cli/workspace_history.md`
     - `docs/internals/world/workspace_sync_filesystem_model.md`
+    - `docs/internals/world/workspace_internal_git_model.md`
 - installer detection / replay attribution contract surfaces that are already sufficiently covered:
   - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - `docs/project_management/packs/implemented/world-disabled-reason-attribution/contract.md`

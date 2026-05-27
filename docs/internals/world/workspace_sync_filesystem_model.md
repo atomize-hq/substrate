@@ -29,6 +29,7 @@ world-only layer is applied back to the host and when conflicting shadowed paths
 ## Stable surfaces for this behavior
 
 - Operator overview: `docs/reference/cli/workspace_sync.md`
+- Related operator history commands: `docs/reference/cli/workspace_history.md`
 - Current implementation details and code pointers: this document
 - Auto-sync hook behavior: `crates/shell/src/execution/auto_sync.rs`
 

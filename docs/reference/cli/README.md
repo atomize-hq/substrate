@@ -13,3 +13,4 @@ Existing related docs (top-level):
 
 Additional reference docs:
 - `docs/reference/cli/workspace_sync.md`
+- `docs/reference/cli/workspace_history.md`
