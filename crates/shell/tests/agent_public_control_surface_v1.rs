@@ -130,16 +130,74 @@ impl AgentControlFixture {
         .expect("write .substrate-profile");
         fs::write(
             self.substrate_home.join("agents/codex.yaml"),
-            cli_agent_file("codex", "host", &self.fake_codex),
+            cli_agent_file("codex", Some("host"), &self.fake_codex),
         )
         .expect("write codex agent file");
         if include_world_backend {
             fs::write(
                 self.substrate_home.join("agents/claude_code.yaml"),
-                cli_agent_file("claude_code", "world", &self.fake_codex),
+                cli_agent_file("claude_code", Some("world"), &self.fake_codex),
             )
             .expect("write claude_code agent file");
         }
+    }
+
+    fn write_runtime_inventory_with_unscoped_member(
+        &self,
+        global_scope: &str,
+        workspace_scope: Option<&str>,
+    ) {
+        self.write_runtime_inventory(true);
+        fs::write(
+            self.substrate_home.join("config.yaml"),
+            format!(
+                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            ),
+        )
+        .expect("write global config.yaml");
+        if let Some(workspace_scope) = workspace_scope {
+            let workspace_config_dir = self.workspace_root.join(".substrate");
+            fs::create_dir_all(&workspace_config_dir).expect("create workspace config dir");
+            fs::write(
+                workspace_config_dir.join("workspace.yaml"),
+                format!("agents:\n  defaults:\n    execution:\n      scope: {workspace_scope}\n",),
+            )
+            .expect("write workspace config patch");
+        }
+        fs::write(
+            self.substrate_home.join("agents/claude_code.yaml"),
+            cli_agent_file("claude_code", None, &self.fake_codex),
+        )
+        .expect("write unscoped claude_code agent file");
+    }
+
+    fn write_runtime_inventory_with_unscoped_orchestrator(
+        &self,
+        global_scope: &str,
+        workspace_scope: Option<&str>,
+    ) {
+        self.write_runtime_inventory(false);
+        fs::write(
+            self.substrate_home.join("config.yaml"),
+            format!(
+                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            ),
+        )
+        .expect("write global config.yaml");
+        if let Some(workspace_scope) = workspace_scope {
+            let workspace_config_dir = self.workspace_root.join(".substrate");
+            fs::create_dir_all(&workspace_config_dir).expect("create workspace config dir");
+            fs::write(
+                workspace_config_dir.join("workspace.yaml"),
+                format!("agents:\n  defaults:\n    execution:\n      scope: {workspace_scope}\n",),
+            )
+            .expect("write workspace config patch");
+        }
+        fs::write(
+            self.substrate_home.join("agents/codex.yaml"),
+            cli_agent_file("codex", None, &self.fake_codex),
+        )
+        .expect("write unscoped codex agent file");
     }
 
     fn run(&self, args: &[&str]) -> Output {
@@ -223,9 +281,12 @@ impl AgentControlFixture {
     }
 }
 
-fn cli_agent_file(agent_id: &str, scope: &str, binary: &Path) -> String {
+fn cli_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String {
+    let execution_scope = scope
+        .map(|scope| format!("  execution:\n    scope: {scope}\n"))
+        .unwrap_or_default();
     format!(
-        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
         binary.display()
     )
 }
@@ -1708,6 +1769,128 @@ fn public_start_rejects_unsupported_disable_capability_names_at_parse_time() {
     assert!(
         !fixture.fake_codex_args_path(1).exists(),
         "parse-time capability rejection must fail before launching a backend runtime"
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_omitted_scope_uses_global_defaults_when_workspace_scope_is_unset() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_with_unscoped_orchestrator("host", None);
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from global host default",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "omitted scope should honor the global host default for an unscoped backend: {output:?}"
+    );
+
+    let records = parse_ndjson_output(&output);
+    let accepted = find_ndjson_record(&records, "accepted");
+    let completed = find_ndjson_record(&records, "completed");
+    assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("host"));
+    assert_eq!(
+        completed.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+
+    let orchestration_session_id = completed["orchestration_session_id"]
+        .as_str()
+        .expect("start session id");
+    let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/attach_launch_knobs/requested_execution_scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_with_unscoped_member("host", Some("world"));
+
+    #[cfg(target_os = "linux")]
+    let output = {
+        let socket_home = tempfile::Builder::new()
+            .prefix("sac-omitted-world-")
+            .tempdir_in("/tmp")
+            .expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let _server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+            &socket_path,
+            StreamBehavior::Normal,
+            vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-omitted-world-start".to_string(),
+                exit_code_on_cancel: 130,
+            }],
+        );
+        fixture
+            .command()
+            .current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .args([
+                "agent",
+                "start",
+                "--backend",
+                "cli:claude_code",
+                "--prompt",
+                "hello from workspace world default",
+                "--json",
+            ])
+            .output()
+            .expect("run public world start with omitted scope")
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "hello from workspace world default",
+        "--json",
+    ]);
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "workspace world default should resolve omitted scope to the Linux-first world path: {output:?}"
+        );
+        let stderr = stderr_text(&output);
+        assert!(
+            stderr.contains("unsupported_platform_or_posture"),
+            "world-default omitted scope must keep the frozen classifier: {stderr}"
+        );
+        return;
+    }
+
+    assert!(
+        output.status.success(),
+        "workspace world default should route omitted scope through the world-backed path: {output:?}"
+    );
+    let start_json = parse_json_output(&output);
+    assert_eq!(
+        start_json.get("scope").and_then(Value::as_str),
+        Some("world")
+    );
+    assert_eq!(
+        start_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
     );
 }
 

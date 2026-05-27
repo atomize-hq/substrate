@@ -491,8 +491,8 @@ pub struct AgentOwnerHelperArgs {
 pub struct AgentStartArgs {
     #[arg(long = "backend", value_name = "BACKEND_ID")]
     pub backend: String,
-    #[arg(long, value_name = "host|world", default_value = "host")]
-    pub scope: AgentStartScopeArg,
+    #[arg(long, value_name = "host|world")]
+    pub scope: Option<AgentStartScopeArg>,
     #[arg(
         long = "disable-capability",
         visible_alias = "disable-cap",
@@ -624,7 +624,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_start_defaults_scope_to_host_when_omitted() {
+    fn agent_start_leaves_scope_unset_when_omitted() {
         let start = parse_start_args(&[
             "substrate",
             "agent",
@@ -635,7 +635,7 @@ mod tests {
             "hello",
         ]);
 
-        assert_eq!(start.scope, AgentStartScopeArg::Host);
+        assert_eq!(start.scope, None);
         assert!(start.disable_capability.is_empty());
     }
 
@@ -657,7 +657,7 @@ mod tests {
             "hello",
         ]);
 
-        assert_eq!(start.scope, AgentStartScopeArg::World);
+        assert_eq!(start.scope, Some(AgentStartScopeArg::World));
         assert_eq!(
             start.disable_capability,
             vec![
