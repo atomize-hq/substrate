@@ -99,19 +99,19 @@ Packet 2 is complete only when:
 
 Do not start Packet 3 until Packet 2 verification is green.
 
-## Packet 3: World Binding Persistence And Host Lifecycle Truth
+## Packet 3: Canonical World Identity Persistence And Host Lifecycle Truth
 
 Session goal:
 
-1. persist authoritative world binding,
+1. persist canonical `world_id` and `world_generation` as the durable projection of Packet 2's already-established authoritative world session/binding truth,
 2. preserve normal host lifecycle semantics for the new default path,
 3. keep later world-worker allocation lazy until host orchestration chooses world work,
 4. avoid inventing a world-first inaugural prompt dialect.
 
 ### Tasks
 
-- [ ] Task 3.1: Persist authoritative world binding for the world-backed start path
-  - Acceptance: Linux world-backed root start persists `world_id` and `world_generation`, keeps that binding attached to the same host-rooted orchestration session, does not require a participant-less deferred-attach posture, and does not invent a second inaugural world-launch dialect; the first host-decided world worker/member conversation may remain lazy until later dispatch.
+- [ ] Task 3.1: Persist canonical world identity for the world-backed start path
+  - Acceptance: Linux world-backed root start preserves the authoritative world session/binding truth established in Packet 2, persists canonical `world_id` and `world_generation` as its durable projection, keeps that truth attached to the same host-rooted orchestration session, does not require a participant-less deferred-attach posture, and does not invent a second inaugural world-launch dialect; the first host-decided world worker/member conversation may remain lazy until later dispatch.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
@@ -124,7 +124,7 @@ Session goal:
 Packet 3 is complete only when:
 
 1. Linux world-backed root start succeeds end to end,
-2. authoritative `world_id` and `world_generation` are persisted,
+2. canonical `world_id` and `world_generation` are persisted as the durable projection of the already-established authoritative world session/binding truth,
 3. the operator-facing lifecycle remains the normal host lifecycle rather than a `born_unattached` default.
 
 Do not start Packet 4 until Packet 3 verification is green.

@@ -56,7 +56,7 @@ For `--scope world`, or omitted `--scope` that resolves to world, a successful `
 1. A durable host-rooted orchestration session already exists.
 2. That session is already in the normal host-attached lifecycle, not `born_unattached`.
 3. Authoritative `HostAttachContract` truth is persisted at birth.
-4. Authoritative world binding truth needed for later host-dispatched world work is already persisted.
+4. Authoritative world session/binding truth needed for later host-dispatched world work is already persisted.
 5. The host session is the primary operator-facing thing that was launched; world is the execution substrate behind it.
 
 ### Immediate Truth Versus Lazy Truth
@@ -66,7 +66,7 @@ Truth that must exist immediately at successful start:
 1. The orchestration session record.
 2. An attached host owner/participant suitable for the normal public host lifecycle.
 3. Persisted host attach truth.
-4. Persisted authoritative world binding truth, including the durable world identity needed for later dispatch.
+4. Persisted authoritative world session/binding truth, including the durable world identity needed for later dispatch.
 
 Truth that may remain lazy in this thin slice:
 

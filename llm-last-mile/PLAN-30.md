@@ -156,7 +156,7 @@ Must exist before successful `start` return:
 1. durable host-rooted orchestration session,
 2. attached host owner/participant,
 3. persisted host attach truth,
-4. persisted authoritative world binding truth.
+4. persisted authoritative world session/binding truth.
 
 May remain lazy:
 
@@ -243,12 +243,12 @@ Verification checkpoint:
 4. the success shape is no longer participant-less deferred attach,
 5. missing or invalid attach truth still fails closed.
 
-### Phase 3: World binding/session persistence and later dispatch readiness
+### Phase 3: Canonical world identity persistence and later dispatch readiness
 
 Goal:
 
-1. persist authoritative `world_id` and `world_generation`,
-2. make the world-backed path ready for later host-dispatched world work,
+1. persist canonical `world_id` and `world_generation` as the durable projection of Packet 2's already-established authoritative world session/binding truth,
+2. make the world-backed path ready for later host-dispatched world work without re-opening Packet 2's session-birth contract,
 3. keep the first dispatched world worker/member lazy until the host actually chooses world work,
 4. avoid inventing a second inaugural world-start dialect.
 
@@ -268,7 +268,7 @@ Primary touch surface:
 Verification checkpoint:
 
 1. Linux world-backed root start succeeds end to end,
-2. authoritative world binding is persisted,
+2. canonical `world_id` and `world_generation` are persisted as the durable projection of the already-established authoritative world session/binding truth,
 3. fail-closed behavior remains explicit on unsupported platforms or invalid world runtime state.
 
 ### Phase 4: Status truth, docs, and integration hardening
