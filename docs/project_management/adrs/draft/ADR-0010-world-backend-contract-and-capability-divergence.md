@@ -6,6 +6,12 @@
 - Date (UTC): 2026-01-11
 - Owner(s): Shell / World / Broker maintainers
 
+## Current Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0010-world-backend-contract-and-capability-divergence.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - This ADR defines a **cross-backend contract** for “world” backends (Linux host-native, Linux guest-rootfs, macOS/Lima, Windows/WSL, future Docker/Podman).
 - It focuses on making backend capability divergence explicit while keeping the operator-facing contract stable.

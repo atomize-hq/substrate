@@ -56,7 +56,7 @@ The decision is materially implemented and verified through:
 ## Related ADRs
 
 - `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
-- `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
+- `docs/adr/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
 
 ## Historical Note
 

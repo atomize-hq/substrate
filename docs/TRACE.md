@@ -5,7 +5,7 @@
 The Substrate Trace module (`crates/trace`) provides comprehensive span-based tracing for command execution across the Substrate ecosystem. It captures detailed execution context, policy decisions, and system state to enable command replay, security auditing, and graph-based analysis of command relationships.
 
 Canonical trace schema/correlation vocabulary (Phase 8 cross-cutting spines for LLM/agents/router/workflows):
-- Source of truth: `docs/internals/trace/schema.md` for stable schema details and `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` for the ADR decision record.
+- Source of truth: `docs/internals/trace/schema.md` for stable schema details and `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md` for the ADR decision record.
 
 ### Key Features
 

@@ -5,6 +5,12 @@
 - Date (UTC): 2025-12-29
 - Owner(s): spenser
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/world-overlayfs-enumeration/`
 - Orchestration branch: `feat/world-overlayfs-enumeration`

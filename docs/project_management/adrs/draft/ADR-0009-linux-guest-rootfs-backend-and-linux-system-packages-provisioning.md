@@ -5,6 +5,12 @@
 - Date (UTC): 2026-05-24
 - Owner(s): Shell / World / Installer maintainers
 
+## Current Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/linux_guest_rootfs_backend/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

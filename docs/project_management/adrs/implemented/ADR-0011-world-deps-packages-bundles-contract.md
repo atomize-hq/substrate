@@ -11,6 +11,12 @@
 - Date (UTC): 2026-01-13
 - Owner(s): Shell / World maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directories (impacted):
   - `docs/project_management/_archived/next/` (this ADR; cross-cutting contract)

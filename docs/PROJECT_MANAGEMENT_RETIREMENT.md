@@ -66,12 +66,13 @@ Still remaining before the atomic top-level `packs/**` removal:
   `docs/project_management/**` material rather than live shell wrappers
 - `llm-last-mile/**` and `FSE_PRE_PLANNING_*` are intentionally deferred for now and should not
   drive the next slice ordering
-- the highest-value next namespace decision is ADR curation, because repeated backlink cleanup
-  inside `docs/project_management/adrs/**` has diminishing returns while the long-term destination
-  is now known to be `docs/adr/`
-- the curation-policy question is now resolved for the first slice:
+- the ADR destination question is now resolved:
+  - the stable registry is `docs/adr/**`
+  - repeated backlink cleanup inside `docs/project_management/adrs/**` now has diminishing returns
+    unless a live stable reader still points there
+- the curation-policy question is now resolved:
   - use `restate + supersede`, not a blind directory move
-  - promote first-cluster keepers into `docs/adr/implemented/`
+  - promote current stable keepers into `docs/adr/{implemented,draft,historical}/`
 - the first-cluster promotion slice is now complete:
   - curated implemented ADRs exist for ADR-0027, ADR-0040, ADR-0041, ADR-0042, ADR-0043, and
     ADR-0046
@@ -113,6 +114,22 @@ Validation already completed for the finished slices:
 - the provisioning ADR pair `ADR-0030` and `ADR-0033` is now curated into
   `docs/adr/implemented/`, and current planning readers have been repointed toward the curated
   namespace
+- the world/runtime foundation ADR batch is now curated into `docs/adr/implemented/`:
+  - ADR-0004
+  - ADR-0007
+  - ADR-0014
+  - ADR-0015
+  - ADR-0018
+- the world-deps predecessor pair is now split correctly:
+  - ADR-0002 is curated into `docs/adr/historical/` as stale historical framing
+  - ADR-0011 is curated into `docs/adr/implemented/` as the current inventory + enabled-set
+    contract
+- the remaining installer/diagnostics/backend ADR tail is now classified into `docs/adr/**`:
+  - implemented ADRs: ADR-0031, ADR-0032, ADR-0034, ADR-0035, ADR-0036, ADR-0037, ADR-0038
+  - curated drafts: ADR-0009, ADR-0010, ADR-0039, ADR-2026-02-13 macOS Virtualization.framework
+- the remaining stable-doc ADR path hits outside `docs/project_management/**` have been repointed:
+  - `docs/internals/config/world_root_and_caging.md` now points at curated ADR-0018
+  - `docs/TRACE.md` and `docs/internals/trace/schema.md` now point at curated ADR-0028
 - initial gateway-local manifest normalization under
   `crates/gateway/docs/project_management/**` now uses monorepo-correct
   `crates/gateway/docs/project_management/packs/**` refs in evidence payloads that previously
@@ -138,23 +155,41 @@ Validation already completed for the finished slices:
   - ADR-0041
 - scoped scans over the current ADR consumer set no longer show old first-cluster draft ADR paths
 - curated implemented ADR files now also exist for:
+  - ADR-0004
+  - ADR-0007
+  - ADR-0011
+  - ADR-0014
+  - ADR-0015
+  - ADR-0018
   - ADR-0016
   - ADR-0017
   - ADR-0028
+  - ADR-0031
+  - ADR-0032
+  - ADR-0034
+  - ADR-0035
+  - ADR-0036
+  - ADR-0037
+  - ADR-0038
   - ADR-0047
 - curated historical ADR files now exist for:
+  - ADR-0002
   - ADR-0023
   - ADR-0024
   - ADR-0025
 - curated draft ADR files now exist for:
+  - ADR-0009
+  - ADR-0010
   - ADR-0019
   - ADR-0020
   - ADR-0026
   - ADR-0021
   - ADR-0022
   - ADR-0029
+  - ADR-0039
   - ADR-0044
   - ADR-0045
+  - ADR-2026-02-13 macOS Virtualization.framework
 
 ## Current Dependency Classes
 
@@ -342,6 +377,100 @@ Remaining follow-up:
 - none for the stable-doc dependency itself; the remaining blockers now sit in tests and
   automation rather than `docs/reference/**` or `docs/internals/**`
 
+### E. Remaining Pack Contract and Schema Triage
+
+The remaining `contract.md` / `SCHEMA.md` / `*schema-spec.md` files under
+`docs/project_management/packs/**` are not all equal. Before the atomic `packs/**` cut, treat them
+in three buckets:
+
+#### Already absorbed into stable docs; pack files can retire after backlink cleanup
+
+- trace parity pack surfaces:
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/contract.md`
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md`
+  - stable home:
+    - `docs/internals/trace/schema.md`
+    - `docs/internals/trace/protocol.md`
+    - `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
+- world-deps provisioning and package-contract pack surfaces:
+  - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
+  - `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`
+  - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
+  - `docs/project_management/packs/implemented/add-non-apt-system-package-provisioning-support/contract.md`
+  - `docs/project_management/packs/implemented/add-non-apt-system-package-provisioning-support/world-deps-pacman-schema-spec.md`
+  - stable home:
+    - `docs/reference/world/deps/README.md`
+    - `docs/reference/world/deps/provisioning.md`
+    - `docs/internals/world/deps.md`
+    - `docs/adr/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+    - `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
+    - `docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
+- policy / tuple / gateway contract pack surfaces:
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/{contract.md,SCHEMA.md}`
+  - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/{contract.md,tuple-policy-schema-spec.md}`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/{contract.md,identity-tuple-schema-spec.md}`
+  - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/{contract.md,gateway-status-schema-spec.md}`
+  - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/{contract.md,gateway-backend-adapter-schema-spec.md}`
+  - stable home:
+    - `docs/reference/policy/{contract.md,schema.md,tuple_constraints.md}`
+    - `docs/contracts/gateway/{operator-contract.md,status-schema.md,policy-evaluation.md,backend-adapter-selection.md,backend-adapter-protocol.md,backend-adapter-schema.md,runtime-parity.md}`
+    - `docs/adr/implemented/ADR-0027-llm-and-agent-config-policy-surface.md`
+    - `docs/adr/implemented/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+    - `docs/adr/implemented/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+    - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+    - `docs/adr/implemented/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+    - `docs/adr/implemented/ADR-0046-gateway-backend-selection-runtime-integration.md`
+- workspace sync pack contract:
+  - `docs/project_management/packs/implemented/world-sync/contract.md`
+  - stable home:
+    - `docs/reference/cli/workspace_sync.md`
+    - `docs/internals/world/workspace_sync_filesystem_model.md`
+- installer detection / replay attribution contract surfaces that are already sufficiently covered:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+  - `docs/project_management/packs/implemented/world-disabled-reason-attribution/contract.md`
+  - stable home:
+    - `docs/INSTALLATION.md`
+    - `docs/reference/env/contract.md`
+    - `docs/REPLAY.md`
+    - `docs/adr/implemented/ADR-0031-best-effort-linux-distro-package-manager-discovery-during-install.md`
+    - `docs/adr/implemented/ADR-0038-replay-attribute-why-world-is-disabled-in-warnings.md`
+
+#### Preserve or move before deleting `packs/**`
+
+These files still carry stable contract detail that is only partially summarized elsewhere:
+
+- `docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/contract.md`
+  - preserve before deletion
+  - recommended destination: new stable contract doc under `docs/contracts/` for REPL structured
+    output routing, including `repl.max_pty_buffered_lines` and suppression-summary behavior
+- `docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
+  - preserve before deletion
+  - recommended destination: new stable event-envelope schema doc under `docs/contracts/`
+    because `TRACE.md` discusses `agent_event` rows but does not fully replace the envelope schema
+- `docs/project_management/packs/implemented/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md`
+  - preserve before deletion
+  - recommended destination: new stable `install_state.json` schema doc under `docs/contracts/`
+    because `docs/INSTALLATION.md` lists the fields but does not capture the full additive schema
+    and compatibility rules
+- `docs/project_management/packs/implemented/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md`
+  - preserve before deletion
+  - recommended destination: new stable diagnostics JSON contract doc under `docs/contracts/`
+    because `docs/USAGE.md` summarizes `.shim.world.status` and `.shim.world_deps.status` but does
+    not replace the full machine-readable schema and omission rules
+
+#### Draft-pack contracts that should be folded into draft ADRs rather than promoted to stable contracts
+
+- `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md`
+  - queued work; if the pack tree is removed before implementation, fold the normative CLI copy
+    into `docs/adr/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+- `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md`
+  - still referenced by `llm-last-mile/**`; if the pack tree is removed, fold any still-normative
+    contract text into `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+    before deleting the pack path
+
+No other current pack-local `contract.md` / schema file has yet shown a stronger stable-home need
+than the curated ADR plus existing reference/contract docs above.
+
 ## Delete Or Rewrite Checklist Before Pack Removal
 
 ### Delete candidates
@@ -416,13 +545,13 @@ Completed in this slice:
 
 Use this order in the next session:
 
-1. Curate the remaining world/runtime foundation ADRs that stable docs or code still treat as
-   current semantic anchors.
-2. Continue narrowing the remaining `docs/project_management/**` dependency surface after the
-   ADR registry stops pointing stable readers at the retiring namespace.
-3. Keep current stable-reader rewrites ahead of broad historical cleanup.
-4. Do not reopen the completed current ADR clusters unless a remaining stable consumer still points
-   at the old copies.
+1. Continue narrowing the remaining `docs/project_management/**` dependency surface now that the
+   ADR registry stops being a destination question.
+2. Keep current stable-reader rewrites ahead of broad historical cleanup.
+3. Treat retained `docs/project_management/adrs/**` files as compatibility/history stubs unless a
+   live stable consumer still points at them.
+4. Do not reopen the completed ADR clusters unless a remaining stable consumer still points at the
+   old copies.
 
 ## Resume Notes
 
@@ -436,12 +565,18 @@ Use this order in the next session:
 - The dedicated provisioning ADR slice (`ADR-0030` / `ADR-0033`) is now complete.
 - The config/policy foundation ADR slice (`ADR-0003`, `ADR-0005`, `ADR-0006`, `ADR-0008`,
   `ADR-0012`, `ADR-0013`) is now complete.
-- The next correct move is curating the remaining world/runtime foundation ADRs and continuing to
-  narrow the remaining `docs/project_management/**` dependency surface, not reopening
-  already-curated ADR clusters.
-- Treat the repo-wide `docs/project_management/**` cleanup as subordinate to that ADR curation
-  milestone; otherwise you risk repeatedly repointing docs toward a namespace that is still meant
-  to be retired.
+- The world/runtime foundation ADR slice (`ADR-0004`, `ADR-0007`, `ADR-0014`, `ADR-0015`,
+  `ADR-0018`) is now complete.
+- The remaining installer/diagnostics/backend ADR tail is now classified:
+  - implemented: `ADR-0031`, `ADR-0032`, `ADR-0034`, `ADR-0035`, `ADR-0036`, `ADR-0037`,
+    `ADR-0038`
+  - draft: `ADR-0009`, `ADR-0010`, `ADR-0039`, `ADR-2026-02-13 macOS World backend via
+    Virtualization.framework`
+- The ADR registry is now fully represented under `docs/adr/**`; the remaining work is dependency
+  cleanup and eventual historical pruning, not open-ended ADR destination decisions.
+- Treat the repo-wide `docs/project_management/**` cleanup as the follow-on to the completed ADR
+  curation milestone; otherwise you risk mixing stable-reader rewrites with broad historical
+  pruning before the dependency surface is clearly bounded.
 - The curation-policy and first-cluster-classification questions are no longer open; use the
   recorded policy and ledger under `docs/adr/**` rather than re-deciding them in a later session.
 - The top-level `packs/**` tree must be removed in one cut only after:

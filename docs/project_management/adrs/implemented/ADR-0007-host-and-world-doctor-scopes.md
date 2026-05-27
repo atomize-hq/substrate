@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-07
 - Owner(s): spenser
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0007-host-and-world-doctor-scopes.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/doctor_scopes/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

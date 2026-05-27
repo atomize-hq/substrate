@@ -6,6 +6,12 @@
 - Date (UTC): 2026-02-21
 - Owner(s): TBD (ASSUMPTION: Substrate shell maintainers)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0037-doctor-health-attribute-why-world-is-disabled.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 
 - Feature directory: `docs/project_management/packs/draft/make-doctor-health-output-explain-why/` (ASSUMPTION: created during planning)

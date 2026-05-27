@@ -1,0 +1,5 @@
+version: 1
+name: node-runtime
+description: Node.js + npm bundle.
+packages: ["node", "npm"]
+

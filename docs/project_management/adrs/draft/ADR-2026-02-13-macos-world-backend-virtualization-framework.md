@@ -4,6 +4,13 @@
 - **Decision type:** Architecture / Platform support
 - **Owners:** Substrate Runtime team
 - **Related:** Planning Pack: `planning_pack_2026-02-13_macos_world_backend_vf/README.md`
+
+## Current Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-2026-02-13-macos-world-backend-virtualization-framework.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Context
 Substrate currently supports macOS by running a Linux “world” inside a Lima VM. This provides strong isolation (VM boundary) and allows us to reuse the Linux security model (mount namespaces + optional Landlock hardening, etc.), but it has two major limitations:
 1. **macOS tooling cannot run inside the Linux world.** Users who need native macOS toolchains (Xcode, codesign/notarytool workflows, SwiftPM/Xcodebuild, etc.) cannot run them inside the existing Linux VM world.

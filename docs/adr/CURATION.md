@@ -221,13 +221,91 @@ The following curated implemented ADRs now exist under `docs/adr/implemented/`:
 - `docs/adr/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
 - `docs/adr/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
+## Seventh Cluster: World and Runtime Foundation ADRs
+
+This slice curates the remaining implemented world/runtime foundation ADRs that stable docs or
+runtime contracts still use as semantic anchors.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0004 | `docs/project_management/adrs/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md` | `stable_keeper` | `implemented` | Stable world and trace docs still depend on its filesystem-strategy fallback and observability semantics. |
+| ADR-0007 | `docs/project_management/adrs/implemented/ADR-0007-host-and-world-doctor-scopes.md` | `stable_keeper` | `implemented` | Current installation, command, and platform docs depend on its host/world doctor split and readiness semantics. |
+| ADR-0014 | `docs/project_management/adrs/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md` | `stable_keeper` | `implemented` | It defines the host-resolved policy snapshot authority that current world execution and trace semantics still rely on. |
+| ADR-0015 | `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md` | `stable_keeper` | `implemented` | Stable full-isolation docs still rely on its allowlisted-write correctness and overlay backing-dir semantics. |
+| ADR-0018 | `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` | `stable_keeper` | `implemented` | Current world/config internals still depend on its granular filesystem policy and hardened deny posture. |
+
+## Promoted In This Slice
+
+The following curated implemented ADRs now exist under `docs/adr/implemented/`:
+
+- `docs/adr/implemented/ADR-0004-world-overlayfs-directory-enumeration-reliability.md`
+- `docs/adr/implemented/ADR-0007-host-and-world-doctor-scopes.md`
+- `docs/adr/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md`
+- `docs/adr/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
+- `docs/adr/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+
+## Eighth Cluster: World-Deps Predecessor and Current Contract ADRs
+
+This slice resolves the remaining world-deps predecessor pair by separating stale historical
+framing from the still-current inventory and enabled-set contract.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0002 | `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md` | `historical_only` | `implemented` | It established the early install-class and provisioning posture, but its command surface and selection-file model are no longer accurate. |
+| ADR-0011 | `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md` | `stable_keeper` | `implemented` | It is still the active inventory-directory plus enabled-patch contract behind current world-deps docs and runtime behavior. |
+
+## Promoted In This Slice
+
+The following curated ADRs now exist under `docs/adr/**`:
+
+- `docs/adr/historical/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- `docs/adr/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+
+## Ninth Cluster: Remaining Installer, Diagnostics, and Backend ADR Tail
+
+This slice classifies the remaining legacy-only ADR tail so the stable `docs/adr/**` registry
+fully covers the current ADR set even where some entries remain active drafts.
+
+| ADR | Current path | Curation disposition | Implementation posture | Why it stays or moves |
+| --- | --- | --- | --- | --- |
+| ADR-0009 | `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md` | `stable_keeper` | `still_draft` | It is still an active backend/provisioning direction, but the guest-rootfs backend contract is not yet the current landed runtime baseline. |
+| ADR-0010 | `docs/project_management/adrs/draft/ADR-0010-world-backend-contract-and-capability-divergence.md` | `stable_keeper` | `still_draft` | It remains the queued cross-backend contract for surfacing capability divergence without claiming completed implementation. |
+| ADR-0031 | `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md` | `stable_keeper` | `draft_but_implemented` | Linux installer distro/package-manager discovery and explicit override behavior are already implemented in install flows, tests, and installation docs. |
+| ADR-0032 | `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md` | `stable_keeper` | `draft_but_implemented` | Linux install-state persistence for detected distro/package-manager metadata is already implemented and verified by installer tests. |
+| ADR-0034 | `docs/project_management/adrs/draft/ADR-0034-staging-beaver.md` | `stable_keeper` | `draft_but_implemented` | Dev-install helper staging under `SUBSTRATE_HOME` is already implemented in install scripts and world-enable runtime lookup paths. |
+| ADR-0035 | `docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md` | `stable_keeper` | `draft_but_implemented` | The “install with `--no-world`, enable later” dev workflow is already materially implemented in installer/runtime behavior and smoke coverage. |
+| ADR-0036 | `docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md` | `stable_keeper` | `draft_but_implemented` | Health and shim-doctor now treat `world.enabled: false` as a first-class disabled state rather than a failure. |
+| ADR-0037 | `docs/project_management/adrs/draft/ADR-0037-clarifying-owl.md` | `stable_keeper` | `draft_but_implemented` | Doctor/health diagnostics already attribute the highest-precedence reason that world isolation is disabled. |
+| ADR-0038 | `docs/project_management/adrs/draft/ADR-0038-replaying-raccoon.md` | `stable_keeper` | `draft_but_implemented` | Replay warnings already reuse world-disabled reason attribution instead of implying `--no-world` generically. |
+| ADR-0039 | `docs/project_management/adrs/draft/ADR-0039-capturing-koala.md` | `stable_keeper` | `still_draft` | It remains an active installer-metadata direction for macOS but is not yet a completed stable runtime contract. |
+| ADR-2026-02-13 | `docs/project_management/adrs/draft/ADR-2026-02-13-macos-world-backend-virtualization-framework.md` | `stable_keeper` | `still_draft` | It is still a proposed backend direction rather than current macOS backend truth. |
+
+## Promoted In This Slice
+
+The following curated implemented ADRs now exist under `docs/adr/implemented/`:
+
+- `docs/adr/implemented/ADR-0031-best-effort-linux-distro-package-manager-discovery-during-install.md`
+- `docs/adr/implemented/ADR-0032-persist-linux-distro-package-manager-detection-in-install-state.md`
+- `docs/adr/implemented/ADR-0034-stabilize-dev-install-helper-discovery-under-substrate-home.md`
+- `docs/adr/implemented/ADR-0035-make-substrate-world-enable-work-after-dev-install-no-world.md`
+- `docs/adr/implemented/ADR-0036-world-disabled-first-class-status-in-health-and-shim-doctor.md`
+- `docs/adr/implemented/ADR-0037-doctor-health-attribute-why-world-is-disabled.md`
+- `docs/adr/implemented/ADR-0038-replay-attribute-why-world-is-disabled-in-warnings.md`
+
+The following curated draft ADRs now exist under `docs/adr/draft/`:
+
+- `docs/adr/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
+- `docs/adr/draft/ADR-0010-world-backend-contract-and-capability-divergence.md`
+- `docs/adr/draft/ADR-0039-persist-macos-host-os-details-in-install-state.md`
+- `docs/adr/draft/ADR-2026-02-13-macos-world-backend-virtualization-framework.md`
+
 ## Next Resume Slice
 
-The remaining current ADR tail, provisioning slice, and config/policy foundation slice are now
-classified and promoted. Next, continue with:
+The ADR registry is now fully classified into `docs/adr/**`. Legacy copies remain intentionally
+under `docs/project_management/adrs/**` as compatibility and historical breadcrumbs. Next,
+continue with:
 
-1. curate the remaining world/runtime foundation ADRs that stable docs or code still treat as
-   current semantic anchors
-2. narrow any remaining `docs/project_management/**` dependency surface that still
-   points stable readers at retiring namespaces
+1. narrow any remaining `docs/project_management/**` dependency surface that still points stable
+   readers at retiring namespaces
+2. treat leftover legacy ADR files as retained history/stubs rather than unmigrated registry gaps
 3. do not reopen already-curated ADR clusters unless new stable references are discovered

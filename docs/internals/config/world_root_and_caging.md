@@ -156,6 +156,6 @@ Repro harness:
   - `docs/internals/env/inventory.md` (exported state env vars)
 - Policy snapshot and full isolation filesystem enforcement:
   - `docs/WORLD.md`
-  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/adr/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - REPL persistent sessions and drift restarts:
   - `docs/internals/repl/persistent_session.md`

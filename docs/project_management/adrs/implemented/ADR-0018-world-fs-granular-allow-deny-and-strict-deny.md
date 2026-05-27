@@ -5,6 +5,12 @@
 - Date (UTC): 2026-01-29
 - Owner(s): spenser, Substrate maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/_archived/world-fs-granular-allow-deny/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

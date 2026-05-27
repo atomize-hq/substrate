@@ -47,7 +47,7 @@ The decision is materially implemented and verified through:
 ## Related ADRs
 
 - `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
-- `docs/project_management/adrs/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
+- `docs/adr/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 - `docs/adr/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 
 ## Historical Note

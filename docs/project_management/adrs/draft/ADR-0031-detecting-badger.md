@@ -6,6 +6,12 @@
 - Date (UTC): 2026-02-21
 - Owner(s): ASSUMPTION: Substrate maintainers
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0031-best-effort-linux-distro-package-manager-discovery-during-install.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 
 - Feature directory: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`

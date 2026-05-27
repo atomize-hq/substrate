@@ -4,6 +4,12 @@ Status: Approved
 Owner: Substrate core team  
 Date: 2026-01-18  
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: f593408c9cc872e61a9c5fb74272f077ada540949a67630eae622cb43c1f1d14

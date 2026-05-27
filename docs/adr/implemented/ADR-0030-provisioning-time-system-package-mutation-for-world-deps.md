@@ -57,8 +57,8 @@ The decision is materially implemented and verified through:
 ## Related ADRs
 
 - `docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
-- `docs/project_management/adrs/implemented/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
-- `docs/project_management/adrs/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
+- `docs/adr/historical/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+- `docs/adr/draft/ADR-0009-linux-guest-rootfs-backend-and-linux-system-packages-provisioning.md`
 
 ## Historical Note
 

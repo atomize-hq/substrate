@@ -5,6 +5,12 @@
 - Date (UTC): 2026-02-21
 - Owner(s): TBD (ASSUMPTION: Substrate shell + installer maintainers)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0035-make-substrate-world-enable-work-after-dev-install-no-world.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/dev-install-world-service-staging/` (ASSUMPTION)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`

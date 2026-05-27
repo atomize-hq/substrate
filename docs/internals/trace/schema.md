@@ -4,7 +4,7 @@ This document is the stable internal schema reference for canonical trace record
 
 Related sources:
 - [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md)
-- `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+- `docs/adr/implemented/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 ## 1. Span records (`command_start` / `command_complete`)
 

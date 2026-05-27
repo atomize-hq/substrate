@@ -8,6 +8,8 @@
 > Current readers should use:
 > - `docs/reference/world/deps/README.md`
 > - `docs/reference/world/deps/provisioning.md`
+> - `docs/adr/historical/ADR-0002-world-deps-install-classes-and-world-provisioning.md`
+> - `docs/adr/implemented/ADR-0011-world-deps-packages-bundles-contract.md`
 > - `docs/adr/implemented/ADR-0030-provisioning-time-system-package-mutation-for-world-deps.md`
 > - `docs/adr/implemented/ADR-0033-manager-aware-system-package-provisioning-for-world-deps.md`
 >

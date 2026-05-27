@@ -6,6 +6,12 @@
 - Date (UTC): 2026-03-30
 - Owner(s): TBD (ASSUMPTION: installer/host-provisioning maintainers)
 
+## Current Curated Draft ADR
+
+- Current curated draft ADR: `docs/adr/draft/ADR-0039-persist-macos-host-os-details-in-install-state.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 
 - Feature directory: `docs/project_management/packs/draft/persist-macos-host-os-install-state/` (ASSUMPTION: created during planning)

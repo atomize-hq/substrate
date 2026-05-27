@@ -5,6 +5,12 @@
 - Date (UTC): 2026-02-21
 - Owner(s): TBD (ASSUMPTION: Substrate shell maintainers)
 
+## Stable Curated ADR
+
+- Current stable ADR: `docs/adr/implemented/ADR-0036-world-disabled-first-class-status-in-health-and-shim-doctor.md`
+- This project-management file remains the planning-rich historical source retained for
+  compatibility while `docs/project_management/**` is being retired.
+
 ## Scope
 - Feature directory: `docs/project_management/packs/draft/world-disabled-diagnostics/` (ASSUMPTION: new pack)
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
