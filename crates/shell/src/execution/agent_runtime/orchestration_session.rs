@@ -344,6 +344,42 @@ impl OrchestrationSessionRecord {
         }
     }
 
+    pub(crate) fn new_deferred_host_attach(
+        orchestration_session_id: String,
+        shell_trace_session_id: String,
+        workspace_root: String,
+        host_attach_contract: HostAttachContract,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            orchestration_session_id,
+            shell_trace_session_id,
+            workspace_root,
+            shell_owner_pid: 0,
+            state: OrchestrationSessionState::Active,
+            opened_at: now,
+            last_active_at: now,
+            orchestrator_agent_id: host_attach_contract.launch_descriptor.agent_id.clone(),
+            orchestrator_backend_id: host_attach_contract.backend_id.clone(),
+            orchestrator_protocol: host_attach_contract.protocol.clone(),
+            active_session_handle_id: None,
+            latest_run_id: None,
+            world_id: None,
+            world_generation: None,
+            invalidation_reason: None,
+            closed_at: None,
+            posture: OrchestrationSessionPosture::ParkedResumable,
+            posture_changed_at: now,
+            attached_participant_id: None,
+            pending_inbox_count: 0,
+            last_parked_at: Some(now),
+            last_attention_at: None,
+            parked_reason: Some("host attach deferred".to_string()),
+            startup_prompt: None,
+            host_attach_contract: Some(host_attach_contract),
+        }
+    }
+
     pub(crate) fn transition_state(&mut self, next: OrchestrationSessionState) {
         self.state = next;
         self.last_active_at = Utc::now();
@@ -711,6 +747,41 @@ mod tests {
         session
             .validate_persisted_invariants()
             .expect("new session invariants");
+    }
+
+    #[test]
+    fn deferred_host_attach_session_starts_parked_without_attached_owner() {
+        let manifest = manifest();
+        let contract = HostAttachContract::from_manifest_for_test(&manifest)
+            .expect("host attach contract for deferred session");
+        let session = OrchestrationSessionRecord::new_deferred_host_attach(
+            "sess_001".to_string(),
+            "trace_001".to_string(),
+            "/workspace".to_string(),
+            contract.clone(),
+        );
+
+        assert_eq!(session.state, OrchestrationSessionState::Active);
+        assert_eq!(
+            session.posture,
+            OrchestrationSessionPosture::ParkedResumable
+        );
+        assert_eq!(session.active_participant_id(), None);
+        assert_eq!(session.attached_participant_id(), None);
+        assert_eq!(session.shell_owner_pid, 0);
+        assert_eq!(
+            session.orchestrator_agent_id,
+            contract.launch_descriptor.agent_id
+        );
+        assert_eq!(session.orchestrator_backend_id, contract.backend_id);
+        assert_eq!(session.orchestrator_protocol, contract.protocol);
+        assert_eq!(
+            session.parked_reason.as_deref(),
+            Some("host attach deferred")
+        );
+        session
+            .validate_persisted_invariants()
+            .expect("deferred host attach invariants");
     }
 
     #[test]

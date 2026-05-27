@@ -375,6 +375,13 @@ struct StartLaunchPlan {
     resolved_contract: ResolvedLaunchContract,
 }
 
+#[allow(dead_code)]
+#[derive(Debug)]
+struct WorldStartSessionBirthPlan {
+    requested_world_contract: ResolvedLaunchContract,
+    session: OrchestrationSessionRecord,
+}
+
 fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     let prompt = load_public_prompt_source(&PublicPromptInput {
         prompt: args.prompt_source.prompt.clone(),
@@ -1095,6 +1102,18 @@ fn build_start_launch_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
 ) -> Result<StartLaunchPlan> {
+    match args.scope {
+        AgentStartScopeArg::Host => build_host_start_launch_plan(args, context),
+        AgentStartScopeArg::World => anyhow::bail!(config_model::user_error(
+            "unsupported_platform_or_posture: caller contract rejected field 'requested_execution_scope': public root start is host-only in v1"
+        )),
+    }
+}
+
+fn build_host_start_launch_plan(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+) -> Result<StartLaunchPlan> {
     let backend_id = args.backend.trim();
     if backend_id.is_empty() {
         anyhow::bail!(config_model::user_error(
@@ -1104,11 +1123,6 @@ fn build_start_launch_plan(
 
     let cwd = current_dir();
     let envelope = build_start_dispatch_envelope(args, backend_id);
-    if args.scope == AgentStartScopeArg::World {
-        anyhow::bail!(config_model::user_error(
-            "unsupported_platform_or_posture: caller contract rejected field 'requested_execution_scope': public root start is host-only in v1"
-        ));
-    }
     let resolved = match resolve_inventory_contract_for_exact_backend(
         &cwd,
         &context.effective_config,
@@ -1178,6 +1192,98 @@ fn build_start_launch_plan(
             source_orchestration_session_id: None,
         },
         resolved_contract: resolved,
+    })
+}
+
+#[allow(dead_code)]
+fn build_world_start_host_attach_dispatch_envelope(
+    args: &AgentStartArgs,
+    backend_id: &str,
+) -> DispatchRequestEnvelope {
+    DispatchRequestEnvelope {
+        caller_kind: DispatchCallerKind::HumanStart,
+        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+        backend_id: Some(backend_id.to_string()),
+        orchestration_session_id: None,
+        requested_execution_scope_override: None,
+        capability_overrides: build_start_capability_overrides(&args.disable_capability),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: AgentExecutionScope::Host,
+            host_execution_client_start: HostExecutionClientStart::Defer,
+            attach_mode_preference: AttachModePreference::ContinuityRequired,
+        },
+        has_prompt_payload: false,
+    }
+}
+
+#[allow(dead_code)]
+fn build_world_start_session_birth_plan(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+) -> Result<WorldStartSessionBirthPlan> {
+    let backend_id = args.backend.trim();
+    if backend_id.is_empty() {
+        anyhow::bail!(config_model::user_error(
+            "unknown_backend: public start requires --backend <backend_id>"
+        ));
+    }
+
+    let cwd = current_dir();
+    let world_envelope = build_start_dispatch_envelope(args, backend_id);
+    let permissive_policy = permissive_inventory_selection_policy(&context.inventory);
+    let requested_world_contract = resolve_inventory_contract_for_exact_backend(
+        &cwd,
+        &context.effective_config,
+        &context.inventory,
+        &permissive_policy,
+        &world_envelope,
+        AgentExecutionScope::World,
+    )
+    .map_err(|err| dispatch_resolution_user_error(start_dispatch_classifier(&err), err))?
+    .ok_or_else(|| {
+        config_model::user_error(format!(
+            "unknown_backend: baseline truth rejected field 'backend_id': no exact world-scoped backend match found for '{}'",
+            backend_id
+        ))
+    })?;
+
+    let orchestrator =
+        validate_orchestrator_selection(&context.effective_config, &context.inventory)
+            .map_err(config_model::user_error)?;
+    let host_backend_id = orchestrator.derived_backend_id();
+    let host_attach_envelope =
+        build_world_start_host_attach_dispatch_envelope(args, &host_backend_id);
+    let host_attach_resolved = resolve_inventory_contract_for_exact_backend(
+        &cwd,
+        &context.effective_config,
+        &context.inventory,
+        &context.base_policy,
+        &host_attach_envelope,
+        AgentExecutionScope::Host,
+    )
+    .map_err(|err| dispatch_resolution_user_error(start_dispatch_classifier(&err), err))?
+    .ok_or_else(|| {
+        config_model::user_error(format!(
+            "runtime_start_failed: baseline truth rejected field 'backend_id': no exact host-scoped orchestrator backend match found for '{}'",
+            host_backend_id
+        ))
+    })?;
+    let host_attach_contract = HostAttachContract::from_resolved_contract(&host_attach_resolved, None)
+        .ok_or_else(|| {
+            config_model::user_error(format!(
+                "runtime_start_failed: resolved host attach contract for backend '{}' did not remain host scoped",
+                host_backend_id
+            ))
+        })?;
+
+    Ok(WorldStartSessionBirthPlan {
+        requested_world_contract,
+        session: OrchestrationSessionRecord::new_deferred_host_attach(
+            Uuid::now_v7().to_string(),
+            Uuid::now_v7().to_string(),
+            cwd.display().to_string(),
+            host_attach_contract,
+        ),
     })
 }
 
@@ -3638,5 +3744,235 @@ impl AgentExecutionScope {
             Self::Host => "host",
             Self::World => "world",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &Path) -> Self {
+            let original = std::env::current_dir().expect("current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
+        }
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &Path) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = &self.previous {
+                std::env::set_var(self.key, previous);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    fn write_agent_file(agent_id: &str, scope: &str, binary: &Path) -> String {
+        format!(
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            binary.display()
+        )
+    }
+
+    fn write_test_runtime_inventory(
+        substrate_home: &Path,
+        workspace_root: &Path,
+        include_world_backend: bool,
+        allow_host_backend: bool,
+    ) {
+        let allowed_backends = match (allow_host_backend, include_world_backend) {
+            (true, true) => "    - cli:codex\n    - cli:claude_code\n",
+            (true, false) => "    - cli:codex\n",
+            (false, true) => "    - cli:claude_code\n",
+            (false, false) => "",
+        };
+        fs::create_dir_all(substrate_home.join("agents")).expect("agents dir");
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            format!(
+                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}",
+            ),
+        )
+        .expect("write policy");
+        fs::write(
+            workspace_root.join(".substrate-profile"),
+            "id: test-policy\nname: Test Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\n",
+        )
+        .expect("write workspace profile");
+
+        let binary = std::env::current_exe().expect("current test binary");
+        fs::write(
+            substrate_home.join("agents/codex.yaml"),
+            write_agent_file("codex", "host", &binary),
+        )
+        .expect("write host orchestrator");
+        if include_world_backend {
+            fs::write(
+                substrate_home.join("agents/claude_code.yaml"),
+                write_agent_file("claude_code", "world", &binary),
+            )
+            .expect("write world backend");
+        }
+    }
+
+    fn command_context_for_test(cwd: &Path) -> AgentCommandContext {
+        let effective_config =
+            config_model::resolve_effective_config(cwd, &CliConfigOverrides::default())
+                .expect("resolve effective config");
+        let (base_policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
+            .expect("resolve effective policy");
+        let inventory =
+            load_effective_agent_inventory(cwd, &base_policy).expect("load agent inventory");
+        AgentCommandContext {
+            effective_config,
+            base_policy,
+            inventory,
+        }
+    }
+
+    fn host_start_args() -> AgentStartArgs {
+        AgentStartArgs {
+            backend: "cli:codex".to_string(),
+            scope: AgentStartScopeArg::Host,
+            disable_capability: vec![AgentDisableCapabilityArg::SessionFork],
+            prompt_source: crate::execution::cli::PublicPromptArgs::default(),
+            json: false,
+        }
+    }
+
+    fn world_start_args() -> AgentStartArgs {
+        AgentStartArgs {
+            backend: "cli:claude_code".to_string(),
+            scope: AgentStartScopeArg::World,
+            disable_capability: vec![AgentDisableCapabilityArg::SessionStop],
+            prompt_source: crate::execution::cli::PublicPromptArgs::default(),
+            json: false,
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn host_start_launch_plan_keeps_eager_host_attach_behavior() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, false, true);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan =
+            build_host_start_launch_plan(&host_start_args(), &context).expect("host launch plan");
+
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+        assert_eq!(
+            plan.helper_plan
+                .host_attach_contract
+                .as_ref()
+                .expect("host attach contract")
+                .attach_launch_knobs
+                .host_execution_client_start,
+            crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::StartNow
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn world_start_session_birth_plan_creates_deferred_host_attach_session() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, true, true);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan = build_world_start_session_birth_plan(&world_start_args(), &context)
+            .expect("world session birth plan");
+
+        assert_eq!(plan.requested_world_contract.backend_id, "cli:claude_code");
+        assert_eq!(
+            plan.requested_world_contract.execution_scope,
+            AgentExecutionScope::World
+        );
+        assert_eq!(plan.session.orchestrator_backend_id, "cli:codex");
+        assert_eq!(plan.session.active_participant_id(), None);
+        assert_eq!(plan.session.attached_participant_id(), None);
+        let attach_contract = plan
+            .session
+            .host_attach_contract()
+            .expect("persisted attach contract");
+        assert_eq!(attach_contract.backend_id, "cli:codex");
+        assert_eq!(
+            attach_contract
+                .attach_launch_knobs
+                .requested_execution_scope,
+            AgentExecutionScope::Host
+        );
+        assert_eq!(
+            attach_contract.attach_launch_knobs.host_execution_client_start,
+            crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::Defer
+        );
+        assert_eq!(attach_contract.capabilities.session_stop, false);
+        plan.session
+            .validate_persisted_invariants()
+            .expect("world-born session invariants");
+    }
+
+    #[test]
+    #[serial]
+    fn world_start_session_birth_plan_fails_closed_without_host_attach_backend() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, true, false);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let err = build_world_start_session_birth_plan(&world_start_args(), &context)
+            .expect_err("missing host attach backend must fail closed");
+
+        assert!(err.to_string().contains("policy_disallow"));
     }
 }
