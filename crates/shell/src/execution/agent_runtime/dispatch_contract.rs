@@ -963,8 +963,9 @@ mod tests {
     use super::{
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
         AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind, DispatchCallerKind,
-        DispatchCapabilityOverrideSet, DispatchRequestEnvelope, DispatchResolutionErrorKind,
-        FieldBaselineOrigin, FieldValueOrigin, HostExecutionClientStart,
+        DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
+        DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
+        HostExecutionClientStart,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind, AgentConfigV1,
@@ -1624,8 +1625,16 @@ mod tests {
 
             assert_eq!(error.field, field);
             assert_eq!(
+                error.rejecting_layer,
+                DispatchRejectingLayer::CallerContract
+            );
+            assert_eq!(
                 error.kind,
                 DispatchResolutionErrorKind::OverrideNotSupportedForCaller
+            );
+            assert_eq!(
+                error.reason,
+                "dispatch-time capability override is unsupported for this field in slice 29.5; only session_resume, session_fork, session_stop, status_snapshot, and event_stream may narrow from true to false"
             );
         }
     }

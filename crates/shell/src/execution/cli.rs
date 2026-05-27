@@ -434,6 +434,33 @@ impl AgentScopeArg {
     }
 }
 
+#[derive(Copy, Clone, Debug, Default, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "snake_case")]
+pub enum AgentStartScopeArg {
+    #[default]
+    Host,
+    World,
+}
+
+impl AgentStartScopeArg {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::World => "world",
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "snake_case")]
+pub enum AgentDisableCapabilityArg {
+    SessionResume,
+    SessionFork,
+    SessionStop,
+    StatusSnapshot,
+    EventStream,
+}
+
 #[derive(Args, Debug, Default)]
 pub struct AgentViewArgs {
     /// Emit JSON instead of human-readable output
@@ -464,6 +491,14 @@ pub struct AgentOwnerHelperArgs {
 pub struct AgentStartArgs {
     #[arg(long = "backend", value_name = "BACKEND_ID")]
     pub backend: String,
+    #[arg(long, value_name = "host|world", default_value = "host")]
+    pub scope: AgentStartScopeArg,
+    #[arg(
+        long = "disable-capability",
+        visible_alias = "disable-cap",
+        value_name = "CAPABILITY"
+    )]
+    pub disable_capability: Vec<AgentDisableCapabilityArg>,
     #[command(flatten)]
     pub prompt_source: PublicPromptArgs,
     #[arg(long)]
@@ -519,7 +554,7 @@ pub enum AgentAction {
     Status(AgentViewArgs),
     /// Validate deterministic startability of the agent control plane
     Doctor(AgentDoctorArgs),
-    /// Start a new host-scoped orchestration session from an exact backend id
+    /// Start a new orchestration session from an exact backend id
     Start(AgentStartArgs),
     /// Submit a follow-up prompt to the exact backend in an orchestration session
     Turn(AgentTurnArgs),
@@ -568,6 +603,90 @@ pub enum WorkspaceAction {
     Checkpoint(WorkspaceCheckpointArgs),
     /// Restore the workspace to an internal checkpoint
     Rollback(WorkspaceRollbackArgs),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentStartScopeArg, Cli, SubCommands,
+    };
+    use clap::Parser;
+
+    fn parse_start_args(args: &[&str]) -> super::AgentStartArgs {
+        let cli = Cli::try_parse_from(args).expect("agent start should parse");
+        let Some(SubCommands::Agent(AgentCmd {
+            action: AgentAction::Start(start),
+        })) = cli.sub
+        else {
+            panic!("expected agent start command");
+        };
+        start
+    }
+
+    #[test]
+    fn agent_start_defaults_scope_to_host_when_omitted() {
+        let start = parse_start_args(&[
+            "substrate",
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex",
+            "--prompt",
+            "hello",
+        ]);
+
+        assert_eq!(start.scope, AgentStartScopeArg::Host);
+        assert!(start.disable_capability.is_empty());
+    }
+
+    #[test]
+    fn agent_start_accepts_scope_and_repeatable_disable_capability_flags() {
+        let start = parse_start_args(&[
+            "substrate",
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex",
+            "--scope",
+            "world",
+            "--disable-capability",
+            "event_stream",
+            "--disable-cap",
+            "session_resume",
+            "--prompt",
+            "hello",
+        ]);
+
+        assert_eq!(start.scope, AgentStartScopeArg::World);
+        assert_eq!(
+            start.disable_capability,
+            vec![
+                AgentDisableCapabilityArg::EventStream,
+                AgentDisableCapabilityArg::SessionResume,
+            ]
+        );
+    }
+
+    #[test]
+    fn agent_start_rejects_unsupported_disable_capability_names_at_parse_time() {
+        let err = Cli::try_parse_from([
+            "substrate",
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex",
+            "--disable-capability",
+            "llm",
+            "--prompt",
+            "hello",
+        ])
+        .expect_err("unsupported disable capability must fail at parse time");
+
+        let rendered = err.to_string();
+        assert!(rendered.contains("llm"));
+        assert!(rendered.contains("session_resume"));
+        assert!(rendered.contains("event_stream"));
+    }
 }
 
 #[derive(Args, Debug)]

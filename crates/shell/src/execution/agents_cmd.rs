@@ -46,9 +46,10 @@ use crate::execution::agent_runtime::{
     MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
-    AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
-    AgentSessionControlArgs, AgentStartArgs, AgentToolboxAction, AgentToolboxCmd,
-    AgentToolboxViewArgs, AgentTurnArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
+    AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentDoctorArgs, AgentOwnerHelperArgs,
+    AgentScopeArg, AgentSessionControlArgs, AgentStartArgs, AgentStartScopeArg, AgentToolboxAction,
+    AgentToolboxCmd, AgentToolboxViewArgs, AgentTurnArgs, AgentViewArgs, AgentsAction, AgentsCmd,
+    Cli,
 };
 use crate::execution::config_model::{
     self, AgentExecutionScope, AgentToolboxBindTransport, CliConfigOverrides, SubstrateConfig,
@@ -892,17 +893,45 @@ fn start_dispatch_classifier(
     }
 }
 
-fn build_start_dispatch_envelope(backend_id: &str) -> DispatchRequestEnvelope {
+fn build_start_capability_overrides(
+    disabled_capabilities: &[AgentDisableCapabilityArg],
+) -> DispatchCapabilityOverrideSet {
+    let mut overrides = DispatchCapabilityOverrideSet::default();
+    for capability in disabled_capabilities {
+        match capability {
+            AgentDisableCapabilityArg::SessionResume => overrides.session_resume = Some(false),
+            AgentDisableCapabilityArg::SessionFork => overrides.session_fork = Some(false),
+            AgentDisableCapabilityArg::SessionStop => overrides.session_stop = Some(false),
+            AgentDisableCapabilityArg::StatusSnapshot => overrides.status_snapshot = Some(false),
+            AgentDisableCapabilityArg::EventStream => overrides.event_stream = Some(false),
+        }
+    }
+    overrides
+}
+
+fn build_start_dispatch_envelope(
+    args: &AgentStartArgs,
+    backend_id: &str,
+) -> DispatchRequestEnvelope {
+    let requested_execution_scope = match args.scope {
+        AgentStartScopeArg::Host => AgentExecutionScope::Host,
+        AgentStartScopeArg::World => AgentExecutionScope::World,
+    };
+    let host_execution_client_start = match args.scope {
+        AgentStartScopeArg::Host => HostExecutionClientStart::StartNow,
+        AgentStartScopeArg::World => HostExecutionClientStart::Defer,
+    };
+
     DispatchRequestEnvelope {
         caller_kind: DispatchCallerKind::HumanStart,
         baseline_kind: DispatchBaselineKind::InventoryLaunch,
         backend_id: Some(backend_id.to_string()),
         orchestration_session_id: None,
         requested_execution_scope_override: None,
-        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        capability_overrides: build_start_capability_overrides(&args.disable_capability),
         attach_launch_knobs: AttachLaunchKnobs {
-            requested_execution_scope: AgentExecutionScope::Host,
-            host_execution_client_start: HostExecutionClientStart::StartNow,
+            requested_execution_scope,
+            host_execution_client_start,
             attach_mode_preference: AttachModePreference::ContinuityRequired,
         },
         has_prompt_payload: true,
@@ -1074,7 +1103,12 @@ fn build_start_launch_plan(
     }
 
     let cwd = current_dir();
-    let envelope = build_start_dispatch_envelope(backend_id);
+    let envelope = build_start_dispatch_envelope(args, backend_id);
+    if args.scope == AgentStartScopeArg::World {
+        anyhow::bail!(config_model::user_error(
+            "unsupported_platform_or_posture: caller contract rejected field 'requested_execution_scope': public root start is host-only in v1"
+        ));
+    }
     let resolved = match resolve_inventory_contract_for_exact_backend(
         &cwd,
         &context.effective_config,

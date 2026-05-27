@@ -1616,6 +1616,103 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
 
 #[test]
 #[serial]
+fn public_start_scope_host_and_disable_capability_flags_persist_narrowed_capabilities() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--scope",
+        "host",
+        "--disable-capability",
+        "session_fork",
+        "--disable-cap",
+        "status_snapshot",
+        "--prompt",
+        "hello from narrowed start",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "host-scoped public start with narrowed capabilities should succeed: {output:?}"
+    );
+
+    let records = parse_ndjson_output(&output);
+    let completed = find_ndjson_record(&records, "completed");
+    let orchestration_session_id = completed["orchestration_session_id"]
+        .as_str()
+        .expect("start session id");
+    let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
+
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/capabilities/session_fork")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/capabilities/status_snapshot")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/capabilities/session_resume")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/attach_launch_knobs/requested_execution_scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_rejects_unsupported_disable_capability_names_at_parse_time() {
+    let fixture = AgentControlFixture::new();
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--disable-capability",
+        "llm",
+        "--prompt",
+        "hello",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "unsupported disable capability names must fail at parse time: {output:?}"
+    );
+
+    let stderr = stderr_text(&output);
+    assert!(
+        stderr.contains("invalid value 'llm'"),
+        "parse-time rejection must name the unsupported capability: {stderr}"
+    );
+    assert!(
+        stderr.contains("session_resume") && stderr.contains("event_stream"),
+        "parse-time rejection must advertise the supported narrowing family: {stderr}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(1).exists(),
+        "parse-time capability rejection must fail before launching a backend runtime"
+    );
+}
+
+#[test]
+#[serial]
 fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
