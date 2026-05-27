@@ -3,29 +3,31 @@
 Source SOW: [30-public-world-scoped-agent-start-and-capability-flags.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)  
 Decomposition basis: feature-slice breakdown produced on 2026-05-27  
 Phase: `SPECIFY`  
-Status: implementation-aligned on 2026-05-27; the Linux-first public world-start contract, `born_unattached`, and public capability-narrowing behavior now match the runtime in this branch
+Status: draft realigned to host-first product intent on 2026-05-27
 
 ## Assumptions
 
 These are the assumptions I am making so the spec stays concrete. Correct any of them before moving to planning.
 
-1. Omitting `--scope` must preserve current behavior, which means public `agent start` still defaults to host-scoped start.
+1. Omitting `--scope` should resolve requested execution substrate through workspace-local config/profile/policy first, then global config/policy, rather than hardcoding host.
 2. Public capability controls use `--disable-capability <capability>` as the primary flag and `--disable-cap <capability>` as the alias, with values restricted to the already-landed narrowing family from slice 29.75:
    `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`.
 3. Public world-scoped root start is explicitly Linux-first for this slice; non-Linux behavior must fail closed with explicit guidance.
-4. Born-unattached host-rooted world start uses the distinct operator-visible label `born_unattached` and must not reuse `parked_resumable` or `detached_reattachable` when that would imply prior attach history.
-5. This slice may change CLI parsing, runtime session state, status projection, and docs, but it must not change the durable authority model validated by slices 28.5, 29, and 29.75.
+4. `--scope host` is the explicit bypass-world path: orchestration starts on the host and later dispatch stays host-scoped unless a later slice reopens that behavior.
+5. The thin slice should treat world scope as the default execution substrate behind a host session, not as “run the first visible prompt directly in a world agent before the host session is attached.”
+6. This slice may change CLI parsing, runtime session state, world binding/session setup, and docs, but it must not change the durable authority model validated by slices 28.5, 29, and 29.75.
 
 ## Objective
 
-Build a public `substrate agent start --scope world ...` surface that launches a world-scoped worker under a host-rooted durable orchestration session, persists authoritative host attach truth at session birth, and avoids eager host execution-client startup.
+Build a public `substrate agent start` surface that launches a host-rooted durable orchestration session first, persists authoritative host attach truth at session birth, and treats world scope as the default execution substrate the host agent later uses for dispatched world work.
 
 Primary operator story:
 
-1. The operator selects `--scope host` or `--scope world` explicitly.
-2. `--scope host` preserves the current root-start behavior.
-3. `--scope world` creates a host-rooted durable session, persists the resolved host attach contract, launches a world worker through the shared dispatch contract, and leaves host attach deferred.
-4. Before any sanctioned host attach occurs, status and follow-up surfaces must tell the truth about the session without implying active host ownership or prior attach continuity.
+1. The operator may omit `--scope`, or select `--scope host` / `--scope world` explicitly.
+2. Omitting `--scope` resolves requested execution substrate through workspace-local config/profile/policy first, then global config/policy.
+3. `--scope host` explicitly bypasses world.
+4. `--scope world` explicitly requests the default world-backed path while still starting a host-rooted attached orchestration session.
+5. The inaugural operator prompt is fulfilled by the host orchestration agent; later world work is dispatched by that host agent under the established world session/binding.
 
 ## Tech Stack
 
@@ -96,7 +98,7 @@ This feature is expected to touch these areas:
 - `crates/shell/src/execution/agent_runtime/state_store.rs`
   - Public session posture classification and live-session control/status selection
 - `crates/shell/src/execution/agent_runtime/control.rs`
-  - Helper launch plans, prompt streaming envelopes, and Linux world-member submit behavior
+  - Helper launch plans, prompt streaming envelopes, world binding/session setup, and Linux world-member dispatch behavior
 - `crates/shell/tests/agent_public_control_surface_v1.rs`
   - End-to-end public CLI control-plane regression coverage
 - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
@@ -148,18 +150,18 @@ Test levels for this feature:
 1. Unit tests in `dispatch_contract.rs`
    - Validate `--scope` mapping, supported capability override families, narrowing-only behavior, policy denial, and persisted-attach constraints.
 2. Integration tests in `agent_public_control_surface_v1.rs`
-   - Validate host start parity, world-scoped root start success or fail-closed posture, deferred host attach, world member launch, and public follow-up behavior.
+   - Validate omitted-scope resolution order, host-scoped bypass behavior, host-first world-backed start success, world binding/session setup, and public follow-up behavior.
 3. Integration tests in `agent_successor_contract_ahcsitc0.rs`
-   - Validate status / doctor JSON truth for born-unattached host-rooted sessions and preserve current host vs world projection contracts.
+   - Validate host lifecycle/status truth for the new default path and preserve current parked / awaiting-attention projection contracts.
 4. Manual smoke checks
    - Validate the exact operator story for `start`, `status`, `reattach`, and `turn`.
 
 Coverage expectations:
 
 - Every new public flag must have at least one positive parser/behavior test and one negative fail-closed test.
-- Every new status/posture state must have command-level JSON assertions.
-- Existing host-only public root-start behavior must keep regression coverage so this slice cannot silently break it.
-- `born_unattached` must have explicit status-surface coverage distinct from detached continuity coverage.
+- Every new public resolution rule must have command-level assertions.
+- Existing host lifecycle semantics (`active_attached`, `parked_resumable`, `awaiting_attention`) must keep regression coverage so this slice cannot silently break them.
+- World-backed start must prove host-first prompt handling plus world binding/session setup without depending on a born-unattached default posture.
 
 ## Boundaries
 
@@ -167,18 +169,19 @@ Coverage expectations:
   - Reuse the shared dispatch contract from slice 29 instead of adding a CLI-only launch dialect.
   - Keep durable authority host-rooted for all `--scope world` starts.
   - Persist authoritative `HostAttachContract` truth at session birth.
+  - Treat the inaugural operator prompt as a host-orchestrator concern, even when scope resolves to world.
   - Fail closed on unsupported scope/backend combinations and unsupported capability overrides.
   - Update docs and tests together with runtime behavior.
 - Ask first:
   - Introducing any new dependency.
-  - Changing the public JSON shape beyond what this feature requires for truthful born-unattached status.
+  - Changing the public JSON shape beyond what this feature requires for truthful host lifecycle or scope-resolution reporting.
   - Broadening capability overrides beyond the five narrowing-only fields.
   - Relaxing the current Linux-first world-member behavior or changing cross-platform rollout promises.
 - Never:
   - Reopen standalone world-root continuity.
   - Reintroduce backfill/repair logic for missing persisted attach truth.
-  - Treat born-unattached sessions as `parked_resumable` or `detached_reattachable` if that implies prior attach history.
-  - Start a host execution client eagerly just to manufacture ownership theater for `--scope world`.
+  - Treat the thin slice as a two-prompt “host plus world bootstrap” product.
+  - Route the inaugural public prompt directly into a first world agent while describing the feature as host-first orchestration.
   - Add a second public follow-up dialect for world workers.
 
 ## Success Criteria
@@ -186,15 +189,16 @@ Coverage expectations:
 The feature is done only when all of the following are true:
 
 1. `substrate agent start` accepts explicit scope selection through one shared dispatch-envelope flow.
-2. `substrate agent start --scope host` preserves the current host-rooted root-start behavior.
-3. `substrate agent start --scope world` creates a host-rooted durable orchestration session, persists authoritative host attach truth at birth, launches a world worker/member under that session, and does not eagerly start a host execution client.
-4. Public capability flags, if present, only affect the already-supported narrowing family:
+2. Omitting `--scope` resolves requested execution substrate through workspace-local config/profile/policy first, then global config/policy.
+3. `substrate agent start --scope host` explicitly bypasses world and preserves host-rooted root-start behavior.
+4. `substrate agent start --scope world` creates a host-rooted durable orchestration session, persists authoritative host attach truth at birth, and establishes world binding/session truth for later host-dispatched world work.
+5. The inaugural operator prompt is handled by the host orchestration agent rather than being sent directly to a first world worker/member.
+6. Public capability flags, if present, only affect the already-supported narrowing family:
    `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, exposed as `--disable-capability <capability>` with `--disable-cap <capability>` as the alias.
-5. Unsupported capability fields such as `session_start`, `llm`, and `mcp_client` remain fail closed.
-6. A born-unattached host-rooted world-start session has the truthful non-terminal operator-visible status `born_unattached`, which does not imply active host attachment or prior attach history.
-7. Public world-scoped root start is supported only on Linux for this slice; non-Linux platforms fail closed with explicit posture guidance.
-8. Detached-world follow-up remains fail closed until sanctioned host attach occurs.
-9. `docs/USAGE.md`, the slice doc, and integration tests all describe the same operator contract.
+7. Unsupported capability fields such as `session_start`, `llm`, and `mcp_client` remain fail closed.
+8. The default public world-backed path uses the normal host-attached lifecycle and does not require `born_unattached` as the operator-facing happy-path posture.
+9. Public world-scoped root start is supported only on Linux for this slice; non-Linux platforms fail closed with explicit posture guidance.
+10. `docs/USAGE.md` should not be rewritten ahead of runtime changes, but the slice docs and integration expectations must describe the same intended contract.
 
 ## Resolved Decisions
 
@@ -202,9 +206,10 @@ These review decisions are now frozen for this spec:
 
 1. Public capability narrowing uses `--disable-capability <capability>` with `--disable-cap <capability>` as the alias.
 2. There is no single-letter short flag for capability narrowing.
-3. The born-unattached operator-visible status label is `born_unattached`.
-4. Public world-scoped root start is Linux-first for this slice.
-5. Omitting `--scope` preserves the current host-scoped default behavior.
+3. Public world-scoped root start is Linux-first for this slice.
+4. Omitting `--scope` resolves through workspace-local config/profile/policy first, then global config/policy.
+5. `--scope host` is the explicit bypass-world path.
+6. `born_unattached` is not the default thin-slice happy-path posture.
 
 ## Review Gate
 

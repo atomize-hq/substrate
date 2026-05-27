@@ -1,6 +1,6 @@
 # SOW: Targeted REPL Agent Turns, Linux-First
 
-Status: implementation-oriented draft. This SOW defines the next landing after the Linux-first member-runtime placement and gateway-auth slices. It is intentionally narrow: add one explicit REPL caller grammar for targeted agent turns, route those turns by named `backend_id`, submit a real user prompt into the already-live UAA session for the selected backend, and stream the result back through the REPL. It does not redesign `substrate -c`, and it does not productize a broader `substrate agent start|resume|fork|stop` command family.
+Status: implementation-oriented draft. This SOW defines the next landing after the Linux-first member-runtime placement and gateway-auth slices. It is intentionally narrow: add one explicit REPL caller grammar for targeted agent turns, route those turns by named `backend_id`, submit a real user prompt by lazily launching the selected runtime on first targeted use or reusing it when already live, and stream the result back through the REPL. It does not redesign `substrate -c`, and it does not productize a broader `substrate agent start|resume|fork|stop` command family.
 
 ## Objective
 
@@ -9,7 +9,7 @@ Land one Linux-first production path where the interactive REPL can:
 - parse an explicit targeted agent-turn syntax,
 - resolve that syntax to a named backend such as `cli:codex`,
 - require routing by `backend_id` instead of "the one eligible member,"
-- submit the user’s prompt into the already-active retained-control UAA session for the selected runtime,
+- submit the user’s prompt by lazily launching the selected runtime on first targeted use or reusing it when already live,
 - and stream the resulting agent output back through the REPL without collapsing the input into normal shell execution.
 
 The preferred syntax decision for this slice is:
