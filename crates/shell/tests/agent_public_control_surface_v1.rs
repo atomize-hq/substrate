@@ -3851,7 +3851,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
 
 #[test]
 #[serial]
-fn public_root_start_rejects_world_scoped_backends_in_v1() {
+fn public_root_start_world_scope_persists_deferred_host_attach_session() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(true);
@@ -3861,29 +3861,102 @@ fn public_root_start_rejects_world_scoped_backends_in_v1() {
         "start",
         "--backend",
         "cli:claude_code",
+        "--scope",
+        "world",
         "--prompt",
         "hello",
         "--json",
     ]);
+    assert!(
+        output.status.success(),
+        "world-scoped root start must persist a durable session birth: {output:?}"
+    );
+    let start_json = parse_json_output(&output);
+    assert!(
+        start_json.get("participant_id").is_none(),
+        "deferred world start must not manufacture an attached host owner: {start_json}"
+    );
+    assert_empty_warnings(&start_json);
+
+    let orchestration_session_id = start_json["orchestration_session_id"]
+        .as_str()
+        .expect("start session id");
+    let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
     assert_eq!(
-        output.status.code(),
-        Some(2),
-        "world-scoped root start must fail closed: {output:?}"
+        persisted_session.get("state").and_then(Value::as_str),
+        Some("active")
     );
-    let stderr = stderr_text(&output);
-    assert!(
-        stderr.contains("unsupported_platform_or_posture"),
-        "world-scoped root start must classify the posture failure exactly: {stderr}"
+    assert_eq!(
+        persisted_session.get("posture").and_then(Value::as_str),
+        Some("parked_resumable")
     );
-    assert!(
-        stderr.contains("public root start is host-only in v1"),
-        "world-scoped root start failure must explain the Linux-first host-only contract: {stderr}"
+    assert_eq!(
+        persisted_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        None
+    );
+    assert_eq!(
+        persisted_session
+            .get("attached_participant_id")
+            .and_then(Value::as_str),
+        None
+    );
+    assert_eq!(
+        persisted_session
+            .get("shell_owner_pid")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/execution_scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/attach_launch_knobs/host_execution_client_start")
+            .and_then(Value::as_str),
+        Some("defer")
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/continuity_uaa_session_id")
+            .and_then(Value::as_str),
+        None
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/startup_prompt/state")
+            .and_then(Value::as_str),
+        None
+    );
+    let participants_dir = fixture
+        .substrate_home
+        .join("run/agent-hub/sessions")
+        .join(orchestration_session_id)
+        .join("participants");
+    let participant_files = fs::read_dir(&participants_dir)
+        .ok()
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    entry.path().extension().and_then(|value| value.to_str()) == Some("json")
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    assert_eq!(
+        participant_files, 0,
+        "deferred world start must not persist an attached host participant at birth"
     );
 }
 
 #[test]
 #[serial]
-fn public_root_start_denials_name_field_layer_and_reason() {
+fn public_root_start_world_scope_reports_requested_backend_and_scope() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(true);
@@ -3893,27 +3966,36 @@ fn public_root_start_denials_name_field_layer_and_reason() {
         "start",
         "--backend",
         "cli:claude_code",
+        "--scope",
+        "world",
         "--prompt",
         "hello",
         "--json",
     ]);
+    assert!(
+        output.status.success(),
+        "world-scoped root start must succeed once the public seam is wired: {output:?}"
+    );
+    let start_json = parse_json_output(&output);
+    assert!(
+        start_json.get("source_orchestration_session_id").is_none(),
+        "new world-root births must not advertise a source session: {start_json}"
+    );
     assert_eq!(
-        output.status.code(),
-        Some(2),
-        "world-scoped root start must fail closed: {output:?}"
+        start_json.get("action").and_then(Value::as_str),
+        Some("start")
     );
-    let stderr = stderr_text(&output);
-    assert!(
-        stderr.contains("unsupported_platform_or_posture"),
-        "start denial must keep the posture classifier: {stderr}"
+    assert_eq!(
+        start_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
     );
-    assert!(
-        stderr.contains("baseline truth rejected field 'requested_execution_scope'"),
-        "start denial must name the rejecting layer and field: {stderr}"
+    assert_eq!(
+        start_json.get("scope").and_then(Value::as_str),
+        Some("world")
     );
-    assert!(
-        stderr.contains("public root start is host-only in v1"),
-        "start denial must preserve the concrete posture reason: {stderr}"
+    assert_eq!(
+        start_json.get("state").and_then(Value::as_str),
+        Some("active")
     );
 }
 

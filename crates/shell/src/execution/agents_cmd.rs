@@ -370,7 +370,7 @@ struct AgentControlResultJson<'a> {
     source_orchestration_session_id: Option<&'a str>,
 }
 
-struct StartLaunchPlan {
+struct HostStartLaunchPlan {
     helper_plan: HiddenOwnerHelperLaunchPlan,
     resolved_contract: ResolvedLaunchContract,
 }
@@ -382,6 +382,11 @@ struct WorldStartSessionBirthPlan {
     session: OrchestrationSessionRecord,
 }
 
+enum StartLaunchPlan {
+    Host(HostStartLaunchPlan),
+    WorldBirth(WorldStartSessionBirthPlan),
+}
+
 fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     let prompt = load_public_prompt_source(&PublicPromptInput {
         prompt: args.prompt_source.prompt.clone(),
@@ -390,10 +395,34 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
-    let StartLaunchPlan {
+    let start_plan = build_start_launch_plan(args, &context)?;
+
+    if let StartLaunchPlan::WorldBirth(world_birth) = start_plan {
+        let _ = prompt;
+        store
+            .persist_orchestration_session(&world_birth.session)
+            .map_err(runtime_start_error)?;
+        return render_agent_control_result(
+            args.json,
+            &AgentControlResultJson {
+                action: "start",
+                orchestration_session_id: &world_birth.session.orchestration_session_id,
+                backend_id: &world_birth.requested_world_contract.backend_id,
+                scope: "world",
+                state: "active",
+                warnings: Vec::new(),
+                participant_id: None,
+                source_orchestration_session_id: None,
+            },
+        );
+    }
+    let StartLaunchPlan::Host(HostStartLaunchPlan {
         helper_plan,
         resolved_contract,
-    } = build_start_launch_plan(args, &context)?;
+    }) = start_plan
+    else {
+        unreachable!("world-start plans return early");
+    };
 
     #[cfg(not(unix))]
     {
@@ -1103,17 +1132,19 @@ fn build_start_launch_plan(
     context: &AgentCommandContext,
 ) -> Result<StartLaunchPlan> {
     match args.scope {
-        AgentStartScopeArg::Host => build_host_start_launch_plan(args, context),
-        AgentStartScopeArg::World => anyhow::bail!(config_model::user_error(
-            "unsupported_platform_or_posture: caller contract rejected field 'requested_execution_scope': public root start is host-only in v1"
-        )),
+        AgentStartScopeArg::Host => {
+            build_host_start_launch_plan(args, context).map(StartLaunchPlan::Host)
+        }
+        AgentStartScopeArg::World => {
+            build_world_start_session_birth_plan(args, context).map(StartLaunchPlan::WorldBirth)
+        }
     }
 }
 
 fn build_host_start_launch_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
-) -> Result<StartLaunchPlan> {
+) -> Result<HostStartLaunchPlan> {
     let backend_id = args.backend.trim();
     if backend_id.is_empty() {
         anyhow::bail!(config_model::user_error(
@@ -1169,7 +1200,7 @@ fn build_host_start_launch_plan(
         .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
 
     let orchestration_session_id = Uuid::now_v7().to_string();
-    Ok(StartLaunchPlan {
+    Ok(HostStartLaunchPlan {
         helper_plan: HiddenOwnerHelperLaunchPlan {
             mode: OwnerHelperMode::Start,
             descriptor: (&descriptor).into(),
@@ -3955,6 +3986,31 @@ mod tests {
         plan.session
             .validate_persisted_invariants()
             .expect("world-born session invariants");
+    }
+
+    #[test]
+    #[serial]
+    fn build_start_launch_plan_routes_world_scope_to_deferred_session_birth() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, true, true);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan = build_start_launch_plan(&world_start_args(), &context)
+            .expect("world start launch plan");
+
+        let StartLaunchPlan::WorldBirth(plan) = plan else {
+            panic!("world scope must route through deferred session birth");
+        };
+        assert_eq!(plan.requested_world_contract.backend_id, "cli:claude_code");
+        assert_eq!(plan.session.orchestrator_backend_id, "cli:codex");
+        assert_eq!(plan.session.active_participant_id(), None);
+        assert_eq!(plan.session.attached_participant_id(), None);
     }
 
     #[test]
