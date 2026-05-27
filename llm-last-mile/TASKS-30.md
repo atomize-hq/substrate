@@ -5,14 +5,14 @@ Source spec: [SPEC-30-public-world-scoped-agent-start-and-capability-flags.md](/
 Source plan: [PLAN-30.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-30.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: Packet 1 landed; narrowed for Packet 2+ work on 2026-05-27
+Status: Packets 1-2 landed; narrowed for Packet 3+ work on 2026-05-27
 
 ## Execution Packets
 
-This slice should be implemented as four separate `/incremental-implementation` sessions, but Packet 1 is already landed in code and now serves as the frozen floor for Packet 2.
+This slice should be implemented as four separate `/incremental-implementation` sessions, but Packets 1-2 are already landed in code and now serve as the frozen floor for Packet 3.
 
 - Packet 1 is landed and should not be reopened unless the contract changes.
-- Packet 2 implements Phase 2 only.
+- Packet 2 is landed and should not be reopened unless the contract changes.
 - Packet 3 implements Phase 3 only.
 - Packet 4 implements Phase 4 only.
 
@@ -20,7 +20,7 @@ Do not start Packet 3 until Packet 2’s checkpoint is green. Do not start Packe
 
 ## Packet 1: Landed Public Input Contract And Resolver Wiring
 
-Packet 1 is already landed in code. These tasks remain here only as frozen context for Packet 2 and later review.
+Packet 1 is already landed in code. These tasks remain here only as frozen context for Packet 3 and later review.
 
 Session goal:
 
@@ -60,7 +60,7 @@ Packet 1 is complete only when:
 3. unsupported capability families still fail closed,
 4. explicit `--scope host` behavior is unchanged.
 
-Packet 2 should assume this checkpoint is already green.
+Packet 3 should assume this checkpoint is already green.
 
 ## Packet 2: Host-First Start Birth And World Session Setup
 
@@ -73,14 +73,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Refactor root-start planning so omitted scope resolves through config/policy and `--scope host` remains the bypass path
+- [x] Task 2.1: Refactor root-start planning so omitted scope resolves through config/policy and `--scope host` remains the bypass path
   - Acceptance: explicit `--scope host` still resolves through the existing public host prompt path; omitted `--scope` preserves the landed preferred-scope probe plus one alternate-scope fallback; the resolved scope remains authoritative for the request and operator-visible output; host-scoped regressions remain green after the new runtime work lands.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
 
-- [ ] Task 2.2: Implement host-first world-backed session birth
+- [x] Task 2.2: Implement host-first world-backed session birth
   - Acceptance: `agent start --scope world`, or omitted `--scope` that resolves to world, no longer returns the old deferred-host-attach `WorldBirth` / `born_unattached` success shape; it creates a durable host-rooted orchestration session that is already truthfully host-attached at return time, persists authoritative `HostAttachContract` truth at birth, establishes authoritative world session/binding truth before `start` returns, and routes the inaugural operator prompt through the host orchestration agent instead of a first world-worker conversation.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
@@ -99,33 +99,41 @@ Packet 2 is complete only when:
 
 Do not start Packet 3 until Packet 2 verification is green.
 
-## Packet 3: Canonical World Identity Persistence And Host Lifecycle Truth
+## Packet 3: Canonical World Identity Reuse And Lazy Dispatch Readiness
 
 Session goal:
 
-1. persist canonical `world_id` and `world_generation` as the durable projection of Packet 2's already-established authoritative world session/binding truth,
-2. preserve normal host lifecycle semantics for the new default path,
+1. treat Packet 2's persisted `world_id` and `world_generation` as the canonical durable projection of authoritative world session/binding truth,
+2. require later host-decided world work to reuse that authoritative parent binding,
 3. keep later world-worker allocation lazy until host orchestration chooses world work,
-4. avoid inventing a world-first inaugural prompt dialect.
+4. avoid inventing a world-first inaugural prompt dialect or reopening the Packet 2 start contract.
 
 ### Tasks
 
-- [ ] Task 3.1: Persist canonical world identity for the world-backed start path
-  - Acceptance: Linux world-backed root start preserves the authoritative world session/binding truth established in Packet 2, persists canonical `world_id` and `world_generation` as its durable projection, keeps that truth attached to the same host-rooted orchestration session, does not require a participant-less deferred-attach posture, and does not invent a second inaugural world-launch dialect; the first host-decided world worker/member conversation may remain lazy until later dispatch.
-  - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+- [ ] Task 3.1: Reuse authoritative parent world binding for later world-member launch
+  - Acceptance: later host-decided world-member launch treats the Packet-2 `world_id` and `world_generation` as the canonical parent binding for the orchestration session, reuses that same authoritative binding for member launch, and fails closed when the authoritative parent binding is missing or mismatched against the active world session.
+  - Verify: `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
     - [`crates/shell/src/execution/agent_runtime/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
 
+- [ ] Task 3.2: Keep later world work lazy and preserve the Packet 2 host-first floor
+  - Acceptance: Packet 3 does not introduce an eager first world-member conversation at public `start` return, does not revive `born_unattached` as the default happy path, and keeps later world work opt-in from host orchestration rather than background-triggered.
+  - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+  - Files:
+    - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+    - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+    - [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+
 ### Packet 3 Checkpoint
 
 Packet 3 is complete only when:
 
-1. Linux world-backed root start succeeds end to end,
-2. canonical `world_id` and `world_generation` are persisted as the durable projection of the already-established authoritative world session/binding truth,
-3. the operator-facing lifecycle remains the normal host lifecycle rather than a `born_unattached` default.
+1. later host-decided world work reuses the authoritative parent world binding established by Packet 2,
+2. missing or mismatched authoritative world binding truth fails closed,
+3. no eager world-member conversation or revived `born_unattached` default is introduced while wiring this readiness path.
 
 Do not start Packet 4 until Packet 3 verification is green.
 
@@ -193,6 +201,6 @@ Packet 4 is complete only when:
 ## Notes For Implementation
 
 - Packet 1 is already landed. Treat it as the contract floor for Packet 2 instead of reopening it.
-- Packet 2 is the highest-risk runtime packet. Keep it focused on replacing deferred-host-attach world start with host-first session birth and world session/binding setup.
-- Packet 3 should stay narrow. If it expands into specialized born-unattached or lazy-attach policy, stop and defer that work to a later slice.
+- Packet 2 is landed floor. Do not reopen it while implementing Packet 3 unless the contract itself changes.
+- Packet 3 should stay narrow. If it expands into specialized born-unattached policy, automatic attach triggers, or broad status-UI work, stop and defer that work to a later slice.
 - Packet 4 is the integration packet. This is where obsolete deferred-host-attach assertions should be replaced and where wording should be aligned across runtime, tests, and llm-last-mile docs.

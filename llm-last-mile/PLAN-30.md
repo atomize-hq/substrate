@@ -7,7 +7,7 @@ Follow-on slice: [31-lazy-host-attach-for-host-rooted-world-start.md](/Users/spe
 Proposed branch: `feat/public-world-scoped-agent-start`  
 Base branch: `main`  
 Plan type: public caller-surface expansion with host-first world-backed delivery  
-Status: draft narrowed for the Packet 2 runtime pass on 2026-05-27
+Status: draft narrowed for the Packet 3 runtime pass on 2026-05-27
 
 ## Objective
 
@@ -48,11 +48,10 @@ The repo already has the key ingredients:
 
 What is still missing is narrower:
 
-1. the slice docs do not yet explicitly freeze the landed omitted-scope probe/fallback contract,
-2. world-scoped root start is still implemented and tested as world-first / deferred-host-attach instead of host-first orchestration,
-3. there is still no truthful success path that returns from world-backed start with normal attached host lifecycle plus authoritative world binding already in place,
-4. runtime/tests still encode `WorldBirth` / `born_unattached` assumptions that do not match the intended thin-slice product model,
-5. Packet-2-ready planning is still mixed with already-landed Packet-1 work.
+1. Packet 1 and Packet 2 are now landed floor, but the slice docs still describe Packet 2 as future work instead of the current runtime truth.
+2. Packet 3 ownership is blurry because top-level `world_id` and `world_generation` are already persisted at world-backed start time.
+3. The remaining runtime contract to freeze is how later host-decided world work must reuse the authoritative parent world binding and fail closed on missing or mismatched truth.
+4. Packet 3 still needs a cleaner boundary between runtime/readiness work and the broader status/doc hardening that belongs in Packet 4.
 
 The minimum honest implementation is one ordered slice with four workstreams:
 
@@ -72,7 +71,7 @@ The minimum honest implementation is one ordered slice with four workstreams:
 | Supported narrowing family | [`validate_capability_override_shape(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/dispatch_contract.rs:784) | Reuse exactly. Do not broaden the allowed family in this slice. |
 | Persisted attach truth | [`HostAttachContract`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:72) | Reuse exactly. World-scoped root start must persist this truth at birth. |
 | Omitted-scope resolver floor | [`resolve_requested_start_scope(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1077) | Freeze the preferred-scope probe plus one alternate-scope fallback as intended Packet-1 behavior. |
-| Current world-start planner | [`build_world_start_session_birth_plan(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1348) | Replace the deferred-host-attach `WorldBirth` path with the host-first Packet-2 contract. |
+| Current world-start planner | [`build_world_start_session_birth_plan(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1348) | Packet 2 landed the host-first world-backed start floor; Packet 3 should build on it rather than reopen it. |
 | Public session posture vocabulary | [`PublicSessionPosture`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:103) | Preserve current host lifecycle semantics for the thin slice. |
 | Durable orchestration posture vocabulary | [`OrchestrationSessionPosture`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:69) | Reuse current attached/detached host lifecycle truth; do not make `born_unattached` the default happy path. |
 | Linux world-member dispatch path | [`submit_world_prompt_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:1511) | Keep for later host-dispatched world work rather than inaugural prompt handling. |
@@ -80,10 +79,10 @@ The minimum honest implementation is one ordered slice with four workstreams:
 
 ### Exact remaining gap
 
-1. The repo has landed omitted-scope fallback behavior, but the slice docs do not yet state whether that fallback is intentional product behavior.
-2. There is still no launch path that creates a host-rooted attached orchestration session while also establishing the world-backed session/binding the host will later use before `start` returns.
-3. The runtime and tests still lean on a world-first / deferred-host-attach contract that no longer matches the intended product.
-4. Docs and integration tests still reflect Packet-1-plus-old-runtime reality instead of a Packet-2-ready contract.
+1. The repo has landed omitted-scope fallback plus host-first world-backed start behavior, but the slice docs do not yet treat that as the floor.
+2. The remaining Packet 3 runtime question is not first-time world identity persistence, but how later host-decided world work must consume the authoritative parent world binding already established by Packet 2.
+3. The fail-closed rules for missing or mismatched authoritative world binding truth are visible in runtime code, but not yet frozen as the Packet 3 contract.
+4. Packet 3 and Packet 4 boundaries are still blurry around lifecycle/status hardening versus runtime/readiness work.
 
 ### Scope decision
 
@@ -187,7 +186,7 @@ Rules:
 
 ### Phase 1: Public input contract and resolver wiring
 
-Status: landed in Packet 1. Treat this as the frozen floor for Packet 2; do not reopen unless the contract changes.
+Status: landed in Packet 1. Treat this as the frozen floor for Packet 3; do not reopen unless the contract changes.
 
 Goal:
 
@@ -214,6 +213,8 @@ Verification checkpoint:
 3. host-scope root-start regressions still pass.
 
 ### Phase 2: Host-first start birth plus world-backed session setup
+
+Status: landed in Packet 2. Treat this as the frozen floor for Packet 3; do not reopen unless the contract changes.
 
 Goal:
 
@@ -243,18 +244,18 @@ Verification checkpoint:
 4. the success shape is no longer participant-less deferred attach,
 5. missing or invalid attach truth still fails closed.
 
-### Phase 3: Canonical world identity persistence and later dispatch readiness
+### Phase 3: Canonical world identity reuse and later dispatch readiness
 
 Goal:
 
-1. persist canonical `world_id` and `world_generation` as the durable projection of Packet 2's already-established authoritative world session/binding truth,
+1. treat Packet 2's persisted `world_id` and `world_generation` as the canonical durable projection of authoritative world session/binding truth,
 2. make the world-backed path ready for later host-dispatched world work without re-opening Packet 2's session-birth contract,
 3. keep the first dispatched world worker/member lazy until the host actually chooses world work,
 4. avoid inventing a second inaugural world-start dialect.
 
 Why third:
 
-1. once host-first birth is stable, world binding/session setup can attach to that frozen contract,
+1. Packet 2 already established the start-time world binding/session floor, so Packet 3 can focus on later reuse rather than first-time creation,
 2. this keeps host session truth and later world-dispatch truth separable during implementation,
 3. it minimizes cross-file conflicts until the final integration pass.
 
@@ -267,9 +268,9 @@ Primary touch surface:
 
 Verification checkpoint:
 
-1. Linux world-backed root start succeeds end to end,
-2. canonical `world_id` and `world_generation` are persisted as the durable projection of the already-established authoritative world session/binding truth,
-3. fail-closed behavior remains explicit on unsupported platforms or invalid world runtime state.
+1. later host-decided world work reuses the authoritative parent world binding established by Packet 2,
+2. missing or mismatched authoritative world binding truth fails closed,
+3. no eager world-member conversation or revived `born_unattached` happy path is introduced as part of this readiness work.
 
 ### Phase 4: Status truth, docs, and integration hardening
 

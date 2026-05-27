@@ -3,7 +3,7 @@
 Source SOW: [30-public-world-scoped-agent-start-and-capability-flags.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)  
 Decomposition basis: feature-slice breakdown produced on 2026-05-27  
 Phase: `SPECIFY`  
-Status: draft narrowed for the Packet 2 runtime pass on 2026-05-27
+Status: draft narrowed for the Packet 3 runtime pass on 2026-05-27
 
 ## Assumptions
 
@@ -19,12 +19,14 @@ These are the assumptions I am making so the spec stays concrete. Correct any of
 
 ## Observed Repo Floor
 
-The current repo already freezes some Packet-1 behavior that this spec now treats as the starting floor:
+The current repo already freezes some Packet-1 and Packet-2 behavior that this spec now treats as the starting floor:
 
-1. Omitted `--scope` currently resolves the effective default scope, probes for an exact backend match in that preferred scope, falls back once to the alternate scope if needed, and stamps the resolved scope into `DispatchRequestEnvelope`.
-2. Public world-scoped root start is still implemented with the older deferred-host-attach runtime model:
-   `StartLaunchPlan::WorldBirth`, `OrchestrationSessionRecord::new_deferred_host_attach(...)`, `born_unattached`, no attached host participant at `start` return, and a temporary world-member bootstrap that is canceled after readiness proof is captured.
-3. Packet 2 should treat item 2 as old-model runtime behavior to replace, not as the desired thin-slice product contract.
+1. Omitted `--scope` resolves the effective default scope, probes for an exact backend match in that preferred scope, falls back once to the alternate scope if needed, and stamps the resolved scope into `DispatchRequestEnvelope`.
+2. Public world-scoped root start now uses the host-first attached runtime model:
+   a host-rooted orchestration session is launched through the hidden owner-helper path, the inaugural prompt is host-routed, authoritative world session/binding truth is established before `start` returns, and the successful session remains `active_attached` rather than `born_unattached`.
+3. That same Packet-2 floor already persists top-level `world_id` and `world_generation` on the orchestration session as the durable projection of the authoritative world session/binding truth established at start.
+4. Later world-member launch logic already contains fail-closed checks that require authoritative parent world binding truth and reject missing or mismatched binding before member launch.
+5. Packet 3 should treat items 1-4 as landed floor and narrow only the remaining runtime/readiness contract around later host-decided world work.
 
 ## Objective
 
@@ -38,7 +40,7 @@ Primary operator story:
 4. `--scope world` explicitly requests the default world-backed path while still starting a host-rooted attached orchestration session.
 5. The inaugural operator prompt is fulfilled by the host orchestration agent; later world work is dispatched by that host agent under the established world session/binding.
 
-## Frozen Packet 2 Contract
+## Landed Packet 2 Floor
 
 ### Omitted `--scope` Resolution
 
@@ -80,7 +82,7 @@ Truth that may remain lazy in this thin slice:
 2. Public `agent start` must not submit the inaugural operator prompt directly to a first world worker/member.
 3. If the host later dispatches work into world, that is subsequent host behavior, not the meaning of public root start.
 
-### Deferred Beyond Slice 30
+### Deferred Beyond Packet 2
 
 This spec intentionally leaves the following outside Packet 2 and outside the thin-slice contract:
 
@@ -89,6 +91,27 @@ This spec intentionally leaves the following outside Packet 2 and outside the th
 3. Automatic world-dispatch policy, pending-work triggers, or inbox-driven attach behavior.
 4. Capability broadening beyond the already-supported narrowing-only family.
 5. Non-Linux parity for public world-backed root start.
+
+## Frozen Packet 3 Contract
+
+### Canonical World Identity Reuse
+
+1. The `world_id` and `world_generation` persisted by Packet 2 are already the canonical durable projection of the authoritative world session/binding truth for that orchestration session.
+2. Packet 3 must treat that persisted parent binding as the single source of truth for later host-decided world work.
+3. Later world-member launch must reuse the same authoritative parent binding rather than minting an unrelated or detached world identity.
+4. If the authoritative parent binding is missing or does not match the active world session, later world-member launch must fail closed.
+
+### Later World Work Must Stay Lazy
+
+1. Packet 3 must not introduce an eager first world-member conversation at public `start` return.
+2. Packet 3 must not introduce automatic world dispatch from pending work, inbox activity, or other background triggers.
+3. The first world worker/member conversation may still remain lazy until the host actually chooses world work.
+
+### Lifecycle Guardrails
+
+1. The default public world-backed path remains the normal host-attached lifecycle rather than `born_unattached`.
+2. Packet 3 may preserve specialized `born_unattached` status semantics for older or specialized sessions, but it must not reintroduce that posture as the thin-slice happy path.
+3. Packet 3 should narrow runtime/readiness behavior only; broader operator-facing status hardening remains Packet 4 work.
 
 ## Tech Stack
 
@@ -159,7 +182,7 @@ This feature is expected to touch these areas:
 - `crates/shell/src/execution/agent_runtime/state_store.rs`
   - Public session posture classification and live-session control/status selection
 - `crates/shell/src/execution/agent_runtime/control.rs`
-  - Helper launch plans, prompt streaming envelopes, world binding/session setup, and Linux world-member dispatch behavior
+  - Helper launch plans, prompt streaming envelopes, authoritative world binding persistence, and Linux world-member dispatch behavior
 - `crates/shell/tests/agent_public_control_surface_v1.rs`
   - End-to-end public CLI control-plane regression coverage
 - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
@@ -209,9 +232,9 @@ Test levels for this feature:
 1. Unit tests in `dispatch_contract.rs`
    - Validate `--scope` mapping, supported capability override families, narrowing-only behavior, policy denial, and persisted-attach constraints.
 2. Integration tests in `agent_public_control_surface_v1.rs`
-   - Validate omitted-scope preferred-scope resolution plus alternate-scope fallback, host-scoped bypass behavior, replacement of the old `WorldBirth` / `born_unattached` root-start shape, host-first world-backed start success, world binding/session setup, and public follow-up behavior.
+   - Validate omitted-scope preferred-scope resolution plus alternate-scope fallback, host-scoped bypass behavior, host-first world-backed start success, authoritative world session/binding truth at start, and public follow-up behavior.
 3. Integration tests in `agent_successor_contract_ahcsitc0.rs`
-   - Validate host lifecycle/status truth for the new default path and preserve current parked / awaiting-attention projection contracts.
+   - Validate authoritative world identity/status truth for later world work and preserve current parked / awaiting-attention projection contracts.
 4. Manual smoke checks
    - Validate the exact operator story for `start`, `status`, `reattach`, and `turn`.
 
@@ -220,7 +243,7 @@ Coverage expectations:
 - Every new public flag must have at least one positive parser/behavior test and one negative fail-closed test.
 - Every new public resolution rule must have command-level assertions.
 - Existing host lifecycle semantics (`active_attached`, `parked_resumable`, `awaiting_attention`) must keep regression coverage so this slice cannot silently break them.
-- World-backed start must prove host-first prompt handling plus world binding/session setup without depending on a born-unattached default posture.
+- World-backed start must prove host-first prompt handling plus authoritative world session/binding setup without depending on a born-unattached default posture.
 
 ## Boundaries
 
@@ -229,8 +252,9 @@ Coverage expectations:
   - Treat the Packet-1 omitted-scope fallback behavior as frozen unless the spec is deliberately changed.
   - Keep durable authority host-rooted for all `--scope world` starts.
   - Persist authoritative `HostAttachContract` truth at session birth.
-  - Replace the current deferred-host-attach / `born_unattached` world-start success shape with the normal host-attached success shape.
+  - Treat the landed Packet-2 host-first world-start success shape as floor rather than reopening it.
   - Treat the inaugural operator prompt as a host-orchestrator concern, even when scope resolves to world.
+  - Treat Packet-2 `world_id` and `world_generation` persistence as the canonical parent binding floor for Packet 3 rather than first-time work to be rediscovered.
   - Fail closed on unsupported scope/backend combinations and unsupported capability overrides.
   - Update docs and tests together with runtime behavior.
 - Ask first:
@@ -253,9 +277,11 @@ The feature is done only when all of the following are true:
 2. Omitting `--scope` resolves the preferred default scope through workspace-local config/profile/policy first, then global config/policy, probes for an exact backend in that preferred scope, and falls back once to the alternate scope only if needed.
 3. `substrate agent start --scope host` explicitly bypasses world and preserves host-rooted root-start behavior.
 4. The resolved scope from step 2 is stamped into the request and is the authoritative scope reported back to the operator.
-5. `substrate agent start --scope world`, or omitted `--scope` that resolves to world, creates a host-rooted durable orchestration session, persists authoritative host attach truth at birth, and establishes world binding/session truth for later host-dispatched world work before `start` returns.
+5. `substrate agent start --scope world`, or omitted `--scope` that resolves to world, creates a host-rooted durable orchestration session, persists authoritative host attach truth at birth, and establishes authoritative world session/binding truth for later host-dispatched world work before `start` returns.
 6. The same successful world-backed start is already truthfully host-attached at return time and does not use a participant-less `born_unattached` success posture.
-7. The inaugural operator prompt is handled by the host orchestration agent rather than being sent directly to a first world worker/member.
+7. The `world_id` and `world_generation` persisted at start are treated as the canonical durable projection of that authoritative world session/binding truth.
+8. Later host-decided world work reuses the same authoritative parent world binding and fails closed on missing or mismatched binding truth.
+9. The inaugural operator prompt is handled by the host orchestration agent rather than being sent directly to a first world worker/member.
 8. Public capability flags, if present, only affect the already-supported narrowing family:
    `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, exposed as `--disable-capability <capability>` with `--disable-cap <capability>` as the alias.
 9. Unsupported capability fields such as `session_start`, `llm`, and `mcp_client` remain fail closed.
