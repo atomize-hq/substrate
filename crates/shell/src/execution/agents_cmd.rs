@@ -7,13 +7,12 @@ use crate::execution::agent_runtime::control::request_private_stop;
 use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
     load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
-    persist_runtime_stop_closeout, PersistedWorldBinding,
-    public_prompt_rendered_exit_code, reconcile_hidden_owner_helper_start_timeout,
-    remove_hidden_owner_helper_launch_plan, run_public_prompt_command,
-    wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
+    persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
+    reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
+    run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
-    HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
-    PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
+    HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PersistedWorldBinding,
+    PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
     HIDDEN_OWNER_HELPER_SUBCOMMAND,
 };
 #[cfg(unix)]
@@ -29,9 +28,7 @@ use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
-use crate::execution::agent_runtime::session::{
-    AgentRuntimeReplacementParticipantInit,
-};
+use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 #[cfg(unix)]
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
@@ -61,9 +58,7 @@ use crate::execution::config_model::{
 #[cfg(target_os = "linux")]
 use crate::execution::policy_snapshot;
 #[cfg(target_os = "linux")]
-use crate::execution::{
-    ReplPersistentSessionClient, ReplSessionStartParams,
-};
+use crate::execution::{ReplPersistentSessionClient, ReplSessionStartParams};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -1503,7 +1498,9 @@ fn establish_public_world_start_binding(
         .enable_all()
         .build()
         .context("failed to initialize world-start launch runtime")?;
-    rt.block_on(async { establish_public_world_start_binding_async(orchestration_session_id, workspace_root).await })
+    rt.block_on(async {
+        establish_public_world_start_binding_async(orchestration_session_id, workspace_root).await
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -4288,14 +4285,8 @@ mod tests {
             .expect("world session birth plan");
 
         assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
-        assert_eq!(
-            plan.public_identity.scope,
-            AgentExecutionScope::World
-        );
-        assert_eq!(
-            plan.helper_plan.descriptor.backend_id,
-            "cli:codex"
-        );
+        assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
         let attach_contract = plan
             .helper_plan
             .host_attach_contract

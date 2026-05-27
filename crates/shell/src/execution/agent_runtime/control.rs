@@ -582,11 +582,7 @@ pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_action(
     action: PublicPromptAction,
 ) -> Result<()> {
     run_hidden_owner_helper_startup_prompt_stream_with_projection(
-        listener,
-        json,
-        action,
-        None,
-        None,
+        listener, json, action, None, None,
     )
 }
 
@@ -682,9 +678,14 @@ fn rewrite_startup_prompt_envelope_action(
             version: *version,
             action,
             orchestration_session_id: orchestration_session_id.clone(),
-            backend_id: backend_id_override.unwrap_or(backend_id.as_str()).to_string(),
+            backend_id: backend_id_override
+                .unwrap_or(backend_id.as_str())
+                .to_string(),
             participant_id: participant_id.clone(),
-            scope: scope_override.map(scope_label).unwrap_or(scope.as_str()).to_string(),
+            scope: scope_override
+                .map(scope_label)
+                .unwrap_or(scope.as_str())
+                .to_string(),
         },
         PublicPromptEnvelope::Completed {
             version,
@@ -696,11 +697,13 @@ fn rewrite_startup_prompt_envelope_action(
             state,
             warnings,
             ..
-            } => PublicPromptEnvelope::Completed {
+        } => PublicPromptEnvelope::Completed {
             version: *version,
             action,
             orchestration_session_id: orchestration_session_id.clone(),
-            backend_id: backend_id_override.unwrap_or(backend_id.as_str()).to_string(),
+            backend_id: backend_id_override
+                .unwrap_or(backend_id.as_str())
+                .to_string(),
             participant_id: participant_id.clone(),
             turn_outcome: turn_outcome.clone(),
             session_posture: *session_posture,

@@ -1886,10 +1886,7 @@ fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults(
     let records = parse_ndjson_output(&output);
     let accepted = find_ndjson_record(&records, "accepted");
     let start_json = find_ndjson_record(&records, "completed");
-    assert_eq!(
-        accepted.get("scope").and_then(Value::as_str),
-        Some("world")
-    );
+    assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("world"));
     assert_eq!(
         start_json.get("backend_id").and_then(Value::as_str),
         Some("cli:claude_code")
@@ -4131,7 +4128,10 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         start_accepted.get("scope").and_then(Value::as_str),
         Some("world")
     );
-    assert_eq!(start_json.get("action").and_then(Value::as_str), Some("start"));
+    assert_eq!(
+        start_json.get("action").and_then(Value::as_str),
+        Some("start")
+    );
     assert_eq!(
         start_json.get("backend_id").and_then(Value::as_str),
         Some("cli:claude_code")
@@ -4271,7 +4271,9 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
             "host-first root start must leave the retained orchestrator live"
         );
         assert_eq!(
-            participant.pointer("/internal/uaa_session_id").and_then(Value::as_str),
+            participant
+                .pointer("/internal/uaa_session_id")
+                .and_then(Value::as_str),
             Some("thread-test")
         );
     }
@@ -4403,10 +4405,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         start_json.get("backend_id").and_then(Value::as_str),
         Some("cli:claude_code")
     );
-    assert_eq!(
-        accepted.get("scope").and_then(Value::as_str),
-        Some("world")
-    );
+    assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("world"));
     assert_eq!(
         start_json.get("state").and_then(Value::as_str),
         Some("active")
