@@ -27,6 +27,25 @@ The queued direction that still matters is:
 - explicit host-scoped orchestrator and world-scoped member model
 - identity that keeps `backend_id` separate from provider, auth authority, and protocol
 
+## Folded Contract Detail
+
+When this queued work lands, the successor command-surface intent is:
+
+- the canonical runtime namespace is `substrate agent ...`
+- the core read surfaces are:
+  - `substrate agent list`
+  - `substrate agent status`
+  - `substrate agent doctor`
+- `substrate agents validate` remains an inventory-validation compatibility leaf rather than a
+  plural alias for the successor surfaces
+- `backend_id` remains the adapter identifier in `<kind>:<agent_id>` form
+- pure-agent rows use `router=agent_hub` and `protocol=substrate.agent.session`
+- pure-agent rows omit `provider` and `auth_authority`
+- nested gateway-backed rows stay separate from pure-agent rows and are the rows that publish
+  `provider` and `auth_authority`
+- the intended owner set remains `crates/shell`, `crates/common`, and the `transport-api-*`
+  crates rather than a new `crates/agent-hub` crate
+
 ## Why Queued
 
 This is active architectural input, but it is not landed and still needs the queue of
@@ -41,5 +60,5 @@ When implementation is ready, it should be restated against:
 
 ## Draft Note
 
-Keep the project-management ADR for detailed design reasoning, but treat this curated draft as the
-queued Agent Hub successor anchor.
+This curated draft now carries the queued command-surface summary that previously lived only in the
+pack contract file. Keep the project-management ADR as the planning-rich historical source.

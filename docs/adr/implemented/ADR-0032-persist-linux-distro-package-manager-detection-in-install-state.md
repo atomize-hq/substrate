@@ -33,6 +33,7 @@ The stable decision is:
 This ADR owns the stable Linux install-state metadata contract documented in:
 
 - `docs/INSTALLATION.md`
+- `docs/contracts/install-state-schema.md`
 
 ## Current Implementation Anchors
 

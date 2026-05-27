@@ -469,7 +469,7 @@ Files:
 - [crates/shell/src/execution/agent_runtime/session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs:36)
 - [crates/shell/src/execution/agent_runtime/mod.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/mod.rs:1)
 - [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md)
-- [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md)
+- [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md)
 
 Do:
 

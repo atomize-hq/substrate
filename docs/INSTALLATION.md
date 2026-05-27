@@ -120,6 +120,8 @@ with `substrate --world ...` without changing the stored metadata.
   `host_state.platform.pkg_manager.source`. macOS and Windows do not write this
   Linux host-state file; they only participate in compile/test parity for this
   pack.
+- The stable machine-readable schema for that file lives in
+  `docs/contracts/install-state-schema.md`.
 - Metadata writes are idempotent; missing or corrupted files only emit warnings
   and never block install/uninstall runs.
 - Uninstallers accept `--cleanup-state`/`--auto-cleanup` to remove recorded

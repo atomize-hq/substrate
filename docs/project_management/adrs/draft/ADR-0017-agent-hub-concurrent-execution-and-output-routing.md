@@ -28,8 +28,8 @@
 - Spec manifest: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
 - Impact map: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/impact_map.md`
 - CI checkpoint plan: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
-- Contract: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`
-- Spec: structured event envelope: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
+- Stable contract: `docs/contracts/repl-output-routing.md`
+- Stable event-envelope contract: `docs/contracts/agent-event-envelope.md`
 - Spec: telemetry/trace records: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
 - Spec: platform parity: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
 - Slice specs:

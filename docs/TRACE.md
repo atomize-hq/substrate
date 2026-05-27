@@ -192,6 +192,10 @@ Bootstrap and lifecycle rows for the first host orchestrator caller path are emi
 
 Runtime-owned shell rows follow the same rule. Host stream chunks, shell command-completion events, and world-restart alerts emit orchestration-scoped `agent_event` rows only when a live parent orchestration session exists and supplies the real `orchestration_session_id`; otherwise stdout/stderr, `command_*` trace spans, and operator-facing terminal messaging continue without appending an orchestration-scoped `agent_event` row. Suppression here is additive only: missing orchestration context suppresses the shell-owned `agent_event` row, but it does not authorize heuristic recovery or synthetic correlation.
 
+Stable contract details for the structured envelope and REPL routing behavior live in:
+- `docs/contracts/agent-event-envelope.md`
+- `docs/contracts/repl-output-routing.md`
+
 Operator-facing omission rules:
 - Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.
 - Nested gateway-backed records may add `provider` and `auth_authority`, but they must omit `world_id` and `world_generation`.

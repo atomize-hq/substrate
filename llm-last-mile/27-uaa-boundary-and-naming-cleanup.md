@@ -541,7 +541,7 @@ When this slice lands, the following must be updated together:
 - [AGENTS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENTS.md),
 - [ADR-0042](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md),
 - [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md),
-- [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md),
+- [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md),
 - [dist/release-template.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/dist/release-template.md),
 - [scripts/linux/world-provision.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/linux/world-provision.sh),
 - [scripts/substrate/install-substrate.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/install-substrate.sh),
@@ -1190,7 +1190,7 @@ This pass kept the approved baseline fixed:
    The current text names `_archived/**`, but the repo still contains non-archived path families with old names that are neither clearly live nor clearly exempt:
 
    - [macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md:43) still treats `world-agent` and `substrate-world-agent` as current contract terms.
-   - [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md:69) and adjacent draft-pack specs still describe `protocol=uaa.agent.session` as the canonical pure-agent label.
+   - [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md:28) and adjacent draft-pack specs still describe `protocol=uaa.agent.session` as the canonical pure-agent label.
 
    Those are not under `docs/project_management/_archived/**`, and they are not currently called out in the SOW's truth-sync set or allowlist. That leaves exact room for implementation drift: one contributor can treat them as live normative surfaces, another can treat them as historical planning evidence, and both can claim the SOW supports that choice.
 
@@ -1245,7 +1245,7 @@ This pass keeps the approved baseline fixed:
 
 4. The live-vs-historical boundary needed explicit path decisions, not just category language.
 
-   The earlier pass correctly found ambiguity around [macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md:43) and [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md:69). This pass resolves that by treating those path families as truth-sync surfaces unless they are explicitly allowlisted as historical.
+   The earlier pass correctly found ambiguity around [macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md:43) and [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md:28). This pass resolves that by treating those path families as truth-sync surfaces unless they are explicitly allowlisted as historical.
 
 ### Round-4 Verdict
 

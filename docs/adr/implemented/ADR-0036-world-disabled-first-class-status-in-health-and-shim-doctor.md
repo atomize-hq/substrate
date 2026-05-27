@@ -35,6 +35,7 @@ This ADR owns the stable disabled-diagnostics contract documented in:
 
 - `docs/USAGE.md`
 - `docs/INSTALLATION.md`
+- `docs/contracts/diagnostics-json.md`
 
 ## Current Implementation Anchors
 

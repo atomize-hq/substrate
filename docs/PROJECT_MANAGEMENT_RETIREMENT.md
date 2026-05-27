@@ -440,38 +440,30 @@ in three buckets:
     - `docs/adr/implemented/ADR-0031-best-effort-linux-distro-package-manager-discovery-during-install.md`
     - `docs/adr/implemented/ADR-0038-replay-attribute-why-world-is-disabled-in-warnings.md`
 
-#### Preserve or move before deleting `packs/**`
+#### Stable homes now in place before deleting `packs/**`
 
-These files still carry stable contract detail that is only partially summarized elsewhere:
+These pack-local contract surfaces now have explicit stable homes:
 
 - `docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/contract.md`
-  - preserve before deletion
-  - recommended destination: new stable contract doc under `docs/contracts/` for REPL structured
-    output routing, including `repl.max_pty_buffered_lines` and suppression-summary behavior
+  - stable home: `docs/contracts/repl-output-routing.md`
 - `docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
-  - preserve before deletion
-  - recommended destination: new stable event-envelope schema doc under `docs/contracts/`
-    because `TRACE.md` discusses `agent_event` rows but does not fully replace the envelope schema
+  - stable home: `docs/contracts/agent-event-envelope.md`
 - `docs/project_management/packs/implemented/persist-detected-linux-distro-pkg-manager/install-state-schema-spec.md`
-  - preserve before deletion
-  - recommended destination: new stable `install_state.json` schema doc under `docs/contracts/`
-    because `docs/INSTALLATION.md` lists the fields but does not capture the full additive schema
-    and compatibility rules
+  - stable home: `docs/contracts/install-state-schema.md`
 - `docs/project_management/packs/implemented/world-disabled-diagnostics/world-disabled-diagnostics-json-schema-spec.md`
-  - preserve before deletion
-  - recommended destination: new stable diagnostics JSON contract doc under `docs/contracts/`
-    because `docs/USAGE.md` summarizes `.shim.world.status` and `.shim.world_deps.status` but does
-    not replace the full machine-readable schema and omission rules
+  - stable home: `docs/contracts/diagnostics-json.md`
 
-#### Draft-pack contracts that should be folded into draft ADRs rather than promoted to stable contracts
+Remaining follow-up:
+
+- repoint retained backlinks before deleting the pack copies
+- keep the new contract docs, not the pack-local contract files, as the stable owned surfaces
+
+#### Draft-pack contracts folded into draft ADRs rather than promoted to stable contracts
 
 - `docs/project_management/packs/active/warn-config-global-show-workspace-overrides/contract.md`
-  - queued work; if the pack tree is removed before implementation, fold the normative CLI copy
-    into `docs/adr/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
+  - folded into `docs/adr/draft/ADR-0019-warn-config-global-show-when-workspace-config-overrides.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md`
-  - still referenced by `llm-last-mile/**`; if the pack tree is removed, fold any still-normative
-    contract text into `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
-    before deleting the pack path
+  - folded into `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 
 No other current pack-local `contract.md` / schema file has yet shown a stronger stable-home need
 than the curated ADR plus existing reference/contract docs above.

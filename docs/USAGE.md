@@ -273,6 +273,9 @@ $ substrate health --json | jq '.summary | {ok, missing_managers, world_ok, worl
 
 When `.shim.world.status` is `disabled` and `.shim.world_deps.status` is `skipped_disabled`, the summary stays non-error and the human output prints the disabled contract lines instead of enabled-world remediation guidance.
 
+Machine-readable JSON details and omission rules live in:
+- `docs/contracts/diagnostics-json.md`
+
 Both commands honor the same overrides (`HOME`, `SUBSTRATE_MANAGER_MANIFEST`,
 `SHIM_TRACE_LOG`). Drop fixture files into `~/.substrate/health/world_doctor.json`
 and `~/.substrate/health/world_deps.json` when you need deterministic outputs in

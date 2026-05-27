@@ -32,9 +32,9 @@ The stable decision is:
 
 This ADR owns the stable output-routing and event-envelope behavior surfaced through:
 
-- interactive REPL output behavior
-- structured agent-event rendering and attribution
-- trace correlation expectations for concurrent agent execution
+- `docs/contracts/repl-output-routing.md`
+- `docs/contracts/agent-event-envelope.md`
+- `docs/TRACE.md`
 
 ## Current Implementation Anchors
 

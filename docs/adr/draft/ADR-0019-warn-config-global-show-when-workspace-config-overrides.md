@@ -27,6 +27,18 @@ The queued direction that still matters is:
 - keep stdout patch-only and script-safe
 - emit explicit scope/write-target guidance for implicit-scope `config set`
 
+## Folded Contract Detail
+
+When this queued work lands, the stable command-surface intent is:
+
+- `substrate config global show` still prints only the global patch on stdout
+- when a workspace override is active, `substrate config global show` emits exactly one stderr note
+  explaining that workspace config overrides the global patch in the current directory
+- unreadable or invalid workspace config must not make `config global show` fail if the global
+  patch is otherwise readable
+- implicit `substrate config set <key>=<value>` remains workspace-scoped and emits an explicit
+  write-target note on stderr while keeping stdout as the effective merged config
+
 ## Why Queued
 
 This remains active UX/input-surface work, but it is not landed and should not be treated as a
@@ -39,5 +51,5 @@ When implementation is ready, it should be restated against:
 
 ## Draft Note
 
-Keep the project-management ADR for the original operator-contract detail, but treat this curated
-draft as the queued warning-behavior placeholder.
+This curated draft now carries the queued contract summary that previously lived only in the pack
+contract file. Keep the project-management ADR as the planning-rich historical source.
