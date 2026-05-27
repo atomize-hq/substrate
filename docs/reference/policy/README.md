@@ -1,8 +1,9 @@
 # Policy Reference
 
-This directory is scaffolding: it is intended to hold the stable operator contract for policy files and policy mode semantics.
+Stable policy reference docs live here.
 
-Existing related docs (top-level):
-- `docs/BROKER.md`
-- `docs/WORLD.md`
-
+- `contract.md`: operator-facing ADR-0027 contract for policy/config file families, precedence,
+  fail-closed posture, backend allowlists, and host credential-read gates.
+- `schema.md`: authoritative ADR-0027 key-path, type, default, and merge-strategy reference.
+- `tuple_constraints.md`: additive ADR-0043 policy reference for `llm.constraints.*`, including
+  grammar, evaluation order, deny wording, and explain-surface ownership.

@@ -11,7 +11,7 @@ basis:
   source_scope_version: v1
   upstream_closeouts:
     - governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
   required_threads:
     - THR-10
     - THR-12

@@ -1,6 +1,6 @@
 # Claude Code Live Integration Smoke - seam extraction
 
-Source: `docs/project_management/packs/active/azure-kimi-claude-gateway`, `docs/project_management/packs/active/azure-foundry-provider-transport`, `docs/foundation/*.md`, `docs/adr/0001-0007`, and current Claude Code/gateway operator anchors under `gateway/`
+Source: `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway`, `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport`, `docs/foundation/*.md`, `docs/adr/0001-0007`, and current Claude Code/gateway operator anchors under `gateway/`
 
 This pack captures seam briefs, authoritative threading, pack-level review surfaces, seam-exit intent, and governance scaffolds. It is intentionally one level above seam-local decomposition.
 

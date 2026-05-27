@@ -9,8 +9,8 @@ basis:
   source_seam_brief: ../../seam-2-openai-responses-surface.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts:
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
   required_threads:
     - THR-10
     - THR-12
@@ -66,8 +66,8 @@ open_remediations: []
 - **Basis posture**:
   - **Currentness**: `current` (revalidated against `SEAM-1` closeout-backed `THR-10` publication)
   - **Upstream closeouts assumed**:
-    - `docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
   - **Required threads**: `THR-10`, `THR-12`
   - **Stale triggers**:
     - ADR 0008 changes the Responses subset or the minimum streaming event set

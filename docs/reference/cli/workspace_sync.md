@@ -5,6 +5,9 @@ This page explains `workspace sync` in plain English using only **host** vs **wo
 If you want the deeper implementation details (overlayfs, agents, code pointers), see:
 `docs/internals/world/workspace_sync_filesystem_model.md`.
 
+For Substrate's workspace-history commands, see:
+`docs/reference/cli/workspace_history.md`.
+
 ## Host vs world: what are the two filesystems?
 
 - **Host** = your real workspace directory on your machine.
@@ -110,3 +113,15 @@ Some paths are protected and will not be synced/mutated:
 - `.substrate/**`
 
 If the world’s pending changes include protected paths, sync refuses.
+
+## Related workspace history commands
+
+`workspace sync` is separate from Substrate's checkpoint and rollback history commands:
+
+- `substrate workspace checkpoint`
+- `substrate workspace rollback <target>`
+
+Those commands use Substrate's internal history store rather than world pending diffs. Their
+operator-facing contract lives in:
+
+- `docs/reference/cli/workspace_history.md`

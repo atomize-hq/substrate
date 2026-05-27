@@ -1,1 +1,0 @@
-Source-lock the live PLAN.md, freeze the slice-29 contract and durable-state vocabulary, initialize parent-owned .runs state, and authorize only L0.

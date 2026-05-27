@@ -1,1 +1,0 @@
-P1 passed on accepted tip `0d15fb2fe8902a9201c891eccd3d7a20325f9d72`. All locked commands from `ORCH_PLAN.md` passed, and GitNexus `detect-changes` reported a low-risk staged implementation scope with no affected processes.

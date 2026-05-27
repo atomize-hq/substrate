@@ -14,15 +14,17 @@ These constraints are mandatory design guardrails for early implementation:
 
 Authoritative repository-local decisions:
 
-- [ADR 0005](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0005-present-a-single-backend-identity-to-substrate.md)
-- [ADR 0006](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0006-preserve-an-in-world-compatible-deployment-boundary.md)
-- [ADR 0007](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0007-integrate-via-normalized-structured-events-not-raw-provider-streams.md)
+- [ADR 0005](crates/gateway/docs/adr/0005-present-a-single-backend-identity-to-substrate.md)
+- [ADR 0006](crates/gateway/docs/adr/0006-preserve-an-in-world-compatible-deployment-boundary.md)
+- [ADR 0007](crates/gateway/docs/adr/0007-integrate-via-normalized-structured-events-not-raw-provider-streams.md)
 
 External planning inputs reviewed:
 
 - LLM/policy surface pack:
-  [/Users/spensermcconnell/__Sandbox/actions-runner/_work/substrate/substrate/candidate/docs/project_management/packs/active/llm_and_agent_config_policy_surface](/Users/spensermcconnell/__Sandbox/actions-runner/_work/substrate/substrate/candidate/docs/project_management/packs/active/llm_and_agent_config_policy_surface)
+  - `docs/reference/policy/contract.md`
+  - `docs/reference/policy/schema.md`
+  - `docs/reference/policy/tuple_constraints.md`
 - Agent-hub output routing pack:
-  [/Users/spensermcconnell/__Sandbox/actions-runner/_work/substrate/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing](/Users/spensermcconnell/__Sandbox/actions-runner/_work/substrate/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing)
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 
 If an implementation choice conflicts with these constraints, stop and resolve the conflict in docs before proceeding.

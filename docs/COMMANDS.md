@@ -74,12 +74,20 @@ Once you type `graph`, `host`, `world`, `config`, `policy`, `workspace`, `shim`,
 | `substrate graph status` | — | — | Baseline mock backend status. |
 | `substrate graph what-changed <SPAN_ID>` | `span_id` (string) | `--limit <N>` | Exercise different limits plus anchor/caging toggles. |
 
+### `workspace` Subcommand
+
+| Invocation | Positional Arguments | Subcommand Flags | Notes |
+| --- | --- | --- | --- |
+| `substrate workspace sync` | — | `--dry-run`, `--direction <from_world|from_host|both>`, `--conflict-policy <prefer_host|prefer_world|abort>`, `--exclude <PATTERN>`, `--verbose` | Reconciles or applies pending world changes. Stable contract: `docs/reference/cli/workspace_sync.md`. |
+| `substrate workspace checkpoint` | — | `--message <TEXT>`, `--verbose` | Records a workspace snapshot into Substrate's internal history store. Stable contract: `docs/reference/cli/workspace_history.md`. |
+| `substrate workspace rollback <target>` | `target` (`last` or a checkpoint id) | `--force`, `--verbose` | Restores a workspace snapshot from Substrate's internal history store. Stable contract: `docs/reference/cli/workspace_history.md`. |
+
 ### world Subcommand
 
 | Invocation | Positional Arguments | Subcommand Flags | Notes |
 | --- | --- | --- | --- |
 | `substrate world doctor` | — | `--json` | World-scoped readiness report (host + world-service facts). |
-| `substrate world enable` | — | `--prefix`, `--profile`, `--provision-deps`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`; `--provision-deps` is the operator-facing APT workflow. See `docs/reference/world/deps/README.md` and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`. |
+| `substrate world enable` | — | `--prefix`, `--profile`, `--provision-deps`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`; `--provision-deps` is the operator-facing APT workflow. See `docs/reference/world/deps/README.md` and `docs/reference/world/deps/provisioning.md`. |
 | `substrate world deps current list [VIEW]` | `view` (`available`, `enabled`, `applied`) | `--all`, `--json` | `available/enabled` are host-only; `applied` queries the world backend. |
 | `substrate world deps current show <ITEM>` | `item` name | `--json`, `--explain` | `--explain` queries the world backend and prints remediation/manual instructions when blocked. |
 | `substrate world deps current install <ITEM...>` | One or more item names | `--dry-run`, `--verbose` | Applies immediately without modifying enabled list; APT-backed items are probe-only at runtime and remediate to `substrate world enable --provision-deps`. |

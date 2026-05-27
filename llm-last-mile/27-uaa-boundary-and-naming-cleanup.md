@@ -43,7 +43,7 @@ The following keep their current upstream meaning and are not renamed here:
 
 - crates.io package `unified-agent-api`
 - Rust import name `agent_api`
-- adopted capability/schema ids such as `agent_api.run`, `agent_api.session.resume.v1`, and `agent_api.session.handle.v1` documented in [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21)
+- adopted capability/schema ids such as `agent_api.run`, `agent_api.session.resume.v1`, and `agent_api.session.handle.v1` documented in [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21)
 - surfaced internal correlation fields such as `internal.uaa_session_id` / `uaa_session_id`, which remain internal and correctly describe upstream session-handle identity in [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:120) and [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md:210)
 
 This slice does not rename upstream `agent_api` under any spelling. The rename target is only the pre-UAA local transport naming.
@@ -90,7 +90,7 @@ This SOW assumes the following are already true and are not being redesigned her
 - `crates/shell` already depends on the real external Unified Agent API as `agent_api` in [crates/shell/Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml:61).
 - `crates/world-agent` also already depends on the real external Unified Agent API for member runtime launch/control.
 - `world-api` already owns the abstract world backend contract and is not part of this rename.
-- The local typed host↔world transport remains a separate boundary documented today in [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237) and [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md:21), even though those docs still use the old pre-cleanup names.
+- The local typed host↔world transport remains a separate boundary documented today in [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237) and [docs/contracts/gateway/runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/runtime-parity.md:21), even though those docs still use the old pre-cleanup names.
 - The public session/control contract is already frozen around `orchestration_session_id` plus exact `backend_id`; public callers do not target `participant_id`, `active_session_handle_id`, or `internal.uaa_session_id` as documented in [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:116).
 - `backend_id` remains the adapter/allowlist identity only; this slice does not reopen provider/auth/protocol overloading questions already settled in [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md:147).
 
@@ -121,7 +121,7 @@ That drift now costs more than it did earlier, because the codebase contains bot
 This repo already uses real upstream UAA semantics:
 
 - external crate import `agent_api` in [crates/shell/Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml:61),
-- adopted `agent_api.*` capability/schema ids in [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21),
+- adopted `agent_api.*` capability/schema ids in [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21),
 - and surfaced internal `uaa_session_id` semantics in [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md:214).
 
 Those are not the things being renamed here.
@@ -131,7 +131,7 @@ Those are not the things being renamed here.
 The local transport boundary is already explicit in implementation:
 
 - transport/client/schema crates under [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml:55),
-- typed transport ownership in [docs/contracts/substrate-gateway-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-runtime-parity.md:21),
+- typed transport ownership in [docs/contracts/gateway/runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/runtime-parity.md:21),
 - and the `world-agent` socket API boundary in [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237).
 
 The ambiguity is naming, not architectural absence. The misleading names are specifically:
@@ -187,7 +187,7 @@ Primary anchors:
 - [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:67)
 - [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md:237)
 - [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md:184)
-- [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21)
+- [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21)
 
 Required outcome:
 
@@ -326,9 +326,9 @@ Primary anchors:
 - [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:169)
 - [docs/REPLAY.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/REPLAY.md:82)
 - [docs/reference/env/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/env/contract.md:63)
-- [docs/manual_verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/manual_verification/linux_world_socket.md:12)
-- [docs/cross-platform/mac_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/mac_world_setup.md:108)
-- [docs/cross-platform/wsl_world_troubleshooting.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/wsl_world_troubleshooting.md:163)
+- [docs/reference/world/verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/verification/linux_world_socket.md:12)
+- [docs/reference/world/platforms/macos-lima-setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/platforms/macos-lima-setup.md:108)
+- [docs/reference/world/platforms/windows-wsl-troubleshooting.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/platforms/windows-wsl-troubleshooting.md:163)
 - [ADR-0042](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md:127)
 - [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md:183)
 - [ADR-0045](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md:255)
@@ -348,7 +348,7 @@ Primary anchors:
 
 - [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:120)
 - [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md:214)
-- [docs/contracts/substrate-gateway-backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md:21)
+- [docs/contracts/gateway/backend-adapter-schema.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/backend-adapter-schema.md:21)
 
 Required outcome:
 
@@ -533,15 +533,15 @@ When this slice lands, the following must be updated together:
 - [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md),
 - [docs/REPLAY.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/REPLAY.md),
 - [docs/reference/env/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/env/contract.md),
-- [docs/manual_verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/manual_verification/linux_world_socket.md),
-- [docs/cross-platform/mac_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/mac_world_setup.md),
-- [docs/cross-platform/wsl_world_troubleshooting.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/wsl_world_troubleshooting.md),
+- [docs/reference/world/verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/verification/linux_world_socket.md),
+- [docs/reference/world/platforms/macos-lima-setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/platforms/macos-lima-setup.md),
+- [docs/reference/world/platforms/windows-wsl-troubleshooting.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/world/platforms/windows-wsl-troubleshooting.md),
 - [dist-workspace.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/dist-workspace.toml),
 - [macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md),
 - [AGENTS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENTS.md),
 - [ADR-0042](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md),
 - [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md),
-- [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md),
+- [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md),
 - [dist/release-template.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/dist/release-template.md),
 - [scripts/linux/world-provision.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/linux/world-provision.sh),
 - [scripts/substrate/install-substrate.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/install-substrate.sh),
@@ -1190,7 +1190,7 @@ This pass kept the approved baseline fixed:
    The current text names `_archived/**`, but the repo still contains non-archived path families with old names that are neither clearly live nor clearly exempt:
 
    - [macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md:43) still treats `world-agent` and `substrate-world-agent` as current contract terms.
-   - [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md:69) and adjacent draft-pack specs still describe `protocol=uaa.agent.session` as the canonical pure-agent label.
+   - [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md:28) and adjacent draft-pack specs still describe `protocol=uaa.agent.session` as the canonical pure-agent label.
 
    Those are not under `docs/project_management/_archived/**`, and they are not currently called out in the SOW's truth-sync set or allowlist. That leaves exact room for implementation drift: one contributor can treat them as live normative surfaces, another can treat them as historical planning evidence, and both can claim the SOW supports that choice.
 
@@ -1245,7 +1245,7 @@ This pass keeps the approved baseline fixed:
 
 4. The live-vs-historical boundary needed explicit path decisions, not just category language.
 
-   The earlier pass correctly found ambiguity around [macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md:43) and [docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md:69). This pass resolves that by treating those path families as truth-sync surfaces unless they are explicitly allowlisted as historical.
+   The earlier pass correctly found ambiguity around [macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/macos-hardening/macos-hardened-same-user-lima/phase-2-same-user-hardening/README.md:43) and [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md:28). This pass resolves that by treating those path families as truth-sync surfaces unless they are explicitly allowlisted as historical.
 
 ### Round-4 Verdict
 

@@ -104,7 +104,7 @@ Controls whether Substrate forwards a small allowlist of host environment variab
 
 See:
 - Full configuration reference (including env forwarding contract): `docs/CONFIGURATION.md`
-- Planning contract (host-visible hardening): `docs/project_management/packs/implemented/world-deps-host-visible-hardening/WDH0-spec.md`
+- This page is the stable host-visible hardening reference.
 
 ### Hardened worlds: `$HOME` is scratch (ephemeral)
 
@@ -130,6 +130,6 @@ Implementation notes live in: `docs/internals/world/deps.md`.
 - Config file locations and precedence: `docs/reference/config/contract.md`
 - Full configuration reference (including env overrides and exported state): `docs/CONFIGURATION.md`
 - Workspace definition and precedence model:
-  - `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
-  - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+  - `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
+  - `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md`
 - World filesystem isolation and policy model: `docs/WORLD.md`

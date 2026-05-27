@@ -1,7 +1,7 @@
 {
   "case_id": "mixed-reasoning-and-tool-calls-k2-thinking",
   "contract_ref": "docs/foundation/azure-kimi-c02-normalized-event-contract.md",
-  "raw_artifact_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/mixed-reasoning-and-tool-calls-k2-thinking/raw-response.json",
+  "raw_artifact_ref": "crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/mixed-reasoning-and-tool-calls-k2-thinking/raw-response.json",
   "normalized_events": [
     {
       "event_kind": "action",

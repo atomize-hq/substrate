@@ -1,9 +1,0 @@
-{
-  "depends_on": [
-    "L1-a3-durable-attach-freeze"
-  ],
-  "unblocks": [
-    "L2-a4-human-caller-adoption",
-    "L3-a5-repl-dispatch-adoption"
-  ]
-}

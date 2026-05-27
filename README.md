@@ -66,7 +66,7 @@ After the warm step, run `substrate` from the workspace (or your PATH) and it wi
 pwsh -File scripts\windows\wsl-smoke.ps1
 ```
 
-Detailed setup guidance, doctor output, and troubleshooting live in [`docs/cross-platform/wsl_world_setup.md`](docs/cross-platform/wsl_world_setup.md).
+Detailed setup guidance, doctor output, and troubleshooting live in [`docs/reference/world/platforms/windows-wsl-setup.md`](docs/reference/world/platforms/windows-wsl-setup.md).
 
 > Windows installers follow the same pass-through model—host shells keep their
 > PATH, and `substrate shim doctor` provides the canonical view of manager
@@ -195,8 +195,8 @@ Additional capabilities planned for later phases:
 - **[Replay](docs/REPLAY.md)** - Replaying traced commands (with Linux isolation option)
 - **[Graph](docs/GRAPH.md)** - Graph architecture and CLI (mock backend)
 - **[Privileged Tests](docs/HOWTO_PRIVILEGED_TESTS.md)** - Running isolation/netfilter tests on Linux
-- **[Windows World Setup](docs/cross-platform/wsl_world_setup.md)** - WSL2 provisioning, warm/doctor/smoke automation, and troubleshooting
-- **[Transport Parity Design](docs/cross-platform/transport_parity_design.md)** - The cross-platform transport architecture that underpins Windows parity
+- **[Windows World Setup](docs/reference/world/platforms/windows-wsl-setup.md)** - WSL2 provisioning, warm/doctor/smoke automation, and troubleshooting
+- **[Transport Parity Design](docs/internals/world/transport-parity.md)** - The cross-platform transport architecture that underpins Windows parity
 
 ### World Doctor & Host Readiness
 

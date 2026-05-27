@@ -9,11 +9,11 @@ basis:
   source_seam_brief: ../../seam-1-claude-code-operator-bootstrap.md
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts:
-    - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
   required_threads: []
   stale_triggers:
     - docs/foundation/azure-foundry-c07-runtime-transport-contract.md changes Azure provider setup, model-mapping, or startup assumptions that the bootstrap path depends on
@@ -68,11 +68,11 @@ open_remediations: []
 - **Basis posture**:
   - **Currentness**: `current`
   - **Upstream closeouts assumed**:
-    - `docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md`
-    - `docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md`
   - **Required threads**: none; this seam owns `THR-08`
   - **Stale triggers**:
     - `C-07` changes Azure setup or mapping semantics

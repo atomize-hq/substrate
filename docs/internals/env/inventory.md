@@ -4,7 +4,7 @@ This is the exhaustive, repo-grounded inventory of environment variables that Su
 
 It is not an operator-facing stability promise. The stability labels in the catalog are scoped to this repo (e.g., “test-only”, “script-only”, “internal”).
 
-- Governing ADR (taxonomy intent, not a usage source of truth): `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
+- Governing ADR (taxonomy intent, not a usage source of truth): `docs/adr/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`
 
 ## Coverage Checklist
 

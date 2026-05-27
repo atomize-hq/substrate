@@ -27,10 +27,10 @@ This contract is grounded in the landed basis and seam-local planning below:
 - `docs/foundation/anthropic-messages-c03-contract.md`
 - `docs/foundation/planner-executor-c04-policy-contract.md`
 - `docs/foundation/substrate-boundary-c05-contract.md`
-- `docs/project_management/packs/active/azure-foundry-provider-transport/threading.md`
-- `docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md`
-- `docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/seam.md`
-- `docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/review.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threading.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/seam.md`
+- `crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/review.md`
 
 If this note and the landed basis disagree, this note must be revalidated before downstream operator work proceeds.
 

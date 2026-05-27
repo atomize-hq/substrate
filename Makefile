@@ -140,10 +140,9 @@ pre-ci:
 PM_SYSTEM_SCRIPTS := docs/project_management/system/scripts
 FSE_SYSTEM_SCRIPTS := docs/project_management/system/fse/scripts
 
-# Feature directory under docs/project_management/packs/<bucket>/<feature>
+# Compatibility vars kept for retired planning automation entrypoints.
 FEATURE_DIR ?=
 
-# Space-separated list of pack-relative paths to scan (scoped lint for planning agents)
 OWNED_PATHS ?=
 
 # Planning agent id for pm-run-planning-agent
@@ -156,7 +155,6 @@ PWS_ID ?=
 START_AT ?=
 POLL_S ?= 60
 
-# ADR path under docs/project_management/adrs/<bucket>/...
 ADR ?=
 
 CODEX_PROFILE ?=
@@ -167,138 +165,6 @@ PROVING_RUN_FACTS ?=
 PROVING_RUN_HUMAN_INPUTS ?=
 PROVING_RUN_CLOSEOUT_OUTPUT ?= proving-run-closeout.json
 
-.PHONY: planning-validate
-planning-validate:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	python3 $(PM_SYSTEM_SCRIPTS)/planning/validate_tasks_json.py --feature-dir "$(FEATURE_DIR)"
-
-.PHONY: planning-lint
-planning-lint:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	$(PM_SYSTEM_SCRIPTS)/planning/lint.sh --feature-dir "$(FEATURE_DIR)"
-
-.PHONY: planning-micro-lint
-planning-micro-lint:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(OWNED_PATHS)" ]; then echo "ERROR: set OWNED_PATHS=\"<pack-relative paths you edited>\""; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/micro_lint.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(AGENT)" ]; then cmd="$$cmd --agent \"$(AGENT)\""; fi; \
-	cmd="$$cmd -- $(OWNED_PATHS)"; \
-	eval "$$cmd"
-
-.PHONY: pm-pws-plan
-pm-pws-plan:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_pws_plan.py --feature-dir "$(FEATURE_DIR)"
-
-.PHONY: pm-run-pws
-pm-run-pws:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(PWS_ID)" ]; then echo "ERROR: set PWS_ID=<PWS_ID>"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/run_pws_agent.sh --feature-dir \"$(FEATURE_DIR)\" --pws-id \"$(PWS_ID)\""; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	eval "$$cmd"
-
-.PHONY: pm-full-planning-orchestrate
-pm-full-planning-orchestrate:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/full_planning_orchestrate.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	eval "$$cmd"
-
-.PHONY: pm-pre-full-planning-converge
-pm-pre-full-planning-converge:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/pre_full_planning_converge.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	eval "$$cmd"
-
-.PHONY: pm-post-full-planning-converge
-pm-post-full-planning-converge:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/post_full_planning_converge.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	eval "$$cmd"
-
-.PHONY: pm-planning-pipeline
-pm-planning-pipeline:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/planning_pipeline_orchestrate.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(START_AT)" ]; then cmd="$$cmd --start-at \"$(START_AT)\""; fi; \
-	if [ -n "$(POLL_S)" ]; then cmd="$$cmd --poll-s \"$(POLL_S)\""; fi; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	eval "$$cmd"
-
-.PHONY: pm-run-planning-agent
-pm-run-planning-agent:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(AGENT)" ]; then echo "ERROR: set AGENT=spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/run_planning_agent.sh --feature-dir \"$(FEATURE_DIR)\" --agent \"$(AGENT)\""; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	eval "$$cmd"
-
-.PHONY: pm-pre-planning-research
-pm-pre-planning-research:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/pre_planning_research_orchestrate.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(START_AT)" ]; then cmd="$$cmd --start-at \"$(START_AT)\""; fi; \
-	if [ -n "$(POLL_S)" ]; then cmd="$$cmd --poll-s \"$(POLL_S)\""; fi; \
-	CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)" eval "$$cmd"
-
-.PHONY: pm-pre-planning-from-adr
-pm-pre-planning-from-adr:
-	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/adrs/<bucket>/ADR-XXXX-....md"; exit 2; fi
-	@set -euo pipefail; \
-	if [ -n "$$(git status --porcelain=v1)" ]; then echo "ERROR: orchestration checkout is dirty; commit or stash before running"; exit 2; fi; \
-	bucket="$(BUCKET)"; \
-	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
-	if [ -z "$$bucket" ]; then bucket="draft"; fi; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/scaffold_pre_planning_pack.sh --adr \"$(ADR)\" --bucket \"$$bucket\""; \
-	if [ -n "$(FEATURE)" ]; then cmd="$$cmd --feature \"$(FEATURE)\""; fi; \
-	feature_dir="$$(eval "$$cmd")"; \
-	if [ -z "$$feature_dir" ]; then echo "ERROR: scaffold_pre_planning_pack.sh returned empty feature dir"; exit 2; fi; \
-	tasks_path="$$feature_dir/tasks.json"; \
-	if [ -n "$$(git status --porcelain=v1 -- "$$tasks_path")" ]; then \
-	  git add -- "$$tasks_path"; \
-	  if ! git diff --cached --quiet; then git commit -m "docs: bootstrap pre-planning pack"; fi; \
-	fi; \
-	if [ "$(RUN_PIPELINE)" = "1" ]; then \
-	  $(MAKE) pm-planning-pipeline FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)" CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)"; \
-	else \
-	  $(MAKE) pm-pre-planning-research FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)" CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)"; \
-	fi
-
 .PHONY: pm-prepare-proving-run-closeout
 pm-prepare-proving-run-closeout:
 	@if [ -z "$(PROVING_RUN_FACTS)" ]; then echo "ERROR: set PROVING_RUN_FACTS=<path-to-lifecycle-facts.json>"; exit 2; fi
@@ -307,34 +173,10 @@ pm-prepare-proving-run-closeout:
 	if [ -n "$(PROVING_RUN_HUMAN_INPUTS)" ]; then cmd="$$cmd --human-inputs \"$(PROVING_RUN_HUMAN_INPUTS)\""; fi; \
 	eval "$$cmd"
 
-.PHONY: pm-fse-pre-planning-from-adr
-pm-fse-pre-planning-from-adr:
-	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/adrs/<bucket>/ADR-XXXX-....md"; exit 2; fi
-	@set -euo pipefail; \
-	if [ -n "$$(git status --porcelain=v1)" ]; then echo "ERROR: orchestration checkout is dirty; commit or stash before running"; exit 2; fi; \
-	bucket="$(BUCKET)"; \
-	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
-	if [ -z "$$bucket" ]; then bucket="draft"; fi; \
-	cmd="$(FSE_SYSTEM_SCRIPTS)/planning/scaffold_pre_planning_pack.sh --adr \"$(ADR)\" --bucket \"$$bucket\""; \
-	if [ -n "$(FEATURE)" ]; then cmd="$$cmd --feature \"$(FEATURE)\""; fi; \
-	feature_dir="$$(eval "$$cmd")"; \
-	if [ -z "$$feature_dir" ]; then echo "ERROR: scaffold_pre_planning_pack.sh returned empty feature dir"; exit 2; fi; \
-	fse_metadata_path="$$feature_dir/fse_pre_planning.json"; \
-	if [ -n "$$(git status --porcelain=v1 -- "$$fse_metadata_path")" ]; then \
-	  git add -- "$$fse_metadata_path"; \
-	  if ! git diff --cached --quiet; then git commit -m "docs: bootstrap fse pre-planning pack"; fi; \
-	fi; \
-	cmd="$(FSE_SYSTEM_SCRIPTS)/planning/pre_planning_research_orchestrate.sh --feature-dir \"$$feature_dir\""; \
-	if [ -n "$(START_AT)" ]; then cmd="$$cmd --start-at \"$(START_AT)\""; fi; \
-	if [ -n "$(POLL_S)" ]; then cmd="$$cmd --poll-s \"$(POLL_S)\""; fi; \
-	CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)" eval "$$cmd"
-
-.PHONY: planning-lint-ps
-planning-lint-ps:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
-	pwsh -File $(PM_SYSTEM_SCRIPTS)/planning/lint.ps1 -FeatureDir "$(FEATURE_DIR)"
+.PHONY: planning-validate planning-lint planning-micro-lint pm-pws-plan pm-run-pws pm-full-planning-orchestrate pm-pre-full-planning-converge pm-post-full-planning-converge pm-planning-pipeline pm-run-planning-agent pm-pre-planning-research pm-pre-planning-from-adr pm-fse-pre-planning-from-adr planning-lint-ps
+planning-validate planning-lint planning-micro-lint pm-pws-plan pm-run-pws pm-full-planning-orchestrate pm-pre-full-planning-converge pm-post-full-planning-converge pm-planning-pipeline pm-run-planning-agent pm-pre-planning-research pm-pre-planning-from-adr pm-fse-pre-planning-from-adr planning-lint-ps:
+	@echo "ERROR: target '$@' was retired with project-management pack automation. See docs/PROJECT_MANAGEMENT_RETIREMENT.md." >&2
+	@exit 2
 
 .PHONY: adr-check
 adr-check:
@@ -358,14 +200,8 @@ pm-lift-intake:
 
 .PHONY: pm-lift-pack
 pm-lift-pack:
-	@if [ -z "$(PACK)" ]; then echo "ERROR: set PACK=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(PACK)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: PACK must be under docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@set -euo pipefail; \
-	if [ "$(EMIT_JSON)" = "1" ]; then \
-	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-impact-map --feature-dir "$(PACK)" --emit-json; \
-	else \
-	  python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift.py from-impact-map --feature-dir "$(PACK)"; \
-	fi
+	@echo "ERROR: target '$@' was retired with project-management pack automation. See docs/PROJECT_MANAGEMENT_RETIREMENT.md." >&2
+	@exit 2
 
 .PHONY: pm-lift-diff
 pm-lift-diff:
@@ -379,15 +215,8 @@ pm-lift-diff:
 
 .PHONY: pm-lift-strict
 pm-lift-strict:
-	@if [ -n "$(FILE)" ] && [ -n "$(PACK)" ]; then echo "ERROR: set only one of FILE or PACK"; exit 2; fi
-	@if [ -z "$(FILE)" ] && [ -z "$(PACK)" ]; then echo "ERROR: set FILE=<path/to/intake_or_adr.md> or PACK=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if [ -n "$(PACK)" ] && ! echo "$(PACK)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: PACK must be under docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@set -euo pipefail; \
-	if [ -n "$(FILE)" ]; then \
-	  PM_LIFT_STRICT=1 python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift_strict_check.py --intake "$(FILE)"; \
-	else \
-	  PM_LIFT_STRICT=1 python3 $(PM_SYSTEM_SCRIPTS)/planning/pm_lift_strict_check.py --feature-dir "$(PACK)"; \
-	fi
+	@echo "ERROR: target '$@' was retired with project-management pack automation. See docs/PROJECT_MANAGEMENT_RETIREMENT.md." >&2
+	@exit 2
 
 # =========================
 # Cross-platform smoke (CI)
@@ -422,53 +251,19 @@ ci-compile-parity:
 installers-container-smoke:
 	@bash tests/installers/pkg_manager_container_smoke.sh
 
-# Dispatch defaults (override as needed)
+# Retired pack automation compatibility entrypoints.
 PLATFORM ?= linux
-	RUNNER_KIND ?= self-hosted
-	MACOS_RUNNER_KIND ?=
-	RUN_WSL ?= 0
-	RUN_INTEG_CHECKS ?= 0
-	SMOKE_SLICE_ID ?=
-	SMOKE_CHECKOUT_REF ?=
-	WORKFLOW ?= .github/workflows/feature-smoke.yml
+RUNNER_KIND ?= self-hosted
+MACOS_RUNNER_KIND ?=
+RUN_WSL ?= 0
+RUN_INTEG_CHECKS ?= 0
+SMOKE_SLICE_ID ?=
+SMOKE_CHECKOUT_REF ?=
+WORKFLOW ?=
 WORKFLOW_REF ?= $(CURRENT_REF)
 REMOTE ?= origin
 CLEANUP ?= 1
 
-.PHONY: feature-smoke
-feature-smoke:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(WORKFLOW_REF)" ]; then echo "ERROR: set WORKFLOW_REF=<ref> (ref must not be main/testing; use the orchestration/task ref)"; exit 2; fi
-	@if [ "$(PLATFORM)" = "wsl" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: PLATFORM=wsl requires RUNNER_KIND=self-hosted"; exit 2; fi
-	@if [ "$(RUN_WSL)" = "1" ] && [ "$(RUNNER_KIND)" != "self-hosted" ]; then echo "ERROR: RUN_WSL=1 requires RUNNER_KIND=self-hosted"; exit 2; fi
-	@set -euo pipefail; \
-	args="--feature-dir \"$(FEATURE_DIR)\" --runner-kind $(RUNNER_KIND) --platform $(PLATFORM) --workflow \"$(WORKFLOW)\" --workflow-ref \"$(WORKFLOW_REF)\" --remote \"$(REMOTE)\""; \
-	if [ -n "$(MACOS_RUNNER_KIND)" ]; then args="$$args --macos-runner-kind $(MACOS_RUNNER_KIND)"; fi; \
-	if [ "$(RUN_WSL)" = "1" ]; then args="$$args --run-wsl"; fi; \
-	if [ "$(RUN_INTEG_CHECKS)" = "1" ]; then args="$$args --run-integ-checks"; fi; \
-	if [ -n "$(SMOKE_CHECKOUT_REF)" ]; then args="$$args --checkout-ref \"$(SMOKE_CHECKOUT_REF)\""; fi; \
-	if [ -n "$(SMOKE_SLICE_ID)" ]; then args="$$args --smoke-slice-id \"$(SMOKE_SLICE_ID)\""; fi; \
-	if [ "$(CLEANUP)" = "1" ]; then args="$$args --cleanup"; fi; \
-	eval "scripts/ci/dispatch_feature_smoke.sh $$args"
-
-.PHONY: feature-smoke-all
-feature-smoke-all:
-	@$(MAKE) feature-smoke PLATFORM=all
-
-.PHONY: feature-smoke-behavior
-feature-smoke-behavior:
-	@$(MAKE) feature-smoke PLATFORM=behavior
-
-.PHONY: feature-smoke-wsl
-feature-smoke-wsl:
-	@$(MAKE) feature-smoke PLATFORM=wsl RUN_WSL=0 RUNNER_KIND=self-hosted
-
-# =========================
-# Planning pack scaffolding
-# =========================
-
-# New feature directory name under docs/project_management/packs/<bucket>/<feature>
 FEATURE ?=
 PACK_BUCKET ?=
 DECISION_HEAVY ?= 0
@@ -480,44 +275,23 @@ BEHAVIOR_PLATFORMS ?=
 CI_PARITY_PLATFORMS ?=
 SLICE_PREFIX ?=
 
-.PHONY: planning-new-feature
-planning-new-feature:
-	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
-	@set -euo pipefail; \
-	bucket="$(PACK_BUCKET)"; \
-	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
-	if [ -z "$$bucket" ]; then bucket="active"; fi; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/planning/new_feature.sh --feature \"$(FEATURE)\" --bucket \"$$bucket\""; \
-	if [ -n "$(SLICE_PREFIX)" ]; then cmd="$$cmd --slice-prefix \"$(SLICE_PREFIX)\""; fi; \
-	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd --decision-heavy"; fi; \
-	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd --cross-platform"; fi; \
-	if [ -n "$(BEHAVIOR_PLATFORMS)" ]; then cmd="$$cmd --behavior-platforms \"$(BEHAVIOR_PLATFORMS)\""; fi; \
-	if [ -n "$(CI_PARITY_PLATFORMS)" ]; then cmd="$$cmd --ci-parity-platforms \"$(CI_PARITY_PLATFORMS)\""; fi; \
-	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd --wsl-required"; fi; \
-	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd --wsl-separate"; fi; \
-	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd --automation"; fi; \
-	eval "$$cmd"; \
-	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/packs/$$bucket/$(FEATURE)"
+TASK_ID ?=
+TASK_PLATFORM ?=
+SLICE_ID ?=
+CODE_TASK_ID ?=
+TEST_TASK_ID ?=
+PLATFORMS ?=
+SMOKE_RUN_ID ?=
 
-.PHONY: planning-new-feature-ps
-planning-new-feature-ps:
-	@if [ -z "$(FEATURE)" ]; then echo "ERROR: set FEATURE=<feature_dir_name>"; exit 2; fi
-	@if ! command -v pwsh >/dev/null 2>&1; then echo "ERROR: pwsh not found on PATH"; exit 2; fi
-	@set -euo pipefail; \
-	bucket="$(PACK_BUCKET)"; \
-	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
-	if [ -z "$$bucket" ]; then bucket="active"; fi; \
-	cmd="pwsh -File $(PM_SYSTEM_SCRIPTS)/planning/new_feature.ps1 -Feature \"$(FEATURE)\" -Bucket \"$$bucket\""; \
-	if [ -n "$(SLICE_PREFIX)" ]; then cmd="$$cmd -SlicePrefix \"$(SLICE_PREFIX)\""; fi; \
-	if [ "$(DECISION_HEAVY)" = "1" ]; then cmd="$$cmd -DecisionHeavy"; fi; \
-	if [ "$(CROSS_PLATFORM)" = "1" ]; then cmd="$$cmd -CrossPlatform"; fi; \
-	if [ -n "$(BEHAVIOR_PLATFORMS)" ]; then cmd="$$cmd -BehaviorPlatforms \"$(BEHAVIOR_PLATFORMS)\""; fi; \
-	if [ -n "$(CI_PARITY_PLATFORMS)" ]; then cmd="$$cmd -CiParityPlatforms \"$(CI_PARITY_PLATFORMS)\""; fi; \
-	if [ "$(WSL_REQUIRED)" = "1" ]; then cmd="$$cmd -WslRequired"; fi; \
-	if [ "$(WSL_SEPARATE)" = "1" ]; then cmd="$$cmd -WslSeparate"; fi; \
-	if [ "$(AUTOMATION)" = "1" ]; then cmd="$$cmd -Automation"; fi; \
-	eval "$$cmd"; \
-	$(MAKE) planning-validate FEATURE_DIR="docs/project_management/packs/$$bucket/$(FEATURE)"
+LAUNCH_CODEX ?= 0
+VERIFY_ONLY ?= 0
+NO_COMMIT ?= 0
+SMOKE ?= 0
+REMOVE_WORKTREES ?= 0
+PRUNE_LOCAL ?= 0
+PRUNE_REMOTE ?=
+FORCE ?= 0
+DRY_RUN ?= 0
 
 .PHONY: planning-archive
 planning-archive:
@@ -528,179 +302,7 @@ planning-archive:
 	if [ "$(ALLOW_DIRTY)" = "1" ]; then cmd="$$cmd --allow-dirty"; fi; \
 	eval "$$cmd"
 
-# =========================
-# Triad execution automation
-# =========================
-
-TASK_ID ?=
-TASK_PLATFORM ?=
-SLICE_ID ?=
-CODE_TASK_ID ?=
-TEST_TASK_ID ?=
-PLATFORMS ?=
-SMOKE_RUN_ID ?=
-
-LAUNCH_CODEX ?= 0
-CODEX_PROFILE ?=
-CODEX_MODEL ?=
-CODEX_JSONL ?= 0
-
-VERIFY_ONLY ?= 0
-NO_COMMIT ?= 0
-SMOKE ?= 0
-
-REMOVE_WORKTREES ?= 0
-PRUNE_LOCAL ?= 0
-PRUNE_REMOTE ?=
-FORCE ?= 0
-DRY_RUN ?= 0
-
-.PHONY: triad-code-checks
-triad-code-checks:
-	cargo fmt
-	cargo clippy --workspace --all-targets -- -D warnings
-
-.PHONY: triad-test-checks
-triad-test-checks:
-	cargo fmt
-
-.PHONY: triad-task-start
-triad-task-start:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/task_start.sh --feature-dir \"$(FEATURE_DIR)\" --task-id \"$(TASK_ID)\""; \
-	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	if [ -n "$(TASK_PLATFORM)" ]; then cmd="$$cmd --platform \"$(TASK_PLATFORM)\""; fi; \
-	if [ "$(FORCE)" = "1" ]; then cmd="$$cmd --force"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-task-start-pair
-triad-task-start-pair:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(SLICE_ID)" ] && ( [ -z "$(CODE_TASK_ID)" ] || [ -z "$(TEST_TASK_ID)" ] ); then \
-		  echo "ERROR: set SLICE_ID=<slice> OR set CODE_TASK_ID=<id> TEST_TASK_ID=<id>"; exit 2; \
-		fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/task_start_pair.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(SLICE_ID)" ]; then cmd="$$cmd --slice-id \"$(SLICE_ID)\""; fi; \
-	if [ -n "$(CODE_TASK_ID)" ]; then cmd="$$cmd --code-task-id \"$(CODE_TASK_ID)\""; fi; \
-	if [ -n "$(TEST_TASK_ID)" ]; then cmd="$$cmd --test-task-id \"$(TEST_TASK_ID)\""; fi; \
-	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	if [ "$(FORCE)" = "1" ]; then cmd="$$cmd --force"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-task-start-complete
-triad-task-start-complete:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/task_start_complete.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-orch-ensure
-triad-orch-ensure:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/orch_ensure.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ -n "$(FROM_BRANCH)" ]; then cmd="$$cmd --from-branch \"$(FROM_BRANCH)\""; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-task-start-platform-fixes
-triad-task-start-platform-fixes:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
-	@if [ -z "$(PLATFORMS)" ]; then echo "ERROR: set PLATFORMS=linux,macos,windows[,wsl]"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
-	IFS=',' read -r -a platforms <<<"$(PLATFORMS)"; \
-	for p in "$${platforms[@]}"; do cmd="$$cmd --platform \"$$p\""; done; \
-	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-task-start-platform-fixes-from-smoke
-triad-task-start-platform-fixes-from-smoke:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
-	@if [ -z "$(SMOKE_RUN_ID)" ]; then echo "ERROR: set SMOKE_RUN_ID=<gh-run-id>"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/task_start_platform_fixes.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\" --from-smoke-run \"$(SMOKE_RUN_ID)\""; \
-	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-task-start-integ-final
-triad-task-start-integ-final:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/task_start_integ_final.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
-	if [ "$(LAUNCH_CODEX)" = "1" ]; then cmd="$$cmd --launch-codex"; fi; \
-	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
-	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
-	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-mark-noop-platform-fixes-completed
-triad-mark-noop-platform-fixes-completed:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@if [ -z "$(SLICE_ID)" ]; then echo "ERROR: set SLICE_ID=<slice>"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/mark_noop_platform_fixes_completed.sh --feature-dir \"$(FEATURE_DIR)\" --slice-id \"$(SLICE_ID)\""; \
-	if [ -n "$(SMOKE_RUN_ID)" ]; then cmd="$$cmd --from-smoke-run \"$(SMOKE_RUN_ID)\""; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-task-finish
-triad-task-finish:
-	@if [ -z "$(TASK_ID)" ]; then echo "ERROR: set TASK_ID=<task-id>"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/task_finish.sh --task-id \"$(TASK_ID)\""; \
-	if [ "$(VERIFY_ONLY)" = "1" ]; then cmd="$$cmd --verify-only"; fi; \
-	if [ "$(NO_COMMIT)" = "1" ]; then cmd="$$cmd --no-commit"; fi; \
-	if [ "$(SMOKE)" = "1" ]; then cmd="$$cmd --smoke"; fi; \
-	if [ -n "$(TASK_PLATFORM)" ]; then cmd="$$cmd --platform \"$(TASK_PLATFORM)\""; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
-
-.PHONY: triad-feature-cleanup
-triad-feature-cleanup:
-	@if [ -z "$(FEATURE_DIR)" ]; then echo "ERROR: set FEATURE_DIR=docs/project_management/packs/<bucket>/<feature>"; exit 2; fi
-	@if ! echo "$(FEATURE_DIR)" | grep -q '^docs/project_management/packs/'; then echo "ERROR: FEATURE_DIR must be under docs/project_management/packs/<bucket>/<feature> (legacy next/ is removed)"; exit 2; fi
-	@set -euo pipefail; \
-	cmd="$(PM_SYSTEM_SCRIPTS)/triad/feature_cleanup.sh --feature-dir \"$(FEATURE_DIR)\""; \
-	if [ "$(REMOVE_WORKTREES)" = "1" ]; then cmd="$$cmd --remove-worktrees"; fi; \
-	if [ "$(PRUNE_LOCAL)" = "1" ]; then cmd="$$cmd --prune-local-branches"; fi; \
-	if [ -n "$(PRUNE_REMOTE)" ]; then cmd="$$cmd --prune-remote-branches \"$(PRUNE_REMOTE)\""; fi; \
-	if [ "$(FORCE)" = "1" ]; then cmd="$$cmd --force"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
-	eval "$$cmd"
+.PHONY: feature-smoke feature-smoke-all feature-smoke-behavior feature-smoke-wsl planning-new-feature planning-new-feature-ps triad-code-checks triad-test-checks triad-task-start triad-task-start-pair triad-task-start-complete triad-orch-ensure triad-task-start-platform-fixes triad-task-start-platform-fixes-from-smoke triad-task-start-integ-final triad-mark-noop-platform-fixes-completed triad-task-finish triad-feature-cleanup
+feature-smoke feature-smoke-all feature-smoke-behavior feature-smoke-wsl planning-new-feature planning-new-feature-ps triad-code-checks triad-test-checks triad-task-start triad-task-start-pair triad-task-start-complete triad-orch-ensure triad-task-start-platform-fixes triad-task-start-platform-fixes-from-smoke triad-task-start-integ-final triad-mark-noop-platform-fixes-completed triad-task-finish triad-feature-cleanup:
+	@echo "ERROR: target '$@' was retired with project-management pack automation. See docs/PROJECT_MANAGEMENT_RETIREMENT.md." >&2
+	@exit 2

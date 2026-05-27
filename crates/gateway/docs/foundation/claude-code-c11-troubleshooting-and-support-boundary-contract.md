@@ -23,12 +23,12 @@ It does not define:
 
 This contract is grounded in the landed basis and seam-local planning below:
 
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/seam.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/review.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/slice-1-freeze-troubleshooting-boundary-contract-and-taxonomy.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-2-closeout.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/seam.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/review.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/slice-1-freeze-troubleshooting-boundary-contract-and-taxonomy.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-2-closeout.md`
 - `docs/foundation/claude-code-c09-operator-bootstrap-contract.md`
 - `docs/foundation/claude-code-c10-live-session-smoke-verification-contract.md`
 - `docs/foundation/claude-code-c10-live-session-smoke-procedure.md`

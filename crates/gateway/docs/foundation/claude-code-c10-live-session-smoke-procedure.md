@@ -23,9 +23,9 @@ This note is grounded in:
 
 - `docs/foundation/claude-code-c10-live-session-smoke-verification-contract.md`
 - `docs/foundation/claude-code-c09-operator-bootstrap-contract.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/seam.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/review.md`
-- `docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/seam.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-2-live-session-smoke-verification/review.md`
+- `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md`
 - `gateway/README.md`
 - `gateway/src/router/mod.rs`
 - `gateway/src/server/mod.rs`

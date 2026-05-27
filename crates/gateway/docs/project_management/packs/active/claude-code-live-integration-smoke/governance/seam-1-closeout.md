@@ -3,17 +3,17 @@ seam_id: SEAM-1
 status: landed
 closeout_version: v1
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/slice-3-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/slice-3-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
   currentness: current
   upstream_closeouts:
-    - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
   required_threads: []
   stale_triggers:
     - `docs/foundation/claude-code-c09-operator-bootstrap-contract.md` changes the canonical bootstrap sequence, evidence posture, or redaction rules in a way that affects downstream bootstrap consumption
@@ -33,9 +33,9 @@ open_remediations: []
 - **Source artifact**: [slice-3-seam-exit-gate.md](../threaded-seams/seam-1-claude-code-operator-bootstrap/slice-3-seam-exit-gate.md)
 - **Landed evidence**:
   - [claude-code-c09-operator-bootstrap-contract.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/claude-code-c09-operator-bootstrap-contract.md)
-  - [seam.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/seam.md)
-  - [review.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/review.md)
-  - [threading.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md)
+  - [seam.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/seam.md)
+  - [review.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-1-claude-code-operator-bootstrap/review.md)
+  - [threading.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md)
   - [gateway/README.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/README.md)
   - [gateway/config/default.example.toml](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/config/default.example.toml)
   - [gateway/config/models.example.toml](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/config/models.example.toml)

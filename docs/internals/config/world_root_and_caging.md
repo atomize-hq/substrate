@@ -23,8 +23,8 @@ The effective config is resolved from defaults + global config + workspace confi
 
 - `docs/CONFIGURATION.md`
 - `docs/reference/config/contract.md`
-- ADRs: `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`,
-  `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
+- ADRs: `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`,
+  `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md`
 
 The settings relevant to this document:
 
@@ -156,7 +156,6 @@ Repro harness:
   - `docs/internals/env/inventory.md` (exported state env vars)
 - Policy snapshot and full isolation filesystem enforcement:
   - `docs/WORLD.md`
-  - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
+  - `docs/adr/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - REPL persistent sessions and drift restarts:
   - `docs/internals/repl/persistent_session.md`
-

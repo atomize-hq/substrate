@@ -35,7 +35,7 @@ execution_horizon:
   - an operator can follow the eventual seam outputs to express Azure auth, deployment URL shape, `api-version`, provider mapping, and Kimi deployment selection without guessing
   - the gateway has an explicit planned path to prove real Azure traffic through `/v1/messages` using `Kimi-K2-Thinking` and `Kimi-K2.5`
 - **Constraints**:
-  - `docs/project_management/packs/active/azure-kimi-claude-gateway` is the upstream landed basis and should be consumed through closeout-backed truth, not re-planned as greenfield work
+  - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway` is the upstream landed basis and should be consumed through closeout-backed truth, not re-planned as greenfield work
   - `docs/foundation/azure-kimi-c02-normalized-event-contract.md`, `docs/foundation/anthropic-messages-c03-contract.md`, `docs/foundation/planner-executor-c04-policy-contract.md`, `docs/foundation/substrate-boundary-c05-contract.md`, and `docs/foundation/substrate-structured-events-c06-contract.md` remain authoritative constraints
   - `docs/foundation/claude-code-mux-extension-boundary.md` and `docs/foundation/claude-code-mux-5a372fb-validation.md` still constrain where Azure-specific work may attach and what remained unresolved after the foundation seam
   - `docs/adr/0002-model-azure-kimi-as-a-first-class-provider-normalization-problem.md` and `docs/adr/0006-preserve-an-in-world-compatible-deployment-boundary.md` prohibit collapsing Azure into a thin generic adapter or hard-coding localhost-only assumptions into the core

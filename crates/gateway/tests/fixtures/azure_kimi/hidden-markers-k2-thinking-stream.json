@@ -1,7 +1,7 @@
 {
   "case_id": "hidden-markers-k2-thinking-stream",
   "contract_ref": "docs/foundation/azure-kimi-c02-normalized-event-contract.md",
-  "raw_artifact_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/raw-response.json",
+  "raw_artifact_ref": "crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/raw-response.json",
   "normalized_events": [
     {
       "event_kind": "action",

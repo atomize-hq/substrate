@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "feature": "gateway-backend-selection-runtime-integration",
-  "strict_touch_validation": true,
-  "adr_paths": [
-    "docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md"
-  ]
-}

@@ -1630,8 +1630,6 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::path::Path;
 
     use serde_json::{json, Value};
 
@@ -2114,35 +2112,6 @@ mod tests {
             invalid_tuple.is_err(),
             "tuple fields must reject backend-id grammar so backend_id cannot become semantic identity"
         );
-    }
-
-    #[test]
-    fn laitdp2_manual_review_playbook_names_required_evidence() {
-        let playbook_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
-            "../../docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md",
-        );
-        let playbook =
-            fs::read_to_string(&playbook_path).expect("manual testing playbook should be readable");
-
-        for required in [
-            "One-owner-per-surface audit",
-            "Tuple meanings and wording",
-            "Machine-readable schema ownership",
-            "Policy and telemetry owner lines",
-            "Platform parity and compatibility",
-            "Claude Code pointed at `substrate_gateway`",
-            "Codex using Responses API and `~/.codex/auth.json`",
-            "Pre-provider-selection publication",
-            "Search for overloaded backend wording",
-            "Search for bridge wording that implies a second control plane",
-            "Search for status-schema drift",
-            "Search for stale active or backup references presented as current owners",
-        ] {
-            assert!(
-                playbook.contains(required),
-                "manual review playbook must include `{required}` as LAITDP2 validation evidence"
-            );
-        }
     }
 
     #[test]

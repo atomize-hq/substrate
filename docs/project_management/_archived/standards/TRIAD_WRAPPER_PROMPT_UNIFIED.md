@@ -1,7 +1,0 @@
-<!-- NOTE: This file is intentionally a redirect stub. -->
-
-# Deprecated location
-
-Source of truth moved to: `docs/project_management/system/prompts/triad_wrappers/triad_unified_wrapper_checkpoint_aware.md`
-
-Do not edit this legacy file.

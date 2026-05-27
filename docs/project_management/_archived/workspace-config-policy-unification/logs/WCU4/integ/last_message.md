@@ -1,6 +1,0 @@
-- Merged `workspace_config_policy_unification-wcu4-integ-core` into `workspace_config_policy_unification-wcu4-integ` (HEAD `c7fb28bf1ea09e87d23887709321a7a4f7f7d0e1`).
-- Ran checks in the integ worktree: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-shell --test installer_env_wcu4 -- --nocapture`, `make integ-checks` (all pass).
-- Dispatched feature smoke (behavior) with `SMOKE_SLICE_ID=WCU4`: run `21071405891` success — https://github.com/atomize-hq/substrate/actions/runs/21071405891
-- Updated closeout + evidence: `docs/project_management/_archived/workspace-config-policy-unification/WCU4-closeout_report.md:1`, `docs/project_management/_archived/workspace-config-policy-unification/session_log.md:406`, `docs/project_management/_archived/workspace-config-policy-unification/tasks.json:1432`.
-- Finished task: `make triad-task-finish TASK_ID="WCU4-integ"` (merged back to orchestration via merge commit).
-- Note: `make integ-checks` initially failed due to disk full; freed space by deleting other worktree `target/` dirs under `wt/*/target`.

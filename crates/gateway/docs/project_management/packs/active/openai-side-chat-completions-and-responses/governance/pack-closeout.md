@@ -10,10 +10,10 @@
 
 The pack is closed out on the basis of the published seam closeouts and thread registry:
 
-- `docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md`
-- `docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md`
-- `docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-3-closeout.md`
-- `docs/project_management/packs/active/openai-side-chat-completions-and-responses/threading.md`
+- `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md`
+- `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md`
+- `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-3-closeout.md`
+- `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/threading.md`
 
 Landed contracts and maintenance basis:
 

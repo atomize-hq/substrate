@@ -728,14 +728,9 @@ run_generic_smoke() {
 }
 
 run_bedpm_installer_conformance() {
-  local smoke_cmd
-
-  smoke_cmd="(cd /src 2>/dev/null || cd \"${REPO_ROOT}\") && bash docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh"
-
-  log "Running BEDPM Linux smoke through the Lima-backed guest path"
-  "${SCRIPTS_ROOT}/lima-warm.sh"
-  run_gateway_lifecycle_proof
-  "${SUBSTRATE_BIN}" -c "${smoke_cmd}"
+  echo "ERROR: --bedpm-installer-conformance was retired with project-management pack automation." >&2
+  echo "See docs/PROJECT_MANAGEMENT_RETIREMENT.md for the replacement workflow." >&2
+  exit 2
 }
 
 run_orchestration_conformance() {

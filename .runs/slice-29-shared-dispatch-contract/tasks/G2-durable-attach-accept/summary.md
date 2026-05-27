@@ -1,1 +1,0 @@
-G2 passed. The authoritative tree at `42636f8eb68fe2e817d973a4896f5c35cfc5b12b` satisfies the durable attach freeze criteria, `accepted_tip_after_G2` is recorded, and the only safe parallel window is open with both runtime lanes branched from the same accepted tree.

@@ -9,13 +9,12 @@ Purpose:
   Recommend whether to SKIP or RUN multi-OS CI based on:
     - required platforms for the audit kind
     - last successful GH Actions run coverage (platforms that actually passed)
-    - whether changes since that run are docs/planning-only
+    - whether changes since that run are docs-only
 
 Usage:
   scripts/ci-audit/ci_audit.sh \
-    --kind <ci-testing|feature-smoke> \
+    --kind ci-testing \
     --orch-branch <ref> \
-    [--feature-dir <path>] \
     [--required-platforms <csv>] \
     [--head-sha <sha>] \
     [--baseline-sha <sha>] \
@@ -25,11 +24,10 @@ Usage:
 
 Examples:
   scripts/ci-audit/ci_audit.sh --kind ci-testing --orch-branch feat/my-feature
-  scripts/ci-audit/ci_audit.sh --kind feature-smoke --orch-branch feat/my-feature --feature-dir docs/project_management/packs/active/my-feature
 
 Notes:
   - Advisory only: does not dispatch CI.
-  - Docs/planning-only changes (anything under docs/) are recommended to SKIP all CI per policy.
+  - Docs-only changes (anything under docs/) are recommended to SKIP all CI per policy.
   - If no last-green run exists, diff baseline falls back to merge-base with origin/testing (if available).
 USAGE
 }
@@ -45,7 +43,6 @@ require_cmd() {
 
 KIND=""
 ORCH_BRANCH=""
-FEATURE_DIR=""
 REQUIRED_PLATFORMS_OVERRIDE=""
 HEAD_SHA=""
 BASELINE_SHA_OVERRIDE=""
@@ -59,8 +56,6 @@ while [[ $# -gt 0 ]]; do
             KIND="${2:-}"; shift 2 ;;
         --orch-branch)
             ORCH_BRANCH="${2:-}"; shift 2 ;;
-        --feature-dir)
-            FEATURE_DIR="${2:-}"; shift 2 ;;
         --required-platforms)
             REQUIRED_PLATFORMS_OVERRIDE="${2:-}"; shift 2 ;;
         --head-sha)
@@ -84,8 +79,9 @@ done
 [[ -n "${ORCH_BRANCH}" ]] || die "Missing --orch-branch"
 
 case "${KIND}" in
-    ci-testing|feature-smoke) ;;
-    *) die "Invalid --kind: ${KIND} (expected ci-testing or feature-smoke)" ;;
+    ci-testing) ;;
+    feature-smoke) die "feature-smoke audit was retired with project-management pack automation" ;;
+    *) die "Invalid --kind: ${KIND} (expected ci-testing)" ;;
 esac
 
 require_cmd gh
@@ -103,7 +99,6 @@ fi
 WORKFLOW_FILE=""
 case "${KIND}" in
     ci-testing) WORKFLOW_FILE=".github/workflows/ci-testing.yml" ;;
-    feature-smoke) WORKFLOW_FILE=".github/workflows/feature-smoke.yml" ;;
 esac
 
 git fetch -q "${REMOTE}" testing "${ORCH_BRANCH}" || true
@@ -111,20 +106,8 @@ git fetch -q "${REMOTE}" testing "${ORCH_BRANCH}" || true
 required_platforms_csv=""
 if [[ -n "${REQUIRED_PLATFORMS_OVERRIDE}" ]]; then
     required_platforms_csv="${REQUIRED_PLATFORMS_OVERRIDE}"
-elif [[ "${KIND}" == "ci-testing" ]]; then
-    required_platforms_csv="linux,macos,windows"
 else
-    if [[ -n "${FEATURE_DIR}" ]]; then
-        if [[ ! -f "${FEATURE_DIR}/tasks.json" ]]; then
-            die "Missing ${FEATURE_DIR}/tasks.json"
-        fi
-        required_platforms_csv="$(jq -r '.meta.behavior_platforms_required // [] | join(",")' "${FEATURE_DIR}/tasks.json")"
-    else
-        die "--feature-dir or --required-platforms is required for --kind feature-smoke"
-    fi
-    if [[ -z "${required_platforms_csv}" ]]; then
-        required_platforms_csv="linux,macos,windows"
-    fi
+    required_platforms_csv="linux,macos,windows"
 fi
 
 to_set_lines() {
@@ -203,15 +186,6 @@ derive_passed_platforms_from_jobs() {
                 "Lint & Test (ubuntu-"*")") platforms+=("linux") ;;
                 "Lint & Test (macos-"*")") platforms+=("macos") ;;
                 "Lint & Test (windows-"*")") platforms+=("windows") ;;
-            esac
-        done < <(jq -r '.[] | select(.conclusion=="success") | .name' <<<"${jobs_json}")
-    else
-        while IFS= read -r job_name; do
-            case "${job_name}" in
-                linux_*) platforms+=("linux") ;;
-                macos_*) platforms+=("macos") ;;
-                windows_*) platforms+=("windows") ;;
-                wsl) platforms+=("wsl") ;;
             esac
         done < <(jq -r '.[] | select(.conclusion=="success") | .name' <<<"${jobs_json}")
     fi

@@ -12,3 +12,13 @@ Existing related docs (top-level):
 
 Operator documentation for `substrate world deps` lives under:
 - `docs/reference/world/deps/README.md`
+
+## World Verification
+
+Operator verification playbooks for stable world behavior live under:
+- `docs/reference/world/verification/README.md`
+
+## World Platforms
+
+Operator-facing platform setup and troubleshooting guides live under:
+- `docs/reference/world/platforms/README.md`

@@ -53,8 +53,8 @@ pub fn wrap_with_anchor_guard(command: &str, anchor_root: &Path) -> String {
 /// Wrap a shell command with the deterministic world environment contract.
 ///
 /// This is defense-in-depth against shells or service environments that mutate PATH/HOME/XDG/TERM
-/// despite the caller providing an explicit env map. The contract is owned by the WDH0 spec:
-/// `docs/project_management/next/world-deps-host-visible-hardening/WDH0-spec.md`.
+/// despite the caller providing an explicit env map. The stable contract reference is
+/// `docs/reference/config/world.md`.
 pub fn wrap_with_world_env_contract(command: &str, env: &HashMap<String, String>) -> String {
     const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
     const BASELINE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";

@@ -1,1 +1,0 @@
-Adopt the frozen shared dispatch semantics in orchestrator-controlled REPL routing without reopening the contract or durable-state owners, and touch world_ops.rs only if a concrete additive transport field is proven necessary.

@@ -585,7 +585,7 @@ Owned files:
 - [crates/world-agent/tests/gateway_runtime_parity.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/gateway_runtime_parity.rs)
 - [crates/gateway/tests/openai_shared_parity.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/tests/openai_shared_parity.rs)
 - [crates/shell/tests/world_gateway.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/world_gateway.rs)
-- [docs/contracts/substrate-gateway-policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-policy-evaluation.md)
+- [docs/contracts/gateway/policy-evaluation.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/gateway/policy-evaluation.md)
 - [crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md)
 - [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
 

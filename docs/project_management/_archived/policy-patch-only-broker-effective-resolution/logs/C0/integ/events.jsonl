@@ -1,6 +1,0 @@
-- Merged `policy-patch-only-broker-effective-resolution-c0-integ-core` into `policy-patch-only-broker-effective-resolution-c0-integ`, then fixed Windows CI flake by serializing env/global-broker test interactions (commit `7207939`).
-- Re-ran gates in the worktree: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, targeted tests, and `make integ-checks` (pass).
-- Re-ran CI compile parity: run `21096432455` (`https://github.com/atomize-hq/substrate/actions/runs/21096432455`) (success on ubuntu/macos/windows).
-- Re-ran behavioral smoke (C0): run `21096457624` (`https://github.com/atomize-hq/substrate/actions/runs/21096457624`) (linux/macos/windows all success).
-- Completed and committed `docs/project_management/_archived/next/policy-patch-only-broker-effective-resolution/C0-closeout_report.md` on the orchestration branch.
-- Ran `make triad-task-finish TASK_ID="C0-integ"`; merged back to `feat/policy-patch-only-broker-effective-resolution` (merge commit `0cc8c10`) and pushed to `origin`.

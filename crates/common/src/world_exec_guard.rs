@@ -1,6 +1,6 @@
 //! Exec-time guardrails for host-mounted toolchain binaries in host-visible worlds.
 //!
-//! Spec: `docs/project_management/next/world-deps-host-visible-hardening/WDH2-spec.md`
+//! Reference: `docs/reference/config/world.md`
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

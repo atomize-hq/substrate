@@ -1,6 +1,0 @@
-git status --short --branch -- PLAN.md ORCH_PLAN.md
-git rev-parse HEAD
-sha256sum PLAN.md
-git worktree list --porcelain
-npx gitnexus status
-npx gitnexus analyze

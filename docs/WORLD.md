@@ -1,6 +1,6 @@
 # Substrate World: Architecture, Behavior, and Operations (Linux & macOS)
 
-This document describes the world execution model, transport topology, and validation evidence used by Substrate. It is descriptive context for `docs/contracts/substrate-gateway-runtime-parity.md`, `docs/contracts/substrate-gateway-operator-contract.md`, and `docs/contracts/substrate-gateway-status-schema.md`; it does not redefine those operator contracts.
+This document describes the world execution model, transport topology, and validation evidence used by Substrate. It is descriptive context for `docs/contracts/gateway/runtime-parity.md`, `docs/contracts/gateway/operator-contract.md`, and `docs/contracts/gateway/status-schema.md`; it does not redefine those operator contracts.
 
 Status: Linux host-native and macOS Lima-backed worlds are the supported provisioning paths in this slice. Windows/WSL helper scripts are intentionally fail-closed until their placement contract matches the Linux-first runtime contract.
 
@@ -171,7 +171,7 @@ Deliberate boundary for later lanes:
   confirm `cap_chown` is present in the service's `CapabilityBoundingSet`/`AmbientCapabilities`
   (overlayfs copy-up may require it to preserve ownership/metadata).
 - Need to hand off a reproducible verification run? Execute `scripts/linux/world-socket-verify.sh`
-  (see `docs/manual_verification/linux_world_socket.md`) to provision the socket, capture
+  (see `docs/reference/world/verification/linux_world_socket.md`) to provision the socket, capture
   doctor/shim-status JSON, and optionally uninstall the units afterward.
 - Provisioning is idempotent; rerun the helper whenever the agent binary
   changes or the units need to be repaired. Set `SUBSTRATE_WORLD_SOCKET` to
@@ -282,9 +282,7 @@ Notes
   commands do not use the provisioning profile and never perform runtime APT mutation.
 - Provisioning-time APT and runtime fail-early details live in:
   `docs/reference/world/deps/README.md`
-  and `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`
-  (historical draft-pack path:
-  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`)
+  and `docs/reference/world/deps/provisioning.md`
 
 ---
 
@@ -304,7 +302,7 @@ Notes
   - The shell probes `/v1/capabilities`; if stale socket is found, it removes it.
   - If the agent isn’t running, the shell attempts to spawn it (Linux dev flow: `target/debug/world-service`).
   - macOS invokes the Lima backend ensure path to boot the VM and wire up its tunnel.
-  - Windows/WSL helper flows are intentionally fail-closed in this slice; see `docs/cross-platform/wsl_world_setup.md`.
+  - Windows/WSL helper flows are intentionally fail-closed in this slice; see `docs/reference/world/platforms/windows-wsl-setup.md`.
 - Fallback
   - With `world_fs.require_world=false`, exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
   - With `world_fs.require_world=true`, world routing failures are treated as hard errors (no host fallback).

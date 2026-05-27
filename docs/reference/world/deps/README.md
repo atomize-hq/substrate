@@ -109,4 +109,4 @@ Behavior:
 Internal details and rationale:
 - `docs/internals/world/deps.md`
 - WDAP1 provisioning/remediation contract:
-  `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md` (compatibility shim only)
+  `docs/reference/world/deps/provisioning.md`

@@ -1,5 +1,0 @@
-- Added WCU5 Phase A/B determinism + provenance coverage in `crates/shell/tests/config_world_deps_phase_b.rs:625` and `crates/shell/tests/config_world_deps_phase_b.rs:697`:
-  - `config_current_show_outputs_are_deterministic_without_changes` (byte-for-byte stable stdout/stderr across repeated `config current show` runs)
-  - `config_world_deps_enabled_explain_reports_only_contributing_layers` (global-only vs workspace-only `--explain` sources)
-- Ran `cargo fmt --all` and `cargo test -p substrate-shell --test config_world_deps_phase_b -- --nocapture` (all pass)
-- Ran `make triad-task-finish TASK_ID="WCU5-test"`; it committed `task: WCU5-test` at `867639ea325f03ce8d56dce30c451915991cf40f`

@@ -5,7 +5,7 @@
   "evidence_kind": "repo_backed_and_operator_run_governance_proof",
   "contract_ref": "docs/foundation/claude-code-c10-live-session-smoke-verification-contract.md",
   "procedure_ref": "docs/foundation/claude-code-c10-live-session-smoke-procedure.md",
-  "closeout_ref": "docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-2-closeout.md",
+  "closeout_ref": "crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-2-closeout.md",
   "runbook_ref": "gateway/README.md",
   "limitations": [
     "The tracked trace file preserves the route evidence for the three-branch Claude Code smoke, but the matching last_routing.json from that run is not preserved as a tracked repo artifact.",

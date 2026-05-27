@@ -10,10 +10,10 @@ basis:
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts:
-    - docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
   required_threads:
     - THR-08
   stale_triggers:

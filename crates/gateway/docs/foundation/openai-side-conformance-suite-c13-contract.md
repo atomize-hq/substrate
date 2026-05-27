@@ -15,8 +15,8 @@ It defines the SEAM-3 / `THR-13` conformance and drift-guard contract for the ga
 
 ## Canonical Sources Of Truth
 
-- SEAM-3 planning: `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/seam.md`
-- SEAM-3 pre-exec review: `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/review.md`
+- SEAM-3 planning: `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/seam.md`
+- SEAM-3 pre-exec review: `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/review.md`
 - Chat Completions contract: `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/openai-side-chat-completions-c10-contract.md`
 - Responses contract: `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/openai-side-responses-c11-contract.md`
 - Shared adapter invariants: `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/openai-side-adapter-invariants-c12-contract.md`

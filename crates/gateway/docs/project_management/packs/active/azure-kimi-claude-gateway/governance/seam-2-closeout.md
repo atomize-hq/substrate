@@ -3,7 +3,7 @@ seam_id: SEAM-2
 status: landed
 closeout_version: v2
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/slice-4-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/slice-4-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
@@ -31,8 +31,8 @@ This closeout records the seam-exit gate for `SEAM-2` and the publication-backed
 - **Source artifact**: [slice-4-seam-exit-gate.md](../threaded-seams/seam-2-azure-kimi-normalization/slice-4-seam-exit-gate.md)
 - **Landed evidence**:
   - [azure-kimi-c02-normalized-event-contract.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/azure-kimi-c02-normalized-event-contract.md)
-  - [manifest.json](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/manifest.json)
-  - [variant-notes.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/variant-notes.md)
+  - [manifest.json](crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/manifest.json)
+  - [variant-notes.md](crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/variant-notes.md)
   - five landed regression fixtures under `gateway/tests/fixtures/azure_kimi/`
   - Azure normalization boundary and regression coverage in `gateway/src/providers/openai.rs`
   - verification run: `cargo test openai -- --nocapture`

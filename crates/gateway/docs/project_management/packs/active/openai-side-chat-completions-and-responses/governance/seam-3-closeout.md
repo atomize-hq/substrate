@@ -3,14 +3,14 @@ seam_id: SEAM-3
 status: landed
 closeout_version: v1
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/slice-99-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/slice-99-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
   currentness: current
   upstream_closeouts:
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-1-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
   required_threads:
     - THR-10
     - THR-11
@@ -33,7 +33,7 @@ This closeout records the landed evidence, contract publication, thread advancem
 
 ## Seam-exit gate record
 
-- **Source artifact**: `docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/slice-99-seam-exit-gate.md`
+- **Source artifact**: `crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/threaded-seams/seam-3-openai-side-conformance-and-drift-guards/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
   - Canonical contract:
     - `docs/foundation/openai-side-conformance-suite-c13-contract.md` (`C-13`)

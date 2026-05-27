@@ -36,9 +36,9 @@ candidate_subslices: []
   - In: reproduce or refresh Azure Foundry probe cases, capture raw request/response artifacts, classify explicit and hidden tool-intent cases, and build a fixture corpus with expected normalized outputs.
   - Out: shipping public gateway behavior changes or embedding planner/executor policy into the probe process.
 - **Acceptance criteria**:
-  - `docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/manifest.json` inventories one explicit `tool_calls` case, one hidden `reasoning_content` case, one mixed case, and one no-tool control case.
+  - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/manifest.json` inventories one explicit `tool_calls` case, one hidden `reasoning_content` case, one mixed case, and one no-tool control case.
   - `gateway/tests/fixtures/azure_kimi/explicit-tool-calls-k2-thinking-stream.json`, `gateway/tests/fixtures/azure_kimi/hidden-markers-k2-thinking-nonstream.json`, `gateway/tests/fixtures/azure_kimi/mixed-reasoning-and-tool-calls-k2-thinking.json`, and `gateway/tests/fixtures/azure_kimi/no-tool-control-k2-5-stream.json` each map raw Azure evidence to expected `C-02` normalized output.
-  - `docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/variant-notes.md` records the current `Kimi-K2.5` hidden-marker observation and the streaming hidden-marker variant note for later revalidation.
+  - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/variant-notes.md` records the current `Kimi-K2.5` hidden-marker observation and the streaming hidden-marker variant note for later revalidation.
   - any divergence from the assumptions in `docs/foundation/claude-code-mux-5a372fb-validation.md` is recorded as a stale-trigger candidate for seam exit
 - **Landed outputs**:
   - evidence manifest: `evidence/manifest.json`

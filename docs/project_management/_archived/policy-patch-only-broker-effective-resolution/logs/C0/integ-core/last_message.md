@@ -1,6 +1,0 @@
-- Verified worktree `wt/policy-patch-only-broker-effective-resolution-c0-integ-core`, branch `policy-patch-only-broker-effective-resolution-c0-integ-core`, `.taskmeta.json` present.
-- Local gates green: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p substrate-broker`, `cargo test -p substrate-shell`, `make integ-checks`.
-- Fixes landed: `policy current show --json` now includes `world_fs_require_world`; invalid policy patches now exit `2` (fail-closed) in `--command` path; Windows smoke now resolves `scripts/dev/substrate_shell_driver.exe` via `build.rs`.
-- CI compile parity (success): `RUN_ID=21095712456` `RUN_URL=https://github.com/atomize-hq/substrate/actions/runs/21095712456`
-- Feature smoke (behavior, self-hosted) (success): `RUN_ID=21095742235` `RUN_URL=https://github.com/atomize-hq/substrate/actions/runs/21095742235`
-- Finished task: `make triad-task-finish TASK_ID="C0-integ-core"` (HEAD `b0440d894b4c906c611fb664db76ea6504900db5`).

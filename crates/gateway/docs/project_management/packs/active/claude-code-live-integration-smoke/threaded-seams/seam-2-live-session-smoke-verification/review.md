@@ -59,7 +59,7 @@ flowchart LR
 
 - **Review gate**: `passed`
 - **Contract gate**: `passed` because the owned `C-10` baseline, scenario matrix, artifact path, and verification checklist are explicit across `seam.md`, `S1`, and `S2`
-- **Revalidation gate**: `passed` after rechecking `docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md`, `docs/foundation/claude-code-c09-operator-bootstrap-contract.md`, `gateway/README.md`, `gateway/src/router/mod.rs`, and `gateway/src/server/mod.rs`
+- **Revalidation gate**: `passed` after rechecking `crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-1-closeout.md`, `docs/foundation/claude-code-c09-operator-bootstrap-contract.md`, `gateway/README.md`, `gateway/src/router/mod.rs`, and `gateway/src/server/mod.rs`
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus

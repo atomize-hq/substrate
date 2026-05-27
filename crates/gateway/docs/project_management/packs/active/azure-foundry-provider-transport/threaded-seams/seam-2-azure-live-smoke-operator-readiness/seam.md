@@ -10,9 +10,9 @@ basis:
   source_scope_ref: ../../scope_brief.md
   upstream_closeouts:
     - ../../governance/seam-1-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
-    - docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md
+    - crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md
   required_threads:
     - THR-06
     - THR-07
@@ -64,9 +64,9 @@ open_remediations: []
   - **Currentness**: `current`
   - **Upstream closeouts assumed**:
     - `../../governance/seam-1-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
-    - `docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-3-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-4-closeout.md`
+    - `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/governance/seam-5-closeout.md`
   - **Required threads**: `THR-06`, `THR-07`
   - **Stale triggers**:
     - `C-07` changes Azure auth, base URL, deployment-selection, or request-body invariance in a way that invalidates the smoke path

@@ -127,6 +127,27 @@ substrate agent stop --session <orchestration_session_id> --json
 - Durable inbox behavior is intentionally narrow: persistence exists, pending work can normalize posture into `awaiting_attention`, internal ack/dismiss plus dev-support/test ingress exist, and no public inbox command surface or automatic resume-from-inbox workflow is shipped.
 - `substrate -c`, `--command`, and piped stdin remain shell execution surfaces rather than agent-prompt aliases.
 
+### Workspace History
+
+Substrate also provides workspace-history commands that are separate from world pending-diff sync:
+
+```bash
+substrate workspace checkpoint
+substrate workspace checkpoint --message "before upgrade"
+substrate workspace rollback last
+substrate workspace rollback cp/20260210T183823Z --force
+```
+
+- `workspace checkpoint` records a snapshot into Substrate's internal history store.
+- `workspace rollback` restores a prior snapshot from that store.
+- These commands do not use or mutate the user's `.git/`; they operate on Substrate's separate
+  internal store under `.substrate/`.
+
+Stable docs:
+
+- `docs/reference/cli/workspace_history.md`
+- `docs/internals/world/workspace_internal_git_model.md`
+
 ## PTY Support
 
 Substrate automatically uses PTY for interactive commands:
@@ -251,6 +272,9 @@ $ substrate health --json | jq '.summary | {ok, missing_managers, world_ok, worl
 ```
 
 When `.shim.world.status` is `disabled` and `.shim.world_deps.status` is `skipped_disabled`, the summary stays non-error and the human output prints the disabled contract lines instead of enabled-world remediation guidance.
+
+Machine-readable JSON details and omission rules live in:
+- `docs/contracts/diagnostics-json.md`
 
 Both commands honor the same overrides (`HOME`, `SUBSTRATE_MANAGER_MANIFEST`,
 `SHIM_TRACE_LOG`). Drop fixture files into `~/.substrate/health/world_doctor.json`

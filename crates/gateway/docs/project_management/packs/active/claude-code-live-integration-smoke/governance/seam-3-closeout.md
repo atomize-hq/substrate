@@ -3,7 +3,7 @@ seam_id: SEAM-3
 status: landed
 closeout_version: v1
 seam_exit_gate:
-  source_ref: docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/slice-3-seam-exit-gate.md
+  source_ref: crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/slice-3-seam-exit-gate.md
   status: passed
   promotion_readiness: ready
 basis:
@@ -35,9 +35,9 @@ open_remediations: []
 - **Landed evidence**:
   - [claude-code-c11-troubleshooting-and-support-boundary-contract.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/claude-code-c11-troubleshooting-and-support-boundary-contract.md)
   - [claude-code-c11-operator-troubleshooting-guide.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/claude-code-c11-operator-troubleshooting-guide.md)
-  - [seam.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/seam.md)
-  - [review.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/review.md)
-  - [threading.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md)
+  - [seam.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/seam.md)
+  - [review.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threaded-seams/seam-3-troubleshooting-and-support-boundary/review.md)
+  - [threading.md](crates/gateway/docs/project_management/packs/active/claude-code-live-integration-smoke/threading.md)
   - [gateway/README.md](/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/README.md)
 - **Contracts published or changed**:
   - `C-11` is published in `docs/foundation/claude-code-c11-troubleshooting-and-support-boundary-contract.md`

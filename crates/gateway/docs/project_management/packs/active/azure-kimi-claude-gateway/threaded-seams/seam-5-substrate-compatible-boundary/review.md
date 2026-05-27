@@ -56,7 +56,7 @@ flowchart LR
 
 ## Likely mismatch hotspots
 
-- `docs/project_management/packs/active/azure-kimi-claude-gateway/seam-5-substrate-compatible-boundary.md` can drift into a future-only posture if it keeps `SEAM-5` described as queued instead of active and exec-ready.
+- `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/seam-5-substrate-compatible-boundary.md` can drift into a future-only posture if it keeps `SEAM-5` described as queued instead of active and exec-ready.
 - `gateway/src/server/mod.rs` and config docs can accidentally hard-code localhost-style assumptions even when the pack is trying to keep deployment replaceable.
 - Downstream schema or docs can reintroduce raw provider transport detail if `C-06` is not kept normalized and stable.
 
@@ -70,7 +70,7 @@ flowchart LR
 
 - **Review gate**: `passed`
 - **Contract gate**: `passed`; `S1` freezes the owned public identity and deployment boundary, while `S2` freezes normalized downstream structured events and drift guards
-- **Revalidation gate**: `passed`; the seam was rechecked against `docs/foundation/anthropic-messages-c03-contract.md`, `docs/foundation/azure-kimi-c02-normalized-event-contract.md`, `docs/foundation/planner-executor-c04-policy-contract.md`, and `docs/project_management/packs/active/azure-kimi-claude-gateway/threading.md`
+- **Revalidation gate**: `passed`; the seam was rechecked against `docs/foundation/anthropic-messages-c03-contract.md`, `docs/foundation/azure-kimi-c02-normalized-event-contract.md`, `docs/foundation/planner-executor-c04-policy-contract.md`, and `crates/gateway/docs/project_management/packs/active/azure-kimi-claude-gateway/threading.md`
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus

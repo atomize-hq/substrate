@@ -57,7 +57,7 @@ Keep concise, actionable, and security-focused.
     - Install/dev scripts MUST NOT export override inputs by default (they remain explicit one-off operator/test inputs).
   - Acceptance:
     - New/updated tests prove that when a workspace is enabled and `SUBSTRATE_OVERRIDE_*` is set, override env beats the workspace patch (and remains below CLI flags where flags exist).
-    - `docs/project_management/adrs/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, and `docs/reference/env/contract.md` reflect the updated precedence contract.
+    - `docs/adr/implemented/ADR-0006-env-var-taxonomy-and-override-split.md`, `docs/adr/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`, and `docs/reference/env/contract.md` reflect the updated precedence contract.
 
 - **P1 – Warn on `config global show` when workspace config overrides**
   - Problem: `substrate policy global show` emits a clear note when a workspace policy overrides the global policy for the current directory, but `substrate config global show` does not emit an equivalent warning when `.substrate/workspace.yaml` overrides global config. This is confusing and makes it easy to misdiagnose “why does my config not match behavior?”
@@ -65,7 +65,7 @@ Keep concise, actionable, and security-focused.
   - Acceptance: parity with `policy global show` UX; message is shown only when a workspace override applies; docs/help updated if needed.
 
 - **P1 – World-sync continuation (internal git v2: per-command history + compaction)**
-  - Context: `docs/project_management/packs/active/world-sync/` implements host-only `workspace checkpoint`/`workspace rollback` via `.substrate/git/repo.git/` and explicitly does not implement the richer internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
+  - Context: the current workspace-sync implementation provides host-only `workspace checkpoint`/`workspace rollback` via `.substrate/git/repo.git/` and explicitly does not implement the richer internal history described in `docs/project_management/future/INTERNAL_GIT.md`.
   - Work:
     - Record per-command internal git commits for filesystem-mutating commands and persist a mapping (trace span / command id ↔ internal git commit) for review/debug.
     - Add session/checkpoint tagging semantics and user-facing UX for undo/rollback at multiple resolutions (command / checkpoint / session).

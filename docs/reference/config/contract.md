@@ -10,6 +10,5 @@ Suggested sections:
 
 Existing related docs:
 - `docs/CONFIGURATION.md`
-- `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
-- `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
-
+- `docs/adr/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
+- `docs/adr/implemented/ADR-0005-workspace-config-precedence-over-env.md`

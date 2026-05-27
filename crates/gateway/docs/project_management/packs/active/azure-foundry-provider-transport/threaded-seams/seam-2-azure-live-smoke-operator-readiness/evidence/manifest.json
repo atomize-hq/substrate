@@ -4,7 +4,7 @@
   "contract_ref": "docs/foundation/azure-foundry-c08-operator-verification-contract.md",
   "runbook_ref": "gateway/README.md",
   "env_source_ref": "gateway/.env",
-  "smoke_config_ref": "docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/evidence/temp-config.redacted.example.toml",
+  "smoke_config_ref": "crates/gateway/docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/evidence/temp-config.redacted.example.toml",
   "gateway_base_url_shape": "https://<redacted-host>/openai/v1",
   "config_notes": [
     "the live run used a temporary config outside the repo",

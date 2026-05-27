@@ -1,7 +1,0 @@
-- Verified worktree/branch + `.taskmeta.json`, read `docs/project_management/_archived/next/workspace-config-policy-unification/WCU5-spec.md` and `docs/project_management/standards/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`.
-- Merged `workspace_config_policy_unification-wcu5-code` + `workspace_config_policy_unification-wcu5-test` into `workspace_config_policy_unification-wcu5-integ-core` (now at `e8aef9e`).
-- Fixed test drift caused by the new `--explain` stderr note + global show patch-view behavior (`crates/shell/tests/config_world_deps_phase_b.rs`, `tests/wcu2_explain_determinism.rs`, `crates/shell/tests/config_init.rs`, `crates/shell/tests/policy_discovery.rs`).
-- Ran `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, targeted tests, and `make integ-checks` (all green).
-- CI compile parity: `https://github.com/atomize-hq/substrate/actions/runs/21076236754` (success; macos-14/ubuntu-24.04/windows-2022).
-- Feature smoke (behavior, WCU5): `https://github.com/atomize-hq/substrate/actions/runs/21076323809` (success; linux/macos/windows).
-- Completed end checklist: `make triad-task-finish TASK_ID="WCU5-integ-core"`.

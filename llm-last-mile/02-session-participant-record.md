@@ -241,7 +241,7 @@ When the orchestrator becomes terminal:
 Files:
 
 - `crates/shell/src/execution/agents_cmd.rs`
-- `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md`
+- `docs/adr/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md`
 
 Required changes:

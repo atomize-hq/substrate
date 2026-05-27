@@ -1,1 +1,0 @@
-Accepted L0 on the authoritative branch, recorded `accepted_tip_after_G1`, wrote contract-foundation evidence, and opened the serialized L1 worktree from the accepted tip.
