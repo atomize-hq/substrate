@@ -1,4 +1,0 @@
-- Removed default `SUBSTRATE_OVERRIDE_*` exports from generated `env.sh` in both installers; they now export only `SUBSTRATE_*` state (`scripts/substrate/install-substrate.sh:898`, `scripts/substrate/dev-install-substrate.sh:165`).
-- Updated installer-written global config at `$SUBSTRATE_HOME/config.yaml` to be a patch file with the standard header and only sparse overrides (`scripts/substrate/install-substrate.sh:933`, `scripts/substrate/dev-install-substrate.sh:49`).
-- Baseline tests (before+after): `cargo test -p substrate-shell --test shell_env -- --nocapture` (exit `0` both times).
-- Required checks run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings` (exit `0`); finished with `make triad-task-finish TASK_ID="WCU4-code"` (HEAD `6336ad8e3a600912ea24ae84e2cceb120171dea8`).

@@ -1,9 +1,0 @@
-Added C1 regression coverage for “invalid policy patch fails closed” across CLI, shim, and world-agent.
-
-- Tests added/updated in `crates/broker/src/tests.rs`, `crates/shim/tests/integration.rs`, `crates/world-agent/src/handlers.rs`, plus a `#[cfg(test)]` constructor helper in `crates/world-agent/src/service.rs`.
-- Ran `cargo fmt --all` (clean) and finished the task with `make triad-task-finish TASK_ID="C1-test"` (ok).
-- Targeted test runs:
-  - `cargo test -p substrate-broker c1_cli_command_fails_closed_on_invalid_workspace_policy_patch -- --nocapture` (PASS)
-  - `cargo test -p substrate-shim test_shim_fails_closed_on_invalid_workspace_policy_patch -- --nocapture` (FAIL; got exit `0`, expected `2`)
-  - `cargo test -p world-agent c1_execute_rejects_invalid_policy_patch_as_bad_request -- --nocapture` (FAIL; got HTTP `200`, expected `400`)
-- Commit: `4cd080ea4223356960c61fb6ed3992de628a3b10` on branch `policy-patch-only-broker-effective-resolution-c1-test`.
