@@ -3,7 +3,7 @@
 Source SOW: [30-public-world-scoped-agent-start-and-capability-flags.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)  
 Decomposition basis: feature-slice breakdown produced on 2026-05-27  
 Phase: `SPECIFY`  
-Status: draft narrowed for the Packet 3 runtime pass on 2026-05-27
+Status: draft narrowed for the Packet 4 finalization pass on 2026-05-27
 
 ## Assumptions
 
@@ -15,18 +15,19 @@ These are the assumptions I am making so the spec stays concrete. Correct any of
 3. Public world-scoped root start is explicitly Linux-first for this slice; non-Linux behavior must fail closed with explicit guidance.
 4. `--scope host` is the explicit bypass-world path: orchestration starts on the host and later dispatch stays host-scoped unless a later slice reopens that behavior.
 5. The thin slice should treat world scope as the default execution substrate behind a host session, not as “run the first visible prompt directly in a world agent before the host session is attached,” and the inaugural prompt should therefore remain strictly host-routed.
-6. This slice may change CLI parsing, runtime session state, world binding/session setup, and docs, but it must not change the durable authority model validated by slices 28.5, 29, and 29.75.
+6. Packet 4 may still tighten status/control-surface behavior, docs, and validation coverage, but it must not change the durable authority model or runtime start floor validated by slices 28.5, 29, 29.75, and landed Packets 1-3 of slice 30.
 
 ## Observed Repo Floor
 
-The current repo already freezes some Packet-1 and Packet-2 behavior that this spec now treats as the starting floor:
+The current repo already freezes the Packet-1 through Packet-3 behavior that this spec now treats as the starting floor:
 
 1. Omitted `--scope` resolves the effective default scope, probes for an exact backend match in that preferred scope, falls back once to the alternate scope if needed, and stamps the resolved scope into `DispatchRequestEnvelope`.
 2. Public world-scoped root start now uses the host-first attached runtime model:
    a host-rooted orchestration session is launched through the hidden owner-helper path, the inaugural prompt is host-routed, authoritative world session/binding truth is established before `start` returns, and the successful session remains `active_attached` rather than `born_unattached`.
 3. That same Packet-2 floor already persists top-level `world_id` and `world_generation` on the orchestration session as the durable projection of the authoritative world session/binding truth established at start.
 4. Later world-member launch logic already contains fail-closed checks that require authoritative parent world binding truth and reject missing or mismatched binding before member launch.
-5. Packet 3 should treat items 1-4 as landed floor and narrow only the remaining runtime/readiness contract around later host-decided world work.
+5. The public status/control surfaces already distinguish readable degradation from fail-closed control boundaries: `agent status` may stay readable with warnings, while toolbox and doctor surfaces fail closed when authoritative parent or world-boundary proof is unavailable.
+6. Packet 4 should therefore treat items 1-5 as landed floor and freeze only the remaining operator-facing truth, control-surface hardening, docs alignment, and validation wall.
 
 ## Objective
 
@@ -92,7 +93,7 @@ This spec intentionally leaves the following outside Packet 2 and outside the th
 4. Capability broadening beyond the already-supported narrowing-only family.
 5. Non-Linux parity for public world-backed root start.
 
-## Frozen Packet 3 Contract
+## Landed Packet 3 Floor
 
 ### Canonical World Identity Reuse
 
@@ -111,7 +112,35 @@ This spec intentionally leaves the following outside Packet 2 and outside the th
 
 1. The default public world-backed path remains the normal host-attached lifecycle rather than `born_unattached`.
 2. Packet 3 may preserve specialized `born_unattached` status semantics for older or specialized sessions, but it must not reintroduce that posture as the thin-slice happy path.
-3. Packet 3 should narrow runtime/readiness behavior only; broader operator-facing status hardening remains Packet 4 work.
+3. Packet 3 is runtime/readiness floor only; broader operator-facing status hardening remains Packet 4 work.
+
+## Frozen Packet 4 Contract
+
+### Operator-Facing Lifecycle And Status Truth
+
+1. The default public world-backed happy path remains the normal host-attached lifecycle from the first successful `start` return.
+2. `agent status` must continue to project that happy path as attached host truth rather than reviving `born_unattached` as the default slice-30 success posture.
+3. Existing `active_attached`, `parked_resumable`, and `awaiting_attention` semantics remain valid and must not be repurposed by Packet 4.
+4. `born_unattached` may still appear for specialized or legacy sessions that genuinely persist that posture, but Packet 4 must not describe or test it as the default world-backed start path.
+
+### Control-Surface Hardening
+
+1. `agent status` remains a readable projection surface: when authoritative parent/session linkage is incomplete, it may degrade with warnings rather than fail closed.
+2. `agent toolbox status` remains a fail-closed control surface for active-session authorization: it must prefer authoritative live parent/session manifests over trace history and may expose `active_world_binding` only when the live parent session carries both `world_id` and `world_generation`.
+3. `agent toolbox env` must continue to fail closed when no authoritative live orchestrator session is available, even if historical trace events suggest otherwise.
+4. `agent doctor` must continue to fail closed at orchestrator selection, runtime realizability, policy allowlist, and required world-boundary checks instead of implying partial readiness.
+
+### Linux-First And Non-Linux Fail-Closed Expectations
+
+1. Linux remains the only supported public happy path for `agent start --scope world` in slice 30.
+2. Non-Linux `--scope world` root start must remain explicit fail-closed behavior with `unsupported_platform_or_posture` guidance rather than a degraded “best effort” mode.
+3. Packet 4 must preserve the distinction between supported Linux world-backed start and specialized/legacy postures that may still surface elsewhere in status output.
+
+### Final Validation Wall
+
+1. Slice 30 cannot close honestly until the targeted control-plane suites and the full workspace validation wall are green.
+2. Manual Linux validation must confirm host-first world-backed start truth, omitted-scope fallback behavior, and the status/toolbox/doctor operator story against the landed Packet-1 through Packet-3 floor.
+3. Manual non-Linux validation must confirm the explicit fail-closed posture for public world-backed root start.
 
 ## Tech Stack
 
@@ -188,7 +217,7 @@ This feature is expected to touch these areas:
 - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
   - Status / doctor / contract regression coverage
 - `llm-last-mile/`
-  - Planning and scope documents that become the Packet-2 source of truth in this narrow pass
+  - Planning and scope documents that become the Packet-4 source of truth in this narrow pass
 
 ## Code Style
 
@@ -236,7 +265,7 @@ Test levels for this feature:
 3. Integration tests in `agent_successor_contract_ahcsitc0.rs`
    - Validate authoritative world identity/status truth for later world work and preserve current parked / awaiting-attention projection contracts.
 4. Manual smoke checks
-   - Validate the exact operator story for `start`, `status`, `reattach`, and `turn`.
+   - Validate the exact operator story for `start`, `status`, `toolbox`, `doctor`, `reattach`, and `turn`.
 
 Coverage expectations:
 
@@ -244,6 +273,7 @@ Coverage expectations:
 - Every new public resolution rule must have command-level assertions.
 - Existing host lifecycle semantics (`active_attached`, `parked_resumable`, `awaiting_attention`) must keep regression coverage so this slice cannot silently break them.
 - World-backed start must prove host-first prompt handling plus authoritative world session/binding setup without depending on a born-unattached default posture.
+- `agent status` readable degradation, toolbox fail-closed authorization, and doctor fail-closed readiness checks must all have explicit regression coverage because Packet 4 freezes those surfaces as distinct operator contracts.
 
 ## Boundaries
 
@@ -254,7 +284,8 @@ Coverage expectations:
   - Persist authoritative `HostAttachContract` truth at session birth.
   - Treat the landed Packet-2 host-first world-start success shape as floor rather than reopening it.
   - Treat the inaugural operator prompt as a host-orchestrator concern, even when scope resolves to world.
-  - Treat Packet-2 `world_id` and `world_generation` persistence as the canonical parent binding floor for Packet 3 rather than first-time work to be rediscovered.
+  - Treat Packet-2 `world_id` and `world_generation` persistence plus landed Packet-3 reuse/fail-closed behavior as the canonical parent binding floor rather than first-time work to be rediscovered.
+  - Treat `agent status` as a readable degradation surface, but toolbox and doctor as fail-closed control surfaces at authoritative parent/world-boundary seams.
   - Fail closed on unsupported scope/backend combinations and unsupported capability overrides.
   - Update docs and tests together with runtime behavior.
 - Ask first:
@@ -279,15 +310,16 @@ The feature is done only when all of the following are true:
 4. The resolved scope from step 2 is stamped into the request and is the authoritative scope reported back to the operator.
 5. `substrate agent start --scope world`, or omitted `--scope` that resolves to world, creates a host-rooted durable orchestration session, persists authoritative host attach truth at birth, and establishes authoritative world session/binding truth for later host-dispatched world work before `start` returns.
 6. The same successful world-backed start is already truthfully host-attached at return time and does not use a participant-less `born_unattached` success posture.
-7. The `world_id` and `world_generation` persisted at start are treated as the canonical durable projection of that authoritative world session/binding truth.
-8. Later host-decided world work reuses the same authoritative parent world binding and fails closed on missing or mismatched binding truth.
-9. The inaugural operator prompt is handled by the host orchestration agent rather than being sent directly to a first world worker/member.
-8. Public capability flags, if present, only affect the already-supported narrowing family:
+7. The `world_id` and `world_generation` persisted at start are treated as the canonical durable projection of that authoritative world session/binding truth, and later host-decided world work reuses that same authoritative parent binding with fail-closed mismatch handling.
+8. The inaugural operator prompt is handled by the host orchestration agent rather than being sent directly to a first world worker/member.
+9. Public capability flags, if present, only affect the already-supported narrowing family:
    `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, exposed as `--disable-capability <capability>` with `--disable-cap <capability>` as the alias.
-9. Unsupported capability fields such as `session_start`, `llm`, and `mcp_client` remain fail closed.
-10. The default public world-backed path uses the normal host-attached lifecycle and does not require `born_unattached` as the operator-facing happy-path posture.
-11. Public world-scoped root start is supported only on Linux for this slice; non-Linux platforms fail closed with explicit posture guidance.
-12. The llm-last-mile slice docs and integration expectations become sufficient to start Packet 2 without relying on parked `30.25` follow-on behavior.
+10. Unsupported capability fields such as `session_start`, `llm`, and `mcp_client` remain fail closed.
+11. `agent status` remains readable when parent/session linkage is degraded, while `agent toolbox` and `agent doctor` preserve fail-closed control-surface behavior at authoritative parent/world-boundary seams.
+12. `agent toolbox status` only surfaces `active_world_binding` when the authoritative live parent session carries both `world_id` and `world_generation`; missing binding proof is non-fatal for status but not a license to infer one.
+13. The default public world-backed path uses the normal host-attached lifecycle and does not require `born_unattached` as the operator-facing happy-path posture.
+14. Public world-scoped root start is supported only on Linux for this slice; non-Linux platforms fail closed with explicit posture guidance.
+15. The llm-last-mile slice docs and validation expectations become sufficient to implement and close Packet 4 without reopening the landed Packet-1 through Packet-3 floor.
 
 ## Resolved Decisions
 
@@ -301,11 +333,13 @@ These review decisions are now frozen for this spec:
 6. `--scope host` is the explicit bypass-world path.
 7. `born_unattached` is not the default thin-slice happy-path posture.
 8. Packet 2 requires immediate host-session truth plus persisted world binding truth, but it does not require an eager first world-worker conversation at `start` return.
+9. Packet 4 preserves readable `agent status` degradation while keeping toolbox and doctor fail closed at authoritative parent/world-boundary seams.
 
 ## Open Questions
 
-1. This spec freezes resolved `scope` as operator-visible truth, but it does not require a second public field exposing the preferred-versus-fallback provenance. If Packet 2 needs that extra reporting, it should be called out explicitly during implementation rather than inferred.
+1. This spec freezes resolved `scope` as operator-visible truth, but it does not require a second public field exposing the preferred-versus-fallback provenance. If Packet 4 needs that extra reporting, it should be called out explicitly during implementation rather than inferred.
 2. This spec requires authoritative world binding truth before `start` returns, but it does not freeze one specific internal mechanism for proving world readiness beyond that durable contract.
+3. This spec freezes the operator-facing rule that `agent status` may degrade readably while toolbox and doctor fail closed, but it does not require Packet 4 to invent new user-facing labels beyond the current warning/reason strings already exercised by the regression suites.
 
 ## Review Gate
 
