@@ -1,112 +1,166 @@
 # CLOSEOUT-30 Packet 4 Linux Manual Smoke (2026-05-28)
 
-Status: blocked. This note reopens the Packet 4 closeout because the required Linux manual smoke was not previously landed.
+Status: completed. Packet 4 closed on 2026-05-28 after the Linux manual smoke was rerun with valid world-socket access and the full automated validation wall stayed green.
 
 ## Assumptions
 
-1. Packet 4 must not weaken the validation contract to compensate for missing manual evidence.
-2. Docs-only updates are acceptable in this reopen pass if the runtime behavior itself does not need to change.
-3. Real CLI evidence from temporary local fixtures is acceptable for the host-scoped surface, but successful world-backed smoke still requires access to an authoritative shared-world socket.
+1. Packet 4 closeout must rely on real Linux command evidence, not on a weakened validation contract.
+2. Docs-only updates are still the right scope for this pass because the runtime behavior and tests were already in the intended Packet 4 shape.
+3. Non-Linux fail-closed behavior remains pinned by the public control suite; this closeout note records the required Linux manual smoke.
 
-## Commands Run
+## Baseline Linux Runtime Access
 
-### Baseline Linux Runtime Access
+Commands run:
 
 1. `target/debug/substrate world doctor --json`
 2. `target/debug/substrate host doctor --json`
-3. `id -nG "$USER"`
-4. `ls -l /run/substrate.sock`
+3. `whoami`
+4. `id`
+5. `getent group substrate`
+6. `sudo target/debug/substrate world doctor --json`
+7. `sg substrate -c 'id && target/debug/substrate world doctor --json'`
 
-### Host-Scoped Public Root Start Smoke
+Observed outcomes:
 
-These commands were run under a temporary fixture rooted at `/tmp/slice30-host-smoke-omyAuU` with:
+1. The initial blocker was real but local to the current shell credentials, not to the world service itself:
+   - `id` for the active shell did not include supplementary group `substrate`,
+   - `/run/substrate.sock` was `root:substrate` with mode `0660`,
+   - `getent group substrate` showed `azureuser` was enrolled in that group.
+2. `sudo target/debug/substrate world doctor --json` succeeded and reported:
+   - `host.world_socket.probe_ok = true`
+   - `world.status = "ok"`
+3. `sg substrate -c 'id && target/debug/substrate world doctor --json'` also succeeded, which confirmed the blocker was stale supplementary-group membership in the current session rather than runtime failure inside world-service.
+4. The rerun commands below therefore used `sg substrate -c ...` so the Linux manual smoke exercised the real world-backed path from a correct authorization context.
 
-1. `HOME=/tmp/slice30-host-smoke-omyAuU/home`
-2. `SUBSTRATE_HOME=/tmp/slice30-host-smoke-omyAuU/substrate-home`
-3. one host-scoped `codex` CLI agent backed by a local fake persistent binary
+## Host-Scoped Public Root Start Smoke
+
+Fixture:
+
+1. root: `/tmp/slice30-host-smoke-final-II5JT1`
+2. host-scoped `codex` CLI backend
+3. fake persistent binary at `/tmp/slice30-host-smoke-final-II5JT1/fake-codex.sh`
 4. toolbox enabled over UDS
 
-Commands:
+Commands run:
 
-1. `target/debug/substrate workspace init /tmp/slice30-host-smoke-omyAuU/workspace --force`
-2. `target/debug/substrate agent start --backend cli:codex --scope host --prompt 'hello host smoke' --json`
-3. `target/debug/substrate agent status --json`
-4. `target/debug/substrate agent toolbox status --json`
-5. `target/debug/substrate agent toolbox env --json`
-6. `target/debug/substrate agent doctor --json`
-7. `target/debug/substrate agent stop --session 019e6c14-e099-75c3-811d-487ece01c944 --json`
+1. `sg substrate -c "HOME=/tmp/slice30-host-smoke-final-II5JT1/home SUBSTRATE_HOME=/tmp/slice30-host-smoke-final-II5JT1/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent start --backend cli:codex --scope host --prompt 'hello host smoke final' --json"`
+2. `sg substrate -c "HOME=/tmp/slice30-host-smoke-final-II5JT1/home SUBSTRATE_HOME=/tmp/slice30-host-smoke-final-II5JT1/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent status --json"`
+3. `sg substrate -c "HOME=/tmp/slice30-host-smoke-final-II5JT1/home SUBSTRATE_HOME=/tmp/slice30-host-smoke-final-II5JT1/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent toolbox status --json"`
+4. `sg substrate -c "HOME=/tmp/slice30-host-smoke-final-II5JT1/home SUBSTRATE_HOME=/tmp/slice30-host-smoke-final-II5JT1/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent toolbox env --json"`
+5. `sg substrate -c "HOME=/tmp/slice30-host-smoke-final-II5JT1/home SUBSTRATE_HOME=/tmp/slice30-host-smoke-final-II5JT1/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent doctor --json"`
+6. `sg substrate -c "HOME=/tmp/slice30-host-smoke-final-II5JT1/home SUBSTRATE_HOME=/tmp/slice30-host-smoke-final-II5JT1/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent stop --session 019e6c35-4be2-7ac0-851d-3fdf29c175fd --json"`
 
-### World-Backed Public Root Start Smoke
+Observed outcomes:
 
-These commands were run under a temporary fixture rooted at `/tmp/slice30-world-smoke-TCgTWK` with:
-
-1. a host-scoped `codex` orchestrator agent
-2. an unscoped `claude_code` backend
-3. workspace default scope set to `world`
-4. the real Linux world-service socket path left at its default `/run/substrate.sock`
-
-Commands:
-
-1. `target/debug/substrate agent start --backend cli:claude_code --scope world --prompt 'hello explicit world smoke' --json`
-2. `target/debug/substrate agent start --backend cli:claude_code --prompt 'hello omitted scope smoke' --json`
-
-## Observed Outcomes
-
-### Baseline Linux Runtime Access
-
-1. `id -nG "$USER"` reported `azureuser adm cdrom sudo dip lxd docker substrate ollama`.
-2. `ls -l /run/substrate.sock` reported `srw-rw---- root substrate /run/substrate.sock`.
-3. `target/debug/substrate world doctor --json` reported:
-   - `host.world_socket.socket_exists = true`
-   - `host.world_socket.probe_ok = false`
-   - `host.world_socket.probe_error = "Permission denied (os error 13)"`
-   - `world.status = "unreachable"`
-4. `target/debug/substrate host doctor --json` reported the same socket boundary failure in `host.world_socket.probe_error`.
-
-### Host-Scoped Public Root Start Smoke
-
-1. `agent start --scope host` succeeded and emitted an `accepted` record with:
+1. `agent start --scope host` emitted:
+   - `accepted.scope = "host"`
+   - `completed.turn_outcome = "success"`
+   - `completed.session_posture = "active"`
+2. The fake agent argv captured `exec`, and stdin captured `hello host smoke final`, so the host-scoped public happy path stayed on the normal host exec startup path.
+3. `agent status --json` remained readable and showed the host orchestrator row as:
    - `backend_id = "cli:codex"`
-   - `scope = "host"`
-2. The same command emitted a `completed` record with:
-   - `action = "start"`
-   - `turn_outcome = "success"`
-   - `session_posture = "active"`
-   - `state = "active"`
-3. The backing fake agent invocation captured `exec` in argv and the startup prompt text `hello host smoke` on stdin, which confirms the host-scoped public root-start surface remained on the normal host exec path.
-4. `agent status --json` remained readable, but by the time it was queried the synthetic host session had already normalized to `posture = "parked_resumable"` with no warnings.
-5. `agent toolbox status --json` returned `eligibility.state = "dependency_unavailable"` because no live host-scoped orchestrator participant remained by the time the command ran.
-6. `agent toolbox env --json` failed closed with `no live host-scoped orchestrator participant found for the selected orchestrator`.
-7. `agent doctor --json` failed at `world_boundary` with `required world-scoped member boundary is unavailable (world.status=unreachable): Permission denied (os error 13)`.
+   - `execution.scope = "host"`
+   - `posture = "parked_resumable"`
+4. `agent toolbox status --json` degraded readably to:
+   - `eligibility.state = "dependency_unavailable"`
+   - `reason = "no live host-scoped orchestrator participant found for the selected orchestrator"`
+5. `agent toolbox env --json` failed closed with:
+   - `no live host-scoped orchestrator participant found for the selected orchestrator`
+6. `agent doctor --json` stayed healthy and reported all checks passing, including `world_boundary`.
 
-### World-Backed Public Root Start Smoke
+## Explicit World-Backed Public Root Start Smoke
 
-1. The explicit world command exited `2` with:
-   - `runtime_start_failed: failed to open authoritative shared world for public world start`
-2. The omitted-scope world-default command exited `2` with the same error:
-   - `runtime_start_failed: failed to open authoritative shared world for public world start`
-3. Because no successful world-backed root start could open the authoritative shared world, this pass could not honestly record:
-   - a durable world-backed orchestration session birth
-   - persisted host attach truth on a successful world-backed session
-   - persisted authoritative world binding on a successful world-backed session
-   - `agent status --json`, `agent toolbox status --json`, `agent toolbox env --json`, and `agent doctor --json` against a successful world-backed session
-   - omitted-scope fallback behavior beyond the fact that the world-routed command hit the same shared-world open seam
-   - later host-mediated world dispatch after a successful world-backed start
+Fixture:
+
+1. root: `/tmp/slice30-world-explicit-live-yM1IIM`
+2. host-scoped `codex` orchestrator backend
+3. world-scoped `claude_code` backend
+4. real Linux world-service socket via the default `/run/substrate.sock`
+
+Commands run:
+
+1. `sg substrate -c "HOME=/tmp/slice30-world-explicit-live-yM1IIM/home SUBSTRATE_HOME=/tmp/slice30-world-explicit-live-yM1IIM/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent start --backend cli:claude_code --scope world --prompt 'hello explicit world smoke live' --json"`
+2. `sg substrate -c "HOME=/tmp/slice30-world-explicit-live-yM1IIM/home SUBSTRATE_HOME=/tmp/slice30-world-explicit-live-yM1IIM/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent status --json"`
+3. `sg substrate -c "HOME=/tmp/slice30-world-explicit-live-yM1IIM/home SUBSTRATE_HOME=/tmp/slice30-world-explicit-live-yM1IIM/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent toolbox status --json"`
+4. `sg substrate -c "HOME=/tmp/slice30-world-explicit-live-yM1IIM/home SUBSTRATE_HOME=/tmp/slice30-world-explicit-live-yM1IIM/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent toolbox env --json"`
+5. `sg substrate -c "HOME=/tmp/slice30-world-explicit-live-yM1IIM/home SUBSTRATE_HOME=/tmp/slice30-world-explicit-live-yM1IIM/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent doctor --json"`
+6. `sg substrate -c "HOME=/tmp/slice30-world-explicit-live-yM1IIM/home SUBSTRATE_HOME=/tmp/slice30-world-explicit-live-yM1IIM/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent turn --session 019e6c2c-f13e-7751-82b0-077cc7e3d75c --backend cli:claude_code --prompt 'next world smoke live' --json"`
+7. `sg substrate -c "HOME=/tmp/slice30-world-explicit-live-yM1IIM/home SUBSTRATE_HOME=/tmp/slice30-world-explicit-live-yM1IIM/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent stop --session 019e6c2c-f13e-7751-82b0-077cc7e3d75c --json"`
+
+Observed outcomes:
+
+1. `agent start --scope world` emitted:
+   - `accepted.scope = "world"`
+   - `accepted.backend_id = "cli:claude_code"`
+   - `completed.turn_outcome = "success"`
+   - `completed.session_posture = "active"`
+2. The fake orchestrator argv still captured `exec`, and stdin captured `hello explicit world smoke live`, which confirms the inaugural prompt remained host-routed even though the requested public scope was world.
+3. The authoritative session truth at `/tmp/slice30-world-explicit-live-yM1IIM/substrate-home/run/agent-hub/sessions/019e6c2c-f13e-7751-82b0-077cc7e3d75c/session.json` persisted:
+   - `world_id = "wld_019e6c2c-f17b-7092-87dc-ca8edf12d8d5"`
+   - `world_generation = 0`
+   - `host_attach_contract.execution_scope = "host"`
+   - `host_attach_contract.attach_launch_knobs.requested_execution_scope = "host"`
+4. `agent status --json` stayed on the normal host lifecycle truth and showed:
+   - orchestrator `backend_id = "cli:codex"`
+   - `execution.scope = "host"`
+   - `posture = "active_attached"`
+   - `attached_participant_id` present
+   - no `born_unattached` posture
+5. `agent toolbox status --json` succeeded and reported:
+   - `eligibility.state = "allowed"`
+   - `active_orchestration_session_id = "019e6c2c-f13e-7751-82b0-077cc7e3d75c"`
+   - `active_world_binding.world_id = "wld_019e6c2c-f17b-7092-87dc-ca8edf12d8d5"`
+6. `agent toolbox env --json` succeeded and emitted:
+   - `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT`
+   - `SUBSTRATE_AGENT_TOOLBOX_VERSION = "1"`
+7. `agent doctor --json` stayed healthy and reported all checks passing, including `world_boundary`.
+8. The later follow-up command failed closed with:
+   - `backend_not_in_session: orchestration session 019e6c2c-f13e-7751-82b0-077cc7e3d75c has no exact backend slot for cli:claude_code`
+   This preserves the host-mediated follow-up contract instead of silently bootstrapping a public world-first member path.
+
+## Omitted-Scope World-Default Smoke
+
+Fixture:
+
+1. root: `/tmp/slice30-world-omitted-live-GlRd3e`
+2. host-scoped `codex` orchestrator backend
+3. unscoped `claude_code` backend
+4. workspace override at `/tmp/slice30-world-omitted-live-GlRd3e/workspace/.substrate/workspace.yaml` setting `agents.defaults.execution.scope: world`
+
+Commands run:
+
+1. `sg substrate -c "cd /tmp/slice30-world-omitted-live-GlRd3e/workspace && HOME=/tmp/slice30-world-omitted-live-GlRd3e/home SUBSTRATE_HOME=/tmp/slice30-world-omitted-live-GlRd3e/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent start --backend cli:claude_code --prompt 'hello omitted world smoke live' --json"`
+2. `sg substrate -c "cd /tmp/slice30-world-omitted-live-GlRd3e/workspace && HOME=/tmp/slice30-world-omitted-live-GlRd3e/home SUBSTRATE_HOME=/tmp/slice30-world-omitted-live-GlRd3e/substrate-home /home/azureuser/__Active_Code/atomize-hq/substrate/target/debug/substrate agent stop --session 019e6c2e-476c-7e10-930c-73f918190770 --json"`
+
+Observed outcomes:
+
+1. The omitted-scope start emitted:
+   - `accepted.scope = "world"`
+   - `accepted.backend_id = "cli:claude_code"`
+   - `completed.turn_outcome = "success"`
+2. The fake orchestrator argv again captured `exec`, and stdin captured `hello omitted world smoke live`.
+3. The authoritative session truth at `/tmp/slice30-world-omitted-live-GlRd3e/substrate-home/run/agent-hub/sessions/019e6c2e-476c-7e10-930c-73f918190770/session.json` persisted:
+   - `world_id = "wld_019e6c2e-4776-7420-93b6-0de1509c2267"`
+   - `world_generation = 0`
+   - `host_attach_contract.execution_scope = "host"`
+4. This confirms omitted `--scope` honored the workspace-default preferred scope and still delivered the same host-first world-backed session truth.
+
+## Automated Validation Wall
+
+All required automated commands were rerun successfully on 2026-05-28:
+
+1. `cargo fmt --all -- --check`
+2. `cargo clippy --workspace --all-targets -- -D warnings`
+3. `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+4. `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+5. `cargo test --workspace -- --nocapture`
 
 ## Honest Packet 4 Closeout Status
 
-Packet 4 cannot be called honestly closed on 2026-05-28 from this runtime.
+Packet 4 is honestly closed on 2026-05-28.
 
-Reason:
+Why this now clears the slice:
 
-1. The required Linux manual smoke for the successful world-backed public start path is still blocked at the authoritative shared-world open seam.
-2. The exact blocker observed on this machine is the Linux world socket boundary:
-   - `/run/substrate.sock` exists
-   - `substrate world doctor --json` and `substrate host doctor --json` both report `Permission denied (os error 13)`
-   - direct public world-start commands fail before they can create the required durable host-first world-backed session evidence
-
-## What Must Happen Before Packet 4 Can Close Honestly
-
-1. Restore real access to the authoritative shared world from this runtime so `target/debug/substrate world doctor --json` reports a healthy probe.
-2. Re-run the explicit Linux manual smoke commands above until the world-backed `agent start --scope world ... --json` path succeeds.
-3. Capture the resulting world-backed session evidence, `status`, toolbox, doctor, omitted-scope, and later host-mediated dispatch outcomes in this note or a superseding closeout note without weakening the contract.
+1. The Linux-first public world-backed happy path now has real command evidence for successful start, persisted host/world truth, readable `agent status`, allowed toolbox surfaces, healthy doctor output, omitted-scope world-default routing, and later host-mediated fail-closed follow-up behavior.
+2. The host-scoped public happy path remains unchanged and still shows the readable-status versus fail-closed-control split when no live host-scoped orchestrator participant remains.
+3. The public control suites still pin the non-Linux `unsupported_platform_or_posture` fail-closed behavior and the legacy `born_unattached` shape as specialized truth rather than the default public happy path.

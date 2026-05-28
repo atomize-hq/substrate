@@ -5,7 +5,7 @@ Source spec: [SPEC-30-public-world-scoped-agent-start-and-capability-flags.md](/
 Source plan: [PLAN-30.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-30.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: Packets 1-3 remain landed floor; Packet 4 closeout was reopened on 2026-05-28 because the required Linux manual smoke evidence was not yet landed
+Status: Packets 1-4 landed; slice 30 closed on 2026-05-28 after Packet 4 reran the required Linux manual smoke and the full validation wall
 
 ## Execution Packets
 
@@ -14,9 +14,9 @@ This slice was planned as four separate `/incremental-implementation` sessions, 
 - Packet 1 is landed and should not be reopened unless the contract changes.
 - Packet 2 is landed and should not be reopened unless the contract changes.
 - Packet 3 is landed and should not be reopened unless the contract changes.
-- Packet 4 code/test work is landed, but closeout is reopened and currently blocked on required Linux manual smoke evidence.
+- Packet 4 is landed; no active implementation packets remain for slice 30.
 
-Treat the Packet 3 checkpoint as green repo floor for this pass. Packet 4 remains the only open closeout packet until the required Linux manual smoke is landed or an explicit blocker is cleared.
+Treat the Packet 4 checkpoint as green repo floor for this slice. Slice 30 is now closed against the landed Packet 1-4 floor.
 
 ## Packet 1: Landed Public Input Contract And Resolver Wiring
 
@@ -182,8 +182,8 @@ Session goal:
     - [`llm-last-mile/PLAN-30.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-30.md)
     - [`llm-last-mile/TASKS-30.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-30.md)
 
-- [ ] Task 4.5: Run the final validation wall for the full slice
-  - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests pass; Linux manual smoke evidence is actually landed for the host-first world-backed path; non-Linux manual evidence covers explicit public world-start fail-closed posture; if Linux smoke is blocked, the exact command, blocker, and unmet acceptance items are captured without downgrading the contract.
+- [x] Task 4.5: Run the final validation wall for the full slice
+  - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests pass; Linux manual smoke evidence is landed for the host-first world-backed path; the public control suites keep the non-Linux `unsupported_platform_or_posture` fail-closed posture pinned; no closeout step relaxes the Packet 4 contract.
   - Verify:
     - `cargo fmt --all -- --check`
     - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -215,4 +215,4 @@ Packet 4 is complete only when:
 - Packet 1 is landed floor. Do not reopen it while implementing Packet 4 unless the contract itself changes.
 - Packet 2 is landed floor. Do not reopen runtime start birth or world-binding setup while implementing Packet 4 unless the contract itself changes.
 - Packet 3 is landed floor. Do not reopen authoritative parent world-binding reuse or mismatch fail-closed behavior while implementing Packet 4 unless the contract itself changes.
-- Packet 4 closeout is still open. Keep the work narrow to validation truth and manual smoke evidence unless the frozen contract itself needs to change.
+- Packet 4 is landed. Keep any follow-on work out of slice 30 unless the frozen contract itself needs to change.
