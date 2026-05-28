@@ -20,6 +20,7 @@ wt/
 __pycache__/
 *.pyc
 .runs
+.codex-turn-capture
 
 # Triad/Codex artifacts (store under feature planning packs to survive `cargo clean`)
 docs/project_management/next/**/logs/
