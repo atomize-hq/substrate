@@ -545,6 +545,39 @@ mod tests {
     }
 
     #[test]
+    fn validate_member_selection_prefers_world_alias_while_host_codex_remains_distinct() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                "codex",
+                AgentExecutionScope::Host,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+        inventory.insert(
+            "codex_world".to_string(),
+            make_entry_with_runtime_family(
+                "codex_world",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                Some(AgentCliRuntimeFamily::Codex),
+                required_capabilities(),
+            ),
+        );
+
+        let descriptor = assert_selected_descriptor(validate_member_selection(&config, &inventory));
+        assert_eq!(descriptor.agent_id, "codex_world");
+        assert_eq!(descriptor.backend_id, "cli:codex_world");
+        assert_eq!(descriptor.backend_kind, AgentRuntimeBackendKind::Codex);
+        assert_eq!(descriptor.execution_scope, AgentExecutionScope::World);
+    }
+
+    #[test]
     fn validate_member_selection_fails_closed_on_ambiguity() {
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
@@ -692,6 +725,43 @@ mod tests {
         ));
         assert_eq!(descriptor.agent_id, "codex");
         assert_eq!(descriptor.backend_id, "cli:codex");
+    }
+
+    #[test]
+    fn validate_exact_backend_selection_preserves_codex_world_alias_identity() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                "codex",
+                AgentExecutionScope::Host,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+        inventory.insert(
+            "codex_world".to_string(),
+            make_entry_with_runtime_family(
+                "codex_world",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                Some(AgentCliRuntimeFamily::Codex),
+                required_capabilities(),
+            ),
+        );
+
+        let descriptor = assert_exact_selected_descriptor(validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::World,
+            "cli:codex_world",
+        ));
+        assert_eq!(descriptor.agent_id, "codex_world");
+        assert_eq!(descriptor.backend_id, "cli:codex_world");
+        assert_eq!(descriptor.backend_kind, AgentRuntimeBackendKind::Codex);
     }
 
     #[test]

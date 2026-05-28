@@ -104,13 +104,13 @@ impl AgentControlFixture {
         );
     }
 
-    fn write_runtime_inventory(&self, include_world_backend: bool) {
+    fn write_runtime_inventory_with_member_backend(&self, member_agent_id: Option<&str>) {
         fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
-        let allowed_backends = if include_world_backend {
-            "    - cli:codex\n    - cli:claude_code\n"
-        } else {
-            "    - cli:codex\n"
-        };
+        let mut allowed_backends = vec!["    - cli:codex".to_string()];
+        if let Some(member_agent_id) = member_agent_id {
+            allowed_backends.push(format!("    - cli:{member_agent_id}"));
+        }
+        let allowed_backends = allowed_backends.join("\n");
         fs::write(
             self.substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -119,7 +119,7 @@ impl AgentControlFixture {
         fs::write(
             self.substrate_home.join("policy.yaml"),
             format!(
-                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}",
+                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}\n",
             ),
         )
         .expect("write policy.yaml");
@@ -133,13 +133,20 @@ impl AgentControlFixture {
             cli_agent_file("codex", Some("host"), &self.fake_codex),
         )
         .expect("write codex agent file");
-        if include_world_backend {
+        if let Some(member_agent_id) = member_agent_id {
             fs::write(
-                self.substrate_home.join("agents/claude_code.yaml"),
-                cli_agent_file("claude_code", Some("world"), &self.fake_codex),
+                self.substrate_home
+                    .join(format!("agents/{member_agent_id}.yaml")),
+                cli_agent_file(member_agent_id, Some("world"), &self.fake_codex),
             )
-            .expect("write claude_code agent file");
+            .unwrap_or_else(|_| panic!("write {member_agent_id} agent file"));
         }
+    }
+
+    fn write_runtime_inventory(&self, include_world_backend: bool) {
+        self.write_runtime_inventory_with_member_backend(
+            include_world_backend.then_some("claude_code"),
+        );
     }
 
     fn write_runtime_inventory_with_unscoped_member(
@@ -285,10 +292,19 @@ fn cli_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String 
     let execution_scope = scope
         .map(|scope| format!("  execution:\n    scope: {scope}\n"))
         .unwrap_or_default();
+    let runtime_family = runtime_family_for_fixture_agent(agent_id);
     format!(
-        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
         binary.display()
     )
+}
+
+fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
+    match agent_id {
+        "claude_code" => "claude_code",
+        "codex" | "codex_world" => "codex",
+        other => panic!("fixture runtime_family is not specified for agent `{other}`"),
+    }
 }
 
 fn write_fake_codex_script(dir: &Path) -> PathBuf {
@@ -827,11 +843,7 @@ fn host_attach_contract_manifest(
     agent_id: &str,
     orchestration_session_id: &str,
 ) -> Value {
-    let backend_kind = if agent_id == "claude_code" {
-        "claude_code"
-    } else {
-        "codex"
-    };
+    let backend_kind = runtime_family_for_fixture_agent(agent_id);
     json!({
         "backend_id": format!("cli:{agent_id}"),
         "execution_scope": "host",
@@ -1114,7 +1126,7 @@ fn write_runtime_participant(
             "last_transition_at": ts,
             "resumed_from_participant_id": resumed_from_participant_id,
             "internal": {
-                "resolved_agent_kind": agent_id,
+                "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
                 "resolved_binary_path": fixture.fake_codex.display().to_string(),
                 "shell_owner_pid": std::process::id(),
                 "lease_token": format!("lease-{participant_id}"),
@@ -1181,7 +1193,7 @@ fn write_world_member_participant(
             "world_generation": world_generation,
             "orchestrator_participant_id": orchestrator_participant_id,
             "internal": {
-                "resolved_agent_kind": agent_id,
+                "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
                 "resolved_binary_path": fixture.fake_codex.display().to_string(),
                 "shell_owner_pid": std::process::id(),
                 "lease_token": format!("lease-{participant_id}"),
@@ -3875,7 +3887,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
 fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory(true);
+    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
 
     let socket_home = tempfile::Builder::new()
         .prefix("sac-world-submit-")
@@ -3904,7 +3916,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     )
     .expect("host runtime ready");
 
-    repl.send_line("::cli:claude_code member targeted first turn");
+    repl.send_line("::cli:codex_world member targeted first turn");
     repl.wait_for_output("substrate>", Duration::from_secs(5))
         .expect("prompt after initial world turn");
 
@@ -3954,7 +3966,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
             "--session",
             &orchestration_session_id,
             "--backend",
-            "cli:claude_code",
+            "cli:codex_world",
             "--prompt",
             "continue in world",
             "--json",
@@ -3979,7 +3991,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     );
     assert_eq!(
         turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:claude_code")
+        Some("cli:codex_world")
     );
     assert_eq!(
         turn_json.get("turn_outcome").and_then(Value::as_str),
@@ -3988,6 +4000,28 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     assert_eq!(
         turn_json.get("session_posture").and_then(Value::as_str),
         Some("active")
+    );
+
+    let live_members = wait_for_live_world_member_count(
+        &fixture,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        live_members[0].get("agent_id").and_then(Value::as_str),
+        Some("codex_world")
+    );
+    assert_eq!(
+        live_members[0].get("backend_id").and_then(Value::as_str),
+        Some("cli:codex_world")
+    );
+    assert_eq!(
+        live_members[0]
+            .pointer("/internal/resolved_agent_kind")
+            .and_then(Value::as_str),
+        Some("codex"),
+        "world member persistence must keep canonical runtime-family spelling separate from alias identity"
     );
 
     let guard = records.lock().expect("lock world-service records");
@@ -4000,7 +4034,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     assert_eq!(submit.orchestration_session_id, orchestration_session_id);
     assert_eq!(submit.participant_id, member_participant_id);
     assert_eq!(submit.orchestrator_participant_id, owner_participant_id);
-    assert_eq!(submit.backend_id, "cli:claude_code");
+    assert_eq!(submit.backend_id, "cli:codex_world");
     assert_eq!(submit.world_id, world_id);
     assert_eq!(submit.world_generation, world_generation);
     assert_eq!(submit.prompt, "continue in world");
@@ -4022,7 +4056,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
 fn public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory(true);
+    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
 
     #[cfg(target_os = "linux")]
     let output = {
@@ -4048,7 +4082,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
                 "agent",
                 "start",
                 "--backend",
-                "cli:claude_code",
+                "cli:codex_world",
                 "--scope",
                 "world",
                 "--prompt",
@@ -4082,7 +4116,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         "agent",
         "start",
         "--backend",
-        "cli:claude_code",
+        "cli:codex_world",
         "--scope",
         "world",
         "--prompt",
@@ -4127,7 +4161,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         );
         assert_eq!(
             start_accepted.get("backend_id").and_then(Value::as_str),
-            Some("cli:claude_code")
+            Some("cli:codex_world")
         );
         assert_eq!(
             start_accepted.get("scope").and_then(Value::as_str),
@@ -4139,7 +4173,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         );
         assert_eq!(
             start_json.get("backend_id").and_then(Value::as_str),
-            Some("cli:claude_code")
+            Some("cli:codex_world")
         );
         assert_eq!(
             start_json.get("turn_outcome").and_then(Value::as_str),
@@ -4302,7 +4336,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
                 "--session",
                 orchestration_session_id,
                 "--backend",
-                "cli:claude_code",
+                "cli:codex_world",
                 "--prompt",
                 "next",
                 "--json",
@@ -4331,7 +4365,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
 fn public_root_start_world_scope_reports_requested_backend_and_scope() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory(true);
+    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
 
     #[cfg(target_os = "linux")]
     let output = {
@@ -4356,7 +4390,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
                 "agent",
                 "start",
                 "--backend",
-                "cli:claude_code",
+                "cli:codex_world",
                 "--scope",
                 "world",
                 "--prompt",
@@ -4372,7 +4406,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         "agent",
         "start",
         "--backend",
-        "cli:claude_code",
+        "cli:codex_world",
         "--scope",
         "world",
         "--prompt",
@@ -4408,7 +4442,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         );
         assert_eq!(
             start_json.get("backend_id").and_then(Value::as_str),
-            Some("cli:claude_code")
+            Some("cli:codex_world")
         );
         assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("world"));
         assert_eq!(

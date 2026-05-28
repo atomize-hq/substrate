@@ -3881,19 +3881,19 @@ fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_fam
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: codex
 "#,
     );
     fixture.write_global_policy_patch(
         r#"agents:
   allowed_backends:
-    - cli:claude_code
+    - cli:codex
     - cli:codex_world
 "#,
     );
     fixture.write_agent_file(
-        "claude_code.yaml",
-        &cli_agent_file("claude_code", "host", true, true, true),
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, true, true),
     );
     fixture.write_agent_file(
         "codex_world.yaml",
@@ -3901,14 +3901,14 @@ fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_fam
     );
     write_live_runtime_manifest(
         &fixture,
-        "claude_code",
+        "codex",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
         "ash_orchestrator_alias_world",
         "2026-04-05T00:00:01Z",
     );
     write_active_orchestration_session(
         &fixture,
-        "claude_code",
+        "codex",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
         Some("ash_orchestrator_alias_world"),
         "2026-04-05T00:00:01Z",
@@ -5167,7 +5167,7 @@ fn agent_doctor_fails_closed_on_world_member_allowlist_before_world_boundary() {
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: codex
 "#,
     );
     fixture.write_global_policy_patch(
@@ -5183,7 +5183,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
+    - "cli:codex"
 
 net_allowed: []
 cmd_allowed: []
@@ -5203,12 +5203,12 @@ metadata: {}
 "#,
     );
     fixture.write_agent_file(
-        "claude_code.yaml",
-        &cli_agent_file("claude_code", "host", true, true, true),
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, true, true),
     );
     fixture.write_agent_file(
-        "codex.yaml",
-        &cli_agent_file("codex", "world", true, false, true),
+        "codex_world.yaml",
+        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
     );
 
     let output = fixture.run(&["agent", "doctor", "--json"]);
@@ -5249,7 +5249,7 @@ metadata: {}
     assert_eq!(
         checks[5].pointer("/reason").and_then(Value::as_str),
         Some(
-            "required world-scoped member backend 'cli:codex' is not allowlisted by effective policy agents.allowed_backends"
+            "required world-scoped member backend 'cli:codex_world' is not allowlisted by effective policy agents.allowed_backends"
         ),
         "member dispatch must be gated by the derived backend_id before world boundary handling: {json}"
     );
@@ -5301,7 +5301,7 @@ fn agent_doctor_exactly_one_world_member_candidate_continues_into_world_boundary
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: codex
 "#,
     );
     fixture.write_global_policy_patch(
@@ -5317,8 +5317,8 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
     - "cli:codex"
+    - "cli:codex_world"
 
 net_allowed: []
 cmd_allowed: []
@@ -5338,12 +5338,12 @@ metadata: {}
 "#,
     );
     fixture.write_agent_file(
-        "claude_code.yaml",
-        &cli_agent_file("claude_code", "host", true, true, true),
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, true, true),
     );
     fixture.write_agent_file(
-        "codex.yaml",
-        &cli_agent_file("codex", "world", true, false, true),
+        "codex_world.yaml",
+        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
     );
 
     let output = fixture.run(&["agent", "doctor", "--json"]);
