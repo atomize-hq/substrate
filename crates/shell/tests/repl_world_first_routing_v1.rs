@@ -335,10 +335,7 @@ agents:
     .expect("write agent runtime policy");
     fs::write(
         home_substrate.join("agents/codex.yaml"),
-        format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            fake_codex.display()
-        ),
+        runtime_agent_yaml("codex", "host", fake_codex, "codex"),
     )
     .expect("write codex agent file");
 }
@@ -348,6 +345,25 @@ fn write_orchestrator_and_world_member_runtime_world_config(
     home_substrate: &Path,
     fake_orchestrator: &Path,
     fake_member: &Path,
+    on_drift: &str,
+) {
+    write_orchestrator_and_exact_world_member_runtime_world_config(
+        home_substrate,
+        fake_orchestrator,
+        fake_member,
+        "codex",
+        "codex",
+        on_drift,
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_orchestrator_and_exact_world_member_runtime_world_config(
+    home_substrate: &Path,
+    fake_orchestrator: &Path,
+    fake_member: &Path,
+    member_agent_id: &str,
+    member_runtime_family: &str,
     on_drift: &str,
 ) {
     fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
@@ -375,23 +391,21 @@ agents:
 "#
     );
     fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
-    write_member_runtime_policy(home_substrate, true);
+    write_member_runtime_policy_with_member_backend(
+        home_substrate,
+        true,
+        &format!("cli:{member_agent_id}"),
+    );
     fs::write(
         home_substrate.join("agents/claude_code.yaml"),
-        format!(
-            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            fake_orchestrator.display()
-        ),
+        runtime_agent_yaml("claude_code", "host", fake_orchestrator, "claude_code"),
     )
     .expect("write claude_code agent file");
     fs::write(
-        home_substrate.join("agents/codex.yaml"),
-        format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            fake_member.display()
-        ),
+        home_substrate.join(format!("agents/{member_agent_id}.yaml")),
+        runtime_agent_yaml(member_agent_id, "world", fake_member, member_runtime_family),
     )
-    .expect("write codex agent file");
+    .unwrap_or_else(|_| panic!("write {member_agent_id} agent file"));
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -429,24 +443,27 @@ agents:
     write_member_runtime_policy(home_substrate, true);
     fs::write(
         home_substrate.join("agents/claude_code.yaml"),
-        format!(
-            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            fake_orchestrator.display()
-        ),
+        runtime_agent_yaml("claude_code", "host", fake_orchestrator, "claude_code"),
     )
     .expect("write claude_code agent file");
     fs::write(
         home_substrate.join("agents/codex.yaml"),
-        format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            fake_secondary_host.display()
-        ),
+        runtime_agent_yaml("codex", "host", fake_secondary_host, "codex"),
     )
     .expect("write codex agent file");
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_member_runtime_policy(home_substrate: &Path, require_world: bool) {
+    write_member_runtime_policy_with_member_backend(home_substrate, require_world, "cli:codex");
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_member_runtime_policy_with_member_backend(
+    home_substrate: &Path,
+    require_world: bool,
+    member_backend_id: &str,
+) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let require_world = if require_world { "true" } else { "false" };
     let policy = format!(
@@ -473,10 +490,18 @@ metadata: {{}}
 agents:
   allowed_backends:
     - cli:claude_code
-    - cli:codex
+    - {member_backend_id}
 "#
     );
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn runtime_agent_yaml(agent_id: &str, scope: &str, binary: &Path, runtime_family: &str) -> String {
+    format!(
+        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+        binary.display()
+    )
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -589,10 +614,7 @@ agents:
     .expect("write agent runtime policy");
     fs::write(
         home_substrate.join("agents/codex.yaml"),
-        format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            fake_codex.display()
-        ),
+        runtime_agent_yaml("codex", "host", fake_codex, "codex"),
     )
     .expect("write codex agent file");
 }
@@ -2585,6 +2607,166 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     );
     let persisted = read_orchestration_session(&session_path);
     assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[serial]
+fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
+    let temp = temp_dir("substrate-c3-targeted-world-alias-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_exact_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "codex_world",
+        "codex",
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-world-alias-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-targeted-world-alias".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    assert_eq!(
+        live_participants
+            .iter()
+            .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
+            .collect::<Vec<_>>(),
+        vec![Some("cli:claude_code"), Some("cli:codex_world")],
+        "aliased world startup must preserve exact authoritative-live backend identity"
+    );
+
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let member_orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+    assert_eq!(
+        member.get("agent_id").and_then(Value::as_str),
+        Some("codex_world"),
+        "persisted member truth must keep the exact aliased agent id"
+    );
+    assert_eq!(
+        member.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex_world")
+    );
+    assert_eq!(
+        member
+            .pointer("/internal/resolved_agent_kind")
+            .and_then(Value::as_str),
+        Some("codex"),
+        "persisted member truth must keep canonical runtime-family spelling separate from alias identity"
+    );
+
+    repl.send_line("::cli:codex_world second");
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("__MEMBER_TURN_SUBMIT_STUB__ second", Duration::from_secs(3))
+        .expect("typed submit route output");
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "targeted follow-up turn must reuse the retained aliased member instead of relaunching it: {guard:#?}"
+    );
+    let member_dispatch = guard
+        .member_dispatch_requests
+        .first()
+        .and_then(|request| request.member_dispatch.as_ref())
+        .expect("member dispatch request");
+    let submit = guard
+        .member_turn_submit_requests
+        .first()
+        .expect("member turn submit request");
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, member_participant_id);
+    assert_eq!(
+        submit.orchestrator_participant_id,
+        member_orchestrator_participant_id
+    );
+    assert_eq!(submit.backend_id, "cli:codex_world");
+    assert_eq!(submit.world_id, world_id);
+    assert_eq!(submit.world_generation, world_generation);
+    assert_eq!(submit.prompt, "second");
+    assert_eq!(
+        member_dispatch.backend_id, "cli:codex_world",
+        "retained member dispatch must preserve the exact aliased backend identity"
+    );
+    drop(guard);
+
+    let live_members_after = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(3),
+    );
+    assert_eq!(
+        live_members_after[0]
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some(member_participant_id.as_str()),
+        "targeted alias submit must keep one retained world member rather than swap or duplicate it"
+    );
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));

@@ -367,7 +367,7 @@ import sys
 path = pathlib.Path(sys.argv[1])
 events = [line.strip() for line in os.environ.get("STATE_EVENTS", "").splitlines() if line.strip()]
 schema_version = 1
-timestamp = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
 base = {}
 parsed_existing = False

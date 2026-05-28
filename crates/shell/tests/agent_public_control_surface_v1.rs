@@ -104,13 +104,13 @@ impl AgentControlFixture {
         );
     }
 
-    fn write_runtime_inventory(&self, include_world_backend: bool) {
+    fn write_runtime_inventory_with_member_backend(&self, member_agent_id: Option<&str>) {
         fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
-        let allowed_backends = if include_world_backend {
-            "    - cli:codex\n    - cli:claude_code\n"
-        } else {
-            "    - cli:codex\n"
-        };
+        let mut allowed_backends = vec!["    - cli:codex".to_string()];
+        if let Some(member_agent_id) = member_agent_id {
+            allowed_backends.push(format!("    - cli:{member_agent_id}"));
+        }
+        let allowed_backends = allowed_backends.join("\n");
         fs::write(
             self.substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -119,7 +119,7 @@ impl AgentControlFixture {
         fs::write(
             self.substrate_home.join("policy.yaml"),
             format!(
-                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}",
+                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}\n",
             ),
         )
         .expect("write policy.yaml");
@@ -130,16 +130,81 @@ impl AgentControlFixture {
         .expect("write .substrate-profile");
         fs::write(
             self.substrate_home.join("agents/codex.yaml"),
-            cli_agent_file("codex", "host", &self.fake_codex),
+            cli_agent_file("codex", Some("host"), &self.fake_codex),
         )
         .expect("write codex agent file");
-        if include_world_backend {
+        if let Some(member_agent_id) = member_agent_id {
             fs::write(
-                self.substrate_home.join("agents/claude_code.yaml"),
-                cli_agent_file("claude_code", "world", &self.fake_codex),
+                self.substrate_home
+                    .join(format!("agents/{member_agent_id}.yaml")),
+                cli_agent_file(member_agent_id, Some("world"), &self.fake_codex),
             )
-            .expect("write claude_code agent file");
+            .unwrap_or_else(|_| panic!("write {member_agent_id} agent file"));
         }
+    }
+
+    fn write_runtime_inventory(&self, include_world_backend: bool) {
+        self.write_runtime_inventory_with_member_backend(
+            include_world_backend.then_some("claude_code"),
+        );
+    }
+
+    fn write_runtime_inventory_with_unscoped_member(
+        &self,
+        global_scope: &str,
+        workspace_scope: Option<&str>,
+    ) {
+        self.write_runtime_inventory(true);
+        fs::write(
+            self.substrate_home.join("config.yaml"),
+            format!(
+                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            ),
+        )
+        .expect("write global config.yaml");
+        if let Some(workspace_scope) = workspace_scope {
+            let workspace_config_dir = self.workspace_root.join(".substrate");
+            fs::create_dir_all(&workspace_config_dir).expect("create workspace config dir");
+            fs::write(
+                workspace_config_dir.join("workspace.yaml"),
+                format!("agents:\n  defaults:\n    execution:\n      scope: {workspace_scope}\n",),
+            )
+            .expect("write workspace config patch");
+        }
+        fs::write(
+            self.substrate_home.join("agents/claude_code.yaml"),
+            cli_agent_file("claude_code", None, &self.fake_codex),
+        )
+        .expect("write unscoped claude_code agent file");
+    }
+
+    fn write_runtime_inventory_with_unscoped_orchestrator(
+        &self,
+        global_scope: &str,
+        workspace_scope: Option<&str>,
+    ) {
+        self.write_runtime_inventory(false);
+        fs::write(
+            self.substrate_home.join("config.yaml"),
+            format!(
+                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            ),
+        )
+        .expect("write global config.yaml");
+        if let Some(workspace_scope) = workspace_scope {
+            let workspace_config_dir = self.workspace_root.join(".substrate");
+            fs::create_dir_all(&workspace_config_dir).expect("create workspace config dir");
+            fs::write(
+                workspace_config_dir.join("workspace.yaml"),
+                format!("agents:\n  defaults:\n    execution:\n      scope: {workspace_scope}\n",),
+            )
+            .expect("write workspace config patch");
+        }
+        fs::write(
+            self.substrate_home.join("agents/codex.yaml"),
+            cli_agent_file("codex", None, &self.fake_codex),
+        )
+        .expect("write unscoped codex agent file");
     }
 
     fn run(&self, args: &[&str]) -> Output {
@@ -223,11 +288,23 @@ impl AgentControlFixture {
     }
 }
 
-fn cli_agent_file(agent_id: &str, scope: &str, binary: &Path) -> String {
+fn cli_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String {
+    let execution_scope = scope
+        .map(|scope| format!("  execution:\n    scope: {scope}\n"))
+        .unwrap_or_default();
+    let runtime_family = runtime_family_for_fixture_agent(agent_id);
     format!(
-        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
         binary.display()
     )
+}
+
+fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
+    match agent_id {
+        "claude_code" => "claude_code",
+        "codex" | "codex_world" => "codex",
+        other => panic!("fixture runtime_family is not specified for agent `{other}`"),
+    }
 }
 
 fn write_fake_codex_script(dir: &Path) -> PathBuf {
@@ -766,11 +843,7 @@ fn host_attach_contract_manifest(
     agent_id: &str,
     orchestration_session_id: &str,
 ) -> Value {
-    let backend_kind = if agent_id == "claude_code" {
-        "claude_code"
-    } else {
-        "codex"
-    };
+    let backend_kind = runtime_family_for_fixture_agent(agent_id);
     json!({
         "backend_id": format!("cli:{agent_id}"),
         "execution_scope": "host",
@@ -1053,7 +1126,7 @@ fn write_runtime_participant(
             "last_transition_at": ts,
             "resumed_from_participant_id": resumed_from_participant_id,
             "internal": {
-                "resolved_agent_kind": agent_id,
+                "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
                 "resolved_binary_path": fixture.fake_codex.display().to_string(),
                 "shell_owner_pid": std::process::id(),
                 "lease_token": format!("lease-{participant_id}"),
@@ -1120,7 +1193,7 @@ fn write_world_member_participant(
             "world_generation": world_generation,
             "orchestrator_participant_id": orchestrator_participant_id,
             "internal": {
-                "resolved_agent_kind": agent_id,
+                "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
                 "resolved_binary_path": fixture.fake_codex.display().to_string(),
                 "shell_owner_pid": std::process::id(),
                 "lease_token": format!("lease-{participant_id}"),
@@ -1616,6 +1689,227 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
 
 #[test]
 #[serial]
+fn public_start_scope_host_and_disable_capability_flags_persist_narrowed_capabilities() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--scope",
+        "host",
+        "--disable-capability",
+        "session_fork",
+        "--disable-cap",
+        "status_snapshot",
+        "--prompt",
+        "hello from narrowed start",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "host-scoped public start with narrowed capabilities should succeed: {output:?}"
+    );
+
+    let records = parse_ndjson_output(&output);
+    let completed = find_ndjson_record(&records, "completed");
+    let orchestration_session_id = completed["orchestration_session_id"]
+        .as_str()
+        .expect("start session id");
+    let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
+
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/capabilities/session_fork")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/capabilities/status_snapshot")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/capabilities/session_resume")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/attach_launch_knobs/requested_execution_scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_rejects_unsupported_disable_capability_names_at_parse_time() {
+    let fixture = AgentControlFixture::new();
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--disable-capability",
+        "llm",
+        "--prompt",
+        "hello",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "unsupported disable capability names must fail at parse time: {output:?}"
+    );
+
+    let stderr = stderr_text(&output);
+    assert!(
+        stderr.contains("invalid value 'llm'"),
+        "parse-time rejection must name the unsupported capability: {stderr}"
+    );
+    assert!(
+        stderr.contains("session_resume") && stderr.contains("event_stream"),
+        "parse-time rejection must advertise the supported narrowing family: {stderr}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(1).exists(),
+        "parse-time capability rejection must fail before launching a backend runtime"
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_omitted_scope_uses_global_defaults_when_workspace_scope_is_unset() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_with_unscoped_orchestrator("host", None);
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from global host default",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "omitted scope should honor the global host default for an unscoped backend: {output:?}"
+    );
+
+    let records = parse_ndjson_output(&output);
+    let accepted = find_ndjson_record(&records, "accepted");
+    let completed = find_ndjson_record(&records, "completed");
+    assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("host"));
+    assert_eq!(
+        completed.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+
+    let orchestration_session_id = completed["orchestration_session_id"]
+        .as_str()
+        .expect("start session id");
+    let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
+    assert_eq!(
+        persisted_session
+            .pointer("/host_attach_contract/attach_launch_knobs/requested_execution_scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_with_unscoped_member("host", Some("world"));
+
+    #[cfg(target_os = "linux")]
+    let output = {
+        let socket_home = tempfile::Builder::new()
+            .prefix("sac-omitted-world-")
+            .tempdir_in("/tmp")
+            .expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let _server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+            &socket_path,
+            StreamBehavior::Normal,
+            vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-omitted-world-start".to_string(),
+                exit_code_on_cancel: 130,
+            }],
+        );
+        fixture
+            .command()
+            .current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .args([
+                "agent",
+                "start",
+                "--backend",
+                "cli:claude_code",
+                "--prompt",
+                "hello from workspace world default",
+                "--json",
+            ])
+            .output()
+            .expect("run public world start with omitted scope")
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "hello from workspace world default",
+        "--json",
+    ]);
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "workspace world default should resolve omitted scope to the Linux-first world path: {output:?}"
+        );
+        let stderr = stderr_text(&output);
+        assert!(
+            stderr.contains("unsupported_platform_or_posture"),
+            "world-default omitted scope must keep the frozen classifier: {stderr}"
+        );
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        assert!(
+            output.status.success(),
+            "workspace world default should route omitted scope through the world-backed path: {output:?}"
+        );
+        let records = parse_ndjson_output(&output);
+        let accepted = find_ndjson_record(&records, "accepted");
+        let start_json = find_ndjson_record(&records, "completed");
+        assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("world"));
+        assert_eq!(
+            start_json.get("backend_id").and_then(Value::as_str),
+            Some("cli:claude_code")
+        );
+    }
+}
+
+#[test]
+#[serial]
 fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -1929,18 +2223,6 @@ fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capa
         ts,
     );
 
-    let reattach_output = fixture.run(&[
-        "agent",
-        "reattach",
-        "--session",
-        orchestration_session_id,
-        "--json",
-    ]);
-    assert!(
-        reattach_output.status.success(),
-        "public reattach should succeed before fork/stop capability denial is exercised: {reattach_output:?}"
-    );
-
     let mut session = fixture.load_orchestration_session(orchestration_session_id);
     session["host_attach_contract"]["capabilities"] = json!({
         "session_resume": true,
@@ -2013,11 +2295,6 @@ fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capa
         stop_stderr.contains("durable host attach contract does not allow stop"),
         "stop denial must explain the persisted attach capability gate: {stop_output:?}"
     );
-
-    let owner_pid = fixture.load_orchestration_session(orchestration_session_id)["shell_owner_pid"]
-        .as_u64()
-        .expect("reattach owner pid") as u32;
-    terminate_pid(owner_pid);
 }
 
 #[test]
@@ -3610,7 +3887,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
 fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory(true);
+    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
 
     let socket_home = tempfile::Builder::new()
         .prefix("sac-world-submit-")
@@ -3639,7 +3916,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     )
     .expect("host runtime ready");
 
-    repl.send_line("::cli:claude_code member targeted first turn");
+    repl.send_line("::cli:codex_world member targeted first turn");
     repl.wait_for_output("substrate>", Duration::from_secs(5))
         .expect("prompt after initial world turn");
 
@@ -3689,7 +3966,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
             "--session",
             &orchestration_session_id,
             "--backend",
-            "cli:claude_code",
+            "cli:codex_world",
             "--prompt",
             "continue in world",
             "--json",
@@ -3714,7 +3991,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     );
     assert_eq!(
         turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:claude_code")
+        Some("cli:codex_world")
     );
     assert_eq!(
         turn_json.get("turn_outcome").and_then(Value::as_str),
@@ -3723,6 +4000,28 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     assert_eq!(
         turn_json.get("session_posture").and_then(Value::as_str),
         Some("active")
+    );
+
+    let live_members = wait_for_live_world_member_count(
+        &fixture,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        live_members[0].get("agent_id").and_then(Value::as_str),
+        Some("codex_world")
+    );
+    assert_eq!(
+        live_members[0].get("backend_id").and_then(Value::as_str),
+        Some("cli:codex_world")
+    );
+    assert_eq!(
+        live_members[0]
+            .pointer("/internal/resolved_agent_kind")
+            .and_then(Value::as_str),
+        Some("codex"),
+        "world member persistence must keep canonical runtime-family spelling separate from alias identity"
     );
 
     let guard = records.lock().expect("lock world-service records");
@@ -3735,7 +4034,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     assert_eq!(submit.orchestration_session_id, orchestration_session_id);
     assert_eq!(submit.participant_id, member_participant_id);
     assert_eq!(submit.orchestrator_participant_id, owner_participant_id);
-    assert_eq!(submit.backend_id, "cli:claude_code");
+    assert_eq!(submit.backend_id, "cli:codex_world");
     assert_eq!(submit.world_id, world_id);
     assert_eq!(submit.world_generation, world_generation);
     assert_eq!(submit.prompt, "continue in world");
@@ -3754,70 +4053,403 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
 
 #[test]
 #[serial]
-fn public_root_start_rejects_world_scoped_backends_in_v1() {
+fn public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory(true);
+    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
 
+    #[cfg(target_os = "linux")]
+    let output = {
+        let socket_home = tempfile::Builder::new()
+            .prefix("sac-world-start-")
+            .tempdir_in("/tmp")
+            .expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+            &socket_path,
+            StreamBehavior::Normal,
+            vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-public-world-start".to_string(),
+                exit_code_on_cancel: 130,
+            }],
+        );
+        let records = server.records();
+        let output = fixture
+            .command()
+            .current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .args([
+                "agent",
+                "start",
+                "--backend",
+                "cli:codex_world",
+                "--scope",
+                "world",
+                "--prompt",
+                "hello",
+                "--json",
+            ])
+            .output()
+            .expect("run public world start");
+        let guard = records.lock().expect("lock world-service records");
+        assert_eq!(
+            guard.persistent_start_sessions.len(),
+            1,
+            "world-scoped root start must open exactly one shared-world session: {guard:#?}"
+        );
+        assert_eq!(
+            guard.member_dispatch_requests.len(),
+            0,
+            "world-scoped root start must not create a first world-member conversation: {guard:#?}"
+        );
+        assert_eq!(
+            guard.execute_cancel_requests.len(),
+            0,
+            "world-scoped root start must not bootstrap and cancel a temporary world member: {guard:#?}"
+        );
+        drop(guard);
+        output
+    };
+
+    #[cfg(not(target_os = "linux"))]
     let output = fixture.run(&[
         "agent",
         "start",
         "--backend",
-        "cli:claude_code",
+        "cli:codex_world",
+        "--scope",
+        "world",
         "--prompt",
         "hello",
         "--json",
     ]);
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "world-scoped root start must fail closed: {output:?}"
-    );
-    let stderr = stderr_text(&output);
-    assert!(
-        stderr.contains("unsupported_platform_or_posture"),
-        "world-scoped root start must classify the posture failure exactly: {stderr}"
-    );
-    assert!(
-        stderr.contains("public root start is host-only in v1"),
-        "world-scoped root start failure must explain the Linux-first host-only contract: {stderr}"
-    );
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "non-Linux world-scoped root start must fail closed: {output:?}"
+        );
+        let stderr = stderr_text(&output);
+        assert!(
+            stderr.contains("unsupported_platform_or_posture"),
+            "non-Linux world-scoped root start must keep the frozen classifier: {stderr}"
+        );
+        assert!(
+            stderr.contains("supported on Linux only"),
+            "non-Linux world-scoped root start must explain the Linux-first rollout: {stderr}"
+        );
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        assert!(
+            output.status.success(),
+            "world-scoped root start must succeed through the host-first startup path: {output:?}"
+        );
+        let start_records = parse_ndjson_output(&output);
+        let start_accepted = find_ndjson_record(&start_records, "accepted");
+        let start_json = find_ndjson_record(&start_records, "completed");
+        assert_eq!(
+            start_records
+                .first()
+                .and_then(|record| record.get("kind"))
+                .and_then(Value::as_str),
+            Some("accepted"),
+            "world-scoped root start must stream acceptance before completion: {start_records:?}"
+        );
+        assert_eq!(
+            start_accepted.get("backend_id").and_then(Value::as_str),
+            Some("cli:codex_world")
+        );
+        assert_eq!(
+            start_accepted.get("scope").and_then(Value::as_str),
+            Some("world")
+        );
+        assert_eq!(
+            start_json.get("action").and_then(Value::as_str),
+            Some("start")
+        );
+        assert_eq!(
+            start_json.get("backend_id").and_then(Value::as_str),
+            Some("cli:codex_world")
+        );
+        assert_eq!(
+            start_json.get("turn_outcome").and_then(Value::as_str),
+            Some("success")
+        );
+        assert_eq!(
+            start_json.get("session_posture").and_then(Value::as_str),
+            Some("active")
+        );
+        assert_eq!(
+            start_json.get("state").and_then(Value::as_str),
+            Some("active")
+        );
+        assert_empty_warnings(start_json);
+
+        let orchestration_session_id = start_json["orchestration_session_id"]
+            .as_str()
+            .expect("start session id");
+        let participant_id = start_json["participant_id"]
+            .as_str()
+            .expect("start participant id");
+        let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
+        assert_eq!(
+            persisted_session.get("state").and_then(Value::as_str),
+            Some("active")
+        );
+        assert_eq!(
+            persisted_session.get("posture").and_then(Value::as_str),
+            Some("active_attached")
+        );
+        assert_eq!(
+            persisted_session
+                .get("active_session_handle_id")
+                .and_then(Value::as_str),
+            Some(participant_id)
+        );
+        assert_eq!(
+            persisted_session
+                .get("attached_participant_id")
+                .and_then(Value::as_str),
+            Some(participant_id)
+        );
+        assert!(
+            persisted_session
+                .get("shell_owner_pid")
+                .and_then(Value::as_u64)
+                .is_some_and(|pid| pid > 0),
+            "world-scoped root start must persist a live host owner pid: {persisted_session}"
+        );
+        assert_eq!(
+            persisted_session
+                .pointer("/host_attach_contract/execution_scope")
+                .and_then(Value::as_str),
+            Some("host")
+        );
+        assert_eq!(
+            persisted_session
+                .pointer("/host_attach_contract/attach_launch_knobs/host_execution_client_start")
+                .and_then(Value::as_str),
+            Some("start_now")
+        );
+        assert_eq!(
+            persisted_session
+                .pointer("/host_attach_contract/continuity_uaa_session_id")
+                .and_then(Value::as_str),
+            Some("thread-test")
+        );
+        assert_eq!(
+            persisted_session
+                .pointer("/startup_prompt/state")
+                .and_then(Value::as_str),
+            Some("completed")
+        );
+        assert_eq!(
+            persisted_session.get("world_id").and_then(Value::as_str),
+            Some("wld_stub_0001"),
+            "linux world-scoped root start must persist the authoritative world_id from the shared-world launch seam"
+        );
+        assert_eq!(
+            persisted_session.get("world_generation").and_then(Value::as_u64),
+            Some(0),
+            "linux world-scoped root start must persist the authoritative world_generation from the shared-world launch seam"
+        );
+        let participant_files = {
+            let participants_dir = fixture
+                .substrate_home
+                .join("run/agent-hub/sessions")
+                .join(orchestration_session_id)
+                .join("participants");
+            fs::read_dir(&participants_dir)
+                .ok()
+                .map(|entries| {
+                    entries
+                        .filter_map(Result::ok)
+                        .filter(|entry| {
+                            entry.path().extension().and_then(|value| value.to_str())
+                                == Some("json")
+                        })
+                        .count()
+                })
+                .unwrap_or(0)
+        };
+        assert_eq!(
+            participant_files, 1,
+            "linux world-scoped root start must persist exactly one host orchestrator participant"
+        );
+        let participants =
+            session_participant_manifests(&fixture.substrate_home, orchestration_session_id);
+        assert_eq!(
+            participants.len(),
+            1,
+            "expected exactly one persisted host orchestrator manifest"
+        );
+        let participant = &participants[0];
+        assert_eq!(
+            participant.get("role").and_then(Value::as_str),
+            Some("orchestrator")
+        );
+        assert_eq!(
+            participant
+                .pointer("/execution/scope")
+                .and_then(Value::as_str),
+            Some("host")
+        );
+        assert_eq!(
+            participant.get("backend_id").and_then(Value::as_str),
+            Some("cli:codex")
+        );
+        assert_ne!(
+            participant.get("state").and_then(Value::as_str),
+            Some("stopped"),
+            "host-first root start must leave the retained orchestrator live"
+        );
+        assert_eq!(
+            participant
+                .pointer("/internal/uaa_session_id")
+                .and_then(Value::as_str),
+            Some("thread-test")
+        );
+        let start_args = fixture.read_fake_codex_args(1);
+        assert!(
+            start_args.iter().any(|arg| arg == "exec"),
+            "world-scoped root start must still launch the host orchestrator through exec: {start_args:?}"
+        );
+        assert!(
+            !start_args.iter().any(|arg| arg == "resume"),
+            "world-scoped root start must not resume a pre-existing host session: {start_args:?}"
+        );
+        let start_stdin = fixture.read_fake_codex_stdin(1);
+        assert!(
+            start_stdin.contains("hello"),
+            "the inaugural prompt must ride the host orchestrator startup exec stdin payload: {start_stdin:?}"
+        );
+        let turn_output = fixture
+            .command()
+            .current_dir(&fixture.workspace_root)
+            .args([
+                "agent",
+                "turn",
+                "--session",
+                orchestration_session_id,
+                "--backend",
+                "cli:codex_world",
+                "--prompt",
+                "next",
+                "--json",
+            ])
+            .output()
+            .expect("run pre-attach public world turn");
+        assert_eq!(
+            turn_output.status.code(),
+            Some(2),
+            "world follow-up must fail closed until the host allocates a world backend slot: {turn_output:?}"
+        );
+        let turn_stderr = stderr_text(&turn_output);
+        assert!(
+            turn_stderr.contains("backend_not_in_session"),
+            "world follow-up must fail because no world member slot exists yet: {turn_stderr}"
+        );
+        assert!(
+            !turn_stderr.contains("born_unattached"),
+            "host-first world start must not report the old born_unattached posture: {turn_stderr}"
+        );
+    }
 }
 
 #[test]
 #[serial]
-fn public_root_start_denials_name_field_layer_and_reason() {
+fn public_root_start_world_scope_reports_requested_backend_and_scope() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory(true);
+    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
 
+    #[cfg(target_os = "linux")]
+    let output = {
+        let socket_home = tempfile::Builder::new()
+            .prefix("sac-world-start-shape-")
+            .tempdir_in("/tmp")
+            .expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let _server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+            &socket_path,
+            StreamBehavior::Normal,
+            vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-public-world-start-shape".to_string(),
+                exit_code_on_cancel: 130,
+            }],
+        );
+        fixture
+            .command()
+            .current_dir(&fixture.workspace_root)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .args([
+                "agent",
+                "start",
+                "--backend",
+                "cli:codex_world",
+                "--scope",
+                "world",
+                "--prompt",
+                "hello",
+                "--json",
+            ])
+            .output()
+            .expect("run public world start")
+    };
+
+    #[cfg(not(target_os = "linux"))]
     let output = fixture.run(&[
         "agent",
         "start",
         "--backend",
-        "cli:claude_code",
+        "cli:codex_world",
+        "--scope",
+        "world",
         "--prompt",
         "hello",
         "--json",
     ]);
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "world-scoped root start must fail closed: {output:?}"
-    );
-    let stderr = stderr_text(&output);
-    assert!(
-        stderr.contains("unsupported_platform_or_posture"),
-        "start denial must keep the posture classifier: {stderr}"
-    );
-    assert!(
-        stderr.contains("baseline truth rejected field 'requested_execution_scope'"),
-        "start denial must name the rejecting layer and field: {stderr}"
-    );
-    assert!(
-        stderr.contains("public root start is host-only in v1"),
-        "start denial must preserve the concrete posture reason: {stderr}"
-    );
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "non-Linux world-scoped root start must fail closed: {output:?}"
+        );
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        assert!(
+            output.status.success(),
+            "world-scoped root start must succeed once the public seam is wired: {output:?}"
+        );
+        let records = parse_ndjson_output(&output);
+        let accepted = find_ndjson_record(&records, "accepted");
+        let start_json = find_ndjson_record(&records, "completed");
+        assert!(
+            start_json.get("source_orchestration_session_id").is_none(),
+            "new world-root births must not advertise a source session: {start_json}"
+        );
+        assert_eq!(
+            start_json.get("action").and_then(Value::as_str),
+            Some("start")
+        );
+        assert_eq!(
+            start_json.get("backend_id").and_then(Value::as_str),
+            Some("cli:codex_world")
+        );
+        assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("world"));
+        assert_eq!(
+            start_json.get("state").and_then(Value::as_str),
+            Some("active")
+        );
+    }
 }
 
 #[test]

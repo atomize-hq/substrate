@@ -238,6 +238,10 @@ pub(crate) fn configure_child_shell_env<E: CommandEnvAdapter>(
         cmd.set_env_var("PATH", path);
     }
 
+    // A fresh child shell must always re-source manager_env.sh even if the
+    // parent process was itself launched from a Substrate-managed shell.
+    cmd.remove_env_var("SUBSTRATE_MANAGER_ENV_ACTIVE");
+
     if let Some(original) = &config.host_bash_env {
         cmd.set_env_var("SUBSTRATE_ORIGINAL_BASH_ENV", original);
     } else {
@@ -275,7 +279,7 @@ mod tests {
     use crate::execution::settings::WorldRootSettings;
     use crate::execution::ShellMode;
     use serial_test::serial;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::fs;
     use substrate_common::WorldRootMode;
     use substrate_trace::init_trace;
@@ -342,6 +346,22 @@ mod tests {
             env::set_var(key, value);
         } else {
             env::remove_var(key);
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingEnvAdapter {
+        set: HashMap<String, String>,
+        removed: HashSet<String>,
+    }
+
+    impl CommandEnvAdapter for RecordingEnvAdapter {
+        fn set_env_var(&mut self, key: &str, value: &str) {
+            self.set.insert(key.to_string(), value.to_string());
+        }
+
+        fn remove_env_var(&mut self, key: &str) {
+            self.removed.insert(key.to_string());
         }
     }
 
@@ -426,6 +446,20 @@ managers:
         assert!(script.contains("manager_init.sh"));
         assert!(script.contains("SUBSTRATE_ORIGINAL_BASH_ENV"));
         assert!(script.contains(".substrate_bashenv"));
+    }
+
+    #[test]
+    fn configure_child_shell_env_clears_inherited_manager_env_guard() {
+        let temp = tempdir().unwrap();
+        let config = test_shell_config(&temp);
+        let mut adapter = RecordingEnvAdapter::default();
+
+        configure_child_shell_env(&mut adapter, &config, true, false);
+
+        assert!(
+            adapter.removed.contains("SUBSTRATE_MANAGER_ENV_ACTIVE"),
+            "fresh child shells must not inherit the manager env recursion guard"
+        );
     }
 
     #[test]

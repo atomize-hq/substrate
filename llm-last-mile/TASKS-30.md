@@ -5,44 +5,46 @@ Source spec: [SPEC-30-public-world-scoped-agent-start-and-capability-flags.md](/
 Source plan: [PLAN-30.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-30.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: ready for implementation
+Status: Packets 1-4 landed; slice 30 closed on 2026-05-28 after Packet 4 reran the required Linux manual smoke and the full validation wall
 
 ## Execution Packets
 
-This slice should be implemented as four separate `/incremental-implementation` sessions.
+This slice was planned as four separate `/incremental-implementation` sessions, but Packets 1-3 are already landed in code and now serve as the frozen floor for Packet 4.
 
-- Packet 1 implements Phase 1 only.
-- Packet 2 implements Phase 2 only.
-- Packet 3 implements Phase 3 only.
-- Packet 4 implements Phase 4 only.
+- Packet 1 is landed and should not be reopened unless the contract changes.
+- Packet 2 is landed and should not be reopened unless the contract changes.
+- Packet 3 is landed and should not be reopened unless the contract changes.
+- Packet 4 is landed; no active implementation packets remain for slice 30.
 
-Do not start a later packet until the prior packet’s checkpoint is green.
+Treat the Packet 4 checkpoint as green repo floor for this slice. Slice 30 is now closed against the landed Packet 1-4 floor.
 
-## Packet 1: Public Input Contract And Resolver Wiring
+## Packet 1: Landed Public Input Contract And Resolver Wiring
+
+Packet 1 is already landed in code. These tasks remain here only as frozen context for Packet 4 review.
 
 Session goal:
 
 1. add the approved public start flags,
-2. map them into the shared dispatch-envelope contract,
+2. map them plus omitted-scope resolution precedence into the shared dispatch-envelope contract,
 3. pin fail-closed behavior for unsupported capability families.
 
 ### Tasks
 
-- [ ] Task 1.1: Add the public `agent start` CLI surface for `--scope`, `--disable-capability`, and `--disable-cap`
-  - Acceptance: `AgentStartArgs` accepts `--scope host|world`; `--disable-capability <capability>` is repeatable; `--disable-cap <capability>` is the only alias; unsupported capability names fail at parse time; omitting `--scope` preserves the host default.
+- [x] Task 1.1: Add the public `agent start` CLI surface for `--scope`, `--disable-capability`, and `--disable-cap`
+  - Acceptance: `AgentStartArgs` accepts `--scope host|world`; `--disable-capability <capability>` is repeatable; `--disable-cap <capability>` is the only alias; unsupported capability names fail at parse time; omitting `--scope` no longer hardcodes host.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/cli.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/cli.rs)
     - [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 
-- [ ] Task 1.2: Map the new start flags into one shared dispatch-envelope builder
-  - Acceptance: public `agent start` builds `DispatchRequestEnvelope` from CLI inputs instead of hardcoded host-only defaults; supported disable flags map to narrowing-only capability overrides; host default behavior stays unchanged.
+- [x] Task 1.2: Map scope inputs and omitted-scope resolution into one shared dispatch-envelope builder
+  - Acceptance: public `agent start` builds `DispatchRequestEnvelope` from CLI inputs and resolved scope instead of hardcoded host-only defaults; omitted `--scope` resolves the preferred default scope, probes that scope first, falls back once to the alternate scope if needed, and stamps the resolved scope into the envelope; supported disable flags map to narrowing-only capability overrides; explicit `--scope host` bypass behavior stays unchanged.
   - Verify: `cargo test -p shell dispatch_contract -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.3: Pin fail-closed capability rejection for unsupported agent-level fields
+- [x] Task 1.3: Pin fail-closed capability rejection for unsupported agent-level fields
   - Acceptance: public start rejects attempts to set or imply dispatch-time overrides for `session_start`, `llm`, and `mcp_client`; tests assert stable rejection classifiers and reasons.
   - Verify: `cargo test -p shell dispatch_contract -- --nocapture`
   - Files:
@@ -54,31 +56,34 @@ Session goal:
 Packet 1 is complete only when:
 
 1. the public CLI accepts the approved flags,
-2. the shared dispatch envelope receives the new inputs,
+2. the shared dispatch envelope receives the new inputs and resolved-scope truth,
 3. unsupported capability families still fail closed,
-4. host-default root-start behavior is unchanged.
+4. explicit `--scope host` behavior is unchanged.
 
-Do not start Packet 2 until Packet 1 verification is green.
+Packet 4 should assume this checkpoint is already green.
 
-## Packet 2: Host-Rooted World-Start Session Birth
+## Packet 2: Host-First Start Birth And World Session Setup
+
+Packet 2 is already landed in code. These tasks remain here only as frozen context for Packet 4 review.
 
 Session goal:
 
-1. preserve current host-scoped root start,
-2. add scope-aware root-start planning,
-3. create host-rooted world-start session birth with deferred host attach.
+1. preserve explicit host-scoped root start,
+2. preserve the landed omitted-scope resolution contract,
+3. replace the deferred-host-attach world-start success shape,
+4. create host-first world-backed session birth.
 
 ### Tasks
 
-- [ ] Task 2.1: Refactor root-start planning so `--scope host` and omitted scope preserve current behavior
-  - Acceptance: host-scoped root start still resolves through the existing public prompt path, keeps eager host execution-client startup where already required, and existing host-scoped regressions remain green after the new flag surface lands.
+- [x] Task 2.1: Refactor root-start planning so omitted scope resolves through config/policy and `--scope host` remains the bypass path
+  - Acceptance: explicit `--scope host` still resolves through the existing public host prompt path; omitted `--scope` preserves the landed preferred-scope probe plus one alternate-scope fallback; the resolved scope remains authoritative for the request and operator-visible output; host-scoped regressions remain green after the new runtime work lands.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
 
-- [ ] Task 2.2: Implement host-rooted world-start session birth with deferred host attach
-  - Acceptance: `agent start --scope world` creates a durable host-rooted orchestration session, persists authoritative `HostAttachContract` truth at birth, and records deferred host execution-client startup rather than manufacturing an attached host owner.
+- [x] Task 2.2: Implement host-first world-backed session birth
+  - Acceptance: `agent start --scope world`, or omitted `--scope` that resolves to world, no longer returns the old deferred-host-attach `WorldBirth` / `born_unattached` success shape; it creates a durable host-rooted orchestration session that is already truthfully host-attached at return time, persists authoritative `HostAttachContract` truth at birth, establishes authoritative world session/binding truth before `start` returns, and routes the inaugural operator prompt through the host orchestration agent instead of a first world-worker conversation.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
@@ -90,55 +95,64 @@ Session goal:
 Packet 2 is complete only when:
 
 1. host-scoped root start remains compatible,
-2. world-scoped root start creates a host-rooted durable session,
+2. world-backed root start creates a host-rooted attached durable session rather than a `born_unattached` success posture,
 3. authoritative host attach truth is persisted at birth,
-4. host execution-client startup is deferred for the world-scoped path.
+4. authoritative world session/binding truth is established for the world-backed path before `start` returns.
 
-Do not start Packet 3 until Packet 2 verification is green.
+Treat the Packet 2 checkpoint as green repo floor for this pass.
 
-## Packet 3: World-Member Launch And Binding Persistence
+## Packet 3: Canonical World Identity Reuse And Lazy Dispatch Readiness
 
 Session goal:
 
-1. launch the world worker/member under the new host-rooted session,
-2. persist authoritative world binding,
-3. reuse existing world runtime semantics rather than inventing a start-only dialect.
+1. treat Packet 2's persisted `world_id` and `world_generation` as the canonical durable projection of authoritative world session/binding truth,
+2. require later host-decided world work to reuse that authoritative parent binding,
+3. keep later world-worker allocation lazy until host orchestration chooses world work,
+4. avoid inventing a world-first inaugural prompt dialect or reopening the Packet 2 start contract.
 
 ### Tasks
 
-- [ ] Task 3.1: Launch the world worker under the new session and persist authoritative world binding
-  - Acceptance: Linux world-scoped root start launches the world member/worker through existing runtime plumbing, persists `world_id` and `world_generation`, and does not invent a second start-only world launch dialect.
-  - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+- [x] Task 3.1: Reuse authoritative parent world binding for later world-member launch
+  - Acceptance: later host-decided world-member launch treats the Packet-2 `world_id` and `world_generation` as the canonical parent binding for the orchestration session, reuses that same authoritative binding for member launch, and fails closed when the authoritative parent binding is missing or mismatched against the active world session.
+  - Verify: `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
     - [`crates/shell/src/execution/agent_runtime/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
 
+- [x] Task 3.2: Keep later world work lazy and preserve the Packet 2 host-first floor
+  - Acceptance: Packet 3 does not introduce an eager first world-member conversation at public `start` return, does not revive `born_unattached` as the default happy path, and keeps later world work opt-in from host orchestration rather than background-triggered.
+  - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+  - Files:
+    - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+    - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+    - [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+
 ### Packet 3 Checkpoint
 
-Packet 3 is complete only when:
+Packet 3 is treated as complete for this slice’s remaining work when:
 
-1. Linux world-scoped root start succeeds end to end,
-2. authoritative `world_id` and `world_generation` are persisted,
-3. the implementation still reuses the shared-contract world runtime path.
+1. later host-decided world work reuses the authoritative parent world binding established by Packet 2,
+2. missing or mismatched authoritative world binding truth fails closed,
+3. no eager world-member conversation or revived `born_unattached` default is introduced while wiring this readiness path.
 
-Do not start Packet 4 until Packet 3 verification is green.
+Packet 4 should treat this checkpoint as landed floor and only freeze the remaining operator-facing closeout contract.
 
 ## Packet 4: Status Truth, Control Hardening, Docs, And Final Validation
 
 Session goal:
 
-1. expose `born_unattached`,
-2. preserve detached host semantics,
-3. pin Linux-first and pre-attach fail-closed behavior,
+1. preserve truthful host lifecycle semantics,
+2. preserve the readable-status versus fail-closed-control split across `agent status`, toolbox, and doctor,
+3. pin Linux-first and scope-resolution behavior,
 4. align docs with shipped behavior,
 5. run the full validation wall.
 
 ### Tasks
 
-- [ ] Task 4.1: Add truthful `born_unattached` status and preserve existing detached host semantics
-  - Acceptance: a never-attached host-rooted world-start session surfaces `born_unattached`; existing `parked_resumable`, `awaiting_attention`, and detached continuity semantics for previously attached host sessions remain unchanged; status JSON and human-readable output use the frozen vocabulary.
+- [x] Task 4.1: Preserve truthful host lifecycle/status semantics for the world-backed default path
+  - Acceptance: world-backed root start uses the normal host lifecycle as the operator-facing happy path; existing `active_attached`, `parked_resumable`, and `awaiting_attention` semantics remain unchanged; `born_unattached` may remain valid for specialized or legacy sessions but no test or doc treats it as the default slice-30 success posture.
   - Verify: `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
@@ -146,24 +160,30 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
 
-- [ ] Task 4.2: Pin Linux-first and pre-attach fail-closed behavior in the public control suite
-  - Acceptance: Linux world-scoped root start succeeds under the new contract; non-Linux world-scoped root start fails closed with `unsupported_platform_or_posture`; pre-attach world follow-up remains fail closed until sanctioned host attach; obsolete host-only world-start rejection assertions are replaced with the new contract wall.
+- [x] Task 4.2: Preserve and harden the Packet-4 operator control-surface contract
+  - Acceptance: `agent status` remains readable and may degrade with warnings when authoritative parent/session linkage is incomplete; toolbox surfaces continue to fail closed for active-session authorization and prefer authoritative live parent/session manifests over trace history; `agent toolbox status` only surfaces `active_world_binding` when the live parent session carries both `world_id` and `world_generation`; `agent doctor` continues to fail closed at orchestrator selection, runtime realizability, policy allowlist, and required world-boundary checks.
+  - Verify: `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+  - Files:
+    - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+    - [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
+
+- [x] Task 4.3: Pin Linux-first world-backed start and scope-resolution behavior in the public control suite
+  - Acceptance: Linux world-backed root start succeeds under the landed host-first contract; non-Linux world-backed root start fails closed with `unsupported_platform_or_posture`; omitted scope preserves the documented preferred-scope probe plus one alternate-scope fallback; obsolete deferred-host-attach / `born_unattached` root-start assertions are absent from the final slice-30 contract wall.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 
-- [ ] Task 4.3: Update operator docs and planning docs to match the shipped contract
-  - Acceptance: public docs describe `--scope world`, `--disable-capability` / `--disable-cap`, `born_unattached`, Linux-first rollout, and pre-attach fail-closed behavior exactly as implemented; no doc still claims host-only root start as the only contract for this slice.
+- [x] Task 4.4: Update planning docs to match the shipped host-first world-backed contract
+  - Acceptance: planning docs describe omitted-scope preferred-scope resolution plus alternate-scope fallback, `--scope host` as the bypass-world path, `--scope world` as the explicit world-backed host-session path, host-first inaugural prompt handling, immediate start-time host/world truth versus lazy follow-on world work, the readable-status versus fail-closed-control split, Linux-first world-backed support, non-Linux fail-closed posture, and the explicit deferred list exactly as implemented; no slice-30 doc still treats `born_unattached` as the default thin-slice success posture.
   - Verify: manual diff review plus `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
-    - [`docs/USAGE.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md)
-    - [`llm-last-mile/README.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)
     - [`llm-last-mile/SPEC-30-public-world-scoped-agent-start-and-capability-flags.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-30-public-world-scoped-agent-start-and-capability-flags.md)
     - [`llm-last-mile/PLAN-30.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-30.md)
+    - [`llm-last-mile/TASKS-30.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-30.md)
 
-- [ ] Task 4.4: Run the final validation wall for the full slice
-  - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests pass; any Linux manual smoke evidence needed for the slice is captured before closeout.
+- [x] Task 4.5: Run the final validation wall for the full slice
+  - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests pass; Linux manual smoke evidence is landed for the host-first world-backed path; the public control suites keep the non-Linux `unsupported_platform_or_posture` fail-closed posture pinned; no closeout step relaxes the Packet 4 contract.
   - Verify:
     - `cargo fmt --all -- --check`
     - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -171,27 +191,28 @@ Session goal:
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
     - `cargo test --workspace -- --nocapture`
   - Files:
-    - No planned source edits; this is the validation gate after the implementation tasks above.
+    - [`llm-last-mile/CLOSEOUT-30-packet-4-linux-manual-smoke-2026-05-28.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/CLOSEOUT-30-packet-4-linux-manual-smoke-2026-05-28.md)
 
 ### Packet 4 Checkpoint
 
 Packet 4 is complete only when:
 
-1. `born_unattached` is visible and truthful,
-2. Linux-first and non-Linux fail-closed behavior are both pinned,
-3. pre-attach follow-up remains fail closed,
-4. docs, spec, and plan all match shipped behavior,
-5. the full validation wall passes.
+1. world-backed root start keeps the normal host lifecycle as the default operator-facing truth,
+2. `agent status` readable degradation and toolbox/doctor fail-closed behavior are both pinned,
+3. Linux-first and non-Linux fail-closed behavior are both pinned,
+4. omitted-scope resolution order is pinned,
+5. docs, spec, and plan all match shipped behavior,
+6. the full validation wall, including required manual smoke evidence, passes.
 
 ## Cross-Packet Dependency Order
 
-1. Packet 1 blocks Packet 2.
-2. Packet 2 blocks Packet 3.
-3. Packet 3 blocks Packet 4.
+1. Packet 1 landed before Packet 2.
+2. Packet 2 landed before Packet 3.
+3. Packet 3 landed before Packet 4.
 
 ## Notes For Implementation
 
-- Packet 1 is the contract-freeze packet. Do not leak runtime behavior changes into it.
-- Packet 2 is the highest-risk runtime packet. Keep it focused on session birth and deferred host attach.
-- Packet 3 should stay narrow. If it expands into status or docs, stop and defer that work to Packet 4.
-- Packet 4 is the integration packet. This is where obsolete host-only world-start assertions should be replaced and where wording should be aligned across runtime, tests, and docs.
+- Packet 1 is landed floor. Do not reopen it while implementing Packet 4 unless the contract itself changes.
+- Packet 2 is landed floor. Do not reopen runtime start birth or world-binding setup while implementing Packet 4 unless the contract itself changes.
+- Packet 3 is landed floor. Do not reopen authoritative parent world-binding reuse or mismatch fail-closed behavior while implementing Packet 4 unless the contract itself changes.
+- Packet 4 is landed. Keep any follow-on work out of slice 30 unless the frozen contract itself needs to change.

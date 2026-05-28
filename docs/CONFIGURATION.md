@@ -40,7 +40,8 @@ Config keys:
 - `agents.hub.orchestrator_agent_id` selects the canonical host-scoped orchestrator agent for `substrate agent status` and `substrate agent doctor`.
 - Agent inventory entries continue to define each agent's adapter kind and execution posture; the derived `backend_id` remains `<kind>:<agent_id>`.
 - The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=substrate.agent.session`, and `cli.mode=persistent`.
-- The first realized shell-owned UAA backends are `cli:codex` and `cli:claude_code`. Other inventory items may still validate and list successfully, but they are not runtime-realizable on the selected orchestrator path in v1.
+- `config.cli.runtime_family` is the inventory-only runtime-realization truth for shell-owned UAA candidates. Supported values are `codex` and `claude_code`.
+- Runtime realization still keys policy and exact backend routing off the derived `backend_id`. For example, `cli:codex_world` may realize the canonical `codex` runtime family while remaining a distinct exact backend id from `cli:codex`.
 - `config.cli.binary` for the selected orchestrator must resolve on the host during `substrate agent doctor` and async REPL bootstrap.
 
 Policy keys:
@@ -64,6 +65,7 @@ config:
   execution:
     scope: host
   cli:
+    runtime_family: claude_code
     binary: claude
     mode: persistent
   capabilities:

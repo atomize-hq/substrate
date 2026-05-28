@@ -3031,6 +3031,16 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
         let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
             .map_err(|failure| anyhow!(failure.message))?;
+        let initial_world_binding = match (
+            plan.session.world_id.as_ref(),
+            plan.session.world_generation,
+        ) {
+            (Some(world_id), Some(world_generation)) => Some(PersistedWorldBinding {
+                world_id: world_id.clone(),
+                world_generation,
+            }),
+            _ => None,
+        };
         let initial_prompt = plan.startup_prompt.as_ref().map(|startup_prompt| {
             InitialExecPromptPlan::StartupPrompt {
                 prompt: startup_prompt.prompt_text.clone(),
@@ -3039,7 +3049,7 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         });
         let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
             Some(prepared),
-            None,
+            initial_world_binding.as_ref(),
             initial_prompt,
             matches!(plan.mode, OwnerHelperMode::Attach),
             true,
@@ -6240,7 +6250,9 @@ fn build_parked_host_runtime_snapshots(
         OrchestrationSessionPosture::AwaitingAttention => {
             parked_orchestration.mark_awaiting_attention();
         }
-        OrchestrationSessionPosture::ActiveAttached | OrchestrationSessionPosture::Terminal => {
+        OrchestrationSessionPosture::ActiveAttached
+        | OrchestrationSessionPosture::BornUnattached
+        | OrchestrationSessionPosture::Terminal => {
             unreachable!("detached host parking only normalizes to parked or attention posture")
         }
     }
@@ -8581,6 +8593,19 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn runtime_agent_file(
+        agent_id: &str,
+        scope: &str,
+        runtime_family: &str,
+        binary: &Path,
+    ) -> String {
+        format!(
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            binary.display()
+        )
+    }
+
+    #[cfg(unix)]
     fn write_runtime_inventory_with_world_member(
         substrate_home: &Path,
         orchestrator_binary: &Path,
@@ -8600,18 +8625,12 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("claude_code.yaml"),
-            format!(
-                "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                orchestrator_binary.display()
-            ),
+            runtime_agent_file("claude_code", "host", "claude_code", orchestrator_binary),
         )
         .expect("write claude_code agent file");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: world\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                member_binary.display()
-            ),
+            runtime_agent_file("codex", "world", "codex", member_binary),
         )
         .expect("write codex agent file");
     }
@@ -8679,10 +8698,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -8853,10 +8869,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -8970,10 +8983,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -9071,10 +9081,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -9152,10 +9159,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -9301,10 +9305,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -9432,10 +9433,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -9537,10 +9535,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            format!(
-                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                fake_codex.display()
-            ),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 

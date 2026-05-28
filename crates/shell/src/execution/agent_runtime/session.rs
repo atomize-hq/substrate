@@ -523,6 +523,24 @@ impl AgentRuntimeParticipantRecord {
             && self.is_host_orchestrator()
     }
 
+    pub(crate) fn matches_authoritative_parent_world_binding(
+        &self,
+        session: &OrchestrationSessionRecord,
+    ) -> bool {
+        let Some(world_id) = session.world_id.as_deref() else {
+            return false;
+        };
+        let Some(world_generation) = session.world_generation else {
+            return false;
+        };
+
+        self.handle.orchestration_session_id == session.orchestration_session_id
+            && self.handle.role == MEMBER_ROLE
+            && self.handle.execution.scope == AgentExecutionScope::World
+            && self.handle.world_id.as_deref() == Some(world_id)
+            && self.handle.world_generation == Some(world_generation)
+    }
+
     pub(crate) fn set_uaa_session_id(&mut self, backend_session_id: impl Into<String>) {
         self.internal.uaa_session_id = Some(backend_session_id.into());
         if self.is_host_orchestrator() && self.handle.state.is_live() {

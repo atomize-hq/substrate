@@ -79,15 +79,22 @@ impl AgentsValidateFixture {
     }
 }
 
-fn valid_cli_agent_file(agent_id: &str, policy_overlay: Option<&str>) -> String {
+fn valid_cli_agent_file(
+    agent_id: &str,
+    runtime_family: Option<&str>,
+    policy_overlay: Option<&str>,
+) -> String {
     let overlay = policy_overlay.unwrap_or("");
+    let runtime_family = runtime_family
+        .map(|value| format!("    runtime_family: {value}\n"))
+        .unwrap_or_default();
     if overlay.is_empty() {
         format!(
-            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n"
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n{runtime_family}  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n"
         )
     } else {
         format!(
-            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\npolicy_overlay:\n{overlay}"
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n{runtime_family}  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\npolicy_overlay:\n{overlay}"
         )
     }
 }
@@ -119,6 +126,7 @@ world_fs:
         "codex.yaml",
         &valid_cli_agent_file(
             "codex",
+            Some("codex"),
             Some("  world_fs:\n    read:\n      allow_list:\n        - \".\"\n"),
         ),
     );
@@ -128,6 +136,24 @@ world_fs:
         output.status.success(),
         "valid inventory and restrictive world_fs overlay should succeed: {output:?}"
     );
+}
+
+#[test]
+fn agents_validate_accepts_supported_cli_runtime_family_values() {
+    for (agent_id, runtime_family) in [("codex", "codex"), ("claude_code", "claude_code")] {
+        let fixture = AgentsValidateFixture::new();
+        fixture.init_workspace();
+        fixture.write_agent_file(
+            &format!("{agent_id}.yaml"),
+            &valid_cli_agent_file(agent_id, Some(runtime_family), None),
+        );
+
+        let output = fixture.validate();
+        assert!(
+            output.status.success(),
+            "supported runtime_family '{runtime_family}' should validate: {output:?}"
+        );
+    }
 }
 
 #[test]
@@ -259,6 +285,49 @@ config:
 }
 
 #[test]
+fn agents_validate_rejects_invalid_cli_runtime_family_with_exit_2() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file(
+        "bad_runtime_family.yaml",
+        r#"version: 1
+id: bad_runtime_family
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+    runtime_family: codex_world
+  capabilities:
+    session_start: true
+    session_resume: true
+    session_fork: true
+    session_stop: true
+    status_snapshot: true
+    event_stream: true
+"#,
+    );
+
+    let output = fixture.validate();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid runtime_family should exit 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("bad_runtime_family.yaml")
+            && stderr.contains("runtime_family")
+            && stderr.contains("unknown variant"),
+        "stderr should mention runtime_family enum validation\nstderr: {stderr}"
+    );
+}
+
+#[test]
 fn agents_validate_rejects_filename_id_mismatch_with_exit_2() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
@@ -305,6 +374,7 @@ world_fs:
         "broaden.yaml",
         &valid_cli_agent_file(
             "broaden",
+            Some("codex"),
             Some("  world_fs:\n    read:\n      allow_list:\n        - \"/tmp\"\n"),
         ),
     );

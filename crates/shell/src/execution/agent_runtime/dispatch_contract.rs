@@ -14,7 +14,7 @@ use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, Substrat
 use crate::execution::policy_model::{apply_policy_patch, PolicyPatch};
 
 use super::mapping::{
-    orchestrator_backend_kind, protocol_validation_error, AgentRuntimeBackendKind,
+    protocol_validation_error, resolve_shell_owned_runtime_family, AgentRuntimeBackendKind,
     PURE_AGENT_PROTOCOL,
 };
 
@@ -667,15 +667,15 @@ fn resolve_inventory_projected_contract(
         );
     }
 
-    let backend_kind = orchestrator_backend_kind(projected.agent_id.as_str()).map_err(|err| {
-        DispatchResolutionError {
-            kind: DispatchResolutionErrorKind::BaselineIneligible,
-            field: "agent_id",
-            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
-            reason: err
-                .to_string()
-                .replace("selected orchestrator backend", "selected runtime backend"),
-        }
+    let backend_kind = resolve_shell_owned_runtime_family(
+        projected.agent_id.as_str(),
+        projected.cli_runtime_family,
+    )
+    .map_err(|err| DispatchResolutionError {
+        kind: DispatchResolutionErrorKind::RuntimeUnrealizableAfterResolution,
+        field: "config.cli.runtime_family",
+        rejecting_layer: DispatchRejectingLayer::RuntimeMaterialization,
+        reason: err.to_string(),
     })?;
 
     Ok(ResolvedLaunchContract {
@@ -962,13 +962,14 @@ mod tests {
 
     use super::{
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
-        AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind, DispatchCallerKind,
-        DispatchCapabilityOverrideSet, DispatchRequestEnvelope, DispatchResolutionErrorKind,
-        FieldBaselineOrigin, FieldValueOrigin, HostExecutionClientStart,
+        AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
+        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
+        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
+        FieldValueOrigin, HostExecutionClientStart,
     };
     use crate::execution::agent_inventory::{
-        AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind, AgentConfigV1,
-        AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
+        AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
+        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
     use crate::execution::agent_runtime::control::{
         ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
@@ -1044,6 +1045,7 @@ mod tests {
                     cli: Some(AgentCliConfigV1 {
                         binary: "cargo".to_string(),
                         mode: cli_mode,
+                        runtime_family: Some(AgentCliRuntimeFamily::Codex),
                     }),
                     api: None,
                     capabilities,
@@ -1126,6 +1128,62 @@ mod tests {
         );
         assert_eq!(resolved.backend_id, "cli:codex");
         assert_eq!(resolved.execution_scope, AgentExecutionScope::Host);
+    }
+
+    #[test]
+    fn exact_backend_alias_resolves_canonical_runtime_family_from_inventory_truth() {
+        let cwd = PathBuf::from(".");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex_world".to_string(),
+            AgentInventoryEntryV1 {
+                path: PathBuf::from("codex_world.yaml"),
+                file: AgentFileV1 {
+                    version: 1,
+                    id: "codex_world".to_string(),
+                    config: AgentConfigV1 {
+                        enabled: true,
+                        kind: AgentConfigKind::Cli,
+                        protocol: Some(super::PURE_AGENT_PROTOCOL.to_string()),
+                        execution: AgentExecutionConfigV1 {
+                            scope: Some(AgentExecutionScope::World),
+                        },
+                        cli: Some(AgentCliConfigV1 {
+                            binary: "cargo".to_string(),
+                            mode: Some(AgentCliMode::Persistent),
+                            runtime_family: Some(AgentCliRuntimeFamily::Codex),
+                        }),
+                        api: None,
+                        capabilities: required_capabilities(),
+                    },
+                    policy_overlay: None,
+                },
+            },
+        );
+        let policy = Policy {
+            agents_allowed_backends: vec!["cli:codex_world".to_string()],
+            ..Policy::default()
+        };
+        let config = SubstrateConfig::default();
+
+        let resolved = resolve_inventory_contract_for_exact_backend(
+            &cwd,
+            &config,
+            &inventory,
+            &policy,
+            &exact_backend_envelope(
+                DispatchCallerKind::OrchestratorMemberStart,
+                DispatchBaselineKind::InventoryLaunch,
+                "cli:codex_world",
+            ),
+            AgentExecutionScope::World,
+        )
+        .expect("resolution should succeed")
+        .expect("contract");
+
+        assert_eq!(resolved.agent_id, "codex_world");
+        assert_eq!(resolved.backend_id, "cli:codex_world");
+        assert_eq!(resolved.backend_kind, AgentRuntimeBackendKind::Codex);
     }
 
     #[test]
@@ -1624,8 +1682,16 @@ mod tests {
 
             assert_eq!(error.field, field);
             assert_eq!(
+                error.rejecting_layer,
+                DispatchRejectingLayer::CallerContract
+            );
+            assert_eq!(
                 error.kind,
                 DispatchResolutionErrorKind::OverrideNotSupportedForCaller
+            );
+            assert_eq!(
+                error.reason,
+                "dispatch-time capability override is unsupported for this field in slice 29.5; only session_resume, session_fork, session_stop, status_snapshot, and event_stream may narrow from true to false"
             );
         }
     }

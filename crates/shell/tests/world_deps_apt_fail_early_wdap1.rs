@@ -1,10 +1,9 @@
 mod support;
 
-use std::fs;
-use std::path::PathBuf;
-
 #[cfg(unix)]
-use std::path::Path;
+use std::fs;
+#[cfg(unix)]
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 use std::sync::{Arc, Mutex};

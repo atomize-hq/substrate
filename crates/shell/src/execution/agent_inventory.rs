@@ -61,6 +61,13 @@ pub(crate) struct AgentExecutionConfigV1 {
     pub scope: Option<crate::execution::config_model::AgentExecutionScope>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AgentCliRuntimeFamily {
+    Codex,
+    ClaudeCode,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCliConfigV1 {
@@ -68,6 +75,8 @@ pub(crate) struct AgentCliConfigV1 {
     pub binary: String,
     #[serde(default)]
     pub mode: Option<crate::execution::config_model::AgentCliMode>,
+    #[serde(default)]
+    pub runtime_family: Option<AgentCliRuntimeFamily>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -127,6 +136,7 @@ pub(crate) struct ProjectedInventoryEntryV1 {
     pub cli_mode: crate::execution::config_model::AgentCliMode,
     pub cli_mode_origin: ProjectedInventoryValueOrigin,
     pub cli_binary: Option<String>,
+    pub cli_runtime_family: Option<AgentCliRuntimeFamily>,
     pub capabilities: AgentCapabilitiesV1,
     #[allow(dead_code)]
     pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
@@ -167,6 +177,10 @@ impl AgentFileV1 {
             Some(trimmed)
         }
     }
+
+    pub(crate) fn cli_runtime_family(&self) -> Option<AgentCliRuntimeFamily> {
+        self.config.cli.as_ref().and_then(|cli| cli.runtime_family)
+    }
 }
 
 impl AgentInventoryEntryV1 {
@@ -190,6 +204,10 @@ impl AgentInventoryEntryV1 {
 
     pub(crate) fn effective_cli_binary(&self) -> Option<&str> {
         self.file.effective_cli_binary()
+    }
+
+    pub(crate) fn cli_runtime_family(&self) -> Option<AgentCliRuntimeFamily> {
+        self.file.cli_runtime_family()
     }
 }
 
@@ -274,6 +292,7 @@ pub(crate) fn project_inventory_entry(
         cli_mode: entry.effective_cli_mode(effective_config),
         cli_mode_origin,
         cli_binary: entry.effective_cli_binary().map(ToOwned::to_owned),
+        cli_runtime_family: entry.cli_runtime_family(),
         capabilities: entry.file.config.capabilities.clone(),
         policy_overlay: entry.file.policy_overlay.clone(),
     }
@@ -532,6 +551,7 @@ fn validate_agent_config(path: &Path, config: &AgentConfigV1) -> Result<()> {
     let _ = &config.protocol;
     let _ = config.execution.scope;
     let _ = config.cli.as_ref().and_then(|cli| cli.mode);
+    let _ = config.cli.as_ref().and_then(|cli| cli.runtime_family);
     let _ = config.enabled;
     let _ = config.capabilities.session_start;
     let _ = config.capabilities.session_resume;
@@ -832,10 +852,11 @@ fn validate_overlay_subset(
 #[cfg(test)]
 mod tests {
     use super::{
-        inventory_entry_origin, AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind,
-        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryBaselineOrigin,
-        AgentInventoryEntryV1,
+        inventory_entry_origin, project_inventory_entry, AgentCapabilitiesV1, AgentCliConfigV1,
+        AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1,
+        AgentInventoryBaselineOrigin, AgentInventoryEntryV1,
     };
+    use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
     use tempfile::tempdir;
 
@@ -863,6 +884,7 @@ mod tests {
                     cli: Some(AgentCliConfigV1 {
                         binary: "codex".to_string(),
                         mode: None,
+                        runtime_family: None,
                     }),
                     api: None,
                     capabilities: AgentCapabilitiesV1::default(),
@@ -874,6 +896,42 @@ mod tests {
         assert_eq!(
             inventory_entry_origin(&cwd, &entry),
             AgentInventoryBaselineOrigin::WorkspaceInventory
+        );
+    }
+
+    #[test]
+    fn project_inventory_entry_carries_cli_runtime_family_truth() {
+        let cwd = tempdir().expect("tempdir");
+        let mut effective_config = SubstrateConfig::default();
+        effective_config.agents.defaults.cli.mode = AgentCliMode::Persistent;
+
+        let entry = AgentInventoryEntryV1 {
+            path: cwd.path().join("codex_world.yaml"),
+            file: AgentFileV1 {
+                version: 1,
+                id: "codex_world".to_string(),
+                config: AgentConfigV1 {
+                    enabled: true,
+                    kind: AgentConfigKind::Cli,
+                    protocol: Some("substrate.agent.session".to_string()),
+                    execution: AgentExecutionConfigV1::default(),
+                    cli: Some(AgentCliConfigV1 {
+                        binary: "codex".to_string(),
+                        mode: None,
+                        runtime_family: Some(AgentCliRuntimeFamily::Codex),
+                    }),
+                    api: None,
+                    capabilities: AgentCapabilitiesV1::default(),
+                },
+                policy_overlay: None,
+            },
+        };
+
+        let projected = project_inventory_entry(cwd.path(), &entry, &effective_config);
+
+        assert_eq!(
+            projected.cli_runtime_family,
+            Some(AgentCliRuntimeFamily::Codex)
         );
     }
 }

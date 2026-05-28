@@ -24,6 +24,7 @@ struct SessionContractOptions<'a> {
     capability_override: Option<CapabilityOverride<'a>>,
     cli_mode: &'a str,
     binary: &'a str,
+    runtime_family: Option<&'a str>,
 }
 
 impl SessionContractOptions<'_> {
@@ -33,7 +34,16 @@ impl SessionContractOptions<'_> {
             capability_override: None,
             cli_mode: "persistent",
             binary: "sh",
+            runtime_family: None,
         }
+    }
+}
+
+fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
+    match agent_id {
+        "claude_code" | "claude_code_world" => "claude_code",
+        "codex" | "codex_world" | "helper" => "codex",
+        other => panic!("fixture runtime_family is not specified for agent `{other}`"),
     }
 }
 
@@ -218,6 +228,26 @@ fn cli_agent_file(
         llm,
         mcp_client,
         enabled,
+        runtime_family_for_fixture_agent(agent_id),
+        SessionContractOptions::default(),
+    )
+}
+
+fn cli_agent_file_with_runtime_family(
+    agent_id: &str,
+    scope: &str,
+    llm: bool,
+    mcp_client: bool,
+    enabled: bool,
+    runtime_family: &str,
+) -> String {
+    cli_agent_file_with_session_contract(
+        agent_id,
+        scope,
+        llm,
+        mcp_client,
+        enabled,
+        runtime_family,
         SessionContractOptions::default(),
     )
 }
@@ -228,15 +258,17 @@ fn cli_agent_file_with_session_contract<'a>(
     llm: bool,
     mcp_client: bool,
     enabled: bool,
+    runtime_family: &'a str,
     options: SessionContractOptions<'a>,
 ) -> String {
+    let runtime_family = options.runtime_family.unwrap_or(runtime_family);
     let mut body =
         format!("version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n");
     if let Some(protocol) = options.protocol {
         body.push_str(&format!("  protocol: {protocol}\n"));
     }
     body.push_str(&format!(
-        "  execution:\n    scope: {scope}\n  cli:\n    binary: {}\n    mode: {}\n  capabilities:\n",
+        "  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: {}\n  capabilities:\n",
         options.binary, options.cli_mode
     ));
     for capability in [
@@ -505,7 +537,7 @@ fn runtime_participant_manifest(
     manifest.insert(
         "internal".to_string(),
         json!({
-            "resolved_agent_kind": agent_id,
+            "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
             "resolved_binary_path": "sh",
             "shell_owner_pid": std::process::id(),
             "lease_token": format!("lease-{participant_id}"),
@@ -889,11 +921,7 @@ fn orchestration_session_manifest_with_options(
 }
 
 fn host_attach_contract_manifest(agent_id: &str, continuity_uaa_session_id: &str) -> Value {
-    let backend_kind = if agent_id == "claude_code" {
-        "claude_code"
-    } else {
-        "codex"
-    };
+    let backend_kind = runtime_family_for_fixture_agent(agent_id);
     json!({
         "backend_id": format!("cli:{agent_id}"),
         "execution_scope": "host",
@@ -2338,6 +2366,130 @@ fn agent_toolbox_surfaces_stay_orchestrator_anchored_when_live_member_exists() {
 }
 
 #[test]
+fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_is_missing() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        "ash_turn_parent_missing",
+        "2026-04-07T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        Some("ash_turn_parent_missing"),
+        "2026-04-07T00:00:01Z",
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_member_missing",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-07T00:00:02Z",
+            "wld_member_missing_0001",
+            7,
+            "ash_turn_parent_missing",
+        ),
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "turn must fail closed before dispatch when the authoritative parent world binding is absent: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("stale_linkage"),
+        "missing authoritative parent world binding must fail with stale_linkage rather than silently reviving the member runtime: {stderr}"
+    );
+    assert!(
+        stderr.contains("no longer has an authoritative retained turn target"),
+        "missing authoritative parent world binding must explain why the retained world member is unusable: {stderr}"
+    );
+}
+
+#[test]
+fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_mismatches_member() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        "ash_turn_parent_mismatch",
+        "2026-04-07T00:00:01Z",
+    );
+    write_active_orchestration_session_with_world_binding(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        Some("ash_turn_parent_mismatch"),
+        "2026-04-07T00:00:01Z",
+        "wld_parent_binding_0001",
+        7,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_member_mismatch",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-07T00:00:02Z",
+            "wld_member_binding_9999",
+            7,
+            "ash_turn_parent_mismatch",
+        ),
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "turn must fail closed before dispatch when the member world binding no longer matches the authoritative parent session: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("stale_linkage"),
+        "mismatched authoritative world binding must fail with stale_linkage: {stderr}"
+    );
+    assert!(
+        stderr.contains("no longer has an authoritative retained turn target"),
+        "mismatched authoritative world binding must explain why the retained world member cannot be reused: {stderr}"
+    );
+}
+
+#[test]
 fn agent_status_selected_host_row_stays_unchanged_when_parent_session_has_world_binding() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
@@ -2738,6 +2890,103 @@ fn agent_status_json_surfaces_parked_resumable_fields_from_parent_session_truth(
             .pointer("/pending_inbox_count")
             .and_then(Value::as_u64),
         Some(0)
+    );
+}
+
+#[test]
+fn agent_status_json_surfaces_born_unattached_fields_for_legacy_world_started_session_truth() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_runtime_participant(
+        &fixture,
+        "ash_world_birth_member",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
+        RuntimeParticipantOptions::world_member(
+            "stopped",
+            false,
+            "2026-04-05T00:00:04Z",
+            "world-born-1",
+            7,
+            "ash_deferred_world_birth",
+        ),
+    );
+    write_orchestration_session_with_manifest_options(
+        &fixture,
+        OrchestrationSessionManifestSpec {
+            agent_id: "claude_code",
+            orchestration_session_id: "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
+            active_session_handle_id: None,
+            state: "active",
+            ts: "2026-04-05T00:00:04Z",
+            world_binding: Some(("world-born-1", 7)),
+        },
+        OrchestrationSessionManifestOptions {
+            posture: Some("born_unattached"),
+            attached_participant_id: Some(None),
+            pending_inbox_count: Some(0),
+            last_parked_at: Some(Some("2026-04-05T00:00:04Z")),
+            last_attention_at: Some(None),
+            parked_reason: Some(Some("legacy deferred host attach")),
+            host_attach_contract: None,
+        },
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should surface legacy born-unattached sessions without treating them as the default public happy path: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let born_unattached = find_session_by_agent_and_orchestration_session(
+        sessions,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
+    );
+    assert_eq!(
+        born_unattached
+            .pointer("/source_kind")
+            .and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
+        born_unattached
+            .pointer("/execution/scope")
+            .and_then(Value::as_str),
+        Some("world")
+    );
+    assert_eq!(
+        born_unattached.pointer("/role").and_then(Value::as_str),
+        Some("member")
+    );
+    assert_eq!(
+        born_unattached.pointer("/posture").and_then(Value::as_str),
+        Some("born_unattached")
+    );
+    assert!(
+        born_unattached.get("participant_id").is_none(),
+        "legacy born-unattached status rows must not imply a live authoritative participant: {born_unattached}"
+    );
+    assert!(
+        born_unattached
+            .pointer("/attached_participant_id")
+            .is_some_and(Value::is_null),
+        "born-unattached rows must preserve null attached_participant_id from session truth: {born_unattached}"
+    );
+    assert_eq!(
+        born_unattached.pointer("/world_id").and_then(Value::as_str),
+        Some("world-born-1")
+    );
+    assert_eq!(
+        born_unattached
+            .pointer("/world_generation")
+            .and_then(Value::as_u64),
+        Some(7)
     );
 }
 
@@ -3621,6 +3870,104 @@ fn agent_status_persists_resumed_from_participant_id_for_replacement_members() {
     assert!(
         persisted.get("resumed_from_session_handle_id").is_none(),
         "replacement participant persistence must not revert to the legacy resumed_from_session_handle_id field name"
+    );
+}
+
+#[test]
+fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_family() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: codex
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:codex
+    - cli:codex_world
+"#,
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex_world.yaml",
+        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
+    );
+    write_live_runtime_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+        "ash_orchestrator_alias_world",
+        "2026-04-05T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+        Some("ash_orchestrator_alias_world"),
+        "2026-04-05T00:00:01Z",
+    );
+    write_replacement_world_member_manifest(
+        &fixture,
+        "codex_world",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+        "ash_codex_world_member",
+        "ash_orchestrator_alias_world",
+        "wld_alias_0001",
+        4,
+        "ash_codex_world_member_previous",
+        "2026-04-05T00:00:03Z",
+    );
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "world status should succeed for aliased exact backend fixtures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let alias_member = find_session_by_agent(sessions, "codex_world");
+    assert_eq!(
+        alias_member.pointer("/agent_id").and_then(Value::as_str),
+        Some("codex_world")
+    );
+    assert_eq!(
+        alias_member.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex_world"),
+        "status must keep the exact aliased backend selector visible: {alias_member}"
+    );
+
+    let persisted = serde_json::from_str::<Value>(
+        &fs::read_to_string(participant_manifest_path(
+            &fixture,
+            "ash_codex_world_member",
+        ))
+        .expect("aliased participant manifest should be readable"),
+    )
+    .expect("aliased participant manifest should be valid JSON");
+    assert_eq!(
+        persisted.pointer("/agent_id").and_then(Value::as_str),
+        Some("codex_world")
+    );
+    assert_eq!(
+        persisted.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex_world")
+    );
+    assert_eq!(
+        persisted
+            .pointer("/internal/resolved_agent_kind")
+            .and_then(Value::as_str),
+        Some("codex"),
+        "persisted alias manifests must keep canonical runtime-family truth separate from alias identity: {persisted}"
     );
 }
 
@@ -4544,6 +4891,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_missing() {
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: None,
                 capability_override: None,
@@ -4576,6 +4924,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_wrong() {
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: Some("openai.responses"),
                 capability_override: None,
@@ -4608,6 +4957,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_fals
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: Some(PURE_AGENT_PROTOCOL),
                 capability_override: Some(CapabilityOverride::ForceFalse("event_stream")),
@@ -4640,6 +4990,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_omit
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: Some(PURE_AGENT_PROTOCOL),
                 capability_override: Some(CapabilityOverride::Omit("event_stream")),
@@ -4672,6 +5023,7 @@ fn agent_doctor_fails_at_runtime_realizability_when_selected_binary_is_missing()
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 binary: "definitely_missing_substrate_agent_binary",
                 ..SessionContractOptions::default()
@@ -4725,6 +5077,7 @@ fn agent_doctor_fails_at_runtime_realizability_when_selected_cli_mode_is_per_req
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 cli_mode: "per_request",
                 ..SessionContractOptions::default()
@@ -4814,7 +5167,7 @@ fn agent_doctor_fails_closed_on_world_member_allowlist_before_world_boundary() {
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: codex
 "#,
     );
     fixture.write_global_policy_patch(
@@ -4830,7 +5183,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
+    - "cli:codex"
 
 net_allowed: []
 cmd_allowed: []
@@ -4850,12 +5203,12 @@ metadata: {}
 "#,
     );
     fixture.write_agent_file(
-        "claude_code.yaml",
-        &cli_agent_file("claude_code", "host", true, true, true),
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, true, true),
     );
     fixture.write_agent_file(
-        "codex.yaml",
-        &cli_agent_file("codex", "world", true, false, true),
+        "codex_world.yaml",
+        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
     );
 
     let output = fixture.run(&["agent", "doctor", "--json"]);
@@ -4896,7 +5249,7 @@ metadata: {}
     assert_eq!(
         checks[5].pointer("/reason").and_then(Value::as_str),
         Some(
-            "required world-scoped member backend 'cli:codex' is not allowlisted by effective policy agents.allowed_backends"
+            "required world-scoped member backend 'cli:codex_world' is not allowlisted by effective policy agents.allowed_backends"
         ),
         "member dispatch must be gated by the derived backend_id before world boundary handling: {json}"
     );
@@ -4948,7 +5301,7 @@ fn agent_doctor_exactly_one_world_member_candidate_continues_into_world_boundary
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: codex
 "#,
     );
     fixture.write_global_policy_patch(
@@ -4964,8 +5317,8 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
     - "cli:codex"
+    - "cli:codex_world"
 
 net_allowed: []
 cmd_allowed: []
@@ -4985,12 +5338,12 @@ metadata: {}
 "#,
     );
     fixture.write_agent_file(
-        "claude_code.yaml",
-        &cli_agent_file("claude_code", "host", true, true, true),
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, true, true),
     );
     fixture.write_agent_file(
-        "codex.yaml",
-        &cli_agent_file("codex", "world", true, false, true),
+        "codex_world.yaml",
+        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
     );
 
     let output = fixture.run(&["agent", "doctor", "--json"]);

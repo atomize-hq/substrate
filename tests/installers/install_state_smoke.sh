@@ -144,6 +144,19 @@ set -euo pipefail
 if [[ "\${SUBSTRATE_TEST_FAIL_HOST_STATE_WRITE:-0}" -eq 1 && "\${1:-}" == "-" && -n "\${STATE_EVENTS:-}" ]]; then
   exit 1
 fi
+if [[ "\${1:-}" == "-" ]]; then
+  script_file="\$(mktemp)"
+  cat >"\${script_file}"
+  if [[ "\${SUBSTRATE_TEST_REJECT_DATETIME_UTC:-0}" -eq 1 ]] && grep -q 'datetime\\.UTC' "\${script_file}"; then
+    rm -f "\${script_file}"
+    echo "AttributeError: module 'datetime' has no attribute 'UTC'" >&2
+    exit 1
+  fi
+  "${REAL_PYTHON3}" "\${script_file}" "\${@:2}"
+  status=\$?
+  rm -f "\${script_file}"
+  exit "\${status}"
+fi
 exec "${REAL_PYTHON3}" "\$@"
 EOF_STUB
   chmod +x "${STUB_BIN}/python3"
@@ -1212,6 +1225,24 @@ EOF_INVALID
   mkdir -p "${dev_fresh_prefix}" "$(dirname "${dev_fresh_log}")"
   run_dev_install_branch "${work_root}/dev-fresh" "${dev_fresh_log}" "${dev_fresh_state}" "with-world" "__skip__" "__skip__" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
   assert_env_sh_has_no_override_exports "${dev_fresh_prefix}" "${HOST_PATH}"
+
+  local pycompat_prefix="${work_root}/pycompat"
+  local pycompat_state="${pycompat_prefix}/install_state.json"
+  local pycompat_log="${work_root}/pycompat/install.log"
+  mkdir -p "${pycompat_prefix}" "$(dirname "${pycompat_log}")"
+  SUBSTRATE_TEST_REJECT_DATETIME_UTC=1 \
+    run_hosted_install_branch "${work_root}/pycompat" "${fake_version}" "${artifacts}" "${pycompat_log}" "${pycompat_state}" "with-world" "${missing_os_release}"
+  assert_env_sh_has_no_override_exports "${pycompat_prefix}" "${HOST_PATH}"
+  assert_log_not_contains "${pycompat_log}" "Failed to write host state metadata"
+
+  local dev_pycompat_prefix="${work_root}/dev-pycompat"
+  local dev_pycompat_state="${dev_pycompat_prefix}/install_state.json"
+  local dev_pycompat_log="${work_root}/dev-pycompat/install.log"
+  mkdir -p "${dev_pycompat_prefix}" "$(dirname "${dev_pycompat_log}")"
+  SUBSTRATE_TEST_REJECT_DATETIME_UTC=1 \
+    run_dev_install_branch "${work_root}/dev-pycompat" "${dev_pycompat_log}" "${dev_pycompat_state}" "with-world" "__skip__" "__skip__" "${CURRENT_OS_RELEASE_ID}" "${CURRENT_OS_RELEASE_ID_LIKE}" "${expected_pkg_manager}" "os_release"
+  assert_env_sh_has_no_override_exports "${dev_pycompat_prefix}" "${HOST_PATH}"
+  assert_log_not_contains "${dev_pycompat_log}" "Failed to write host state metadata"
 
   local dev_prefix="${work_root}/dev"
   local dev_state="${dev_prefix}/install_state.json"

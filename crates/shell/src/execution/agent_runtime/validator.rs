@@ -4,7 +4,9 @@ use std::path::PathBuf;
 use anyhow::Result;
 use substrate_broker::Policy;
 
-use crate::execution::agent_inventory::{AgentCapabilitiesV1, AgentInventoryEntryV1};
+use crate::execution::agent_inventory::{
+    AgentCapabilitiesV1, AgentConfigKind, AgentInventoryEntryV1,
+};
 use crate::execution::agent_runtime::dispatch_contract::{
     resolve_inventory_contract_for_exact_backend, resolve_inventory_contract_for_unique_scope,
     AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind, DispatchCallerKind,
@@ -14,7 +16,7 @@ use crate::execution::agent_runtime::dispatch_contract::{
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 
 use super::mapping::{
-    orchestrator_backend_kind, protocol_validation_error, AgentRuntimeBackendKind,
+    protocol_validation_error, resolve_shell_owned_runtime_family, AgentRuntimeBackendKind,
     PURE_AGENT_PROTOCOL,
 };
 
@@ -125,49 +127,70 @@ pub(crate) fn validate_runtime_realizability(
     entry: &AgentInventoryEntryV1,
     effective_config: &SubstrateConfig,
 ) -> std::result::Result<RuntimeSelectionDescriptor, RuntimeRealizabilityError> {
-    let contract = ResolvedLaunchContract {
-        caller_kind: DispatchCallerKind::HumanStart,
-        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+    if entry.file.config.kind != AgentConfigKind::Cli {
+        return Err(RuntimeRealizabilityError {
+            exit_code: 2,
+            reason: format!(
+                "selected runtime '{}' is not runtime-realizable by the shell-owned UAA runtime because config.kind={} is unsupported; only config.kind=cli is supported in v1",
+                entry.file.id,
+                entry.file.config.kind.as_str()
+            ),
+        });
+    }
+
+    let cli_mode = entry.effective_cli_mode(effective_config);
+    if cli_mode != AgentCliMode::Persistent {
+        return Err(RuntimeRealizabilityError {
+            exit_code: 2,
+            reason: format!(
+                "selected runtime '{}' is not runtime-realizable because cli.mode={} is unsupported; only cli.mode=persistent is supported for the first caller path",
+                entry.file.id,
+                match cli_mode {
+                    AgentCliMode::Persistent => "persistent",
+                    AgentCliMode::PerRequest => "per_request",
+                }
+            ),
+        });
+    }
+
+    let protocol = entry
+        .file
+        .config
+        .protocol
+        .clone()
+        .unwrap_or_else(|| PURE_AGENT_PROTOCOL.to_string());
+    let backend_kind =
+        resolve_shell_owned_runtime_family(&entry.file.id, entry.cli_runtime_family()).map_err(
+            |err| RuntimeRealizabilityError {
+                exit_code: 2,
+                reason: err.to_string(),
+            },
+        )?;
+    let binary = entry
+        .effective_cli_binary()
+        .ok_or_else(|| RuntimeRealizabilityError {
+            exit_code: 4,
+            reason: format!(
+                "selected runtime '{}' is not runtime-realizable because config.cli.binary is missing",
+                entry.file.id
+            ),
+        })?;
+    let binary_path = which::which(binary).map_err(|err| RuntimeRealizabilityError {
+        exit_code: 4,
+        reason: format!(
+            "selected runtime '{}' is not runtime-realizable because config.cli.binary '{}' did not resolve on the host: {}",
+            entry.file.id, binary, err
+        ),
+    })?;
+
+    Ok(RuntimeSelectionDescriptor {
         agent_id: entry.file.id.clone(),
         backend_id: entry.derived_backend_id(),
-        backend_kind: orchestrator_backend_kind(&entry.file.id).map_err(|err| {
-            RuntimeRealizabilityError {
-                exit_code: 2,
-                reason: err
-                    .to_string()
-                    .replace("selected orchestrator backend", "selected runtime backend"),
-            }
-        })?,
-        protocol: entry
-            .file
-            .config
-            .protocol
-            .clone()
-            .unwrap_or_else(|| PURE_AGENT_PROTOCOL.to_string()),
+        backend_kind,
+        protocol,
         execution_scope: entry.effective_scope(effective_config),
-        runtime: crate::execution::agent_runtime::dispatch_contract::ResolvedLaunchRuntime {
-            kind: entry.file.config.kind,
-            cli_mode: entry.effective_cli_mode(effective_config),
-            cli_binary: entry.effective_cli_binary().map(ToOwned::to_owned),
-        },
-        capabilities: entry.file.config.capabilities.clone(),
-        attach_launch_knobs: AttachLaunchKnobs {
-            requested_execution_scope: entry.effective_scope(effective_config),
-            host_execution_client_start: HostExecutionClientStart::StartNow,
-            attach_mode_preference: AttachModePreference::ContinuityRequired,
-        },
-        effective_policy: Policy::default(),
-        baseline_source: crate::execution::agent_runtime::dispatch_contract::BaselineSourceMetadata {
-            baseline_kind: DispatchBaselineKind::InventoryLaunch,
-            baseline_origin:
-                crate::execution::agent_runtime::dispatch_contract::FieldBaselineOrigin::GlobalInventory,
-            inventory_path: Some(entry.path.clone()),
-            orchestration_session_id: None,
-        },
-        field_provenance: BTreeMap::new(),
-    };
-
-    materialize_runtime_descriptor(&contract)
+        binary_path,
+    })
 }
 
 pub(crate) fn materialize_runtime_descriptor(
@@ -364,8 +387,8 @@ mod tests {
         PURE_AGENT_PROTOCOL,
     };
     use crate::execution::agent_inventory::{
-        AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind, AgentConfigV1,
-        AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
+        AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
+        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
     use crate::execution::agent_runtime::mapping::LEGACY_PURE_AGENT_PROTOCOL;
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
@@ -377,6 +400,28 @@ mod tests {
         scope: AgentExecutionScope,
         protocol: Option<&str>,
         cli_mode: AgentCliMode,
+        capabilities: AgentCapabilitiesV1,
+    ) -> AgentInventoryEntryV1 {
+        let runtime_family = match agent_id {
+            "claude_code" => Some(AgentCliRuntimeFamily::ClaudeCode),
+            _ => Some(AgentCliRuntimeFamily::Codex),
+        };
+        make_entry_with_runtime_family(
+            agent_id,
+            scope,
+            protocol,
+            cli_mode,
+            runtime_family,
+            capabilities,
+        )
+    }
+
+    fn make_entry_with_runtime_family(
+        agent_id: &str,
+        scope: AgentExecutionScope,
+        protocol: Option<&str>,
+        cli_mode: AgentCliMode,
+        runtime_family: Option<AgentCliRuntimeFamily>,
         capabilities: AgentCapabilitiesV1,
     ) -> AgentInventoryEntryV1 {
         let test_binary = std::env::current_exe()
@@ -396,6 +441,7 @@ mod tests {
                     cli: Some(AgentCliConfigV1 {
                         binary: test_binary,
                         mode: Some(cli_mode),
+                        runtime_family,
                     }),
                     api: None,
                     capabilities,
@@ -472,6 +518,61 @@ mod tests {
         let descriptor = assert_selected_descriptor(validate_member_selection(&config, &inventory));
         assert_eq!(descriptor.agent_id, "codex");
         assert_eq!(descriptor.backend_id, "cli:codex");
+        assert_eq!(descriptor.backend_kind, AgentRuntimeBackendKind::Codex);
+        assert_eq!(descriptor.execution_scope, AgentExecutionScope::World);
+    }
+
+    #[test]
+    fn validate_member_selection_resolves_alias_backend_to_canonical_runtime_family() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex_world".to_string(),
+            make_entry_with_runtime_family(
+                "codex_world",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                Some(AgentCliRuntimeFamily::Codex),
+                required_capabilities(),
+            ),
+        );
+
+        let descriptor = assert_selected_descriptor(validate_member_selection(&config, &inventory));
+        assert_eq!(descriptor.agent_id, "codex_world");
+        assert_eq!(descriptor.backend_id, "cli:codex_world");
+        assert_eq!(descriptor.backend_kind, AgentRuntimeBackendKind::Codex);
+    }
+
+    #[test]
+    fn validate_member_selection_prefers_world_alias_while_host_codex_remains_distinct() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                "codex",
+                AgentExecutionScope::Host,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+        inventory.insert(
+            "codex_world".to_string(),
+            make_entry_with_runtime_family(
+                "codex_world",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                Some(AgentCliRuntimeFamily::Codex),
+                required_capabilities(),
+            ),
+        );
+
+        let descriptor = assert_selected_descriptor(validate_member_selection(&config, &inventory));
+        assert_eq!(descriptor.agent_id, "codex_world");
+        assert_eq!(descriptor.backend_id, "cli:codex_world");
         assert_eq!(descriptor.backend_kind, AgentRuntimeBackendKind::Codex);
         assert_eq!(descriptor.execution_scope, AgentExecutionScope::World);
     }
@@ -627,6 +728,43 @@ mod tests {
     }
 
     #[test]
+    fn validate_exact_backend_selection_preserves_codex_world_alias_identity() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                "codex",
+                AgentExecutionScope::Host,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+        inventory.insert(
+            "codex_world".to_string(),
+            make_entry_with_runtime_family(
+                "codex_world",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                Some(AgentCliRuntimeFamily::Codex),
+                required_capabilities(),
+            ),
+        );
+
+        let descriptor = assert_exact_selected_descriptor(validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::World,
+            "cli:codex_world",
+        ));
+        assert_eq!(descriptor.agent_id, "codex_world");
+        assert_eq!(descriptor.backend_id, "cli:codex_world");
+        assert_eq!(descriptor.backend_kind, AgentRuntimeBackendKind::Codex);
+    }
+
+    #[test]
     fn validate_exact_backend_selection_reports_scope_specific_protocol_error() {
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
@@ -672,6 +810,53 @@ mod tests {
         let error = validate_runtime_realizability(&entry, &config).expect_err("must fail");
         assert!(
             error.reason.starts_with("selected runtime 'claude_code'"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    fn validate_runtime_realizability_requires_runtime_family_for_shell_owned_path() {
+        let config = SubstrateConfig::default();
+        let entry = make_entry_with_runtime_family(
+            "codex_world",
+            AgentExecutionScope::Host,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            None,
+            required_capabilities(),
+        );
+
+        let error = validate_runtime_realizability(&entry, &config).expect_err("must fail");
+        assert!(
+            error
+                .reason
+                .contains("config.cli.runtime_family is required"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    fn validate_runtime_realizability_keeps_cli_mode_failure_ahead_of_runtime_family_checks() {
+        let config = SubstrateConfig::default();
+        let entry = make_entry_with_runtime_family(
+            "codex_world",
+            AgentExecutionScope::Host,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::PerRequest,
+            None,
+            required_capabilities(),
+        );
+
+        let error = validate_runtime_realizability(&entry, &config).expect_err("must fail");
+        assert!(
+            error.reason.contains("cli.mode=per_request"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            !error.reason.contains("runtime_family"),
             "unexpected reason: {}",
             error.reason
         );

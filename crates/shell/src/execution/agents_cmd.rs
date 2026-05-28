@@ -4,6 +4,8 @@ use crate::execution::agent_inventory::{
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::request_private_stop;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::control::PersistedWorldBinding;
 use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
     load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
@@ -20,8 +22,9 @@ use crate::execution::agent_runtime::control::{
     private_stop_transport_path, reconcile_resumed_public_turn_detach_timeout,
     reconcile_start_prompt_completion_timeout,
     register_hidden_owner_helper_startup_prompt_listener,
-    run_hidden_owner_helper_startup_prompt_stream,
-    run_hidden_owner_helper_startup_prompt_stream_with_action, HiddenOwnerHelperStartupPromptPlan,
+    run_hidden_owner_helper_startup_prompt_stream_with_action,
+    run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
+    HiddenOwnerHelperStartupPromptPlan,
 };
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
@@ -46,13 +49,18 @@ use crate::execution::agent_runtime::{
     MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
-    AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
-    AgentSessionControlArgs, AgentStartArgs, AgentToolboxAction, AgentToolboxCmd,
-    AgentToolboxViewArgs, AgentTurnArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
+    AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentDoctorArgs, AgentOwnerHelperArgs,
+    AgentScopeArg, AgentSessionControlArgs, AgentStartArgs, AgentStartScopeArg, AgentToolboxAction,
+    AgentToolboxCmd, AgentToolboxViewArgs, AgentTurnArgs, AgentViewArgs, AgentsAction, AgentsCmd,
+    Cli,
 };
 use crate::execution::config_model::{
     self, AgentExecutionScope, AgentToolboxBindTransport, CliConfigOverrides, SubstrateConfig,
 };
+#[cfg(target_os = "linux")]
+use crate::execution::policy_snapshot;
+#[cfg(target_os = "linux")]
+use crate::execution::{ReplPersistentSessionClient, ReplSessionStartParams};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -62,6 +70,8 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+#[cfg(target_os = "linux")]
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use substrate_broker::Policy;
@@ -69,6 +79,8 @@ use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
 #[cfg(unix)]
 use tokio::runtime::Builder as TokioRuntimeBuilder;
+#[cfg(target_os = "linux")]
+use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = 1;
 #[cfg(unix)]
@@ -369,9 +381,18 @@ struct AgentControlResultJson<'a> {
     source_orchestration_session_id: Option<&'a str>,
 }
 
-struct StartLaunchPlan {
+#[derive(Clone, Debug)]
+struct StartPromptPublicIdentity {
+    #[cfg_attr(not(unix), allow(dead_code))]
+    backend_id: String,
+    scope: AgentExecutionScope,
+}
+
+#[derive(Debug)]
+struct HostStartLaunchPlan {
     helper_plan: HiddenOwnerHelperLaunchPlan,
     resolved_contract: ResolvedLaunchContract,
+    public_identity: StartPromptPublicIdentity,
 }
 
 fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
@@ -382,16 +403,43 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
-    let StartLaunchPlan {
+    #[cfg(target_os = "linux")]
+    let mut start_plan = build_start_launch_plan(args, &context)?;
+    #[cfg(not(target_os = "linux"))]
+    let start_plan = build_start_launch_plan(args, &context)?;
+
+    if start_plan.public_identity.scope == AgentExecutionScope::World {
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = prompt;
+            anyhow::bail!(config_model::user_error(
+                "unsupported_platform_or_posture: public world-scoped root start is supported on Linux only in this slice"
+            ));
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let world_binding = establish_public_world_start_binding(
+                start_plan.helper_plan.orchestration_session_id(),
+                &start_plan.helper_plan.session.workspace_root,
+            )
+            .map_err(runtime_start_error)?;
+            start_plan.helper_plan.session.world_id = Some(world_binding.world_id);
+            start_plan.helper_plan.session.world_generation = Some(world_binding.world_generation);
+        }
+    }
+
+    let HostStartLaunchPlan {
         helper_plan,
         resolved_contract,
-    } = build_start_launch_plan(args, &context)?;
+        public_identity,
+    } = start_plan;
 
     #[cfg(not(unix))]
     {
         let _ = store;
         let _ = helper_plan;
         let _ = resolved_contract;
+        let _ = public_identity;
         let _ = prompt;
         anyhow::bail!(config_model::user_error(
             "unsupported_platform_or_posture: public start prompt streaming requires a Unix launch-time backchannel"
@@ -400,6 +448,17 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
 
     #[cfg(unix)]
     {
+        let public_backend_id = public_identity.backend_id.clone();
+        let public_scope = public_identity.scope;
+        let stream_start_result = |listener| {
+            run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
+                listener,
+                args.json,
+                PublicPromptAction::Start,
+                &public_backend_id,
+                public_scope,
+            )
+        };
         let mut plan = helper_plan;
         let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
             &store,
@@ -413,11 +472,12 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         });
 
         let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
-        match run_hidden_owner_helper_startup_prompt_stream(startup_listener, args.json) {
-            Ok(()) => wait_for_start_prompt_completion_normalization(
+        match stream_start_result(startup_listener) {
+            Ok(()) => wait_for_start_completion_for_scope(
                 &store,
                 &receipt.orchestration_session_id,
                 &receipt.participant_id,
+                public_scope,
             )
             .and_then(|()| {
                 persist_resolved_start_attach_contract(
@@ -447,12 +507,12 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                 });
                 let retry_receipt =
                     launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
-                run_hidden_owner_helper_startup_prompt_stream(retry_listener, args.json)
-                    .map_err(normalize_public_prompt_error)?;
-                wait_for_start_prompt_completion_normalization(
+                stream_start_result(retry_listener).map_err(normalize_public_prompt_error)?;
+                wait_for_start_completion_for_scope(
                     &store,
                     &retry_receipt.orchestration_session_id,
                     &retry_receipt.participant_id,
+                    public_scope,
                 )
                 .and_then(|()| {
                     persist_resolved_start_attach_contract(
@@ -555,6 +615,27 @@ fn stabilize_hidden_owner_helper_start_return(
 }
 
 #[cfg(unix)]
+fn wait_for_start_completion_for_scope(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    public_scope: AgentExecutionScope,
+) -> Result<()> {
+    match public_scope {
+        AgentExecutionScope::Host => wait_for_start_prompt_completion_normalization(
+            store,
+            orchestration_session_id,
+            participant_id,
+        ),
+        AgentExecutionScope::World => wait_for_start_prompt_attached_readiness(
+            store,
+            orchestration_session_id,
+            participant_id,
+        ),
+    }
+}
+
+#[cfg(unix)]
 fn wait_for_start_prompt_completion_normalization(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -601,6 +682,53 @@ fn wait_for_start_prompt_completion_normalization(
                 .unwrap_or_else(|| "session_missing".to_string());
             anyhow::bail!(
                 "timed out waiting for detached start normalization after startup prompt completion for orchestration session {} ({snapshot_summary})",
+                orchestration_session_id,
+            );
+        }
+
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+}
+
+#[cfg(unix)]
+fn wait_for_start_prompt_attached_readiness(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<()> {
+    let readiness_started_at = std::time::Instant::now();
+    loop {
+        match store.classify_hidden_owner_helper_launch_readiness(
+            orchestration_session_id,
+            participant_id,
+            true,
+        )? {
+            HiddenOwnerHelperLaunchReadiness::ReadyAttached => return Ok(()),
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(posture) => {
+                anyhow::bail!(
+                    "runtime_start_failed: world-backed public start detached before returning (orchestration session {} normalized to {:?} instead of remaining attached through start return)",
+                    orchestration_session_id,
+                    posture
+                );
+            }
+            HiddenOwnerHelperLaunchReadiness::Pending => {}
+        }
+
+        if readiness_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            let snapshot_summary = store
+                .load_orchestration_session(orchestration_session_id)?
+                .map(|session| {
+                    format!(
+                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
+                        session.state,
+                        session.posture,
+                        session.attached_participant_id,
+                        session.shell_owner_pid,
+                    )
+                })
+                .unwrap_or_else(|| "session_missing".to_string());
+            anyhow::bail!(
+                "timed out waiting for attached start readiness after startup prompt completion for orchestration session {} ({snapshot_summary})",
                 orchestration_session_id,
             );
         }
@@ -892,17 +1020,72 @@ fn start_dispatch_classifier(
     }
 }
 
-fn build_start_dispatch_envelope(backend_id: &str) -> DispatchRequestEnvelope {
+fn build_start_capability_overrides(
+    disabled_capabilities: &[AgentDisableCapabilityArg],
+) -> DispatchCapabilityOverrideSet {
+    let mut overrides = DispatchCapabilityOverrideSet::default();
+    for capability in disabled_capabilities {
+        match capability {
+            AgentDisableCapabilityArg::SessionResume => overrides.session_resume = Some(false),
+            AgentDisableCapabilityArg::SessionFork => overrides.session_fork = Some(false),
+            AgentDisableCapabilityArg::SessionStop => overrides.session_stop = Some(false),
+            AgentDisableCapabilityArg::StatusSnapshot => overrides.status_snapshot = Some(false),
+            AgentDisableCapabilityArg::EventStream => overrides.event_stream = Some(false),
+        }
+    }
+    overrides
+}
+
+fn start_scope_from_arg(scope: AgentStartScopeArg) -> AgentExecutionScope {
+    match scope {
+        AgentStartScopeArg::Host => AgentExecutionScope::Host,
+        AgentStartScopeArg::World => AgentExecutionScope::World,
+    }
+}
+
+fn alternate_execution_scope(scope: AgentExecutionScope) -> AgentExecutionScope {
+    match scope {
+        AgentExecutionScope::Host => AgentExecutionScope::World,
+        AgentExecutionScope::World => AgentExecutionScope::Host,
+    }
+}
+
+fn host_execution_client_start_for_scope(
+    requested_execution_scope: AgentExecutionScope,
+) -> HostExecutionClientStart {
+    match requested_execution_scope {
+        AgentExecutionScope::Host => HostExecutionClientStart::StartNow,
+        AgentExecutionScope::World => HostExecutionClientStart::Defer,
+    }
+}
+
+fn require_start_backend_id(args: &AgentStartArgs) -> Result<&str> {
+    let backend_id = args.backend.trim();
+    if backend_id.is_empty() {
+        anyhow::bail!(config_model::user_error(
+            "unknown_backend: public start requires --backend <backend_id>"
+        ));
+    }
+    Ok(backend_id)
+}
+
+fn build_start_dispatch_envelope(
+    args: &AgentStartArgs,
+    backend_id: &str,
+    requested_execution_scope: AgentExecutionScope,
+) -> DispatchRequestEnvelope {
     DispatchRequestEnvelope {
         caller_kind: DispatchCallerKind::HumanStart,
         baseline_kind: DispatchBaselineKind::InventoryLaunch,
         backend_id: Some(backend_id.to_string()),
         orchestration_session_id: None,
-        requested_execution_scope_override: None,
-        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        requested_execution_scope_override: Some(requested_execution_scope),
+        capability_overrides: build_start_capability_overrides(&args.disable_capability),
         attach_launch_knobs: AttachLaunchKnobs {
-            requested_execution_scope: AgentExecutionScope::Host,
-            host_execution_client_start: HostExecutionClientStart::StartNow,
+            requested_execution_scope,
+            host_execution_client_start: host_execution_client_start_for_scope(
+                requested_execution_scope,
+            ),
             attach_mode_preference: AttachModePreference::ContinuityRequired,
         },
         has_prompt_payload: true,
@@ -931,6 +1114,53 @@ fn build_persisted_attach_dispatch_envelope(
         },
         has_prompt_payload,
     }
+}
+
+fn probe_start_scope_candidate(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+    cwd: &Path,
+    backend_id: &str,
+    requested_execution_scope: AgentExecutionScope,
+) -> Result<Option<ResolvedLaunchContract>> {
+    let envelope = build_start_dispatch_envelope(args, backend_id, requested_execution_scope);
+    resolve_inventory_contract_for_exact_backend(
+        cwd,
+        &context.effective_config,
+        &context.inventory,
+        &context.base_policy,
+        &envelope,
+        requested_execution_scope,
+    )
+    .map_err(|err| dispatch_resolution_user_error(start_dispatch_classifier(&err), err))
+}
+
+fn resolve_requested_start_scope(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+) -> Result<AgentExecutionScope> {
+    if let Some(scope) = args.scope {
+        return Ok(start_scope_from_arg(scope));
+    }
+
+    let backend_id = require_start_backend_id(args)?;
+    let cwd = current_dir();
+    let preferred_scope = context.effective_config.agents.defaults.execution.scope;
+    if probe_start_scope_candidate(args, context, &cwd, backend_id, preferred_scope)?.is_some() {
+        return Ok(preferred_scope);
+    }
+
+    let fallback_scope = alternate_execution_scope(preferred_scope);
+    if probe_start_scope_candidate(args, context, &cwd, backend_id, fallback_scope)?.is_some() {
+        return Ok(fallback_scope);
+    }
+
+    anyhow::bail!(config_model::user_error(format!(
+        "unknown_backend: baseline truth rejected field 'backend_id': no exact backend match found for '{}' after resolving omitted --scope through effective {} then {} defaults",
+        backend_id,
+        execution_scope_label(preferred_scope),
+        execution_scope_label(fallback_scope),
+    )));
 }
 
 fn permissive_inventory_selection_policy(
@@ -1065,16 +1295,21 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
 fn build_start_launch_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
-) -> Result<StartLaunchPlan> {
-    let backend_id = args.backend.trim();
-    if backend_id.is_empty() {
-        anyhow::bail!(config_model::user_error(
-            "unknown_backend: public start requires --backend <backend_id>"
-        ));
+) -> Result<HostStartLaunchPlan> {
+    match resolve_requested_start_scope(args, context)? {
+        AgentExecutionScope::Host => build_host_start_launch_plan(args, context),
+        AgentExecutionScope::World => build_world_start_session_birth_plan(args, context),
     }
+}
+
+fn build_host_start_launch_plan(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+) -> Result<HostStartLaunchPlan> {
+    let backend_id = require_start_backend_id(args)?;
 
     let cwd = current_dir();
-    let envelope = build_start_dispatch_envelope(backend_id);
+    let envelope = build_start_dispatch_envelope(args, backend_id, AgentExecutionScope::Host);
     let resolved = match resolve_inventory_contract_for_exact_backend(
         &cwd,
         &context.effective_config,
@@ -1121,7 +1356,7 @@ fn build_start_launch_plan(
         .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
 
     let orchestration_session_id = Uuid::now_v7().to_string();
-    Ok(StartLaunchPlan {
+    Ok(HostStartLaunchPlan {
         helper_plan: HiddenOwnerHelperLaunchPlan {
             mode: OwnerHelperMode::Start,
             descriptor: (&descriptor).into(),
@@ -1144,7 +1379,178 @@ fn build_start_launch_plan(
             source_orchestration_session_id: None,
         },
         resolved_contract: resolved,
+        public_identity: StartPromptPublicIdentity {
+            backend_id: backend_id.to_string(),
+            scope: AgentExecutionScope::Host,
+        },
     })
+}
+
+#[allow(dead_code)]
+fn build_world_start_host_attach_dispatch_envelope(
+    args: &AgentStartArgs,
+    backend_id: &str,
+) -> DispatchRequestEnvelope {
+    DispatchRequestEnvelope {
+        caller_kind: DispatchCallerKind::HumanStart,
+        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+        backend_id: Some(backend_id.to_string()),
+        orchestration_session_id: None,
+        requested_execution_scope_override: Some(AgentExecutionScope::Host),
+        capability_overrides: build_start_capability_overrides(&args.disable_capability),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: AgentExecutionScope::Host,
+            host_execution_client_start: HostExecutionClientStart::StartNow,
+            attach_mode_preference: AttachModePreference::ContinuityRequired,
+        },
+        has_prompt_payload: false,
+    }
+}
+
+#[allow(dead_code)]
+fn build_world_start_session_birth_plan(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+) -> Result<HostStartLaunchPlan> {
+    let backend_id = require_start_backend_id(args)?;
+
+    let cwd = current_dir();
+    let world_envelope =
+        build_start_dispatch_envelope(args, backend_id, AgentExecutionScope::World);
+    let requested_world_contract = resolve_inventory_contract_for_exact_backend(
+        &cwd,
+        &context.effective_config,
+        &context.inventory,
+        &context.base_policy,
+        &world_envelope,
+        AgentExecutionScope::World,
+    )
+    .map_err(|err| dispatch_resolution_user_error(start_dispatch_classifier(&err), err))?
+    .ok_or_else(|| {
+        config_model::user_error(format!(
+            "unknown_backend: baseline truth rejected field 'backend_id': no exact world-scoped backend match found for '{}'",
+            backend_id
+        ))
+    })?;
+
+    let orchestrator =
+        validate_orchestrator_selection(&context.effective_config, &context.inventory)
+            .map_err(config_model::user_error)?;
+    let host_backend_id = orchestrator.derived_backend_id();
+    let host_attach_envelope =
+        build_world_start_host_attach_dispatch_envelope(args, &host_backend_id);
+    let host_attach_resolved = resolve_inventory_contract_for_exact_backend(
+        &cwd,
+        &context.effective_config,
+        &context.inventory,
+        &context.base_policy,
+        &host_attach_envelope,
+        AgentExecutionScope::Host,
+    )
+    .map_err(|err| dispatch_resolution_user_error(start_dispatch_classifier(&err), err))?
+    .ok_or_else(|| {
+        config_model::user_error(format!(
+            "runtime_start_failed: baseline truth rejected field 'backend_id': no exact host-scoped orchestrator backend match found for '{}'",
+            host_backend_id
+        ))
+    })?;
+    let host_attach_contract = HostAttachContract::from_resolved_contract(&host_attach_resolved, None)
+        .ok_or_else(|| {
+            config_model::user_error(format!(
+                "runtime_start_failed: resolved host attach contract for backend '{}' did not remain host scoped",
+                host_backend_id
+            ))
+        })?;
+    let descriptor = materialize_runtime_descriptor(&host_attach_resolved)
+        .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
+
+    let orchestration_session_id = Uuid::now_v7().to_string();
+    Ok(HostStartLaunchPlan {
+        helper_plan: HiddenOwnerHelperLaunchPlan {
+            mode: OwnerHelperMode::Start,
+            descriptor: (&descriptor).into(),
+            session: HiddenOwnerHelperSessionPlan {
+                orchestration_session_id,
+                shell_trace_session_id: Uuid::now_v7().to_string(),
+                workspace_root: cwd.display().to_string(),
+                world_id: None,
+                world_generation: None,
+            },
+            participant: HiddenOwnerHelperParticipantPlan {
+                participant_id: format!("ash_{}", Uuid::now_v7()),
+                lease_token: Uuid::now_v7().to_string(),
+                run_id: Uuid::now_v7().to_string(),
+                resumed_from_participant_id: None,
+                internal_uaa_session_id: None,
+            },
+            host_attach_contract: Some(host_attach_contract),
+            startup_prompt: None,
+            source_orchestration_session_id: None,
+        },
+        resolved_contract: host_attach_resolved,
+        public_identity: StartPromptPublicIdentity {
+            backend_id: requested_world_contract.backend_id,
+            scope: AgentExecutionScope::World,
+        },
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn establish_public_world_start_binding(
+    orchestration_session_id: &str,
+    workspace_root: &str,
+) -> Result<PersistedWorldBinding> {
+    let rt = TokioRuntimeBuilder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to initialize world-start launch runtime")?;
+    rt.block_on(async {
+        establish_public_world_start_binding_async(orchestration_session_id, workspace_root).await
+    })
+}
+
+#[cfg(target_os = "linux")]
+async fn establish_public_world_start_binding_async(
+    orchestration_session_id: &str,
+    workspace_root: &str,
+) -> Result<PersistedWorldBinding> {
+    let requested_cwd = workspace_root.to_string();
+    let requested_path = PathBuf::from(&requested_cwd);
+    let resolved = policy_snapshot::resolve_policy_snapshot_for_cwd(requested_path.as_path())
+        .context("policy snapshot (public world start)")?;
+    let world_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+        resolved.snapshot,
+        requested_path.as_path(),
+    )
+    .context("world network policy (public world start)")?;
+    let world_network = policy_snapshot::request_world_network_routing(&world_network_policy);
+    let (mut start_params, _inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
+        requested_cwd,
+        requested_path.as_path(),
+        world_network_policy.snapshot,
+        world_network,
+    )
+    .context("failed to build shared-world session start parameters")?;
+    start_params.shared_world = Some(SharedWorldOwnerSpec {
+        orchestration_session_id: orchestration_session_id.to_string(),
+        action: SharedWorldOwnerAction::AttachOrCreate,
+    });
+
+    let world_client = ReplPersistentSessionClient::start_with(start_params, Arc::new(|_| {}))
+        .await
+        .context("failed to open authoritative shared world for public world start")?;
+    let ready = world_client.ready().clone();
+    let authoritative_binding = ready.shared_world.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "runtime_start_failed: shared world ready frame omitted authoritative binding proof"
+        )
+    })?;
+    let world_binding = PersistedWorldBinding {
+        world_id: authoritative_binding.world_id.clone(),
+        world_generation: authoritative_binding.world_generation,
+    };
+    let _ = world_client.close().await;
+    Ok(world_binding)
 }
 
 #[cfg(unix)]
@@ -2735,17 +3141,68 @@ fn live_participant_status_projection(
     }
 }
 
+fn born_unattached_status_projection(
+    session: &AgentRuntimeSessionRecord,
+) -> Option<SessionProjection> {
+    let anchor =
+        crate::execution::agent_runtime::state_store::born_unattached_status_anchor(session)?;
+    let world_id = session.session.world_id.clone()?;
+    let world_generation = session.session.world_generation?;
+    let last_event_ts = session.session.last_active_at.max(anchor.last_status_at());
+    Some(SessionProjection {
+        last_event_ts,
+        session: StatusSessionJson {
+            orchestration_session_id: session.session.orchestration_session_id.clone(),
+            participant_id: None,
+            agent_id: anchor.handle.agent_id.clone(),
+            source_kind: "live_runtime",
+            backend_id: anchor.handle.backend_id.clone(),
+            client: anchor.handle.agent_id.clone(),
+            router: PURE_AGENT_ROUTER.to_string(),
+            protocol: anchor.handle.protocol.clone(),
+            execution: ExecutionScopeJson { scope: "world" },
+            role: Some(anchor.handle.role.clone()),
+            posture: Some(orchestration_session_posture_label(session.session.posture).to_string()),
+            attached_participant_id: session.session.attached_participant_id.clone(),
+            pending_inbox_count: Some(session.session.pending_inbox_count),
+            last_event_at: last_event_ts.to_rfc3339(),
+            world_id: Some(world_id),
+            world_generation: Some(world_generation),
+        },
+        source: SessionProjectionSource {
+            identity: StatusIdentityKey {
+                orchestration_session_id: session.session.orchestration_session_id.clone(),
+                agent_id: anchor.handle.agent_id.clone(),
+                execution_scope: "world",
+                participant_id: None,
+            },
+            run_id: anchor.internal.latest_run_id.clone(),
+            ts: last_event_ts,
+            is_world_scoped: true,
+            has_top_level_world_id: true,
+            has_top_level_world_generation: true,
+        },
+    })
+}
+
 fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<SessionProjection> {
-    session
+    let mut projections = session
         .status_visible_participants()
         .into_iter()
         .map(|participant| live_participant_status_projection(&session.session, &participant))
-        .collect()
+        .collect::<Vec<_>>();
+    if projections.is_empty() {
+        if let Some(projection) = born_unattached_status_projection(session) {
+            projections.push(projection);
+        }
+    }
+    projections
 }
 
 fn orchestration_session_posture_label(posture: OrchestrationSessionPosture) -> &'static str {
     match posture {
         OrchestrationSessionPosture::ActiveAttached => "active_attached",
+        OrchestrationSessionPosture::BornUnattached => "born_unattached",
         OrchestrationSessionPosture::ParkedResumable => "parked_resumable",
         OrchestrationSessionPosture::AwaitingAttention => "awaiting_attention",
         OrchestrationSessionPosture::Terminal => "terminal",
@@ -3604,5 +4061,355 @@ impl AgentExecutionScope {
             Self::Host => "host",
             Self::World => "world",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &Path) -> Self {
+            let original = std::env::current_dir().expect("current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
+        }
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &Path) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = &self.previous {
+                std::env::set_var(self.key, previous);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    fn write_agent_file(
+        agent_id: &str,
+        runtime_family: &str,
+        scope: Option<&str>,
+        binary: &Path,
+    ) -> String {
+        let execution_scope = scope
+            .map(|scope| format!("  execution:\n    scope: {scope}\n"))
+            .unwrap_or_default();
+        format!(
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            binary.display()
+        )
+    }
+
+    fn write_test_runtime_inventory(
+        substrate_home: &Path,
+        workspace_root: &Path,
+        include_world_backend: bool,
+        allow_host_backend: bool,
+    ) {
+        let allowed_backends = match (allow_host_backend, include_world_backend) {
+            (true, true) => "    - cli:codex\n    - cli:claude_code\n",
+            (true, false) => "    - cli:codex\n",
+            (false, true) => "    - cli:claude_code\n",
+            (false, false) => "",
+        };
+        fs::create_dir_all(substrate_home.join("agents")).expect("agents dir");
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            format!(
+                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}",
+            ),
+        )
+        .expect("write policy");
+        fs::write(
+            workspace_root.join(".substrate-profile"),
+            "id: test-policy\nname: Test Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\n",
+        )
+        .expect("write workspace profile");
+
+        let binary = std::env::current_exe().expect("current test binary");
+        fs::write(
+            substrate_home.join("agents/codex.yaml"),
+            write_agent_file("codex", "codex", Some("host"), &binary),
+        )
+        .expect("write host orchestrator");
+        if include_world_backend {
+            fs::write(
+                substrate_home.join("agents/claude_code.yaml"),
+                write_agent_file("claude_code", "claude_code", Some("world"), &binary),
+            )
+            .expect("write world backend");
+        }
+    }
+
+    fn write_test_runtime_inventory_with_unscoped_member(
+        substrate_home: &Path,
+        workspace_root: &Path,
+        global_scope: &str,
+        workspace_scope: Option<&str>,
+    ) {
+        write_test_runtime_inventory(substrate_home, workspace_root, true, true);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            format!(
+                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n",
+            ),
+        )
+        .expect("write global scope config");
+        if let Some(workspace_scope) = workspace_scope {
+            let workspace_config_dir = workspace_root.join(".substrate");
+            fs::create_dir_all(&workspace_config_dir).expect("workspace config dir");
+            fs::write(
+                workspace_config_dir.join("workspace.yaml"),
+                format!("agents:\n  defaults:\n    execution:\n      scope: {workspace_scope}\n",),
+            )
+            .expect("write workspace scope config");
+        }
+
+        let binary = std::env::current_exe().expect("current test binary");
+        fs::write(
+            substrate_home.join("agents/claude_code.yaml"),
+            write_agent_file("claude_code", "claude_code", None, &binary),
+        )
+        .expect("write unscoped member backend");
+    }
+
+    fn command_context_for_test(cwd: &Path) -> AgentCommandContext {
+        let effective_config =
+            config_model::resolve_effective_config(cwd, &CliConfigOverrides::default())
+                .expect("resolve effective config");
+        let (base_policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
+            .expect("resolve effective policy");
+        let inventory =
+            load_effective_agent_inventory(cwd, &base_policy).expect("load agent inventory");
+        AgentCommandContext {
+            effective_config,
+            base_policy,
+            inventory,
+        }
+    }
+
+    fn host_start_args() -> AgentStartArgs {
+        AgentStartArgs {
+            backend: "cli:codex".to_string(),
+            scope: Some(AgentStartScopeArg::Host),
+            disable_capability: vec![AgentDisableCapabilityArg::SessionFork],
+            prompt_source: crate::execution::cli::PublicPromptArgs::default(),
+            json: false,
+        }
+    }
+
+    fn world_start_args() -> AgentStartArgs {
+        AgentStartArgs {
+            backend: "cli:claude_code".to_string(),
+            scope: Some(AgentStartScopeArg::World),
+            disable_capability: vec![AgentDisableCapabilityArg::SessionStop],
+            prompt_source: crate::execution::cli::PublicPromptArgs::default(),
+            json: false,
+        }
+    }
+
+    fn omitted_scope_start_args(backend_id: &str) -> AgentStartArgs {
+        AgentStartArgs {
+            backend: backend_id.to_string(),
+            scope: None,
+            disable_capability: Vec::new(),
+            prompt_source: crate::execution::cli::PublicPromptArgs::default(),
+            json: false,
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn host_start_launch_plan_keeps_eager_host_attach_behavior() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, false, true);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan =
+            build_host_start_launch_plan(&host_start_args(), &context).expect("host launch plan");
+
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+        assert_eq!(
+            plan.helper_plan
+                .host_attach_contract
+                .as_ref()
+                .expect("host attach contract")
+                .attach_launch_knobs
+                .host_execution_client_start,
+            crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::StartNow
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn world_start_launch_plan_builds_host_helper_with_world_visible_identity() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, true, true);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan = build_world_start_session_birth_plan(&world_start_args(), &context)
+            .expect("world session birth plan");
+
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+        let attach_contract = plan
+            .helper_plan
+            .host_attach_contract
+            .as_ref()
+            .expect("persisted attach contract");
+        assert_eq!(attach_contract.backend_id, "cli:codex");
+        assert_eq!(
+            attach_contract
+                .attach_launch_knobs
+                .requested_execution_scope,
+            AgentExecutionScope::Host
+        );
+        assert_eq!(
+            attach_contract.attach_launch_knobs.host_execution_client_start,
+            crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::StartNow
+        );
+        assert!(!attach_contract.capabilities.session_stop);
+        assert_eq!(plan.helper_plan.session.world_id, None);
+        assert_eq!(plan.helper_plan.session.world_generation, None);
+    }
+
+    #[test]
+    #[serial]
+    fn build_start_launch_plan_routes_world_scope_to_host_helper_path() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, true, true);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan = build_start_launch_plan(&world_start_args(), &context)
+            .expect("world start launch plan");
+
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+    }
+
+    #[test]
+    #[serial]
+    fn build_start_launch_plan_resolves_omitted_scope_from_workspace_defaults_before_global() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory_with_unscoped_member(
+            &substrate_home,
+            &workspace_root,
+            "host",
+            Some("world"),
+        );
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
+            .expect("omitted scope launch plan");
+
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+    }
+
+    #[test]
+    #[serial]
+    fn build_start_launch_plan_resolves_omitted_scope_from_global_defaults_when_workspace_unset() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory_with_unscoped_member(
+            &substrate_home,
+            &workspace_root,
+            "host",
+            None,
+        );
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
+            .expect("omitted scope launch plan");
+
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code");
+        assert_eq!(
+            plan.resolved_contract.execution_scope,
+            AgentExecutionScope::Host
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn world_start_session_birth_plan_fails_closed_without_host_attach_backend() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory(&substrate_home, &workspace_root, true, false);
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let err = build_world_start_session_birth_plan(&world_start_args(), &context)
+            .expect_err("missing host attach backend must fail closed");
+
+        assert!(err.to_string().contains("policy_disallow"));
     }
 }
