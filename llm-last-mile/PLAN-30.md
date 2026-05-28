@@ -7,7 +7,7 @@ Follow-on slice: [31-lazy-host-attach-for-host-rooted-world-start.md](/Users/spe
 Proposed branch: `feat/public-world-scoped-agent-start`  
 Base branch: `main`  
 Plan type: public caller-surface expansion with host-first world-backed delivery  
-Status: completed on 2026-05-28 after Packet 4 closeout and validation
+Status: reopened on 2026-05-28 after closeout audit found missing required Linux manual smoke evidence; honest Packet 4 closure is currently blocked on world-backed smoke runtime access
 
 ## Objective
 
@@ -441,9 +441,9 @@ cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 cargo test --workspace -- --nocapture
 ```
 
-### Supplemental Manual Smoke
+### Required Manual Smoke
 
-On Linux, additional manual smoke may confirm:
+On Linux, Packet 4 closeout must record:
 
 1. run host-scoped public root start and confirm current behavior is unchanged,
 2. run `substrate agent start --scope world ... --json` and confirm:
@@ -457,10 +457,15 @@ On Linux, additional manual smoke may confirm:
 4. confirm omitted `--scope` honors preferred-scope resolution plus one alternate-scope fallback,
 5. confirm later world dispatch remains host-mediated rather than public world-first bootstrap behavior.
 
-On non-Linux, additional manual smoke may confirm:
+On non-Linux, Packet 4 closeout must record:
 
 1. run `substrate agent start --scope world ... --json`,
 2. confirm explicit `unsupported_platform_or_posture` failure.
+
+Closeout note:
+
+1. The 2026-05-28 reopen pass and its exact Linux command evidence are captured in [`CLOSEOUT-30-packet-4-linux-manual-smoke-2026-05-28.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/CLOSEOUT-30-packet-4-linux-manual-smoke-2026-05-28.md).
+2. That note currently documents a real Linux blocker: public world-backed root start could not open the authoritative shared world because the runtime reported `/run/substrate.sock` access as `Permission denied (os error 13)`.
 
 ## Exit Criteria
 
@@ -473,7 +478,8 @@ This plan is complete when:
 5. capability narrowing is explicit and bounded,
 6. status/toolbox/doctor surfaces preserve the frozen readable-degradation versus fail-closed split,
 7. non-Linux world-scoped root start fails closed,
-8. docs, tests, and runtime behavior all tell the same story.
+8. the required manual smoke evidence is landed, or an explicit blocker is recorded without relaxing the contract.
+9. docs, tests, and runtime behavior all tell the same story.
 
 ## Not In Scope
 

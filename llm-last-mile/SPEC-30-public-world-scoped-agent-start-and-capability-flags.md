@@ -3,7 +3,7 @@
 Source SOW: [30-public-world-scoped-agent-start-and-capability-flags.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)  
 Decomposition basis: feature-slice breakdown produced on 2026-05-27  
 Phase: `SPECIFY`  
-Status: completed on 2026-05-28 after Packet 4 closeout and validation
+Status: reopened on 2026-05-28 after closeout audit found missing required Linux manual smoke evidence; honest Packet 4 closure is currently blocked on world-backed smoke runtime access
 
 ## Assumptions
 
@@ -139,8 +139,9 @@ This spec intentionally leaves the following outside Packet 2 and outside the th
 ### Final Validation Wall
 
 1. Slice 30 cannot close honestly until `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`, `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`, and `cargo test --workspace -- --nocapture` are green.
-2. The public control suites must continue to pin the Linux-first host-backed happy path and the non-Linux `unsupported_platform_or_posture` fail-closed contract.
-3. Supplemental manual platform smoke may still be useful, but it is not part of the required slice-30 closeout wall.
+2. Required Linux manual smoke must record the actual commands and operator-visible outcomes for host-scoped start stability, successful world-backed start truth, `agent status`, `agent toolbox status`, `agent toolbox env`, `agent doctor`, omitted-scope world-default routing, and later host-mediated world dispatch.
+3. If any required Linux manual smoke step cannot run because of environment or runtime limitations, Packet 4 remains open and the exact command, blocker, and unmet acceptance items must be recorded without relaxing the closeout bar.
+4. Required non-Linux manual smoke must still confirm the explicit `unsupported_platform_or_posture` fail-closed posture for public world-backed root start.
 
 ## Tech Stack
 
