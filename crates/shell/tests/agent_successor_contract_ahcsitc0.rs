@@ -24,6 +24,7 @@ struct SessionContractOptions<'a> {
     capability_override: Option<CapabilityOverride<'a>>,
     cli_mode: &'a str,
     binary: &'a str,
+    runtime_family: Option<&'a str>,
 }
 
 impl SessionContractOptions<'_> {
@@ -33,7 +34,16 @@ impl SessionContractOptions<'_> {
             capability_override: None,
             cli_mode: "persistent",
             binary: "sh",
+            runtime_family: None,
         }
+    }
+}
+
+fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
+    match agent_id {
+        "claude_code" | "claude_code_world" => "claude_code",
+        "codex" | "codex_world" | "helper" => "codex",
+        other => panic!("fixture runtime_family is not specified for agent `{other}`"),
     }
 }
 
@@ -218,6 +228,26 @@ fn cli_agent_file(
         llm,
         mcp_client,
         enabled,
+        runtime_family_for_fixture_agent(agent_id),
+        SessionContractOptions::default(),
+    )
+}
+
+fn cli_agent_file_with_runtime_family(
+    agent_id: &str,
+    scope: &str,
+    llm: bool,
+    mcp_client: bool,
+    enabled: bool,
+    runtime_family: &str,
+) -> String {
+    cli_agent_file_with_session_contract(
+        agent_id,
+        scope,
+        llm,
+        mcp_client,
+        enabled,
+        runtime_family,
         SessionContractOptions::default(),
     )
 }
@@ -228,15 +258,17 @@ fn cli_agent_file_with_session_contract<'a>(
     llm: bool,
     mcp_client: bool,
     enabled: bool,
+    runtime_family: &'a str,
     options: SessionContractOptions<'a>,
 ) -> String {
+    let runtime_family = options.runtime_family.unwrap_or(runtime_family);
     let mut body =
         format!("version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n");
     if let Some(protocol) = options.protocol {
         body.push_str(&format!("  protocol: {protocol}\n"));
     }
     body.push_str(&format!(
-        "  execution:\n    scope: {scope}\n  cli:\n    binary: {}\n    mode: {}\n  capabilities:\n",
+        "  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: {}\n  capabilities:\n",
         options.binary, options.cli_mode
     ));
     for capability in [
@@ -505,7 +537,7 @@ fn runtime_participant_manifest(
     manifest.insert(
         "internal".to_string(),
         json!({
-            "resolved_agent_kind": agent_id,
+            "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
             "resolved_binary_path": "sh",
             "shell_owner_pid": std::process::id(),
             "lease_token": format!("lease-{participant_id}"),
@@ -889,11 +921,7 @@ fn orchestration_session_manifest_with_options(
 }
 
 fn host_attach_contract_manifest(agent_id: &str, continuity_uaa_session_id: &str) -> Value {
-    let backend_kind = if agent_id == "claude_code" {
-        "claude_code"
-    } else {
-        "codex"
-    };
+    let backend_kind = runtime_family_for_fixture_agent(agent_id);
     json!({
         "backend_id": format!("cli:{agent_id}"),
         "execution_scope": "host",
@@ -3846,6 +3874,104 @@ fn agent_status_persists_resumed_from_participant_id_for_replacement_members() {
 }
 
 #[test]
+fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_family() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex_world
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex_world.yaml",
+        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
+    );
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+        "ash_orchestrator_alias_world",
+        "2026-04-05T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+        Some("ash_orchestrator_alias_world"),
+        "2026-04-05T00:00:01Z",
+    );
+    write_replacement_world_member_manifest(
+        &fixture,
+        "codex_world",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+        "ash_codex_world_member",
+        "ash_orchestrator_alias_world",
+        "wld_alias_0001",
+        4,
+        "ash_codex_world_member_previous",
+        "2026-04-05T00:00:03Z",
+    );
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "world status should succeed for aliased exact backend fixtures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let alias_member = find_session_by_agent(sessions, "codex_world");
+    assert_eq!(
+        alias_member.pointer("/agent_id").and_then(Value::as_str),
+        Some("codex_world")
+    );
+    assert_eq!(
+        alias_member.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex_world"),
+        "status must keep the exact aliased backend selector visible: {alias_member}"
+    );
+
+    let persisted = serde_json::from_str::<Value>(
+        &fs::read_to_string(participant_manifest_path(
+            &fixture,
+            "ash_codex_world_member",
+        ))
+        .expect("aliased participant manifest should be readable"),
+    )
+    .expect("aliased participant manifest should be valid JSON");
+    assert_eq!(
+        persisted.pointer("/agent_id").and_then(Value::as_str),
+        Some("codex_world")
+    );
+    assert_eq!(
+        persisted.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex_world")
+    );
+    assert_eq!(
+        persisted
+            .pointer("/internal/resolved_agent_kind")
+            .and_then(Value::as_str),
+        Some("codex"),
+        "persisted alias manifests must keep canonical runtime-family truth separate from alias identity: {persisted}"
+    );
+}
+
+#[test]
 fn agent_status_surfaces_host_successor_lineage_for_active_orchestrator_sessions() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
@@ -4765,6 +4891,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_missing() {
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: None,
                 capability_override: None,
@@ -4797,6 +4924,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_wrong() {
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: Some("openai.responses"),
                 capability_override: None,
@@ -4829,6 +4957,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_fals
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: Some(PURE_AGENT_PROTOCOL),
                 capability_override: Some(CapabilityOverride::ForceFalse("event_stream")),
@@ -4861,6 +4990,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_omit
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 protocol: Some(PURE_AGENT_PROTOCOL),
                 capability_override: Some(CapabilityOverride::Omit("event_stream")),
@@ -4893,6 +5023,7 @@ fn agent_doctor_fails_at_runtime_realizability_when_selected_binary_is_missing()
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 binary: "definitely_missing_substrate_agent_binary",
                 ..SessionContractOptions::default()
@@ -4946,6 +5077,7 @@ fn agent_doctor_fails_at_runtime_realizability_when_selected_cli_mode_is_per_req
             true,
             true,
             true,
+            "claude_code",
             SessionContractOptions {
                 cli_mode: "per_request",
                 ..SessionContractOptions::default()
