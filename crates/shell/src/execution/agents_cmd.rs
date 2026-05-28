@@ -4,6 +4,8 @@ use crate::execution::agent_inventory::{
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::request_private_stop;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::control::PersistedWorldBinding;
 use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
     load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
@@ -68,6 +70,8 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+#[cfg(target_os = "linux")]
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use substrate_broker::Policy;
@@ -398,7 +402,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
-    let start_plan = build_start_launch_plan(args, &context)?;
+    let mut start_plan = build_start_launch_plan(args, &context)?;
 
     if start_plan.public_identity.scope == AgentExecutionScope::World {
         #[cfg(not(target_os = "linux"))]
