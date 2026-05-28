@@ -4110,12 +4110,17 @@ mod tests {
         }
     }
 
-    fn write_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String {
+    fn write_agent_file(
+        agent_id: &str,
+        runtime_family: &str,
+        scope: Option<&str>,
+        binary: &Path,
+    ) -> String {
         let execution_scope = scope
             .map(|scope| format!("  execution:\n    scope: {scope}\n"))
             .unwrap_or_default();
         format!(
-            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             binary.display()
         )
     }
@@ -4154,13 +4159,13 @@ mod tests {
         let binary = std::env::current_exe().expect("current test binary");
         fs::write(
             substrate_home.join("agents/codex.yaml"),
-            write_agent_file("codex", Some("host"), &binary),
+            write_agent_file("codex", "codex", Some("host"), &binary),
         )
         .expect("write host orchestrator");
         if include_world_backend {
             fs::write(
                 substrate_home.join("agents/claude_code.yaml"),
-                write_agent_file("claude_code", Some("world"), &binary),
+                write_agent_file("claude_code", "claude_code", Some("world"), &binary),
             )
             .expect("write world backend");
         }
@@ -4193,7 +4198,7 @@ mod tests {
         let binary = std::env::current_exe().expect("current test binary");
         fs::write(
             substrate_home.join("agents/claude_code.yaml"),
-            write_agent_file("claude_code", None, &binary),
+            write_agent_file("claude_code", "claude_code", None, &binary),
         )
         .expect("write unscoped member backend");
     }
