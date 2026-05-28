@@ -396,6 +396,7 @@ mod tests {
                     cli: Some(AgentCliConfigV1 {
                         binary: test_binary,
                         mode: Some(cli_mode),
+                        runtime_family: None,
                     }),
                     api: None,
                     capabilities,

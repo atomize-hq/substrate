@@ -1045,6 +1045,7 @@ mod tests {
                     cli: Some(AgentCliConfigV1 {
                         binary: "cargo".to_string(),
                         mode: cli_mode,
+                        runtime_family: None,
                     }),
                     api: None,
                     capabilities,
