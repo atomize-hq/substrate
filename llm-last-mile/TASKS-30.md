@@ -5,7 +5,7 @@ Source spec: [SPEC-30-public-world-scoped-agent-start-and-capability-flags.md](/
 Source plan: [PLAN-30.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-30.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: Packets 1-3 landed; narrowed for Packet 4 finalization on 2026-05-27
+Status: Packets 1-4 landed; slice 30 closed on 2026-05-28 after Packet 4 validation
 
 ## Execution Packets
 
@@ -14,9 +14,9 @@ This slice was planned as four separate `/incremental-implementation` sessions, 
 - Packet 1 is landed and should not be reopened unless the contract changes.
 - Packet 2 is landed and should not be reopened unless the contract changes.
 - Packet 3 is landed and should not be reopened unless the contract changes.
-- Packet 4 is the only remaining active implementation packet for slice 30.
+- Packet 4 is landed; no active implementation packets remain for slice 30.
 
-Treat the Packet 3 checkpoint as green repo floor for this pass. Packet 4 now closes the slice against that landed floor.
+Treat the Packet 4 checkpoint as green repo floor for this slice. Slice 30 is now closed against the landed Packet 1-4 floor.
 
 ## Packet 1: Landed Public Input Contract And Resolver Wiring
 
@@ -151,7 +151,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Preserve truthful host lifecycle/status semantics for the world-backed default path
+- [x] Task 4.1: Preserve truthful host lifecycle/status semantics for the world-backed default path
   - Acceptance: world-backed root start uses the normal host lifecycle as the operator-facing happy path; existing `active_attached`, `parked_resumable`, and `awaiting_attention` semantics remain unchanged; `born_unattached` may remain valid for specialized or legacy sessions but no test or doc treats it as the default slice-30 success posture.
   - Verify: `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
   - Files:
@@ -160,21 +160,21 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
 
-- [ ] Task 4.2: Preserve and harden the Packet-4 operator control-surface contract
+- [x] Task 4.2: Preserve and harden the Packet-4 operator control-surface contract
   - Acceptance: `agent status` remains readable and may degrade with warnings when authoritative parent/session linkage is incomplete; toolbox surfaces continue to fail closed for active-session authorization and prefer authoritative live parent/session manifests over trace history; `agent toolbox status` only surfaces `active_world_binding` when the live parent session carries both `world_id` and `world_generation`; `agent doctor` continues to fail closed at orchestrator selection, runtime realizability, policy allowlist, and required world-boundary checks.
   - Verify: `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
     - [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
 
-- [ ] Task 4.3: Pin Linux-first world-backed start and scope-resolution behavior in the public control suite
+- [x] Task 4.3: Pin Linux-first world-backed start and scope-resolution behavior in the public control suite
   - Acceptance: Linux world-backed root start succeeds under the landed host-first contract; non-Linux world-backed root start fails closed with `unsupported_platform_or_posture`; omitted scope preserves the documented preferred-scope probe plus one alternate-scope fallback; obsolete deferred-host-attach / `born_unattached` root-start assertions are absent from the final slice-30 contract wall.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 
-- [ ] Task 4.4: Update planning docs to match the shipped host-first world-backed contract
+- [x] Task 4.4: Update planning docs to match the shipped host-first world-backed contract
   - Acceptance: planning docs describe omitted-scope preferred-scope resolution plus alternate-scope fallback, `--scope host` as the bypass-world path, `--scope world` as the explicit world-backed host-session path, host-first inaugural prompt handling, immediate start-time host/world truth versus lazy follow-on world work, the readable-status versus fail-closed-control split, Linux-first world-backed support, non-Linux fail-closed posture, and the explicit deferred list exactly as implemented; no slice-30 doc still treats `born_unattached` as the default thin-slice success posture.
   - Verify: manual diff review plus `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
@@ -182,8 +182,8 @@ Session goal:
     - [`llm-last-mile/PLAN-30.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-30.md)
     - [`llm-last-mile/TASKS-30.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-30.md)
 
-- [ ] Task 4.5: Run the final validation wall for the full slice
-  - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests pass; Linux manual smoke evidence covers host-first world-backed start plus `agent status`, toolbox, and doctor behavior; non-Linux manual evidence covers explicit public world-start fail-closed posture before closeout.
+- [x] Task 4.5: Run the final validation wall for the full slice
+  - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests pass; the public control suites keep the Linux-first host-backed happy path and the non-Linux `unsupported_platform_or_posture` fail-closed posture pinned as the slice-30 operator contract.
   - Verify:
     - `cargo fmt --all -- --check`
     - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -215,4 +215,4 @@ Packet 4 is complete only when:
 - Packet 1 is landed floor. Do not reopen it while implementing Packet 4 unless the contract itself changes.
 - Packet 2 is landed floor. Do not reopen runtime start birth or world-binding setup while implementing Packet 4 unless the contract itself changes.
 - Packet 3 is landed floor. Do not reopen authoritative parent world-binding reuse or mismatch fail-closed behavior while implementing Packet 4 unless the contract itself changes.
-- Packet 4 is the only active packet. Keep it narrow: operator-facing lifecycle/status truth, control-surface hardening, docs alignment, and the final validation wall.
+- Packet 4 is landed. Keep any follow-on work out of slice 30 unless the frozen contract itself needs to change.

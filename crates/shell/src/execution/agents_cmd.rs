@@ -1053,7 +1053,7 @@ fn host_execution_client_start_for_scope(
     }
 }
 
-fn require_start_backend_id<'a>(args: &'a AgentStartArgs) -> Result<&'a str> {
+fn require_start_backend_id(args: &AgentStartArgs) -> Result<&str> {
     let backend_id = args.backend.trim();
     if backend_id.is_empty() {
         anyhow::bail!(config_model::user_error(

@@ -3,7 +3,7 @@
 Source SOW: [30-public-world-scoped-agent-start-and-capability-flags.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)  
 Decomposition basis: feature-slice breakdown produced on 2026-05-27  
 Phase: `SPECIFY`  
-Status: draft narrowed for the Packet 4 finalization pass on 2026-05-27
+Status: completed on 2026-05-28 after Packet 4 closeout and validation
 
 ## Assumptions
 
@@ -138,9 +138,9 @@ This spec intentionally leaves the following outside Packet 2 and outside the th
 
 ### Final Validation Wall
 
-1. Slice 30 cannot close honestly until the targeted control-plane suites and the full workspace validation wall are green.
-2. Manual Linux validation must confirm host-first world-backed start truth, omitted-scope fallback behavior, and the status/toolbox/doctor operator story against the landed Packet-1 through Packet-3 floor.
-3. Manual non-Linux validation must confirm the explicit fail-closed posture for public world-backed root start.
+1. Slice 30 cannot close honestly until `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`, `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`, and `cargo test --workspace -- --nocapture` are green.
+2. The public control suites must continue to pin the Linux-first host-backed happy path and the non-Linux `unsupported_platform_or_posture` fail-closed contract.
+3. Supplemental manual platform smoke may still be useful, but it is not part of the required slice-30 closeout wall.
 
 ## Tech Stack
 

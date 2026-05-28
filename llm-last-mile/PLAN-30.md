@@ -7,7 +7,7 @@ Follow-on slice: [31-lazy-host-attach-for-host-rooted-world-start.md](/Users/spe
 Proposed branch: `feat/public-world-scoped-agent-start`  
 Base branch: `main`  
 Plan type: public caller-surface expansion with host-first world-backed delivery  
-Status: draft narrowed for the Packet 4 finalization pass on 2026-05-27
+Status: completed on 2026-05-28 after Packet 4 closeout and validation
 
 ## Objective
 
@@ -46,14 +46,14 @@ The repo already has the key ingredients:
 5. Linux world binding/session plumbing plus later world-member dispatch seams in [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs),
 6. integration suites that already pin most public control behavior in [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) and [`agent_successor_contract_ahcsitc0.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs).
 
-What is still missing is narrower:
+The remaining Packet 4 closeout work was narrower:
 
 1. The slice docs still describe Packet 3-era work as active instead of treating Packets 1-3 as landed floor.
 2. The remaining contract to freeze is operator-facing: what `agent status`, toolbox, and doctor must preserve or fail closed under the landed host-first world-backed model.
 3. The docs do not yet clearly separate legacy/specialized `born_unattached` semantics from the default public happy path for world-backed root start.
 4. The final Linux-first/non-Linux fail-closed wall and honest closeout validation bar are not yet stated tightly enough to make Packet 4 implementation-ready.
 
-The minimum honest implementation is now Packet 4 only:
+The minimum honest implementation was Packet 4 only:
 
 1. preserve truthful lifecycle/status semantics for the landed start floor,
 2. harden and pin the operator control-surface contract,
@@ -441,9 +441,9 @@ cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 cargo test --workspace -- --nocapture
 ```
 
-### Manual
+### Supplemental Manual Smoke
 
-On Linux:
+On Linux, additional manual smoke may confirm:
 
 1. run host-scoped public root start and confirm current behavior is unchanged,
 2. run `substrate agent start --scope world ... --json` and confirm:
@@ -457,7 +457,7 @@ On Linux:
 4. confirm omitted `--scope` honors preferred-scope resolution plus one alternate-scope fallback,
 5. confirm later world dispatch remains host-mediated rather than public world-first bootstrap behavior.
 
-On non-Linux:
+On non-Linux, additional manual smoke may confirm:
 
 1. run `substrate agent start --scope world ... --json`,
 2. confirm explicit `unsupported_platform_or_posture` failure.

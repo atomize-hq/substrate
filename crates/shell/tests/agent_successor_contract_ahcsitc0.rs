@@ -2866,7 +2866,7 @@ fn agent_status_json_surfaces_parked_resumable_fields_from_parent_session_truth(
 }
 
 #[test]
-fn agent_status_json_surfaces_born_unattached_fields_for_world_started_session_truth() {
+fn agent_status_json_surfaces_born_unattached_fields_for_legacy_world_started_session_truth() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_list_and_status_contracts();
@@ -2900,7 +2900,7 @@ fn agent_status_json_surfaces_born_unattached_fields_for_world_started_session_t
             pending_inbox_count: Some(0),
             last_parked_at: Some(Some("2026-04-05T00:00:04Z")),
             last_attention_at: Some(None),
-            parked_reason: Some(Some("host attach deferred")),
+            parked_reason: Some(Some("legacy deferred host attach")),
             host_attach_contract: None,
         },
     );
@@ -2908,7 +2908,7 @@ fn agent_status_json_surfaces_born_unattached_fields_for_world_started_session_t
     let output = fixture.run(&["agent", "status", "--json"]);
     assert!(
         output.status.success(),
-        "agent status should surface born-unattached world-start sessions: {output:?}"
+        "agent status should surface legacy born-unattached sessions without treating them as the default public happy path: {output:?}"
     );
 
     let json = parse_json_output(&output);
@@ -2942,7 +2942,7 @@ fn agent_status_json_surfaces_born_unattached_fields_for_world_started_session_t
     );
     assert!(
         born_unattached.get("participant_id").is_none(),
-        "born-unattached status rows must not imply a live authoritative participant: {born_unattached}"
+        "legacy born-unattached status rows must not imply a live authoritative participant: {born_unattached}"
     );
     assert!(
         born_unattached
