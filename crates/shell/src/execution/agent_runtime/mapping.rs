@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use crate::execution::agent_inventory::AgentCliRuntimeFamily;
+
 pub(crate) const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 pub(crate) const LEGACY_PURE_AGENT_PROTOCOL: &str = concat!("uaa.agent", ".session");
 pub(crate) const PURE_AGENT_ROUTER: &str = "agent_hub";
@@ -23,14 +25,27 @@ impl AgentRuntimeBackendKind {
     }
 }
 
-pub(crate) fn orchestrator_backend_kind(agent_id: &str) -> Result<AgentRuntimeBackendKind> {
-    match agent_id {
-        "codex" => Ok(AgentRuntimeBackendKind::Codex),
-        "claude_code" => Ok(AgentRuntimeBackendKind::ClaudeCode),
-        other => Err(anyhow::anyhow!(
-            "selected orchestrator backend '{other}' is not supported by the shell-owned UAA runtime; supported backends are cli:codex and cli:claude_code"
-        )),
+fn backend_kind_from_runtime_family(
+    runtime_family: AgentCliRuntimeFamily,
+) -> AgentRuntimeBackendKind {
+    match runtime_family {
+        AgentCliRuntimeFamily::Codex => AgentRuntimeBackendKind::Codex,
+        AgentCliRuntimeFamily::ClaudeCode => AgentRuntimeBackendKind::ClaudeCode,
     }
+}
+
+pub(crate) fn resolve_shell_owned_runtime_family(
+    agent_id: &str,
+    runtime_family: Option<AgentCliRuntimeFamily>,
+) -> Result<AgentRuntimeBackendKind> {
+    runtime_family
+        .map(backend_kind_from_runtime_family)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "selected runtime '{}' is not runtime-realizable because config.cli.runtime_family is required for shell-owned UAA runtimes",
+                agent_id
+            )
+        })
 }
 
 pub(crate) fn protocol_validation_error(subject: &str, actual: Option<&str>) -> String {
