@@ -383,6 +383,7 @@ struct AgentControlResultJson<'a> {
 
 #[derive(Clone, Debug)]
 struct StartPromptPublicIdentity {
+    #[cfg_attr(not(unix), allow(dead_code))]
     backend_id: String,
     scope: AgentExecutionScope,
 }
@@ -402,7 +403,10 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
+    #[cfg(target_os = "linux")]
     let mut start_plan = build_start_launch_plan(args, &context)?;
+    #[cfg(not(target_os = "linux"))]
+    let start_plan = build_start_launch_plan(args, &context)?;
 
     if start_plan.public_identity.scope == AgentExecutionScope::World {
         #[cfg(not(target_os = "linux"))]
@@ -430,24 +434,12 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         public_identity,
     } = start_plan;
 
-    let public_backend_id = public_identity.backend_id.clone();
-    let public_scope = public_identity.scope;
-
-    let stream_start_result = |listener| {
-        run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
-            listener,
-            args.json,
-            PublicPromptAction::Start,
-            &public_backend_id,
-            public_scope,
-        )
-    };
-
     #[cfg(not(unix))]
     {
         let _ = store;
         let _ = helper_plan;
         let _ = resolved_contract;
+        let _ = public_identity;
         let _ = prompt;
         anyhow::bail!(config_model::user_error(
             "unsupported_platform_or_posture: public start prompt streaming requires a Unix launch-time backchannel"
@@ -456,6 +448,17 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
 
     #[cfg(unix)]
     {
+        let public_backend_id = public_identity.backend_id.clone();
+        let public_scope = public_identity.scope;
+        let stream_start_result = |listener| {
+            run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
+                listener,
+                args.json,
+                PublicPromptAction::Start,
+                &public_backend_id,
+                public_scope,
+            )
+        };
         let mut plan = helper_plan;
         let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
             &store,
