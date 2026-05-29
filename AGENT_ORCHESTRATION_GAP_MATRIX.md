@@ -97,6 +97,12 @@ Terminology rule for this repository:
   - `substrate agent status` now degrades torn parent/session linkage into warnings on the read surface, but strict control-plane surfaces such as `toolbox status` / `toolbox env` still fail closed and the trace-only fallback remains coarse when the rows omit `participant_id`,
   - macOS/Lima now uses the same shared-owner/member-runtime backend seam as Linux for the supported forwarded path, with regression coverage for shared-owner proof, member dispatch, targeted follow-up reuse, and guest-owned cancel.
   - Linux remains the source-of-truth ownership implementation and still has the broadest platform maturity; Windows/WSL remains fail-closed outside the supported contract.
+  - The remaining v1 work should now be tracked as five explicit buckets rather than a loose tail:
+    - freeze the broader caller-surface contract,
+    - harden the read-side and strict control surfaces,
+    - decide whether toolbox implementation is a near-term goal or stays deliberately introspection-only,
+    - make the Linux/macOS/Windows parity bar explicit for v1,
+    - and clean up the remaining naming/session-handle/compatibility governance leftovers.
 
 ## Gap Matrix
 
@@ -121,6 +127,8 @@ Terminology rule for this repository:
 | Shared-world replacement ordering and world metadata durability | `Landed` | Linux replacement already uses a two-phase `Active -> Replacing -> Replaced` flow with rollback on creation failure, and world `session.json` persistence is atomic-by-rename with failure-preserving behavior | No current correctness gap was confirmed here; only future hardening beyond the current contract would remain |
 | In-world member dispatch over existing host↔world transport | `Landed on Linux and supported macOS/Lima` | The shell now emits typed `member_dispatch` requests over `/v1/execute/stream`, `world-service` validates the authoritative shared-world binding and launches the member UAA runtime inside the active world, `/v1/execute/cancel` reaches retained in-world control ownership, and regression tests cover lazy launch, reuse, replacement, and fail-closed startup behavior on Linux plus the supported macOS/Lima path | Remaining work is broader platform scope and follow-on hardening, not missing member-dispatch transport on the supported macOS/Lima path |
 | macOS/Lima parity for agent orchestration | `Landed in the supported Lima-backed posture` | `world-mac-lima` now forwards the same shared-owner/member-runtime contract as Linux for the supported backend-detected path: `SharedWorldOwnerSpec` reaches the guest, `SharedWorldBindingSnapshot` returns through `WorldHandle.shared_binding`, `member_dispatch` and typed `/v1/member_turn/stream` follow-up are preserved, and cancel remains guest-owned through `/v1/execute/cancel` | Remaining work is outside this slice: Windows/WSL parity, broader public caller-surface breadth, and any future live-guest coverage beyond the documented macOS/Lima smoke plus regression suite |
+| Broader caller-surface contract | `Still open` | The repo now has two narrow, explicit caller surfaces: REPL `::<backend_id> <prompt>` and public `substrate agent start|turn|reattach|fork|stop` with exact selectors and host-only root `start` | v1 still needs the broader caller-semantics contract frozen: whether there is any default-agent routing, what broader non-REPL targeting (if any) looks like, whether `substrate -c` stays shell-wrap-only, and whether public follow-up remains exact `(orchestration_session_id, backend_id)` only or grows a broader selector model |
+| Read-side and strict control-surface hardening | `Partial` | `substrate agent status` now merges live runtime state with trace fallback, preserves durable `parked_resumable` / `awaiting_attention` host sessions, and warns rather than dropping several torn-state cases; strict surfaces such as `toolbox status` / `toolbox env` remain intentionally fail-closed | The remaining hardening work is to define and document the operator-facing truth model for participant-less trace fallback, incomplete session-handle correlation, and the split between readable degraded status versus strict fail-closed control/doctor surfaces |
 | Replacement-member semantics across world-generation rollover | `Landed` | Restart/drift handling invalidates stale members, advances `world_generation`, creates a distinct replacement participant with preserved lineage, and relaunches the replacement member through the in-world transport path on Linux | Remaining work is mainly parity and operator-surface breadth rather than replacement correctness |
 | Agent event schema and trace flattening | `Landed` | Tuple-aware `AgentEvent` schema is live, runtime events are emitted from orchestrator/member lifecycle code, and status surfaces validate world identity + nested parent correlation | Remaining work is narrower read-side cleanup and producer breadth, not missing support for the now-landed in-world member launch path |
 | Event-emission authority plumbing | `Mostly landed` | Production REPL/host/world emitters now require explicit runtime-owned orchestration context before publishing orchestration-scoped `agent_event` rows | Remaining cleanup is narrower: command rows still use synthetic `run_id = cmd_id`, and read-side utilities still keep heuristic recovery helpers such as PID lookup / synthetic parent reconstruction |
@@ -132,7 +140,35 @@ Terminology rule for this repository:
 | Secret handoff into the world gateway | `Landed` | Host-side policy/auth selection still owns auth-source precedence, `world-service` now delivers a read-once `GatewayAuthBundleV1` over inherited FD via `SUBSTRATE_LLM_AUTH_BUNDLE_FD`, and `gateway` integrated startup overlays that bundle in memory before provider construction | Remaining work is follow-on hardening and broader parity, not the default carrier: integrated delivery no longer depends on secret-bearing child env vars |
 | Toolbox surface | `Partial` | Config, `toolbox status`, `toolbox env`, live-session endpoint derivation, and world-binding projection are present | The internal MCP server, mutation tools, and auth/audit plumbing are still unimplemented |
 | Toolbox role in orchestration | `Constrained by design` | ADR-0045 is introspection-only in [ADR-0045](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md:77) | Nothing here should be treated as a substitute for member launch or control-plane execution |
+| Toolbox near-term implementation scope | `Still open` | The visible toolbox surface is intentionally read-side only today (`status|env` plus derived projection), and current architecture keeps toolbox out of the execution/control plane | The repo still needs an explicit near-term decision on whether to invest in the internal MCP server plus auth/audit plumbing soon, or to keep toolbox intentionally introspection-only while dispatch/router/caller work lands first |
+| Cross-platform parity bar for v1 | `Still open` | Linux is the source-of-truth path, macOS/Lima is supported through the forwarded shared-owner/member-runtime seam, and Windows/WSL still fails closed outside the supported contract | The remaining decision is not technical possibility but product scope: whether Windows/WSL parity is required for the v1 bar or is explicitly deferred while Linux and supported macOS/Lima remain the only intended v1 paths |
+| Governance cleanup | `Open, lower-level but real` | The mainline runtime shape is now much clearer: real UAA integration is live, narrow public session control exists, and compatibility dual-writes remain intentional for now | The repo still owes a governance cleanup pass covering local `agent-api-*` vs external `agent_api` naming deconfliction, a cleaner public session-handle contract, and an eventual compatibility-output retirement plan once the current cutover is considered complete |
 | Custom Substrate harness | `Deferred by intent` | Product intent allows for a future Substrate-native harness layer | Do not block v1 on this; revisit only after CLI-agent orchestration through UAA is working cleanly |
+
+## Remaining Documented v1 Work
+
+The remaining work after the current dispatch/control/lifecycle design stack should be treated as explicit tracked follow-on scope, not as background assumptions:
+
+1. Freeze the broader caller-surface contract.
+- The main open product question is still caller-surface breadth.
+- This includes default-agent routing, any broader non-REPL targeting contract, whether `substrate -c` remains shell-wrap-only, and whether public follow-up remains exact `(orchestration_session_id, backend_id)` only.
+
+2. Do read-side and strict control-surface hardening.
+- The next concrete runtime hardening gap is status/session-handle clarity.
+- This includes participant-less trace fallback, partial session-handle truth, and the operator-facing split between readable degraded `agent status` output versus fail-closed `toolbox` / doctor / control-plane selectors.
+
+3. Decide whether toolbox implementation is a near-term goal.
+- The current visible toolbox surface is intentionally introspection-only.
+- The near-term decision is whether the internal MCP server plus auth/audit plumbing moves onto the v1 path soon, or remains deferred so it does not become a second execution plane or distract from orchestration/router work.
+
+4. Make the v1 parity call explicitly.
+- Linux remains the factual source-of-truth path.
+- macOS/Lima is supported on the forwarded shared-owner/member-runtime seam.
+- Windows/WSL remains fail-closed today, so the repo needs an explicit product decision on whether that stays intentionally deferred for v1.
+
+5. Clean up the governance leftovers.
+- These are lower-level than caller semantics or dispatch/router work, but they are still real remaining scope.
+- The concrete items are local `agent-api-*` versus external `agent_api` naming deconfliction, a cleaner public session-handle contract, and eventual retirement of flat compatibility outputs after the current cutover is complete.
 
 ## Still-Open Decisions
 
@@ -171,6 +207,10 @@ These are the decisions that still need to be made to keep the path forward clea
 - The current implementation evidence still says Linux is the strongest and clearest slice for shared-world ownership and replacement behavior.
 - macOS/Lima is now on the supported shared-owner/member-runtime path through the forwarded backend seam; the next parity question is Windows/WSL or any broader non-Linux backend model, not whether Lima needs a different orchestration design.
 - The open question is the parity bar for non-Linux backends after that, not whether the host-orchestrator / world-member model itself is still the intended placement rule.
+
+9. Whether toolbox should stay intentionally introspection-only for the near-term v1 path, or move forward into internal MCP/auth/audit implementation soon.
+- The current architecture and ADR direction still say toolbox is not a second execution plane.
+- The open question is timing and priority: whether implementing the toolbox server/plumbing belongs on the near-term v1 path or should stay behind the caller-surface, router, and status-hardening work.
 
 ## Recommended v1 Runtime Slice
 
