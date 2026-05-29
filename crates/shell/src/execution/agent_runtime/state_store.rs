@@ -17,6 +17,7 @@ use crate::execution::config_model::AgentExecutionScope;
 use super::{
     control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
+    obligation_ledger::OrchestrationObligationRecord,
     orchestration_session::{
         HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
         OrchestrationSessionState, StartupPromptStreamState,
@@ -386,6 +387,12 @@ impl AgentRuntimeStateStore {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn canonical_obligations_dir(&self, orchestration_session_id: &str) -> PathBuf {
+        self.canonical_session_dir(orchestration_session_id)
+            .join("obligations")
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn canonical_inbox_item_path(
         &self,
         orchestration_session_id: &str,
@@ -393,6 +400,16 @@ impl AgentRuntimeStateStore {
     ) -> PathBuf {
         self.canonical_inbox_dir(orchestration_session_id)
             .join(format!("{item_id}.json"))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_path(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligations_dir(orchestration_session_id)
+            .join(format!("{obligation_id}.json"))
     }
 
     fn canonical_lease_path(
@@ -1187,6 +1204,10 @@ impl AgentRuntimeStateStore {
         item.validate()
     }
 
+    fn validate_obligation_record(&self, obligation: &OrchestrationObligationRecord) -> Result<()> {
+        obligation.validate()
+    }
+
     pub(crate) fn persist_orchestration_session(
         &self,
         session: &OrchestrationSessionRecord,
@@ -1240,6 +1261,31 @@ impl AgentRuntimeStateStore {
         }
 
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn persist_obligation(
+        &self,
+        obligation: &OrchestrationObligationRecord,
+    ) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        self.validate_obligation_record(obligation)?;
+        self.load_authoritative_session(&obligation.orchestration_session_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing authoritative parent session {} for orchestration obligation {}",
+                    obligation.orchestration_session_id,
+                    obligation.obligation_id
+                )
+            })?;
+
+        let obligation_path = self.canonical_obligation_path(
+            &obligation.orchestration_session_id,
+            &obligation.obligation_id,
+        );
+        write_atomic_json(&obligation_path, obligation)
     }
 
     #[allow(dead_code)]
@@ -1339,6 +1385,85 @@ impl AgentRuntimeStateStore {
                 .then(left.item_id.cmp(&right.item_id))
         });
         Ok(items)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn load_obligation(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        let path = self.canonical_obligation_path(orchestration_session_id, obligation_id);
+        let Some(obligation) = read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
+        else {
+            return Ok(None);
+        };
+        self.validate_obligation_record(&obligation)
+            .with_context(|| format!("invalid orchestration obligation in {}", path.display()))?;
+        if obligation.orchestration_session_id != orchestration_session_id {
+            anyhow::bail!(
+                "orchestration obligation {} belongs to session {} not {}",
+                obligation_id,
+                obligation.orchestration_session_id,
+                orchestration_session_id
+            );
+        }
+        if obligation.obligation_id != obligation_id {
+            anyhow::bail!(
+                "orchestration obligation artifact {} stored mismatched obligation_id {}",
+                path.display(),
+                obligation.obligation_id
+            );
+        }
+
+        Ok(Some(obligation))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn list_obligations(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        let obligations_dir = self.canonical_obligations_dir(orchestration_session_id);
+        let Some(entries) = safe_read_dir(&obligations_dir)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut obligations = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", obligations_dir.display()))?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+
+            let Some(obligation) =
+                read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
+            else {
+                continue;
+            };
+            self.validate_obligation_record(&obligation)
+                .with_context(|| {
+                    format!("invalid orchestration obligation in {}", path.display())
+                })?;
+            if obligation.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!(
+                    "orchestration obligation {} belongs to session {} not {}",
+                    obligation.obligation_id,
+                    obligation.orchestration_session_id,
+                    orchestration_session_id
+                );
+            }
+            obligations.push(obligation);
+        }
+
+        obligations.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.obligation_id.cmp(&right.obligation_id))
+        });
+        Ok(obligations)
     }
 
     pub(crate) fn set_orchestration_session_world_binding(
@@ -1907,33 +2032,7 @@ fn updated_pending_inbox_count(current: u64, was_pending: bool, is_pending: bool
 }
 
 fn apply_pending_inbox_count(session: &mut OrchestrationSessionRecord, pending_inbox_count: u64) {
-    let now = Utc::now();
-    session.pending_inbox_count = pending_inbox_count;
-    session.last_active_at = now;
-    if pending_inbox_count > 0 {
-        session.last_attention_at = Some(now);
-    }
-
-    if session.state.is_terminal() {
-        return;
-    }
-
-    if session.attached_participant_id().is_some() {
-        return;
-    }
-
-    let desired_posture = if pending_inbox_count > 0 {
-        OrchestrationSessionPosture::AwaitingAttention
-    } else {
-        OrchestrationSessionPosture::ParkedResumable
-    };
-    if session.posture != desired_posture {
-        session.posture = desired_posture;
-        session.posture_changed_at = now;
-    }
-    if desired_posture == OrchestrationSessionPosture::ParkedResumable {
-        session.last_parked_at = Some(now);
-    }
+    session.apply_detached_pending_inbox_count(pending_inbox_count);
 }
 
 fn rollback_inbox_item_write(
@@ -2591,7 +2690,8 @@ mod tests {
     use super::*;
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionState,
-        validator::RuntimeSelectionDescriptor,
+        validator::RuntimeSelectionDescriptor, OrchestrationObligationAttachState,
+        OrchestrationObligationKind, OrchestrationObligationRecord, OrchestrationObligationState,
     };
 
     fn descriptor(agent_id: &str, scope: AgentExecutionScope) -> RuntimeSelectionDescriptor {
@@ -2698,6 +2798,22 @@ mod tests {
             kind,
             Some(format!("message for {item_id}")),
         )
+    }
+
+    fn pending_obligation(
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        kind: OrchestrationObligationKind,
+    ) -> OrchestrationObligationRecord {
+        let mut obligation = OrchestrationObligationRecord::new(
+            orchestration_session_id.to_string(),
+            obligation_id.to_string(),
+            kind,
+            format!("summary for {obligation_id}"),
+        );
+        obligation.attention_required = true;
+        obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        obligation
     }
 
     fn write_legacy_handle_file(
@@ -3094,6 +3210,130 @@ mod tests {
                 }),
                 "resolved inbox items must remain durable artifacts instead of being deleted"
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn born_unattached_session_recovers_original_posture_after_attention_clears() {
+        with_store(|store| {
+            let participant = live_orchestrator(
+                "codex",
+                "sess_born_unattached_attention",
+                "ash_born_unattached_seed",
+            );
+            let contract = HostAttachContract::from_manifest_for_test(&participant)
+                .expect("host attach contract");
+            let session = OrchestrationSessionRecord::new_deferred_host_attach(
+                "sess_born_unattached_attention".to_string(),
+                "trace_born_unattached_attention".to_string(),
+                "/workspace".to_string(),
+                contract,
+            );
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist deferred host attach session");
+
+            store
+                .persist_inbox_item(&pending_inbox_item(
+                    "sess_born_unattached_attention",
+                    "item_follow_up",
+                    DurableInboxItemKind::FollowUpMessage,
+                ))
+                .expect("persist pending inbox item");
+
+            let pending_session = store
+                .load_orchestration_session("sess_born_unattached_attention")
+                .expect("load pending born-unattached session")
+                .expect("pending session exists");
+            assert_eq!(
+                pending_session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+            assert_eq!(pending_session.pending_inbox_count, 1);
+
+            store
+                .dismiss_inbox_item("sess_born_unattached_attention", "item_follow_up")
+                .expect("dismiss final born-unattached inbox item");
+
+            let settled_session = store
+                .load_orchestration_session("sess_born_unattached_attention")
+                .expect("load settled born-unattached session")
+                .expect("settled session exists");
+            assert_eq!(settled_session.pending_inbox_count, 0);
+            assert_eq!(
+                settled_session.posture,
+                OrchestrationSessionPosture::BornUnattached
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_obligation_writes_canonical_artifact_and_round_trips() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_obligation_pending", "ash_obligation_pending");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let obligation = pending_obligation(
+                "sess_obligation_pending",
+                "obl_follow_up",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            store
+                .persist_obligation(&obligation)
+                .expect("persist obligation");
+
+            assert!(
+                store
+                    .canonical_obligation_path("sess_obligation_pending", "obl_follow_up")
+                    .is_file(),
+                "orchestration obligations must be stored canonically under sessions/<session>/obligations"
+            );
+
+            let loaded = store
+                .load_obligation("sess_obligation_pending", "obl_follow_up")
+                .expect("load obligation")
+                .expect("obligation exists");
+            assert_eq!(loaded.kind, OrchestrationObligationKind::FollowUpRequired);
+            assert_eq!(loaded.state, OrchestrationObligationState::Pending);
+            assert!(loaded.attention_required);
+
+            let obligations = store
+                .list_obligations("sess_obligation_pending")
+                .expect("list obligations");
+            assert_eq!(obligations, vec![loaded]);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_obligation_rejects_invalid_records_at_persistence_boundary() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_obligation_invalid", "ash_obligation_invalid");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let mut obligation = pending_obligation(
+                "sess_obligation_invalid",
+                "obl_invalid",
+                OrchestrationObligationKind::Blocked,
+            );
+            obligation.state = OrchestrationObligationState::Resolved;
+
+            let err = store
+                .persist_obligation(&obligation)
+                .expect_err("invalid obligation must fail persistence");
+            assert!(err
+                .to_string()
+                .contains("resolved orchestration obligations must include resolved_at"));
         });
     }
 

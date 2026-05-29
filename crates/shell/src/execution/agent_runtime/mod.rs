@@ -1,6 +1,7 @@
 pub(crate) mod control;
 pub(crate) mod dispatch_contract;
 pub(crate) mod mapping;
+pub(crate) mod obligation_ledger;
 pub(crate) mod orchestration_session;
 pub(crate) mod registry;
 pub(crate) mod session;
@@ -25,6 +26,12 @@ pub(crate) use dispatch_contract::{
 pub(crate) use mapping::{
     MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
     SESSION_HANDLE_SCHEMA_V1,
+};
+#[allow(unused_imports)]
+pub(crate) use obligation_ledger::{
+    OrchestrationObligationAttachState, OrchestrationObligationKind, OrchestrationObligationRecord,
+    OrchestrationObligationReviewState, OrchestrationObligationSeverity,
+    OrchestrationObligationState,
 };
 pub(crate) use orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState};
 pub(crate) use registry::build_gateway_for_descriptor;

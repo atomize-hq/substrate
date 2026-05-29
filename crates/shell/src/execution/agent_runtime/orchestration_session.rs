@@ -463,11 +463,7 @@ impl OrchestrationSessionRecord {
 
     #[allow(dead_code)]
     pub(crate) fn set_pending_inbox_count(&mut self, pending_inbox_count: u64) {
-        self.pending_inbox_count = pending_inbox_count;
-        if pending_inbox_count > 0 {
-            self.last_attention_at = Some(Utc::now());
-        }
-        self.touch_active();
+        self.apply_detached_pending_inbox_count(pending_inbox_count);
     }
 
     #[allow(dead_code)]
@@ -668,16 +664,35 @@ impl OrchestrationSessionRecord {
         }
     }
 
+    pub(crate) fn apply_detached_pending_inbox_count(&mut self, pending_inbox_count: u64) {
+        let now = Utc::now();
+        self.pending_inbox_count = pending_inbox_count;
+        self.last_active_at = now;
+        if pending_inbox_count > 0 {
+            self.last_attention_at = Some(now);
+        }
+
+        if self.state.is_terminal() || self.attached_participant_id().is_some() {
+            return;
+        }
+
+        let desired_posture = self.detached_posture_without_attachment();
+        if self.posture != desired_posture {
+            self.posture = desired_posture;
+            self.posture_changed_at = now;
+        }
+        if desired_posture == OrchestrationSessionPosture::ParkedResumable {
+            self.last_parked_at = Some(now);
+        }
+    }
+
     fn detached_posture_without_attachment(&self) -> OrchestrationSessionPosture {
         if self.pending_inbox_count > 0 {
             OrchestrationSessionPosture::AwaitingAttention
+        } else if self.active_participant_id().is_none() {
+            OrchestrationSessionPosture::BornUnattached
         } else {
-            match self.posture {
-                OrchestrationSessionPosture::BornUnattached => {
-                    OrchestrationSessionPosture::BornUnattached
-                }
-                _ => OrchestrationSessionPosture::ParkedResumable,
-            }
+            OrchestrationSessionPosture::ParkedResumable
         }
     }
 }
@@ -816,12 +831,38 @@ mod tests {
             .expect("parked invariants");
 
         session.set_pending_inbox_count(1);
-        assert!(session.validate_persisted_invariants().is_err());
-
-        session.mark_awaiting_attention();
+        assert_eq!(
+            session.posture,
+            OrchestrationSessionPosture::AwaitingAttention
+        );
         session
             .validate_persisted_invariants()
             .expect("attention invariants");
+    }
+
+    #[test]
+    fn deferred_host_attach_round_trips_back_to_born_unattached_after_attention_clears() {
+        let manifest = manifest();
+        let contract = HostAttachContract::from_manifest_for_test(&manifest)
+            .expect("host attach contract for deferred session");
+        let mut session = OrchestrationSessionRecord::new_deferred_host_attach(
+            "sess_001".to_string(),
+            "trace_001".to_string(),
+            "/workspace".to_string(),
+            contract,
+        );
+
+        session.apply_detached_pending_inbox_count(1);
+        assert_eq!(
+            session.posture,
+            OrchestrationSessionPosture::AwaitingAttention
+        );
+
+        session.apply_detached_pending_inbox_count(0);
+        assert_eq!(session.posture, OrchestrationSessionPosture::BornUnattached);
+        session
+            .validate_persisted_invariants()
+            .expect("born-unattached invariants remain valid after clearing attention");
     }
 
     #[test]
