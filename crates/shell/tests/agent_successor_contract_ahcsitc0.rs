@@ -3057,6 +3057,77 @@ fn agent_status_json_surfaces_awaiting_attention_fields_from_parent_session_trut
 }
 
 #[test]
+#[serial_test::serial]
+fn agent_status_json_derives_awaiting_attention_from_obligation_projection() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_runtime_participant(
+        &fixture,
+        "ash_attention_projected",
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbd",
+        RuntimeParticipantOptions::host_orchestrator("running", false, "2026-04-05T00:00:05Z"),
+    );
+    write_orchestration_session_with_manifest_options(
+        &fixture,
+        OrchestrationSessionManifestSpec {
+            agent_id: "claude_code",
+            orchestration_session_id: "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbd",
+            active_session_handle_id: Some("ash_attention_projected"),
+            state: "active",
+            ts: "2026-04-05T00:00:05Z",
+            world_binding: None,
+        },
+        OrchestrationSessionManifestOptions {
+            posture: Some("parked_resumable"),
+            attached_participant_id: Some(None),
+            pending_inbox_count: Some(0),
+            last_parked_at: Some(Some("2026-04-05T00:00:05Z")),
+            last_attention_at: Some(None),
+            parked_reason: Some(Some("owner detached cleanly")),
+            host_attach_contract: Some(Some("external-session-1")),
+        },
+    );
+
+    let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+    std::env::set_var("SUBSTRATE_HOME", &fixture.substrate_home);
+    let persist_result =
+        substrate_shell::execution::agent_dev_support::persist_runtime_alert_for_dev_support(
+            "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbd",
+            "obl_attention",
+            Some("attention needed from obligation projection".to_string()),
+        );
+    match previous_substrate_home {
+        Some(previous) => std::env::set_var("SUBSTRATE_HOME", previous),
+        None => std::env::remove_var("SUBSTRATE_HOME"),
+    }
+    persist_result.expect("persist runtime alert obligation");
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should project detached attention from obligation truth: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let attention = find_session_by_participant(sessions, "ash_attention_projected");
+    assert_eq!(
+        attention.pointer("/posture").and_then(Value::as_str),
+        Some("awaiting_attention")
+    );
+    assert_eq!(
+        attention
+            .pointer("/pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(1)
+    );
+}
+
+#[test]
 fn agent_status_json_trace_fallback_rows_emit_explicit_null_posture_fields() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();

@@ -2708,7 +2708,8 @@ mod tests {
             AgentRuntimeSessionState,
         },
         validator::RuntimeSelectionDescriptor,
-        AgentRuntimeStateStore, ORCHESTRATOR_ROLE,
+        AgentRuntimeStateStore, OrchestrationObligationAttachState, OrchestrationObligationKind,
+        OrchestrationObligationRecord, ORCHESTRATOR_ROLE,
     };
     use crate::execution::config_model::AgentExecutionScope;
     use std::path::PathBuf;
@@ -2977,6 +2978,103 @@ mod tests {
                 readiness,
                 crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(
                     OrchestrationSessionPosture::ParkedResumable
+                )
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn start_timeout_reconciliation_projects_awaiting_attention_from_persisted_obligation() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_start_timeout_attention".to_string(),
+                "ash_start_timeout_attention".to_string(),
+                "lease_start_timeout_attention".to_string(),
+            )
+            .expect("orchestrator participant");
+            participant.transition_state(AgentRuntimeSessionState::Ready);
+            participant.set_uaa_session_id("uaa_session");
+
+            let mut orchestration = OrchestrationSessionRecord::new(
+                "sess_start_timeout_attention".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
+            );
+            orchestration.transition_state(OrchestrationSessionState::Active);
+            orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+            orchestration.initialize_startup_prompt(participant.handle.participant_id.clone());
+            orchestration.mark_startup_prompt_completed(
+                participant.handle.participant_id.as_str(),
+                "success",
+            );
+            participant.mark_client_detached("owner detached cleanly");
+
+            store
+                .persist_orchestration_session(&orchestration)
+                .expect("persist orchestration");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let mut obligation = OrchestrationObligationRecord::new(
+                "sess_start_timeout_attention",
+                "obl_attention",
+                OrchestrationObligationKind::FollowUpRequired,
+                "attention needed before host resumes",
+            );
+            obligation.attention_required = true;
+            obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+            store
+                .persist_obligation(&obligation)
+                .expect("persist obligation");
+
+            let reconciliation = reconcile_hidden_owner_helper_start_timeout(
+                store,
+                &test_plan(
+                    "sess_start_timeout_attention",
+                    "ash_start_timeout_attention",
+                ),
+            )
+            .expect("reconcile timeout");
+            assert_eq!(
+                reconciliation,
+                HiddenOwnerHelperStartTimeoutReconciliation::Success
+            );
+
+            let persisted = store
+                .load_orchestration_session("sess_start_timeout_attention")
+                .expect("load orchestration")
+                .expect("orchestration exists");
+            assert_eq!(persisted.state, OrchestrationSessionState::Active);
+            assert_eq!(
+                persisted.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+            assert_eq!(persisted.pending_inbox_count, 1);
+
+            let readiness = store
+                .classify_hidden_owner_helper_launch_readiness(
+                    "sess_start_timeout_attention",
+                    "ash_start_timeout_attention",
+                    false,
+                )
+                .expect("classify readiness");
+            assert_eq!(
+                readiness,
+                crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(
+                    OrchestrationSessionPosture::AwaitingAttention
                 )
             );
         });

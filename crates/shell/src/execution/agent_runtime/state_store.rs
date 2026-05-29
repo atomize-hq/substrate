@@ -17,7 +17,10 @@ use crate::execution::config_model::AgentExecutionScope;
 use super::{
     control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
-    obligation_ledger::OrchestrationObligationRecord,
+    obligation_ledger::{
+        OrchestrationObligationKind, OrchestrationObligationRecord,
+        OrchestrationObligationReviewState,
+    },
     orchestration_session::{
         HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
         OrchestrationSessionState, StartupPromptStreamState,
@@ -1272,7 +1275,8 @@ impl AgentRuntimeStateStore {
             .lock()
             .expect("snapshot write mutex poisoned");
         self.validate_obligation_record(obligation)?;
-        self.load_authoritative_session(&obligation.orchestration_session_id)?
+        let mut session = self
+            .load_authoritative_session(&obligation.orchestration_session_id)?
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "missing authoritative parent session {} for orchestration obligation {}",
@@ -1280,12 +1284,47 @@ impl AgentRuntimeStateStore {
                     obligation.obligation_id
                 )
             })?;
+        let existing = self.load_obligation(
+            &obligation.orchestration_session_id,
+            &obligation.obligation_id,
+        )?;
+        let existing_compat_item = self.load_inbox_item(
+            &obligation.orchestration_session_id,
+            &obligation.obligation_id,
+        )?;
+        let mut obligations = self.list_obligations(&obligation.orchestration_session_id)?;
+        obligations.retain(|current| current.obligation_id != obligation.obligation_id);
+        obligations.push(obligation.clone());
+
+        let projected_pending_count = projected_pending_inbox_count_from_obligations(&obligations)?;
+        apply_pending_inbox_count(&mut session, projected_pending_count);
+        let projected_compat_item =
+            compatibility_inbox_item_from_obligation(obligation, existing_compat_item.as_ref());
+        if let Some(item) = projected_compat_item.as_ref() {
+            self.validate_inbox_item_record(item)?;
+        }
 
         let obligation_path = self.canonical_obligation_path(
             &obligation.orchestration_session_id,
             &obligation.obligation_id,
         );
-        write_atomic_json(&obligation_path, obligation)
+        let compatibility_item_path = self.canonical_inbox_item_path(
+            &obligation.orchestration_session_id,
+            &obligation.obligation_id,
+        );
+        write_atomic_json(&obligation_path, obligation)?;
+        if let Some(item) = projected_compat_item.as_ref() {
+            write_atomic_json(&compatibility_item_path, item)?;
+        }
+        if let Err(err) = self.persist_parent_session_snapshot(&session) {
+            rollback_obligation_write(&obligation_path, existing.as_ref())?;
+            if projected_compat_item.is_some() {
+                rollback_inbox_item_write(&compatibility_item_path, existing_compat_item.as_ref())?;
+            }
+            return Err(err);
+        }
+
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -2035,6 +2074,77 @@ fn apply_pending_inbox_count(session: &mut OrchestrationSessionRecord, pending_i
     session.apply_detached_pending_inbox_count(pending_inbox_count);
 }
 
+fn projected_pending_inbox_count_from_obligations(
+    obligations: &[OrchestrationObligationRecord],
+) -> Result<u64> {
+    obligations
+        .iter()
+        .filter(|obligation| obligation.projects_detached_attention())
+        .count()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("pending_inbox_count overflow"))
+}
+
+fn compatibility_inbox_kind_for_obligation(
+    kind: OrchestrationObligationKind,
+) -> Option<DurableInboxItemKind> {
+    match kind {
+        OrchestrationObligationKind::ApprovalRequired => {
+            Some(DurableInboxItemKind::ApprovalRequired)
+        }
+        OrchestrationObligationKind::TaskCompleted => Some(DurableInboxItemKind::CompletionNotice),
+        OrchestrationObligationKind::FollowUpRequired
+        | OrchestrationObligationKind::ForkRequest
+        | OrchestrationObligationKind::ForkRecommendation
+        | OrchestrationObligationKind::ResultAvailable => {
+            Some(DurableInboxItemKind::FollowUpMessage)
+        }
+        OrchestrationObligationKind::Blocked
+        | OrchestrationObligationKind::TaskFailed
+        | OrchestrationObligationKind::RuntimeAlert
+        | OrchestrationObligationKind::EscalationRecommended => {
+            Some(DurableInboxItemKind::RuntimeAlert)
+        }
+    }
+}
+
+fn compatibility_inbox_item_from_obligation(
+    obligation: &OrchestrationObligationRecord,
+    existing: Option<&DurableInboxItemRecord>,
+) -> Option<DurableInboxItemRecord> {
+    let kind = compatibility_inbox_kind_for_obligation(obligation.kind)?;
+    let message = obligation
+        .resolution_note
+        .clone()
+        .or_else(|| Some(obligation.summary.clone()));
+    let mut item = existing.cloned().unwrap_or_else(|| DurableInboxItemRecord {
+        orchestration_session_id: obligation.orchestration_session_id.clone(),
+        item_id: obligation.obligation_id.clone(),
+        kind,
+        state: DurableInboxItemState::Pending,
+        created_at: obligation.created_at,
+        updated_at: obligation.updated_at,
+        resolved_at: None,
+        message: message.clone(),
+    });
+    item.kind = kind;
+    item.message = message;
+    item.updated_at = obligation.updated_at;
+    if obligation.projects_detached_attention() {
+        item.state = DurableInboxItemState::Pending;
+        item.resolved_at = None;
+    } else {
+        item.state = match obligation.review_state {
+            OrchestrationObligationReviewState::Acknowledged => DurableInboxItemState::Acknowledged,
+            OrchestrationObligationReviewState::Unread
+            | OrchestrationObligationReviewState::Dismissed
+            | OrchestrationObligationReviewState::Resolved => DurableInboxItemState::Dismissed,
+        };
+        item.resolved_at = obligation.resolved_at.or(Some(obligation.updated_at));
+    }
+    Some(item)
+}
+
 fn rollback_inbox_item_write(
     item_path: &Path,
     previous: Option<&DurableInboxItemRecord>,
@@ -2047,6 +2157,21 @@ fn rollback_inbox_item_write(
             Err(err) => {
                 Err(err).with_context(|| format!("failed to roll back {}", item_path.display()))
             }
+        },
+    }
+}
+
+fn rollback_obligation_write(
+    obligation_path: &Path,
+    previous: Option<&OrchestrationObligationRecord>,
+) -> Result<()> {
+    match previous {
+        Some(previous) => write_atomic_json(obligation_path, previous),
+        None => match fs::remove_file(obligation_path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err)
+                .with_context(|| format!("failed to roll back {}", obligation_path.display())),
         },
     }
 }
@@ -2691,7 +2816,8 @@ mod tests {
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionState,
         validator::RuntimeSelectionDescriptor, OrchestrationObligationAttachState,
-        OrchestrationObligationKind, OrchestrationObligationRecord, OrchestrationObligationState,
+        OrchestrationObligationKind, OrchestrationObligationRecord,
+        OrchestrationObligationReviewState, OrchestrationObligationState,
     };
 
     fn descriptor(agent_id: &str, scope: AgentExecutionScope) -> RuntimeSelectionDescriptor {
@@ -3307,6 +3433,77 @@ mod tests {
                 .list_obligations("sess_obligation_pending")
                 .expect("list obligations");
             assert_eq!(obligations, vec![loaded]);
+
+            let projected_session = store
+                .load_orchestration_session("sess_obligation_pending")
+                .expect("load projected session")
+                .expect("projected session exists");
+            assert_eq!(projected_session.pending_inbox_count, 1);
+            assert_eq!(
+                projected_session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+
+            let compat_item = store
+                .load_inbox_item("sess_obligation_pending", "obl_follow_up")
+                .expect("load compatibility inbox item")
+                .expect("compatibility item exists");
+            assert_eq!(compat_item.kind, DurableInboxItemKind::FollowUpMessage);
+            assert_eq!(compat_item.state, DurableInboxItemState::Pending);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolving_obligation_updates_detached_projection_and_keeps_compatibility_artifact() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_obligation_resolve", "ash_obligation_resolve");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let mut obligation = pending_obligation(
+                "sess_obligation_resolve",
+                "obl_attention",
+                OrchestrationObligationKind::Blocked,
+            );
+            store
+                .persist_obligation(&obligation)
+                .expect("persist pending obligation");
+
+            obligation.state = OrchestrationObligationState::Resolved;
+            obligation.review_state = OrchestrationObligationReviewState::Resolved;
+            obligation.attention_required = false;
+            obligation.resolution_note = Some("host attach recovered".to_string());
+            obligation.resolved_at = Some(chrono::Utc::now());
+            obligation.updated_at = obligation.resolved_at.expect("resolved_at set");
+            store
+                .persist_obligation(&obligation)
+                .expect("persist resolved obligation");
+
+            let settled_session = store
+                .load_orchestration_session("sess_obligation_resolve")
+                .expect("load settled session")
+                .expect("settled session exists");
+            assert_eq!(settled_session.pending_inbox_count, 0);
+            assert_eq!(
+                settled_session.posture,
+                OrchestrationSessionPosture::ParkedResumable
+            );
+
+            let compat_item = store
+                .load_inbox_item("sess_obligation_resolve", "obl_attention")
+                .expect("load compatibility inbox item")
+                .expect("compatibility item exists");
+            assert_eq!(compat_item.kind, DurableInboxItemKind::RuntimeAlert);
+            assert_eq!(compat_item.state, DurableInboxItemState::Dismissed);
+            assert_eq!(
+                compat_item.message.as_deref(),
+                Some("host attach recovered")
+            );
+            assert!(compat_item.resolved_at.is_some());
         });
     }
 

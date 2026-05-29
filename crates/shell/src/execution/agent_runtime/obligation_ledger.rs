@@ -158,6 +158,14 @@ impl OrchestrationObligationRecord {
 
         Ok(())
     }
+
+    pub(crate) fn is_pending(&self) -> bool {
+        self.state.is_pending()
+    }
+
+    pub(crate) fn projects_detached_attention(&self) -> bool {
+        self.is_pending() && self.attention_required
+    }
 }
 
 #[cfg(test)]
