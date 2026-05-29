@@ -251,6 +251,14 @@ impl AgentControlFixture {
         ))
     }
 
+    fn load_obligation(&self, orchestration_session_id: &str, obligation_id: &str) -> Value {
+        read_json_file(&canonical_obligation_path(
+            &self.substrate_home,
+            orchestration_session_id,
+            obligation_id,
+        ))
+    }
+
     fn reset_fake_codex_state(&self) {
         let state_path = self
             .fake_codex
@@ -501,6 +509,18 @@ fn canonical_participant_manifest_path(
         .join(orchestration_session_id)
         .join("participants")
         .join(format!("{participant_id}.json"))
+}
+
+fn canonical_obligation_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    obligation_id: &str,
+) -> PathBuf {
+    substrate_home
+        .join("run/agent-hub/sessions")
+        .join(orchestration_session_id)
+        .join("obligations")
+        .join(format!("{obligation_id}.json"))
 }
 
 #[cfg(target_os = "linux")]
@@ -874,6 +894,50 @@ fn host_attach_contract_manifest(
         }).expect("serialize effective policy"),
         "continuity_uaa_session_id": format!("uaa-{orchestration_session_id}")
     })
+}
+
+fn write_obligation_record(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    obligation_id: &str,
+    kind: &str,
+    attach_state: &str,
+    attach_attempt_count: u64,
+    attach_claim_owner: Option<&str>,
+    attach_completion_reason: Option<&str>,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_obligation_path(
+            &fixture.substrate_home,
+            orchestration_session_id,
+            obligation_id,
+        ),
+        &json!({
+            "orchestration_session_id": orchestration_session_id,
+            "obligation_id": obligation_id,
+            "kind": kind,
+            "severity": "info",
+            "attention_required": true,
+            "state": "pending",
+            "review_state": "unread",
+            "attach_state": attach_state,
+            "attach_attempt_count": attach_attempt_count,
+            "attach_claim_owner": attach_claim_owner,
+            "attach_last_attempt_at": if attach_attempt_count > 0 { Value::String(ts.to_string()) } else { Value::Null },
+            "attach_completion_reason": attach_completion_reason,
+            "created_at": ts,
+            "updated_at": ts,
+            "resolved_at": Value::Null,
+            "summary": format!("summary for {obligation_id}"),
+            "resolution_note": Value::Null,
+            "source_participant_id": Value::Null,
+            "target_backend_id": "cli:codex",
+            "world_id": Value::Null,
+            "world_generation": Value::Null,
+            "payload": Value::Null
+        }),
+    );
 }
 
 fn write_active_orchestration_session(
@@ -2127,6 +2191,118 @@ fn public_reattach_uses_persisted_attach_continuity_selector_for_resume_args() {
 
     let owner_pid = fixture.load_orchestration_session("sess_resume_contract_args")
         ["shell_owner_pid"]
+        .as_u64()
+        .expect("reattach owner pid") as u32;
+    terminate_pid(owner_pid);
+}
+
+#[test]
+#[serial]
+fn public_reattach_settles_outstanding_auto_attach_claims_and_blocks_duplicate_launches() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_resume_auto_attach";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        "ash_resume_auto_attach",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_resume_auto_attach",
+        "codex",
+        orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-ambient-detached"),
+        None,
+        ts,
+    );
+    write_obligation_record(
+        &fixture,
+        orchestration_session_id,
+        "obl_claimed",
+        "blocked",
+        "claimed",
+        1,
+        Some("router::local"),
+        None,
+        ts,
+    );
+    write_obligation_record(
+        &fixture,
+        orchestration_session_id,
+        "obl_sibling",
+        "follow_up_required",
+        "eligible",
+        0,
+        None,
+        None,
+        ts,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "manual reattach should succeed with an outstanding auto-attach claim: {output:?}"
+    );
+
+    let claimed = fixture.load_obligation(orchestration_session_id, "obl_claimed");
+    assert_eq!(
+        claimed.get("attach_state").and_then(Value::as_str),
+        Some("satisfied")
+    );
+    assert_eq!(
+        claimed
+            .get("attach_completion_reason")
+            .and_then(Value::as_str),
+        Some("session_attach_restored_by_manual_reattach")
+    );
+    assert_eq!(
+        claimed.get("attach_claim_owner").and_then(Value::as_str),
+        Some("router::local")
+    );
+
+    let sibling = fixture.load_obligation(orchestration_session_id, "obl_sibling");
+    assert_eq!(
+        sibling.get("attach_state").and_then(Value::as_str),
+        Some("superseded")
+    );
+    assert_eq!(
+        sibling
+            .get("attach_completion_reason")
+            .and_then(Value::as_str),
+        Some("session_attach_restored_by_manual_reattach")
+    );
+
+    let duplicate = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        !duplicate.status.success(),
+        "reattach must fail once the same session is already actively attached: {duplicate:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(2).exists(),
+        "reattach must not launch a duplicate backend invocation after the same session is already attached"
+    );
+
+    let owner_pid = fixture.load_orchestration_session(orchestration_session_id)["shell_owner_pid"]
         .as_u64()
         .expect("reattach owner pid") as u32;
     terminate_pid(owner_pid);

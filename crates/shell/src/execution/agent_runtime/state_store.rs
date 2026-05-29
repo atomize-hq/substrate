@@ -15,11 +15,15 @@ use substrate_common::paths as substrate_paths;
 use crate::execution::config_model::AgentExecutionScope;
 
 use super::{
+    auto_attach::{
+        claimed_obligation_id, select_attach_candidate, SessionAutoAttachClaim,
+        SessionAutoAttachSettleResult,
+    },
     control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
-        OrchestrationObligationKind, OrchestrationObligationRecord,
-        OrchestrationObligationReviewState,
+        OrchestrationObligationAttachState, OrchestrationObligationKind,
+        OrchestrationObligationRecord, OrchestrationObligationReviewState,
     },
     orchestration_session::{
         HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -1503,6 +1507,131 @@ impl AgentRuntimeStateStore {
                 .then(left.obligation_id.cmp(&right.obligation_id))
         });
         Ok(obligations)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn claim_session_auto_attach(
+        &self,
+        orchestration_session_id: &str,
+        router_identity: &str,
+    ) -> Result<SessionAutoAttachClaim> {
+        if router_identity.trim().is_empty() {
+            anyhow::bail!("router-owned auto-attach claims must include a router_identity");
+        }
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            return Ok(SessionAutoAttachClaim::NoCandidate {
+                reason: "missing_session",
+            });
+        };
+        if record.session.state.is_terminal() {
+            return Ok(SessionAutoAttachClaim::NoCandidate {
+                reason: "terminal_session",
+            });
+        }
+        if record.session.posture == OrchestrationSessionPosture::ActiveAttached {
+            return Ok(SessionAutoAttachClaim::NoCandidate {
+                reason: "attached_host_present",
+            });
+        }
+        if record.session.host_attach_contract().is_none() {
+            return Ok(SessionAutoAttachClaim::NoCandidate {
+                reason: "missing_attach_contract",
+            });
+        }
+
+        let obligations = self.list_obligations(orchestration_session_id)?;
+        if let Some(obligation_id) = claimed_obligation_id(&obligations)? {
+            return Ok(SessionAutoAttachClaim::AlreadyClaimed {
+                obligation_id: obligation_id.to_string(),
+            });
+        }
+        let Some(candidate) = select_attach_candidate(&obligations) else {
+            return Ok(SessionAutoAttachClaim::NoCandidate {
+                reason: "no_eligible_obligations",
+            });
+        };
+
+        let mut claimed = candidate.clone();
+        claimed.mark_attach_claimed(router_identity, Utc::now());
+        self.validate_obligation_record(&claimed)?;
+        let path = self
+            .canonical_obligation_path(&claimed.orchestration_session_id, &claimed.obligation_id);
+        write_atomic_json(&path, &claimed)?;
+
+        Ok(SessionAutoAttachClaim::Claimed {
+            obligation_id: claimed.obligation_id,
+            attach_claim_owner: claimed
+                .attach_claim_owner
+                .expect("mark_attach_claimed must set attach_claim_owner"),
+        })
+    }
+
+    pub(crate) fn settle_session_auto_attach_after_attach_restored(
+        &self,
+        orchestration_session_id: &str,
+        completion_reason: &str,
+    ) -> Result<SessionAutoAttachSettleResult> {
+        if completion_reason.trim().is_empty() {
+            anyhow::bail!(
+                "session attach restoration must include an explanation-ready completion reason"
+            );
+        }
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            return Ok(SessionAutoAttachSettleResult::default());
+        };
+        if record.session.posture != OrchestrationSessionPosture::ActiveAttached {
+            return Ok(SessionAutoAttachSettleResult::default());
+        }
+
+        let obligations = self.list_obligations(orchestration_session_id)?;
+        let _ = claimed_obligation_id(&obligations)?;
+
+        let mut result = SessionAutoAttachSettleResult::default();
+        let settled_at = Utc::now();
+        for mut obligation in obligations {
+            if !obligation.is_pending() {
+                continue;
+            }
+
+            let changed = match obligation.attach_state {
+                OrchestrationObligationAttachState::Claimed => {
+                    obligation.mark_attach_satisfied(completion_reason, settled_at);
+                    result
+                        .satisfied_obligation_ids
+                        .push(obligation.obligation_id.clone());
+                    true
+                }
+                OrchestrationObligationAttachState::Eligible => {
+                    obligation.mark_attach_superseded(completion_reason, settled_at);
+                    result
+                        .superseded_obligation_ids
+                        .push(obligation.obligation_id.clone());
+                    true
+                }
+                OrchestrationObligationAttachState::NotEligible
+                | OrchestrationObligationAttachState::Satisfied
+                | OrchestrationObligationAttachState::FailedClosed
+                | OrchestrationObligationAttachState::Superseded => false,
+            };
+            if !changed {
+                continue;
+            }
+
+            self.validate_obligation_record(&obligation)?;
+            let path = self.canonical_obligation_path(
+                &obligation.orchestration_session_id,
+                &obligation.obligation_id,
+            );
+            write_atomic_json(&path, &obligation)?;
+        }
+
+        Ok(result)
     }
 
     pub(crate) fn set_orchestration_session_world_binding(
@@ -3531,6 +3660,206 @@ mod tests {
             assert!(err
                 .to_string()
                 .contains("resolved orchestration obligations must include resolved_at"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn claim_session_auto_attach_coalesces_to_one_claim_and_persists_metadata() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_auto_attach_claim", "ash_auto_attach");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let follow_up = pending_obligation(
+                "sess_auto_attach_claim",
+                "obl_follow_up",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            let approval = pending_obligation(
+                "sess_auto_attach_claim",
+                "obl_approval",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            store
+                .persist_obligation(&follow_up)
+                .expect("persist follow-up obligation");
+            store
+                .persist_obligation(&approval)
+                .expect("persist approval obligation");
+
+            let claim = store
+                .claim_session_auto_attach("sess_auto_attach_claim", "router::local")
+                .expect("claim auto attach");
+            assert_eq!(
+                claim,
+                SessionAutoAttachClaim::Claimed {
+                    obligation_id: "obl_approval".to_string(),
+                    attach_claim_owner: "router::local".to_string(),
+                }
+            );
+
+            let claimed = store
+                .load_obligation("sess_auto_attach_claim", "obl_approval")
+                .expect("load claimed obligation")
+                .expect("claimed obligation exists");
+            assert_eq!(
+                claimed.attach_state,
+                OrchestrationObligationAttachState::Claimed
+            );
+            assert_eq!(claimed.attach_attempt_count, 1);
+            assert_eq!(claimed.attach_claim_owner.as_deref(), Some("router::local"));
+            assert!(claimed.attach_last_attempt_at.is_some());
+            assert!(claimed.attach_completion_reason.is_none());
+
+            let sibling = store
+                .load_obligation("sess_auto_attach_claim", "obl_follow_up")
+                .expect("load sibling obligation")
+                .expect("sibling obligation exists");
+            assert_eq!(
+                sibling.attach_state,
+                OrchestrationObligationAttachState::Eligible
+            );
+
+            let second_claim = store
+                .claim_session_auto_attach("sess_auto_attach_claim", "router::second")
+                .expect("coalesced second claim");
+            assert_eq!(
+                second_claim,
+                SessionAutoAttachClaim::AlreadyClaimed {
+                    obligation_id: "obl_approval".to_string(),
+                }
+            );
+
+            let persisted = store
+                .load_obligation("sess_auto_attach_claim", "obl_approval")
+                .expect("reload claimed obligation")
+                .expect("claimed obligation persists");
+            assert_eq!(
+                persisted.attach_claim_owner.as_deref(),
+                Some("router::local")
+            );
+            assert_eq!(persisted.attach_attempt_count, 1);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn claim_session_auto_attach_fails_closed_when_multiple_claims_exist() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_auto_attach_invalid", "ash_auto_invalid");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let mut first = pending_obligation(
+                "sess_auto_attach_invalid",
+                "obl_first",
+                OrchestrationObligationKind::Blocked,
+            );
+            first.mark_attach_claimed("router::one", Utc::now());
+            store
+                .persist_obligation(&first)
+                .expect("persist first claimed obligation");
+
+            let mut second = pending_obligation(
+                "sess_auto_attach_invalid",
+                "obl_second",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            second.mark_attach_claimed("router::two", Utc::now());
+            store
+                .persist_obligation(&second)
+                .expect("persist second claimed obligation");
+
+            let err = store
+                .claim_session_auto_attach("sess_auto_attach_invalid", "router::local")
+                .expect_err("multiple active claims must fail closed");
+            assert!(err
+                .to_string()
+                .contains("multiple claimed auto-attach obligations"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn settling_attached_session_auto_attach_satisfies_claim_and_supersedes_siblings() {
+        with_store(|store| {
+            let participant =
+                live_orchestrator("codex", "sess_auto_attach_restored", "ash_auto_restored");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let mut claimed = pending_obligation(
+                "sess_auto_attach_restored",
+                "obl_claimed",
+                OrchestrationObligationKind::Blocked,
+            );
+            claimed.mark_attach_claimed("router::local", Utc::now());
+            store
+                .persist_obligation(&claimed)
+                .expect("persist claimed obligation");
+
+            let eligible = pending_obligation(
+                "sess_auto_attach_restored",
+                "obl_sibling",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            store
+                .persist_obligation(&eligible)
+                .expect("persist eligible sibling obligation");
+
+            let settled = store
+                .settle_session_auto_attach_after_attach_restored(
+                    "sess_auto_attach_restored",
+                    "session_attach_restored_by_test",
+                )
+                .expect("settle attached session auto attach");
+            assert_eq!(
+                settled.satisfied_obligation_ids,
+                vec!["obl_claimed".to_string()]
+            );
+            assert_eq!(
+                settled.superseded_obligation_ids,
+                vec!["obl_sibling".to_string()]
+            );
+
+            let claimed = store
+                .load_obligation("sess_auto_attach_restored", "obl_claimed")
+                .expect("load satisfied obligation")
+                .expect("satisfied obligation exists");
+            assert_eq!(
+                claimed.attach_state,
+                OrchestrationObligationAttachState::Satisfied
+            );
+            assert_eq!(
+                claimed.attach_completion_reason.as_deref(),
+                Some("session_attach_restored_by_test")
+            );
+            assert_eq!(claimed.attach_claim_owner.as_deref(), Some("router::local"));
+
+            let sibling = store
+                .load_obligation("sess_auto_attach_restored", "obl_sibling")
+                .expect("load superseded sibling")
+                .expect("superseded sibling exists");
+            assert_eq!(
+                sibling.attach_state,
+                OrchestrationObligationAttachState::Superseded
+            );
+            assert_eq!(
+                sibling.attach_completion_reason.as_deref(),
+                Some("session_attach_restored_by_test")
+            );
         });
     }
 

@@ -1,3 +1,4 @@
+pub(crate) mod auto_attach;
 pub(crate) mod control;
 pub(crate) mod dispatch_contract;
 pub(crate) mod mapping;
@@ -8,6 +9,7 @@ pub(crate) mod session;
 pub(crate) mod state_store;
 pub(crate) mod validator;
 
+pub(crate) use auto_attach::MANUAL_REATTACH_ATTACH_RESTORED_REASON;
 #[allow(unused_imports)]
 pub(crate) use control::{
     load_public_prompt_source, public_prompt_rendered_exit_code, run_public_prompt_command,

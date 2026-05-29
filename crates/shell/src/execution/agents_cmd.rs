@@ -46,7 +46,8 @@ use crate::execution::agent_runtime::{
     AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
     DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
     HostExecutionClientStart, PublicControlAction, PublicTurnTargetKind, ResolvedLaunchContract,
-    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    MANUAL_REATTACH_ATTACH_RESTORED_REASON, MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE,
+    PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentDoctorArgs, AgentOwnerHelperArgs,
@@ -914,6 +915,12 @@ fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
             receipt.orchestration_session_id
         )));
     }
+    store
+        .settle_session_auto_attach_after_attach_restored(
+            &receipt.orchestration_session_id,
+            MANUAL_REATTACH_ATTACH_RESTORED_REASON,
+        )
+        .map_err(runtime_start_error)?;
 
     render_agent_control_result(
         args.json,
