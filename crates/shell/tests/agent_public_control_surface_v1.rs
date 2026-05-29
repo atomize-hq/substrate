@@ -896,40 +896,41 @@ fn host_attach_contract_manifest(
     })
 }
 
-fn write_obligation_record(
-    fixture: &AgentControlFixture,
-    orchestration_session_id: &str,
-    obligation_id: &str,
-    kind: &str,
-    attach_state: &str,
+struct ObligationRecordSpec<'a> {
+    orchestration_session_id: &'a str,
+    obligation_id: &'a str,
+    kind: &'a str,
+    attach_state: &'a str,
     attach_attempt_count: u64,
-    attach_claim_owner: Option<&str>,
-    attach_completion_reason: Option<&str>,
-    ts: &str,
-) {
+    attach_claim_owner: Option<&'a str>,
+    attach_completion_reason: Option<&'a str>,
+    ts: &'a str,
+}
+
+fn write_obligation_record(fixture: &AgentControlFixture, spec: ObligationRecordSpec<'_>) {
     write_json_file(
         &canonical_obligation_path(
             &fixture.substrate_home,
-            orchestration_session_id,
-            obligation_id,
+            spec.orchestration_session_id,
+            spec.obligation_id,
         ),
         &json!({
-            "orchestration_session_id": orchestration_session_id,
-            "obligation_id": obligation_id,
-            "kind": kind,
+            "orchestration_session_id": spec.orchestration_session_id,
+            "obligation_id": spec.obligation_id,
+            "kind": spec.kind,
             "severity": "info",
             "attention_required": true,
             "state": "pending",
             "review_state": "unread",
-            "attach_state": attach_state,
-            "attach_attempt_count": attach_attempt_count,
-            "attach_claim_owner": attach_claim_owner,
-            "attach_last_attempt_at": if attach_attempt_count > 0 { Value::String(ts.to_string()) } else { Value::Null },
-            "attach_completion_reason": attach_completion_reason,
-            "created_at": ts,
-            "updated_at": ts,
+            "attach_state": spec.attach_state,
+            "attach_attempt_count": spec.attach_attempt_count,
+            "attach_claim_owner": spec.attach_claim_owner,
+            "attach_last_attempt_at": if spec.attach_attempt_count > 0 { Value::String(spec.ts.to_string()) } else { Value::Null },
+            "attach_completion_reason": spec.attach_completion_reason,
+            "created_at": spec.ts,
+            "updated_at": spec.ts,
             "resolved_at": Value::Null,
-            "summary": format!("summary for {obligation_id}"),
+            "summary": format!("summary for {}", spec.obligation_id),
             "resolution_note": Value::Null,
             "source_participant_id": Value::Null,
             "target_backend_id": "cli:codex",
@@ -2225,25 +2226,29 @@ fn public_reattach_settles_outstanding_auto_attach_claims_and_blocks_duplicate_l
     );
     write_obligation_record(
         &fixture,
-        orchestration_session_id,
-        "obl_claimed",
-        "blocked",
-        "claimed",
-        1,
-        Some("router::local"),
-        None,
-        ts,
+        ObligationRecordSpec {
+            orchestration_session_id,
+            obligation_id: "obl_claimed",
+            kind: "blocked",
+            attach_state: "claimed",
+            attach_attempt_count: 1,
+            attach_claim_owner: Some("router::local"),
+            attach_completion_reason: None,
+            ts,
+        },
     );
     write_obligation_record(
         &fixture,
-        orchestration_session_id,
-        "obl_sibling",
-        "follow_up_required",
-        "eligible",
-        0,
-        None,
-        None,
-        ts,
+        ObligationRecordSpec {
+            orchestration_session_id,
+            obligation_id: "obl_sibling",
+            kind: "follow_up_required",
+            attach_state: "eligible",
+            attach_attempt_count: 0,
+            attach_claim_owner: None,
+            attach_completion_reason: None,
+            ts,
+        },
     );
 
     let output = fixture.run(&[
