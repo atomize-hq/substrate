@@ -2416,7 +2416,16 @@ fn owner_helper_startup_extensions(
 ) -> std::result::Result<BTreeMap<String, serde_json::Value>, RuntimeBootstrapFailure> {
     match plan.mode {
         OwnerHelperMode::Start => Ok(BTreeMap::new()),
-        OwnerHelperMode::Attach | OwnerHelperMode::ResumeOneTurn => {
+        OwnerHelperMode::Attach => {
+            let Some(session_id) = plan.participant.internal_uaa_session_id.as_deref() else {
+                return Ok(BTreeMap::new());
+            };
+            Ok(BTreeMap::from([(
+                AGENT_API_SESSION_RESUME_V1.to_string(),
+                build_session_resume_extension(session_id),
+            )]))
+        }
+        OwnerHelperMode::ResumeOneTurn => {
             let session_id = plan
                 .participant
                 .internal_uaa_session_id
@@ -3221,7 +3230,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         });
     }
     let control = match if control_only_attach {
-        let continuity_session_id = startup_extensions
+        if let Some(continuity_session_id) = startup_extensions
             .get(AGENT_API_SESSION_RESUME_V1)
             .and_then(|value| value.as_object())
             .filter(|value| value.get("selector").and_then(serde_json::Value::as_str) == Some("id"))
@@ -3229,16 +3238,13 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             .and_then(serde_json::Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .map(ToOwned::to_owned)
-            .ok_or_else(|| RuntimeBootstrapFailure {
-                exit_code: 1,
-                message: format!(
-                    "missing {} id selector for control-only attach startup: {}",
-                    AGENT_API_SESSION_RESUME_V1, runtime_role
-                ),
-            })?;
-        prompt_fulfillment
-            .run_attach_control(&continuity_session_id)
-            .await
+        {
+            prompt_fulfillment
+                .run_attach_control(&continuity_session_id)
+                .await
+        } else {
+            prompt_fulfillment.run_fresh_attach_control().await
+        }
     } else {
         let request = agent_api::AgentWrapperRunRequest {
             prompt: match initial_prompt.as_ref() {
@@ -7965,6 +7971,10 @@ mod tests {
         HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
     };
     #[cfg(unix)]
+    use crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs;
+    #[cfg(unix)]
+    use crate::execution::agent_runtime::orchestration_session::HostAttachModePreference;
+    #[cfg(unix)]
     use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
     #[cfg(unix)]
     use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
@@ -9402,6 +9412,63 @@ mod tests {
             .await;
         });
         std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn hidden_owner_helper_attach_startup_allows_fresh_attach_without_continuity() {
+        let mut plan = super::HiddenOwnerHelperLaunchPlan {
+            mode: super::OwnerHelperMode::Attach,
+            descriptor: super::ResolvedRuntimeDescriptor::from(&test_runtime_selection_descriptor()),
+            session: HiddenOwnerHelperSessionPlan {
+                orchestration_session_id: "orch-attach-fresh".to_string(),
+                shell_trace_session_id: "trace-attach-fresh".to_string(),
+                workspace_root: "/workspace".to_string(),
+                world_id: None,
+                world_generation: None,
+            },
+            participant: HiddenOwnerHelperParticipantPlan {
+                participant_id: "ash-attach-fresh".to_string(),
+                lease_token: "lease-attach-fresh".to_string(),
+                run_id: "run-attach-fresh".to_string(),
+                resumed_from_participant_id: Some("ash-source".to_string()),
+                internal_uaa_session_id: None,
+            },
+            host_attach_contract: Some(HostAttachContract {
+                continuity_uaa_session_id: None,
+                attach_launch_knobs: HostAttachLaunchKnobs {
+                    attach_mode_preference: HostAttachModePreference::FreshAllowed,
+                    ..HostAttachLaunchKnobs::default()
+                },
+                ..HostAttachContract::from_manifest_for_test(
+                    &AgentRuntimeSessionManifest::new_orchestrator_participant(
+                        &test_runtime_selection_descriptor(),
+                        "orch-attach-fresh".to_string(),
+                        "ash-attach-fresh".to_string(),
+                        "lease-attach-fresh".to_string(),
+                    )
+                    .expect("manifest"),
+                )
+                .expect("fresh attach contract")
+            }),
+            startup_prompt: None,
+            source_orchestration_session_id: Some("orch-source".to_string()),
+        };
+        assert!(!plan.requires_internal_session_id());
+        let startup_extensions =
+            owner_helper_startup_extensions(&plan).expect("fresh attach extensions should resolve");
+        assert!(
+            startup_extensions.is_empty(),
+            "fresh attach must not require a resume extension when continuity is absent: {startup_extensions:?}"
+        );
+        plan.participant.internal_uaa_session_id = Some("uaa-resume".to_string());
+        let startup_extensions = owner_helper_startup_extensions(&plan)
+            .expect("attach with continuity extensions should resolve");
+        assert!(
+            startup_extensions.contains_key(AGENT_API_SESSION_RESUME_V1),
+            "attach with continuity should still publish the resume extension: {startup_extensions:?}"
+        );
     }
 
     #[cfg(unix)]

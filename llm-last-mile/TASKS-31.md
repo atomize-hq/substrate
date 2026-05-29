@@ -130,8 +130,9 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Route automatic attach through persisted-truth continuity-first and fresh-fallback execution
+- [x] Task 4.1: Route automatic attach through persisted-truth continuity-first and fresh-fallback execution
   - Acceptance: automatic attach resolves through persisted attach truth, prefers continuity when valid, falls back to fresh attach only when continuity is unavailable but persisted truth remains valid, and fails closed before backend launch when attach truth is missing, drifted, or disallowed.
+  - 2026-05-29 implementation note: router-owned automatic attach now reuses the shared hidden-owner-helper launch path, resolves persisted attach truth through the narrowing-only contract resolver, and has explicit planner coverage for continuity-first, fresh-fallback, and missing-continuity fail-closed cases. The Codex wrapper still rejects a prompt-free fresh control attach at runtime, so the fresh path is currently verified at the planner/bootstrap seam rather than claimed as end-to-end prompt-free Codex runtime coverage.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
@@ -139,8 +140,9 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/auto_attach.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/auto_attach.rs)
     - [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 
-- [ ] Task 4.2: Preserve fail-closed world follow-up and operator-visible recovery guidance
+- [x] Task 4.2: Preserve fail-closed world follow-up and operator-visible recovery guidance
   - Acceptance: detached or never-attached-yet world follow-up remains non-routable until sanctioned host attach succeeds; operator-facing errors continue to direct users through `reattach`; status and toolbox surfaces stay coherent under the new obligation-ledger truth.
+  - 2026-05-29 implementation note: manual and automatic attach now share the same durable launch authority path, fresh attach preparation no longer fabricates resume-only startup extensions, and the successor/public-control suites keep detached follow-up and operator recovery surfaces fail-closed until ownership is restored.
   - Verify: `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
@@ -149,6 +151,7 @@ Session goal:
 
 - [ ] Task 4.3: Align planning docs and run the full validation wall
   - Acceptance: slice-31 docs match the landed specialized-path contract, including obligation-ledger authority, router-owned attach, continuity-first/fresh-fallback execution, and fail-closed world follow-up; format, lint, targeted suites, and full workspace tests pass; Linux manual smoke evidence is recorded.
+  - 2026-05-29 status note: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, both targeted shell suites, and `cargo test --workspace -- --nocapture` are green. Linux manual smoke evidence was not captured in this session, so the closeout records automated validation complete with manual smoke still pending.
   - Verify:
     - `cargo fmt --all -- --check`
     - `cargo clippy --workspace --all-targets -- -D warnings`

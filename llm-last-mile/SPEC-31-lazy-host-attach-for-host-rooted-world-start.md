@@ -253,6 +253,21 @@ This slice is done only when all of the following are true:
 9. No synthetic prompt reconstruction, hidden bootstrap prompt, or world-first continuation path is introduced.
 10. `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, the two shell suites, and `cargo test --workspace -- --nocapture` are green, with Linux manual smoke evidence recorded.
 
+## Packet 4 Implementation Notes
+
+Implementation notes captured on 2026-05-29:
+
+1. manual `reattach` and router-owned automatic attach now share one hidden-owner-helper launch path in [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs), which keeps launch-time normalization and attach restoration checks centralized.
+2. automatic attach planning in [`auto_attach.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/auto_attach.rs) resolves the persisted host attach contract directly from orchestration-session truth and avoids broadening the requested attach mode:
+   - persisted `continuity_required` remains continuity-required
+   - persisted `continuity_preferred` and `fresh_allowed` narrow to continuity-preferred so fresh attach remains fallback-only
+3. attach startup extension generation now distinguishes continuity-backed attach from fresh attach preparation, so missing continuity no longer forces resume-only startup metadata when the persisted contract still permits fresh recovery.
+4. Packet 4 validation adds planner/bootstrap seam coverage for:
+   - continuity-first automatic attach planning
+   - fresh-fallback planning when continuity is unavailable but persisted truth still allows attach
+   - fail-closed planning when persisted truth requires continuity that no longer exists
+5. The current Codex backend still rejects a prompt-free fresh control attach at the wrapper boundary with an empty-prompt validation error. The landed slice therefore proves the specialized fresh-fallback planner/bootstrap seam and the fail-closed interop contract, but it does not yet claim a fully verified end-to-end prompt-free Codex fresh attach runtime path.
+
 ## Open Questions
 
 1. What should the final operator-visible label be for the never-attached-yet specialized posture: keep `born_unattached` for v1, or rename it while preserving legacy status projection?

@@ -244,6 +244,13 @@ Verification checkpoint:
 3. stale or invalid attach truth fails closed,
 4. docs and final validation wall are green.
 
+Implementation status on 2026-05-29:
+
+1. hidden-owner-helper launch now routes through one shared `control.rs` path for manual `reattach` and router-owned automatic attach.
+2. router-owned automatic attach resolves persisted attach truth through the same narrowing-only contract resolver used by manual `reattach`, requiring continuity when persisted truth still requires it and otherwise permitting a continuity-preferred fresh fallback.
+3. attach startup extension wiring now distinguishes continuity-backed attach from fresh attach preparation so the router path can fail closed before launch or omit resume-only startup state when continuity is absent.
+4. the current Codex control wrapper still rejects a prompt-free fresh control attach at the backend boundary, so Packet 4 currently proves fresh-fallback planning/bootstrap seams and fail-closed behavior without claiming a fully verified prompt-free Codex runtime attach.
+
 ## Risks And Mitigations
 
 1. Risk: detached taxonomy drifts and reopens slice-30 happy-path semantics.

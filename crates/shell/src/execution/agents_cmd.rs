@@ -7,15 +7,12 @@ use crate::execution::agent_runtime::control::request_private_stop;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::PersistedWorldBinding;
 use crate::execution::agent_runtime::control::{
-    hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
-    load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
+    launch_hidden_owner_helper, load_hidden_owner_helper_launch_plan, load_public_prompt_source,
     persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
-    reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
-    run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
-    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
-    HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
-    PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
-    HIDDEN_OWNER_HELPER_SUBCOMMAND,
+    remove_hidden_owner_helper_launch_plan, run_public_prompt_command, HiddenOwnerHelperLaunchPlan,
+    HiddenOwnerHelperLaunchReceipt, HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+    OwnerHelperMode, PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput,
+    PublicSessionPosture,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
@@ -70,7 +67,7 @@ use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
 use std::thread;
@@ -274,97 +271,6 @@ fn run_owner_helper(args: &AgentOwnerHelperArgs) -> Result<i32> {
     crate::repl::async_repl::run_hidden_owner_helper(plan)
 }
 
-#[allow(dead_code)]
-#[derive(Clone, Debug)]
-pub(crate) struct HiddenOwnerHelperLaunchReceipt {
-    pub helper_pid: u32,
-    pub orchestration_session_id: String,
-    pub participant_id: String,
-    pub backend_id: String,
-}
-
-#[allow(dead_code)]
-pub(crate) fn launch_hidden_owner_helper(
-    plan: &HiddenOwnerHelperLaunchPlan,
-    cli: &Cli,
-) -> Result<HiddenOwnerHelperLaunchReceipt> {
-    let store = AgentRuntimeStateStore::new()?;
-    let plan_path = persist_hidden_owner_helper_launch_plan(&store, plan)?;
-    let exe = env::current_exe()
-        .context("failed to resolve current substrate executable for hidden owner-helper launch")?;
-    let mut command = Command::new(exe);
-    if cli.world {
-        command.arg("--world");
-    } else if cli.no_world {
-        command.arg("--no-world");
-    }
-    command
-        .args(["agent", HIDDEN_OWNER_HELPER_SUBCOMMAND, "--plan-file"])
-        .arg(&plan_path)
-        .current_dir(&plan.session.workspace_root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-
-    let mut child = command.spawn().with_context(|| {
-        format!(
-            "failed to spawn hidden owner-helper for orchestration session {}",
-            plan.session.orchestration_session_id
-        )
-    })?;
-    if let Err(err) = wait_for_hidden_owner_helper_readiness(&store, plan) {
-        let reconciled = if plan.mode == OwnerHelperMode::Start
-            && hidden_owner_helper_readiness_timed_out(&err)
-        {
-            Some(reconcile_hidden_owner_helper_start_timeout(&store, plan))
-        } else {
-            None
-        };
-        match reconciled {
-            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::Success)) => {}
-            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureMarkedTerminal)) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
-                return Err(anyhow::anyhow!(
-                    "{}; persisted terminal startup failure for orchestration session {}",
-                    err,
-                    plan.orchestration_session_id(),
-                ));
-            }
-            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged)) | None => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
-                return Err(err);
-            }
-            Some(Err(reconcile_err)) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
-                return Err(anyhow::anyhow!(
-                    "{}; additionally failed to reconcile persisted startup state: {reconcile_err:#}",
-                    err
-                ));
-            }
-        }
-    }
-    #[cfg(unix)]
-    if let Err(err) = stabilize_hidden_owner_helper_start_return(&store, plan, &mut child) {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
-        return Err(err);
-    }
-
-    Ok(HiddenOwnerHelperLaunchReceipt {
-        helper_pid: child.id(),
-        orchestration_session_id: plan.session.orchestration_session_id.clone(),
-        participant_id: plan.participant.participant_id.clone(),
-        backend_id: plan.descriptor.backend_id.clone(),
-    })
-}
-
 const AGENT_CONTROL_STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 const AGENT_CONTROL_STOP_WAIT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -472,7 +378,8 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
             stream_path: startup_listener.path().to_path_buf(),
         });
 
-        let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+        let receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
+            .map_err(runtime_start_error)?;
         match stream_start_result(startup_listener) {
             Ok(()) => wait_for_start_completion_for_scope(
                 &store,
@@ -506,8 +413,8 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                     prompt_text: prompt.prompt_text,
                     stream_path: retry_listener.path().to_path_buf(),
                 });
-                let retry_receipt =
-                    launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+                let retry_receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
+                    .map_err(runtime_start_error)?;
                 stream_start_result(retry_listener).map_err(normalize_public_prompt_error)?;
                 wait_for_start_completion_for_scope(
                     &store,
@@ -526,92 +433,6 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
             }
             Err(err) => Err(normalize_public_prompt_error(err)),
         }
-    }
-}
-
-#[cfg(unix)]
-fn stabilize_hidden_owner_helper_start_return(
-    store: &AgentRuntimeStateStore,
-    plan: &HiddenOwnerHelperLaunchPlan,
-    child: &mut std::process::Child,
-) -> Result<()> {
-    if plan.mode != OwnerHelperMode::Start {
-        return Ok(());
-    }
-
-    let grace_started_at = std::time::Instant::now();
-    loop {
-        if matches!(
-            store.classify_hidden_owner_helper_launch_readiness(
-                plan.orchestration_session_id(),
-                plan.participant_id(),
-                plan.requires_internal_session_id(),
-            )?,
-            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
-        ) {
-            return Ok(());
-        }
-        if child
-            .try_wait()
-            .context("failed to poll hidden owner-helper exit status")?
-            .is_some()
-        {
-            break;
-        }
-        if grace_started_at.elapsed() >= START_ATTACHED_GRACE_TIMEOUT {
-            return Ok(());
-        }
-        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
-    }
-
-    let normalization_started_at = std::time::Instant::now();
-    loop {
-        if matches!(
-            store.classify_hidden_owner_helper_launch_readiness(
-                plan.orchestration_session_id(),
-                plan.participant_id(),
-                plan.requires_internal_session_id(),
-            )?,
-            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
-        ) {
-            return Ok(());
-        }
-
-        if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
-            match reconcile_hidden_owner_helper_start_timeout(store, plan) {
-                Ok(HiddenOwnerHelperStartTimeoutReconciliation::Success) => return Ok(()),
-                Ok(
-                    HiddenOwnerHelperStartTimeoutReconciliation::FailureMarkedTerminal
-                    | HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged,
-                ) => {}
-                Err(reconcile_err) => {
-                    anyhow::bail!(
-                        "timed out waiting for detached start normalization for orchestration session {} after hidden owner-helper {} exited; additionally failed to reconcile persisted startup state: {reconcile_err:#}",
-                        plan.orchestration_session_id(),
-                        child.id(),
-                    );
-                }
-            }
-            let snapshot_summary = store
-                .load_orchestration_session(plan.orchestration_session_id())?
-                .map(|session| {
-                    format!(
-                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
-                        session.state,
-                        session.posture,
-                        session.attached_participant_id,
-                        session.shell_owner_pid,
-                    )
-                })
-                .unwrap_or_else(|| "session_missing".to_string());
-            anyhow::bail!(
-                "timed out waiting for detached start normalization for orchestration session {} after hidden owner-helper {} exited ({snapshot_summary})",
-                plan.orchestration_session_id(),
-                child.id(),
-            );
-        }
-
-        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
     }
 }
 
@@ -819,7 +640,8 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             prompt_text: prompt.prompt_text.clone(),
             stream_path: startup_listener.path().to_path_buf(),
         });
-        let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+        let receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
+            .map_err(runtime_start_error)?;
         run_hidden_owner_helper_startup_prompt_stream_with_action(
             startup_listener,
             args.json,
@@ -894,7 +716,8 @@ fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
         OwnerHelperMode::Attach,
         false,
     )?;
-    let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+    let receipt =
+        launch_hidden_owner_helper(&plan, cli.world, cli.no_world).map_err(runtime_start_error)?;
     if receipt.orchestration_session_id != args.session {
         anyhow::bail!(runtime_start_error(anyhow::anyhow!(
             "hidden owner-helper attached orchestration session {} instead of requested session {}",
