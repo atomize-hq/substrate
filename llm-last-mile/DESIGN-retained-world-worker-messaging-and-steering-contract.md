@@ -1,6 +1,6 @@
 # Design: Retained World Worker Messaging and Steering Contract
 
-Status: draft design input. This document defines the missing retained world-worker messaging and steering contract that sits above the dispatch-allocation contract and below the later durable notification/inbox contract. It is not a public human UX design. It freezes how host orchestrators and retained world workers exchange turns, steering signals, progress, approvals, escalation requests, and fork requests.
+Status: draft design input. This document defines the missing retained world-worker messaging and steering contract that sits above the dispatch-allocation contract and below the later durable orchestration obligation ledger plus its review/attach projections. It is not a public human UX design. It freezes how host orchestrators and retained world workers exchange turns, steering signals, progress, approvals, escalation requests, and fork requests.
 
 ## Why This Doc Exists
 
@@ -10,7 +10,7 @@ That gap matters because the architecture now assumes all of the following:
 
 1. host orchestrators dispatch and steer world work through a control plane,
 2. retained world workers may asynchronously re-engage the host,
-3. `awaiting_attention` is driven by durable unresolved world-orchestration events,
+3. `awaiting_attention` is driven by durable unresolved orchestration obligations,
 4. world-worker fork may be initiated by the host or requested by the worker.
 
 Without a frozen messaging contract, lifecycle, inbox, and policy docs will drift.
@@ -49,7 +49,7 @@ This design freezes the following:
 This design does not:
 
 1. define the later human direct-message surface for world workers,
-2. define the final durable inbox artifact schema on disk,
+2. define the final durable obligation artifact schema on disk,
 3. define the full transport wire encoding or Rust type names,
 4. redefine public host-session `fork`,
 5. permit fuzzy routing or heuristic target selection.
@@ -174,7 +174,7 @@ WorldWorkerEventV1
 4. `event_class`
    - explicit typed class, never inferred from free text.
 5. `attention_required`
-   - explicit signal for later durable attention/inbox behavior.
+   - explicit signal for later durable obligation, review, and attach behavior.
 6. `payload`
    - typed by event class.
 
@@ -360,9 +360,9 @@ Used for:
 3. blocked states,
 4. attention-required events,
 5. fork requests or recommendations,
-6. result/failure notifications that must survive host detachment.
+6. result/failure obligations that must survive host detachment.
 
-The durable notification/inbox contract will define the exact on-disk representation later. This design only freezes which event classes need that durable path.
+The durable obligation-ledger design will define the canonical on-disk representation later. This design only freezes which event classes need that durable path.
 
 ## Attention Semantics
 
@@ -370,7 +370,7 @@ A retained worker event may set `attention_required=true`.
 
 That should mean:
 
-1. the event is eligible to drive durable attention/inbox state,
+1. the event is eligible to drive durable obligation state,
 2. the host session may move to `awaiting_attention`,
 3. the event is not equivalent to immediate prompt injection into the host agent.
 
@@ -437,5 +437,5 @@ The first shippable retained-worker messaging contract should therefore be:
 This messaging contract should feed directly into:
 
 1. the retained worker lifecycle design,
-2. the durable notification/inbox design,
+2. the durable obligation-ledger and review-projection designs,
 3. the host-to-world steering policy matrix.

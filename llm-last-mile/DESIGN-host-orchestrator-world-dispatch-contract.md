@@ -62,7 +62,7 @@ This design does not:
 2. turn the current toolbox into a general execution surface,
 3. introduce fuzzy routing or backend heuristics,
 4. replace the existing world-member runtime seam with generic tool execution,
-5. define the durable notification/inbox payload schema in full,
+5. define the durable obligation-ledger payload schema in full,
 6. define the full policy schema in final implementation syntax.
 
 ## Current Gap: No Frozen Steering Contract Exists Yet
@@ -294,7 +294,7 @@ Rules:
 
 1. `needs_retained_followup` is valid only for ephemeral work.
 2. `needs_retained_followup` is a terminal escalation recommendation, not silent promotion.
-3. retained workers may additionally emit non-terminal world-to-host notifications through the later durable inbox/notification contract.
+3. retained workers may additionally emit non-terminal world-to-host obligations through the later durable obligation-ledger and review-projection designs.
 4. successful `fork_world_worker` allocation must surface distinct child worker identity and lineage rather than reporting the source worker as if it had continued in place.
 
 ## Exact Identity Rules
@@ -426,7 +426,7 @@ The first shippable host-orchestrator world-dispatch contract should therefore b
 This document intentionally leaves three follow-on designs to separate docs:
 
 1. world participant lifecycle model for `ephemeral` versus `retained`,
-2. durable orchestration notification/inbox contract for world-to-host re-engagement,
+2. durable orchestration obligation-ledger plus review/attach projection contracts for world-to-host re-engagement,
 3. policy matrix for host-to-world steering.
 
 Those follow-on docs should consume this dispatch contract rather than redefining it.

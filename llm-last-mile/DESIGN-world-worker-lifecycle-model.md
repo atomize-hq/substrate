@@ -28,8 +28,9 @@ This design composes with:
 1. [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md): explicit mode and action selection.
 2. [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md): conversational and operational message classes plus worker fork requests.
 3. [ADR-0047](../docs/adr/implemented/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md): host-session durable authority and `awaiting_attention` posture.
-4. [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md): durable host posture and inbox-driven host attention semantics.
-5. [11-in-world-member-dispatch-over-existing-host-world-transport.md](./11-in-world-member-dispatch-over-existing-host-world-transport.md): world-side agent execution remains agent-native.
+4. [DESIGN-durable-orchestration-obligation-ledger.md](./DESIGN-durable-orchestration-obligation-ledger.md): canonical durable obligation truth and host-posture derivation.
+5. [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md): durable host posture and deferred host-review semantics.
+6. [11-in-world-member-dispatch-over-existing-host-world-transport.md](./11-in-world-member-dispatch-over-existing-host-world-transport.md): world-side agent execution remains agent-native.
 
 ## Problem Statement
 
@@ -57,7 +58,7 @@ This design freezes the following:
 This design does not:
 
 1. define the final storage schema for world-worker records,
-2. define the final durable notification/inbox artifact shape,
+2. define the final durable obligation artifact shape,
 3. define public user-facing commands for inspecting world-worker lifecycle directly,
 4. replace exact identity routing with fuzzy worker selection,
 5. redefine public host-session `fork`.
@@ -233,7 +234,7 @@ This design must keep worker lifecycle state distinct from host-session posture.
 ### Host posture answers
 
 1. is a host execution client attached?
-2. does the orchestration session have unresolved notifications?
+2. does the orchestration session have unresolved obligations?
 3. is the host session routable?
 
 ### Hard rule
@@ -262,7 +263,7 @@ Retained workers should move into `attention_pending` when they emit an unresolv
 
 1. the worker must remain exact-identity routable unless later invalidated or stopped,
 2. no synthetic prompt may be injected into the host,
-3. the event becomes eligible for durable notification/inbox persistence,
+3. the event becomes eligible for durable obligation persistence,
 4. host response through a sanctioned message path may move the worker back to `running` or `parked`.
 
 ## Parked Semantics
@@ -387,7 +388,7 @@ The host orchestration session remains the durable authority root.
 
 Retained workers may influence:
 
-1. durable notification/inbox creation,
+1. durable obligation creation and its review/attach projections,
 2. host-session `awaiting_attention`,
 3. world-worker lineage graph under the same session,
 4. later exact-target continuation options.
@@ -455,6 +456,6 @@ The first shippable world-worker lifecycle model should therefore be:
 
 This lifecycle design should feed directly into:
 
-1. the durable notification/inbox contract,
+1. the durable obligation-ledger and review-projection contracts,
 2. the host-to-world steering policy matrix,
 3. later implementation planning for worker records and runtime state persistence.

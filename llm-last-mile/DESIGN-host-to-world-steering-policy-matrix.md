@@ -1,6 +1,6 @@
 # Design: Host-To-World Steering Policy Matrix
 
-Status: draft design input. This document defines the policy matrix for host-orchestrator control of world-side agent work after the dispatch, messaging, lifecycle, and durable notification contracts have been frozen. It is not a final config-schema document. It freezes the policy categories, decision axes, default posture, and minimum gating rules that any implementation must honor.
+Status: draft design input. This document defines the policy matrix for host-orchestrator control of world-side agent work after the dispatch, messaging, lifecycle, and durable obligation-ledger contracts have been frozen. It is not a final config-schema document. It freezes the policy categories, decision axes, default posture, and minimum gating rules that any implementation must honor.
 
 ## Why This Doc Exists
 
@@ -9,7 +9,7 @@ The other design docs now define:
 1. how host orchestrators allocate world work,
 2. how retained workers exchange messages with the host,
 3. how worker lifecycle behaves,
-4. how durable notifications and `awaiting_attention` work.
+4. how durable obligations and `awaiting_attention` work.
 
 What is still missing is one explicit answer to:
 
@@ -35,9 +35,10 @@ This design composes with:
 1. [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md): action vocabulary, exact identity, and explicit mode.
 2. [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md): retained-worker message classes, fork requests, and operational steering.
 3. [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md): worker lifecycle states and invalidation semantics.
-4. [DESIGN-durable-orchestration-notification-inbox-contract.md](./DESIGN-durable-orchestration-notification-inbox-contract.md): attention-driving durable notification kinds and resolution behavior.
-5. [ADR-0026](../docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md) and [ADR-0045](../docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md): the future toolbox remains an internal control-plane surface rather than a second execution plane.
-6. [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](./29-shared-agent-dispatch-envelope-and-capability-override-contract.md): capability narrowing remains restriction-only.
+4. [DESIGN-durable-orchestration-obligation-ledger.md](./DESIGN-durable-orchestration-obligation-ledger.md): canonical durable obligation kinds and attach/review substates.
+5. [DESIGN-durable-orchestration-notification-inbox-contract.md](./DESIGN-durable-orchestration-notification-inbox-contract.md): review/inbox projection and attention behavior.
+6. [ADR-0026](../docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md) and [ADR-0045](../docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md): the future toolbox remains an internal control-plane surface rather than a second execution plane.
+7. [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](./29-shared-agent-dispatch-envelope-and-capability-override-contract.md): capability narrowing remains restriction-only.
 
 ## Problem Statement
 
@@ -278,10 +279,10 @@ agents.world_dispatch.fork.recommendations_allowed
 agents.world_dispatch.fork.auto_fork_allowed
 agents.world_dispatch.fork.max_children_per_worker
 
-agents.world_dispatch.notifications.follow_up_allowed
-agents.world_dispatch.notifications.approval_allowed
-agents.world_dispatch.notifications.blocked_allowed
-agents.world_dispatch.notifications.fork_request_allowed
+agents.world_dispatch.obligations.follow_up_allowed
+agents.world_dispatch.obligations.approval_allowed
+agents.world_dispatch.obligations.blocked_allowed
+agents.world_dispatch.obligations.fork_request_allowed
 ```
 
 This is not a final key-path freeze. It is the minimum policy dimensionality the repo should preserve.
@@ -429,7 +430,7 @@ Separate policy should be able to gate whether workers may:
 
 1. ask follow-up questions,
 2. request approvals,
-3. emit blocked notifications,
+3. emit blocked obligations,
 4. emit fork requests.
 
 This matters because some worker roles may be allowed to:
