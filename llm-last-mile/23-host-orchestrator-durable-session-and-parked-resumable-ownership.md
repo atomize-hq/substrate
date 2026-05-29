@@ -4,7 +4,22 @@ Status: implementation-oriented follow-on draft. This SOW expands and operationa
 
 The public verbs are already the right verbs: `substrate agent start`, `substrate agent turn`, `substrate agent reattach`, and `substrate agent stop`. The missing work is not new routing syntax. The missing work is durable lifecycle truth: Substrate must own the orchestration session as the durable authority, while a Codex or equivalent backend process is only an attachable execution client that may exit cleanly without invalidating the session.
 
-This SOW deliberately covers more than posture naming. It pulls in the ADR's full runtime-state contract, durable inbox requirements, resolved `reattach` and compaction decisions, greenfield state-adoption rules, and the operator/test obligations required to make the new lifecycle model real.
+This SOW deliberately covers more than posture naming. It pulls in the ADR's full runtime-state contract, deferred host-work durability requirements, resolved `reattach` and compaction decisions, greenfield state-adoption rules, and the operator/test obligations required to make the new lifecycle model real.
+
+## Current Design Alignment
+
+This SOW predates the newer durable-obligation pivot frozen in:
+
+- [DESIGN-durable-orchestration-obligation-ledger.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-durable-orchestration-obligation-ledger.md)
+- [DESIGN-durable-orchestration-notification-inbox-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-durable-orchestration-notification-inbox-contract.md)
+- [DESIGN-auto-attach-trigger-and-work-queue-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-auto-attach-trigger-and-work-queue-contract.md)
+
+Read this document accordingly:
+
+- the host-session ownership and posture model here is still directionally relevant,
+- references below to per-session durable `inbox/` artifacts and `pending_inbox_count` describe the narrower landed runtime shape from this planning phase,
+- the preferred forward artifact model is now one canonical session-local obligation ledger, with inbox/review and auto-attach handled as projections over the same obligation record,
+- and this document should no longer be treated as the source of truth for the long-term deferred-work artifact shape.
 
 ## Objective
 
@@ -13,7 +28,7 @@ Make host orchestration durable across clean prompt-driven backend exits by:
 - preserving the public `start|turn|reattach|stop` contract exactly as already landed,
 - making the Substrate-owned orchestration session, not the attached client process, the durable authority,
 - introducing explicit host postures for `active_attached`, `parked_resumable`, `awaiting_attention`, and `terminal`,
-- persisting world-originated approvals, completion notices, follow-up messages, and runtime alerts in a session-local durable inbox,
+- persisting world-originated approvals, completion notices, follow-up messages, and runtime alerts as session-local durable obligations, with inbox/review handled as a projection,
 - making `turn` and `reattach` resume valid parked host sessions without fuzzy recovery,
 - tightening the public prompt bridge so every request that emits `Accepted` also emits an explicit `Completed` or `Failed`,
 - and standardizing the internal runtime-state schema and filesystem layout needed to make those guarantees authoritative from first write.
@@ -28,7 +43,7 @@ The public surface already looks durable, but the runtime still behaves too much
 - `OrchestrationSessionRecord` still only models `Allocating | Active | Invalidated | Stopping | Stopped | Failed` in [orchestration_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:7), which is insufficient to express “valid but detached and resumable.”
 - Participant liveness still leans on attachment diagnostics such as `control_owner_retained`, `event_stream_active`, `completion_observer_retained`, and `terminal_observed_at` in [session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs:81).
 - The existing REPL test `start_host_orchestrator_runtime_invalidates_when_attached_control_exits()` in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:7335) documents the current lifecycle bias directly: clean attached-client exit still tends to collapse into invalidation rather than a valid parked session.
-- World follow-up already depends on resumption plumbing such as `build_session_resume_extension(...)` in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:35), but there is still no first-class Substrate-owned durable inbox or parked-host posture separating “no client attached right now” from “session is dead.”
+- World follow-up already depends on resumption plumbing such as `build_session_resume_extension(...)` in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:35), but there is still no first-class Substrate-owned durable obligation model or parked-host posture separating “no client attached right now” from “session is dead.”
 
 The result is a contract mismatch:
 
@@ -59,11 +74,11 @@ In scope:
 
 - define a durable host orchestration session model that survives clean attached-client exit,
 - persist explicit host posture independently from raw lifecycle state,
-- add a canonical session-local durable inbox under the session root,
+- add a canonical session-local durable deferred-work model under the session root,
 - standardize additive session and participant metadata required for parked/resumable ownership,
 - make `turn` and `reattach` resume valid parked host sessions without fuzzy routing,
 - preserve detached-world fail-closed behavior while broadening host durability,
-- make resolved inbox retention and later compaction explicit rather than implicit,
+- make resolved deferred-work retention and later compaction explicit rather than implicit,
 - require greenfield runtime-state writers to adopt the new session-root contract from first write,
 - and update tests and operator-facing docs so the new lifecycle truth is externally provable.
 
@@ -96,7 +111,7 @@ This slice must not rename, broaden, or overload those verbs.
 
 ### 2. The durable authority is the orchestration session, not the attached client
 
-After a session is created successfully, clean exit of the prompt-driven host client must not automatically mean orchestration loss. The durable authority is the Substrate-owned session record, participant state, and durable inbox/task state.
+After a session is created successfully, clean exit of the prompt-driven host client must not automatically mean orchestration loss. The durable authority is the Substrate-owned session record, participant state, and durable deferred-work state. In the current forward design, that deferred-work state is the session-local obligation ledger, not a standalone inbox artifact.
 
 An attached Codex or equivalent backend process is:
 
@@ -117,7 +132,7 @@ The runtime must expose semantics equivalent to:
 - `terminal`
   - the orchestration session is no longer routable
 
-`awaiting_attention` may be persisted directly or derived from `pending_inbox_count > 0`, but the operator-visible behavior must exist and the persisted authority must be unambiguous.
+`awaiting_attention` may be persisted directly or derived from unresolved attention-driving obligations. The currently landed runtime may continue to surface that through `pending_inbox_count`, but that field should now be read as a narrow projection rather than the preferred long-term durable artifact.
 
 ### 4. Detached-host and detached-world rules stay distinct
 
@@ -129,7 +144,7 @@ This slice must not use parked-host durability as a reason to loosen detached-wo
 
 ### 5. World-originated delivery must be durable without an attached client
 
-Approvals, completion notices, follow-up messages, and runtime alerts from world-side work must land in a Substrate-owned durable inbox, queue, or equivalent session-local task ledger. A live attached client may consume those events immediately, but the absence of an attached client must not:
+Approvals, completion notices, follow-up messages, and runtime alerts from world-side work must materialize as Substrate-owned session-local obligations. A runtime may project those obligations into inbox/review rows or attach-processing state, but the absence of an attached client must not:
 
 - silently drop them,
 - silently consume them,
@@ -147,7 +162,7 @@ Required rules:
 
 - `reattach` restores a live attached owner loop when recovery metadata is intact,
 - `reattach` does not submit a prompt,
-- `reattach` does not implicitly consume inbox work,
+- `reattach` does not implicitly consume deferred review work,
 - `reattach` does not act as a one-shot follow-up-turn shortcut,
 - one-shot prompt-taking resume remains on `substrate agent turn --session ... --backend ... --prompt ...`.
 
@@ -163,11 +178,9 @@ Canonical live-state authority remains under:
 - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`
 - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/leases/<participant_id>.lease`
 
-This slice adds a canonical durable inbox path under the same session root:
+This SOW originally assumed a canonical per-session `inbox/` artifact under the same session root. The forward design direction supersedes that artifact-level choice: the canonical deferred-work authority is now the obligation ledger, while any `inbox/` directory should be treated as an implementation-era projection or compatibility surface rather than the preferred long-term source of truth.
 
-- `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/inbox/<item_id>.json`
-
-These session-root files are the sole live-state authority from first write.
+These session-root files remain the sole live-state authority from first write.
 
 ### Orchestration session record
 
@@ -206,9 +219,9 @@ Required semantics:
 - `posture` is the attachability and attention summary. It must not be inferred solely from `state`.
 - `active_session_handle_id` retains its existing compatibility meaning as the authoritative orchestrator participant for the session. It is not proof that a host client is currently attached.
 - `attached_participant_id` is the authoritative pointer to the currently attached host execution client. It must be `null` whenever `posture` is `parked_resumable`, `awaiting_attention`, or `terminal`.
-- `pending_inbox_count` counts unresolved inbox items for the session.
-- `posture=awaiting_attention` is required when the session remains non-terminal, `attached_participant_id=null`, and `pending_inbox_count>0`.
-- `posture=parked_resumable` is required when the session remains non-terminal, `attached_participant_id=null`, `pending_inbox_count=0`, and at least one authoritative host participant remains `resume_eligible=true`.
+- `pending_inbox_count` reflects the currently landed runtime's unresolved review projection. The forward design should generalize the same posture input to unresolved attention-driving obligations rather than a canonical inbox artifact.
+- `posture=awaiting_attention` is required when the session remains non-terminal, `attached_participant_id=null`, and unresolved attention-driving work exists. In the current landed runtime, that may still surface as `pending_inbox_count>0`.
+- `posture=parked_resumable` is required when the session remains non-terminal, `attached_participant_id=null`, no unresolved attention-driving work exists, and at least one authoritative host participant remains `resume_eligible=true`.
 - `posture=terminal` must align with a non-routable session state such as `Invalidated`, `Stopped`, or `Failed`.
 - `posture` is explicit persisted truth and must not be reconstructed heuristically from attachment diagnostics or legacy attachment flags.
 
@@ -235,7 +248,13 @@ Required semantics:
 - These new fields are required for host-orchestrator participants. Member-runtime participants may leave them unset or at safe defaults when the semantics do not apply.
 - `uaa_session_id` is an identifier and correlation field, not proof of attachment, liveness, or resumability on its own.
 
-### Durable inbox item
+### Historical inbox artifact note
+
+This section captures the narrower inbox-shaped artifact assumed by the landed runtime during this planning phase.
+
+For future architecture and new design work, the canonical artifact is now `OrchestrationObligationV1`, and inbox/read surfaces should be treated as review projections over that ledger rather than as a second durable authority.
+
+### Historical durable inbox item
 
 Each unresolved or retained orchestration event must be persisted as one file under:
 
@@ -281,9 +300,9 @@ Required semantics:
 - Correlation fields are join keys for trace, router, workflow, and orchestration analysis. They do not themselves grant delivery, liveness, or resumability semantics.
 - The canonical naming and required/optional classification of cross-cutting correlation fields remain owned by ADR-0028 and the Phase 8 registry. This slice only requires that inbox items carry an explicit compatible correlation envelope and must not rely on heuristic joins.
 
-### Resolved inbox retention and compaction contract
+### Resolved deferred-work retention and compaction contract
 
-Resolved inbox items remain retained for audit and later compaction.
+Resolved deferred-work artifacts or projections remain retained for audit and later compaction.
 
 Required rules:
 
@@ -293,9 +312,9 @@ Required rules:
 - compaction is a maintenance step, not the acknowledgement primitive,
 - this slice fixes compaction eligibility rules but does not choose a numeric retention duration.
 
-### Future inbox-kind growth stays additive
+### Future obligation-kind growth stays additive
 
-The durable inbox outer envelope above is canonical.
+The forward durable outer envelope is now the obligation ledger; the inbox-shaped envelope above remains useful only as a historical implementation reference.
 
 Required rules:
 
@@ -324,14 +343,14 @@ Required rules:
 Components:
 
 - `crates/shell` runtime/session/state layers own durable orchestration-session identity, posture state, and routing gates.
-- A Substrate-owned durable inbox or task ledger owns world-to-host message durability when no client is attached.
+- A Substrate-owned durable obligation ledger owns world-to-host deferred-work durability when no client is attached.
 - An attachable execution client, such as a Codex session, may attach, run, exit, and later resume against the same orchestration session.
 - `world-agent` and the world-member submit path continue to own world-member execution and typed request submission for Linux world follow-up.
 
 End-to-end shape:
 
 - public `start`, `turn`, `reattach`, and `stop` operate on durable orchestration-session state,
-- world-originated events are translated into durable inbox items whether or not a host client is attached,
+- world-originated events are translated into durable obligations whether or not a host client is attached,
 - posture is derived from explicit persisted session and participant truth, not transient attachment heuristics,
 - `turn` and `reattach` resume a valid parked host session through sanctioned host paths only,
 - and prompt-bridge `Accepted` responses are emitted only under a runtime invariant that guarantees explicit terminal delivery.
@@ -369,30 +388,28 @@ This is the bridge between raw process-level attachment changes and durable park
 Adjust the runtime and REPL lifecycle handling in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) so that:
 
 - clean prompt-driven host client exit transitions a valid host session into `parked_resumable`,
-- a detached parked session with pending inbox work transitions into `awaiting_attention`,
+- a detached parked session with unresolved attention-driving work transitions into `awaiting_attention`,
 - explicit `stop`, fatal invalidation, or terminal failure still transition to `terminal`,
 - retained world/member linkage is preserved when the session remains valid,
 - and legacy attachment diagnostics remain diagnostics rather than sole validity authority.
 
 The existing invalidation-on-clean-exit behavior must be replaced, not just hidden behind docs.
 
-### 4. Add the canonical durable inbox under the session root
+### 4. Add the canonical durable obligation model under the session root
 
-Introduce the session-local inbox path and persistence contract under:
-
-- `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/inbox/<item_id>.json`
+Introduce the canonical deferred-work artifact under the session root. The current forward design is the session-local obligation ledger; any `inbox/` directory that exists in the landed runtime should be treated as a review projection or compatibility artifact rather than the long-term canonical model.
 
 Minimum implementation responsibilities:
 
-- define the canonical inbox item envelope,
-- write pending items durably for world-originated approvals, completions, follow-up messages, and runtime alerts,
-- maintain `pending_inbox_count` as authoritative live state,
+- define the canonical deferred-work envelope,
+- write pending obligations durably for world-originated approvals, completions, follow-up messages, and runtime alerts,
+- maintain authoritative attention-driving work counts or equivalent live-state projections,
 - preserve correlation metadata needed for trace/router/workflow joins,
 - and ensure the absence of an attached client never causes event loss.
 
 ### 5. Preserve resolved-item audit retention and explicit compaction rules
 
-The inbox implementation must distinguish:
+The deferred-work implementation must distinguish:
 
 - acknowledgement or dismissal of an item,
 - removal of the item from authoritative pending/live counts,
@@ -439,7 +456,7 @@ Update only the docs needed to tell the truth about:
 
 - durable host orchestration ownership,
 - parked versus attached versus attention-needed posture,
-- the durable inbox/task ledger,
+- the durable obligation ledger plus its review and attach projections,
 - and the accepted-to-terminal delivery guarantee.
 
 This SOW is itself one of those truth surfaces and should remain aligned with the ADR.
@@ -468,7 +485,7 @@ Protected invariants:
 - clean prompt-driven host client exit after session establishment must not silently degrade into session invalidation,
 - accepted prompt requests must not end in silent stream loss,
 - durable orchestration state must remain authoritative over any one attached client process,
-- and persisted inbox correlation data must not be mistaken for new routing authority.
+- and persisted deferred-work correlation data must not be mistaken for new routing authority.
 
 ## Acceptance Criteria
 
@@ -477,14 +494,14 @@ This slice is done when all of the following are true:
 1. `substrate agent start`, `turn`, `reattach`, and `stop` keep the same public verb and selector contract.
 2. A successfully established host orchestration session can survive clean attached-client exit without being invalidated automatically.
 3. The runtime persists an explicit valid parked-resumable host posture instead of forcing detached host into terminal or invalidation semantics.
-4. The runtime persists an explicit `awaiting_attention` posture directly or derives it from authoritative persisted pending-inbox state.
+4. The runtime persists an explicit `awaiting_attention` posture directly or derives it from authoritative persisted attention-driving work state.
 5. `session.json` persists the additive posture fields required by this SOW.
 6. Host-orchestrator participant records persist the additive attachment and resumability fields required by this SOW.
-7. The canonical durable inbox path exists under the session root and stores one persisted artifact per unresolved or retained orchestration event.
-8. World-originated approvals, completion notices, follow-up messages, and runtime alerts are retained durably when no host client is attached.
-9. A live attached host client may observe or acknowledge inbox items in real time, but unresolved items remain durable source-of-truth artifacts until resolved.
-10. Resolving an inbox item removes it from pending/live counts immediately but does not immediately delete the persisted inbox artifact.
-11. Future inbox-kind growth stays additive under the canonical envelope rather than creating ad hoc top-level variants.
+7. The canonical durable deferred-work artifact exists under the session root, and any inbox/read surface is explicitly a projection or compatibility layer rather than a second durable authority.
+8. World-originated approvals, completion notices, follow-up messages, and runtime alerts are retained durably as unresolved session-local obligations when no host client is attached.
+9. A live attached host client may observe or acknowledge review projections in real time, but unresolved obligations remain the durable source of truth until resolved.
+10. Resolving review state removes the underlying work from pending/live attention counts immediately but does not require immediate physical deletion of historical artifacts or projections.
+11. Future obligation-kind growth stays additive under the canonical envelope rather than creating ad hoc top-level variants.
 12. `turn` can resume prompt-taking against a valid parked host session using exact `(orchestration_session_id, backend_id)` targeting.
 13. `reattach` can restore attached host ownership for a valid parked host session without submitting a prompt.
 14. Detached-world follow-up remains fail-closed until a sanctioned host path re-establishes routable ownership.
@@ -511,13 +528,13 @@ Required assertions:
 
 - `active_attached -> parked_resumable` is covered explicitly,
 - `parked_resumable -> active_attached` via `reattach` is covered explicitly,
-- `parked_resumable -> awaiting_attention` is covered explicitly or proven through authoritative pending-inbox derivation,
+- `parked_resumable -> awaiting_attention` is covered explicitly or proven through authoritative attention-driving work derivation,
 - legal transitions to `terminal` are covered explicitly,
 - host `start` creates a valid orchestration session and clean host client exit does not invalidate it,
 - host `turn` succeeds against a valid parked session,
 - `reattach` succeeds against a valid parked session and does not submit a prompt,
 - world-originated retained work survives detached host periods,
-- pending/live counts update correctly when inbox items are acknowledged or dismissed,
+- pending/live counts update correctly when review projections are acknowledged or dismissed,
 - resolved items remain retained until compaction eligibility is met,
 - detached-world follow-up still fails closed,
 - existing exact public turn routing remains authoritative,
@@ -547,6 +564,6 @@ Confirm all of the following manually:
 
 - the host session parks cleanly when the prompt-driven client exits,
 - the parked session remains resumable rather than invalidated,
-- world-originated messages create durable inbox items even while no client is attached,
-- `reattach` restores attached ownership without consuming inbox work implicitly,
+- world-originated messages create durable obligations and corresponding review projections even while no client is attached,
+- `reattach` restores attached ownership without consuming review work implicitly,
 - and no post-`Accepted` stream ends without `Completed` or `Failed`.

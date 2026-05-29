@@ -2,13 +2,31 @@
 
 Source handoff: [2026-05-28-195040-host-world-dispatch-design-stack.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.codex/handoffs/2026-05-28-195040-host-world-dispatch-design-stack.md)  
 Related design stack:
+- [DESIGN-durable-orchestration-obligation-ledger.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-durable-orchestration-obligation-ledger.md)
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-retained-world-worker-messaging-and-steering-contract.md)
 - [DESIGN-world-worker-lifecycle-model.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-durable-orchestration-notification-inbox-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-durable-orchestration-notification-inbox-contract.md)
+- [DESIGN-auto-attach-trigger-and-work-queue-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-auto-attach-trigger-and-work-queue-contract.md)
+- [DESIGN-router-daemon-attach-trigger-integration.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-router-daemon-attach-trigger-integration.md)
 - [DESIGN-host-to-world-steering-policy-matrix.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-host-to-world-steering-policy-matrix.md)  
 Phase: `SPECIFY`  
-Status: draft for review
+Status: superseded scratch spec retained for history
+
+## Superseded Status
+
+This spec captures the earlier split-model idea where durable notifications remained one authority and a separate `work_queue` became a second canonical attach-work ledger.
+
+That is no longer the preferred architecture.
+
+The current forward design stack has pivoted to:
+
+1. one canonical session-local obligation ledger in [DESIGN-durable-orchestration-obligation-ledger.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-durable-orchestration-obligation-ledger.md),
+2. inbox/review as a projection in [DESIGN-durable-orchestration-notification-inbox-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-durable-orchestration-notification-inbox-contract.md),
+3. auto-attach processing as a projection in [DESIGN-auto-attach-trigger-and-work-queue-contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-auto-attach-trigger-and-work-queue-contract.md),
+4. router/daemon behavior over obligations in [DESIGN-router-daemon-attach-trigger-integration.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-router-daemon-attach-trigger-integration.md).
+
+Do not use this spec as the source of truth for new design or implementation work. Keep it only as historical scaffolding for how the architecture evolved.
 
 ## Assumptions
 
