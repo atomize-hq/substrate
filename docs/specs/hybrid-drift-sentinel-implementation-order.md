@@ -276,6 +276,15 @@ Why:
 - keeps model work late and optional
 - ends with the explicit gate before any live integration starts
 
+Packet 13 gate note:
+
+- `2026-05-30`: `S6-S7` passed with bounded request shaping for optional `gpt-5.4-mini`
+  adjudication, safe analyzer-only fallback behavior, and full crate tests green. `S9` replay
+  usefulness was reviewed against a freshly regenerated current-schema analyzer bundle for session
+  `019e767c-e64b-7b93-a540-7a33a90f780f`; the output was useful enough to complete the replay scope
+  even though evidence ranking remained somewhat noisy. `S10` stayed explicitly deferred because no
+  user approval was given for live-mode or broader runtime integration work.
+
 ## If You Want Fewer Packets
 
 Minimum safe compression: `11 packets`

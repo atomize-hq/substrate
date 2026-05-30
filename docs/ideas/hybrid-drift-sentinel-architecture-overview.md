@@ -346,6 +346,14 @@ Questions answered:
 - when to escalate to the model
 - how to present warnings without overfiring
 
+Current gate note:
+
+- `2026-05-30`: the replay-first `agent-drift-sentinel` slice proved the downstream checkpoint
+  contract is usable for operator-facing warnings and optional bounded adjudication, but live-mode
+  integration remained intentionally deferred because replay usefulness was only reviewed as
+  "useful but somewhat noisy" and no explicit user approval was given to widen scope into runtime
+  wiring.
+
 ## Recommended Follow-On Design Docs
 
 After this umbrella doc, split into focused design docs:

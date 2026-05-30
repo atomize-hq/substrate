@@ -209,6 +209,13 @@ Evidence:
 
 - golden-output style tests
 - human review of replay summaries
+- `2026-05-30`: a fresh replay proof for session `019e767c-e64b-7b93-a540-7a33a90f780f` used a
+  regenerated current-schema compactor bundle and a regenerated analyzer bundle before running
+  `cargo run -p agent-drift-sentinel -- --checkpoint-dir target/agent-drift-analyzer/sentinel-replay-session-019e767c-e64b-7b93-a540-7a33a90f780f --mode replay`.
+  The replay output surfaced one clear visible warning with checkpoint id, drift class,
+  expected-next-step guidance, and stable row refs, but the evidence ranking remained somewhat
+  noisy because the top excerpts still favored command-family lines over the strongest task/truth
+  cues.
 
 ### Checkpoint D: Adjudication Safe
 
@@ -230,6 +237,9 @@ Verify:
 Evidence:
 
 - explicit review gate, not just code readiness
+- `2026-05-30`: after the S9 replay review, live-mode work remained explicitly deferred. No live
+  ingestion or runtime integration work started because the user did not approve moving beyond the
+  replay/adjudication scope.
 
 ## Handoff To Later Runtime Integration
 
@@ -250,3 +260,14 @@ The plan is complete when:
 3. scheduler behavior is explicit and not warning-spam-driven
 4. optional adjudication is safe and non-essential
 5. live mode is either validated as the next step or consciously deferred
+
+## Gate Notes
+
+- `S9` replay usefulness review on `2026-05-30`: replay-mode output is useful enough to complete
+  the replay/adjudication scope because it produces stable warning summaries from freshly
+  regenerated analyzer checkpoints, but it should still be treated as somewhat noisy until later
+  evidence-ranking refinement moves the strongest task/truth cues ahead of generic command-family
+  excerpts.
+- `S10` live-entry gate on `2026-05-30`: live-mode work is explicitly deferred. The sentinel crate
+  keeps the live entrypoint gated and does not begin runtime integration without a separate user
+  approval turn.

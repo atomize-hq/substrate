@@ -198,6 +198,18 @@ The spec is satisfied when:
 4. Optional model adjudication is disabled by default and degrades safely.
 5. Operator-facing warnings are grounded in analyzer checkpoints and evidence.
 
+## Gate Notes
+
+- `S9` replay usefulness review on `2026-05-30`: a fresh replay proof over regenerated
+  compactor/analyzer artifacts for session `019e767c-e64b-7b93-a540-7a33a90f780f` showed that the
+  sentinel can produce a stable visible warning with checkpoint id, drift class, expected next
+  step, and row-ref-backed evidence. The output is useful for operator review, although the
+  evidence ranking is still somewhat noisy because command-family excerpts can outrank more direct
+  task/truth cues.
+- `S10` live integration gate on `2026-05-30`: live-mode work is explicitly deferred. The replay
+  and adjudication scope is complete without live runtime integration, and no live-mode or broader
+  runtime wiring should begin until a separate user approval turn authorizes that next slice.
+
 ## Open Questions
 
 1. What trigger mix is best for live runs without overwhelming the operator?
