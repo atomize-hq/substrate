@@ -17,7 +17,8 @@ fn export_bundle_writes_checkpoints_and_summary() {
     let checkpoints = read_checkpoints(&result.checkpoints_path);
     let summary = fs::read_to_string(&result.summary_path).expect("summary");
 
-    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(checkpoints.len(), 2);
     assert!(summary.contains("Agent Drift Analyzer Summary"));
     assert!(summary.contains("session-alpha"));
+    assert!(summary.contains("Checkpoints emitted: `2`"));
 }

@@ -168,14 +168,34 @@ fn sample_archival_rows() -> Vec<CompactionRow> {
         tool_row(
             8,
             9,
+            "{\"command\":\"sed -n '1,120p' crates/agent-drift-analyzer/src/lib.rs\",\"workdir\":\"/repo\"}",
+            Some("{\"call_id\":\"call-6\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"),
+        ),
+        row(
+            9,
+            10,
+            0,
+            CompactionKind::AssistantMessage,
+            "I found the build loop. Next I’m patching lib.rs and rerunning the analyzer checks.",
+            None,
+        ),
+        tool_row(
+            10,
+            11,
             "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
             Some("{\"call_id\":\"call-5\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"),
         ),
         tool_row(
-            9,
-            10,
-            "{\"command\":\"sed -n '1,120p' crates/agent-drift-analyzer/src/lib.rs\",\"workdir\":\"/repo\"}",
-            Some("{\"call_id\":\"call-6\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"),
+            11,
+            12,
+            "{\"command\":\"cargo test -p agent-drift-analyzer -- --nocapture\",\"workdir\":\"/repo\"}",
+            Some("{\"call_id\":\"call-7\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"),
+        ),
+        tool_row(
+            12,
+            13,
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Add File: /tmp/offscope-notes.md\\n+rogue\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+            Some("{\"call_id\":\"call-8\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"),
         ),
     ]
 }

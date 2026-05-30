@@ -7,11 +7,13 @@ use support::analyze_sample_bundle;
 #[test]
 fn wrong_plan_branch_scores_out_of_scope_changes() {
     let result = analyze_sample_bundle();
-    let checkpoint = &result.sessions[0].checkpoints[0];
-    let score = checkpoint
-        .drift_scores
+    let score = result.sessions[0]
+        .checkpoints
         .iter()
-        .find(|score| score.class == agent_drift_analyzer::DriftClass::WrongPlanBranch)
+        .flat_map(|checkpoint| checkpoint.drift_scores.iter())
+        .find(|score| {
+            score.class == agent_drift_analyzer::DriftClass::WrongPlanBranch && score.flagged
+        })
         .expect("wrong plan branch score");
 
     assert!(score.raw_score >= 60);

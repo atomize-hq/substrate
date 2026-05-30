@@ -7,3 +7,5 @@ Suggested contents:
 - cross-platform smoke workflows and runner assumptions
 - test-only environment variables and fixtures
 
+Current guides:
+- [Hybrid Drift Stack Smoke Guide](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/internals/testing/hybrid-drift-stack-smoke-guide.md:1)

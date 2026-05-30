@@ -7,11 +7,13 @@ use support::analyze_sample_bundle;
 #[test]
 fn ignoring_repo_truth_flags_verification_without_truth_reads() {
     let result = analyze_sample_bundle();
-    let checkpoint = &result.sessions[0].checkpoints[0];
-    let score = checkpoint
-        .drift_scores
+    let score = result.sessions[0]
+        .checkpoints
         .iter()
-        .find(|score| score.class == agent_drift_analyzer::DriftClass::IgnoringRepoTruth)
+        .flat_map(|checkpoint| checkpoint.drift_scores.iter())
+        .find(|score| {
+            score.class == agent_drift_analyzer::DriftClass::IgnoringRepoTruth && score.flagged
+        })
         .expect("ignoring repo truth score");
 
     assert!(score.raw_score >= 60);

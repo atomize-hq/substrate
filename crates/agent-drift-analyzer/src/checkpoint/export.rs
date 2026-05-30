@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 
@@ -85,39 +86,56 @@ fn render_summary(checkpoints: &[Checkpoint]) -> String {
         .iter()
         .filter(|checkpoint| checkpoint.flagged)
         .count();
-    let sessions = checkpoints.len();
+    let sessions = checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.session_id.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    let mut by_session = BTreeMap::<&str, Vec<&Checkpoint>>::new();
+    for checkpoint in checkpoints {
+        by_session
+            .entry(checkpoint.session_id.as_str())
+            .or_default()
+            .push(checkpoint);
+    }
     let mut lines = vec![
         "# Agent Drift Analyzer Summary".to_string(),
         String::new(),
         format!("Sessions analyzed: `{sessions}`"),
+        format!("Checkpoints emitted: `{}`", checkpoints.len()),
         format!("Flagged checkpoints: `{flagged}`"),
         String::new(),
     ];
 
-    for checkpoint in checkpoints {
-        let flagged_scores = checkpoint
-            .drift_scores
-            .iter()
-            .filter(|score| score.flagged)
-            .map(|score| format!("{:?}", score.class))
-            .collect::<Vec<_>>();
-        lines.push(format!("## {}", checkpoint.session_id));
+    for (session_id, session_checkpoints) in by_session {
+        lines.push(format!("## {session_id}"));
+        lines.push(format!("- Checkpoints: `{}`", session_checkpoints.len()));
         lines.push(format!(
-            "- Flagged: `{}`",
-            if checkpoint.flagged { "yes" } else { "no" }
+            "- Flagged checkpoints: `{}`",
+            session_checkpoints
+                .iter()
+                .filter(|checkpoint| checkpoint.flagged)
+                .count()
         ));
-        lines.push(format!(
-            "- Expected next step: `{}`",
-            checkpoint.expected_next_step
-        ));
-        lines.push(format!(
-            "- Drift classes: `{}`",
-            if flagged_scores.is_empty() {
-                "none".to_string()
-            } else {
-                flagged_scores.join(", ")
-            }
-        ));
+        for checkpoint in session_checkpoints {
+            let flagged_scores = checkpoint
+                .drift_scores
+                .iter()
+                .filter(|score| score.flagged)
+                .map(|score| format!("{:?}", score.class))
+                .collect::<Vec<_>>();
+            lines.push(format!(
+                "- {}: flagged=`{}` next=`{}` drift=`{}`",
+                checkpoint.checkpoint_id,
+                if checkpoint.flagged { "yes" } else { "no" },
+                checkpoint.expected_next_step,
+                if flagged_scores.is_empty() {
+                    "none".to_string()
+                } else {
+                    flagged_scores.join(", ")
+                }
+            ));
+        }
         lines.push(String::new());
     }
 

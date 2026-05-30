@@ -2,14 +2,19 @@ use crate::checkpoint::{Confidence, DriftClass, DriftScore, TaskFrame};
 use crate::context::ContextPack;
 
 pub fn score_wrong_plan_branch(context: &ContextPack, task_frame: &TaskFrame) -> DriftScore {
-    let expected = if !task_frame.truth_artifacts.is_empty() {
-        task_frame.truth_artifacts.clone()
-    } else {
-        task_frame.working_set_paths.clone()
-    };
+    let mut expected = task_frame.truth_artifacts.clone();
+    expected.extend(
+        context
+            .working_set_paths
+            .iter()
+            .filter(|path| path.source != "observed_command")
+            .map(|path| path.path.clone()),
+    );
+    expected.sort();
+    expected.dedup();
     let mut out_of_scope = Vec::new();
     for command in &context.command_observations {
-        if command.paths.is_empty() {
+        if command.paths.is_empty() || (!command.write_like && !command.verification_like) {
             continue;
         }
         let matches_scope = command.paths.iter().all(|path| {
