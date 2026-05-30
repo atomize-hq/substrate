@@ -24,6 +24,16 @@ pub struct BundleManifest {
     pub source_files: Vec<Utf8PathBuf>,
 }
 
+/// Bundle publication contract for the five-file analyzer-facing export:
+///
+/// - row files, dedupe audit, and summary are written into a hidden sibling
+///   staging directory under the requested output parent
+/// - `manifest.json` is written after the other four contract files
+/// - the final output directory is published only after the staging bundle is
+///   complete
+/// - failed or interrupted runs may leave only clearly marked staging
+///   directories; the final output path is either absent or still points to the
+///   last complete bundle
 #[derive(Debug, Clone)]
 pub struct ExportBundleRequest<'a> {
     pub codex_home: &'a camino::Utf8Path,
@@ -44,6 +54,8 @@ pub enum ExportError {
         #[source]
         source: std::io::Error,
     },
+    #[error("output directory {path} must include a final path segment")]
+    InvalidOutputDirectory { path: Utf8PathBuf },
     #[error("failed to write bundle file {path}: {source}")]
     WriteFile {
         path: Utf8PathBuf,
@@ -56,4 +68,12 @@ pub enum ExportError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("failed to publish completed bundle to {path}: {source}")]
+    PublishOutputDirectory {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("export interrupted at {point}")]
+    InjectedFailure { point: String },
 }
