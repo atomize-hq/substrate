@@ -20,6 +20,8 @@ pub(crate) const MANUAL_REATTACH_ATTACH_RESTORED_REASON: &str =
     "session_attach_restored_by_manual_reattach";
 pub(crate) const ROUTER_AUTO_ATTACH_RESTORED_REASON: &str =
     "session_attach_restored_by_router_auto_attach";
+const ROUTER_AUTO_ATTACH_UNSUPPORTED_REASON: &str =
+    "unsupported_platform_or_posture: router-owned automatic attach is supported on Linux only in this slice";
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -134,6 +136,15 @@ pub(crate) fn execute_session_auto_attach(
             attach_claim_owner,
         } => (obligation_id, attach_claim_owner),
     };
+    if let Err(err) = ensure_router_auto_attach_supported() {
+        let reason = err.to_string();
+        mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+        return Ok(SessionAutoAttachExecution::FailedClosed {
+            obligation_id,
+            attach_claim_owner,
+            reason,
+        });
+    }
 
     let plan = match build_auto_attach_launch_plan(store, orchestration_session_id) {
         Ok(plan) => plan,
@@ -183,12 +194,6 @@ pub(crate) fn build_auto_attach_launch_plan(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
-    if !cfg!(target_os = "linux") {
-        anyhow::bail!(
-            "unsupported_platform_or_posture: router-owned automatic attach is supported on Linux only in this slice"
-        );
-    }
-
     let record = store
         .load_session(orchestration_session_id)?
         .ok_or_else(|| anyhow::anyhow!("missing_session: orchestration session {orchestration_session_id} disappeared before automatic attach could launch"))?;
@@ -298,6 +303,14 @@ pub(crate) fn build_auto_attach_launch_plan(
         startup_prompt: None,
         source_orchestration_session_id: None,
     })
+}
+
+fn ensure_router_auto_attach_supported() -> Result<()> {
+    if cfg!(target_os = "linux") {
+        return Ok(());
+    }
+
+    anyhow::bail!(ROUTER_AUTO_ATTACH_UNSUPPORTED_REASON);
 }
 
 fn mark_attach_failed_closed(
