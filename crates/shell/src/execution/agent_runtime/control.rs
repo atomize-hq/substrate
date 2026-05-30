@@ -2507,6 +2507,17 @@ fn turn_outcome_label(exit_code: i32) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
+pub(crate) fn world_task_terminal_state_from_exit_code(
+    exit_code: i32,
+) -> super::dispatch_contract::WorldTaskTerminalStateV1 {
+    match exit_code {
+        0 => super::dispatch_contract::WorldTaskTerminalStateV1::Completed,
+        130 => super::dispatch_contract::WorldTaskTerminalStateV1::Cancelled,
+        _ => super::dispatch_contract::WorldTaskTerminalStateV1::Failed,
+    }
+}
+
 #[cfg(unix)]
 fn completed_exit_code(turn_outcome: &str) -> i32 {
     match turn_outcome {
@@ -3527,5 +3538,21 @@ mod tests {
             }) if error_code == "owner_unreachable"
                 && message.contains("closed after accepting")
         ));
+    }
+
+    #[test]
+    fn world_task_terminal_state_tracks_public_prompt_exit_semantics() {
+        assert_eq!(
+            super::world_task_terminal_state_from_exit_code(0),
+            super::super::dispatch_contract::WorldTaskTerminalStateV1::Completed
+        );
+        assert_eq!(
+            super::world_task_terminal_state_from_exit_code(130),
+            super::super::dispatch_contract::WorldTaskTerminalStateV1::Cancelled
+        );
+        assert_eq!(
+            super::world_task_terminal_state_from_exit_code(17),
+            super::super::dispatch_contract::WorldTaskTerminalStateV1::Failed
+        );
     }
 }

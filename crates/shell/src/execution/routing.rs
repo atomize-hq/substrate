@@ -39,8 +39,10 @@ pub(crate) use dispatch::world_persistent_session::{
 };
 #[allow(unused_imports)]
 pub(crate) use dispatch::{
-    build_agent_client_and_member_dispatch_request, build_agent_client_and_pending_diff_request,
-    build_agent_client_and_request, execute_command, needs_pty, MemberDispatchTransportRequest,
+    build_agent_client_and_member_dispatch_request,
+    build_agent_client_and_member_dispatch_request_for_cwd,
+    build_agent_client_and_pending_diff_request, build_agent_client_and_request, execute_command,
+    needs_pty, MemberDispatchTransportRequest,
 };
 #[cfg(target_os = "linux")]
 use nix::sys::termios::{

@@ -1082,7 +1082,20 @@ pub(crate) fn build_agent_client_and_member_dispatch_request(
     transport_api_types::ExecuteRequest,
     String,
 )> {
-    build_agent_client_and_member_dispatch_request_impl(request)
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    build_agent_client_and_member_dispatch_request_impl(request, &cwd_path)
+}
+
+#[allow(dead_code)]
+pub(crate) fn build_agent_client_and_member_dispatch_request_for_cwd(
+    request: &MemberDispatchTransportRequest,
+    cwd_path: &std::path::Path,
+) -> anyhow::Result<(
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
+    String,
+)> {
+    build_agent_client_and_member_dispatch_request_impl(request, cwd_path)
 }
 
 pub(crate) fn build_agent_client_and_pending_diff_request() -> anyhow::Result<(
@@ -1177,6 +1190,7 @@ fn build_agent_client_and_request_impl(
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_member_dispatch_request_impl(
     dispatch: &MemberDispatchTransportRequest,
+    cwd_path: &std::path::Path,
 ) -> anyhow::Result<(
     transport_api_client::AgentClient,
     transport_api_types::ExecuteRequest,
@@ -1187,7 +1201,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
 
     let client = AgentClient::unix_socket(&socket_path)?;
-    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd_path = cwd_path.to_path_buf();
     let cwd = cwd_path.display().to_string();
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -1369,6 +1383,7 @@ fn build_agent_client_and_request_impl(
 #[cfg(target_os = "macos")]
 fn build_agent_client_and_member_dispatch_request_impl(
     dispatch: &MemberDispatchTransportRequest,
+    cwd_path: &std::path::Path,
 ) -> anyhow::Result<(
     transport_api_client::AgentClient,
     transport_api_types::ExecuteRequest,
@@ -1377,7 +1392,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
     if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
         let socket_path = std::path::PathBuf::from(socket_path);
         let client = AgentClient::unix_socket(&socket_path)?;
-        let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let cwd_path = cwd_path.to_path_buf();
         let cwd = cwd_path.display().to_string();
         let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
         if inherit_from_host {
@@ -1608,6 +1623,7 @@ fn build_agent_client_and_request_impl(
 #[cfg(target_os = "windows")]
 fn build_agent_client_and_member_dispatch_request_impl(
     dispatch: &MemberDispatchTransportRequest,
+    cwd_path: &std::path::Path,
 ) -> anyhow::Result<(
     transport_api_client::AgentClient,
     transport_api_types::ExecuteRequest,
@@ -1620,7 +1636,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
 
     let client = windows::build_agent_client()?;
     let cwd = windows::current_dir_wsl()?;
-    let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let host_cwd = cwd_path.to_path_buf();
     let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
     let spec = world_spec_for_network_policy(
         crate::execution::settings::world_root_from_env().path,

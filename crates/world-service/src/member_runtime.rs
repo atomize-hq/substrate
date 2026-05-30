@@ -1151,6 +1151,110 @@ mod tests {
         );
     }
 
+    fn sample_stream_context() -> MemberStreamContext {
+        MemberStreamContext {
+            orchestration_session_id: "orch_123".to_string(),
+            run_id: "run_bootstrap".to_string(),
+            participant_id: "ash_member".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: json!("substrate.agent.session"),
+        }
+    }
+
+    fn sample_world_binding() -> SharedWorldBindingSnapshot {
+        SharedWorldBindingSnapshot {
+            orchestration_session_id: "orch_123".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 7,
+            binding_state: world_api::SharedWorldBindingState::Active,
+        }
+    }
+
+    #[test]
+    fn bootstrap_completion_without_session_handle_emits_only_exit() {
+        let mut emitted_registered = false;
+        let frames = frames_from_completion(
+            &sample_stream_context(),
+            &sample_world_binding(),
+            "spn_bootstrap",
+            Ok(AgentWrapperCompletion {
+                status: std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg("exit 0")
+                    .status()
+                    .expect("completion status"),
+                final_text: None,
+                data: None,
+            }),
+            None,
+            &mut emitted_registered,
+            MemberStreamMode::Bootstrap,
+            "codex_world",
+        );
+
+        assert_eq!(
+            frames.len(),
+            1,
+            "bootstrap without continuity metadata must stay terminal"
+        );
+        assert!(matches!(
+            frames.first(),
+            Some(ExecuteStreamFrame::Exit { exit: 0, .. })
+        ));
+        assert!(
+            !emitted_registered,
+            "non-retained bootstrap should not invent a registered event"
+        );
+    }
+
+    #[test]
+    fn bootstrap_completion_with_session_handle_emits_registered_then_exit() {
+        let mut emitted_registered = false;
+        let frames = frames_from_completion(
+            &sample_stream_context(),
+            &sample_world_binding(),
+            "spn_bootstrap",
+            Ok(AgentWrapperCompletion {
+                status: std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg("exit 0")
+                    .status()
+                    .expect("completion status"),
+                final_text: None,
+                data: Some(json!({
+                    "schema": SESSION_HANDLE_SCHEMA_V1,
+                    "session": {
+                        "id": "uaa_session"
+                    }
+                })),
+            }),
+            None,
+            &mut emitted_registered,
+            MemberStreamMode::Bootstrap,
+            "codex_world",
+        );
+
+        assert_eq!(
+            frames.len(),
+            2,
+            "bootstrap with continuity metadata must surface registration before exit"
+        );
+        assert!(matches!(
+            frames.first(),
+            Some(ExecuteStreamFrame::Event { event }) if event.kind == AgentEventKind::Registered
+        ));
+        assert!(matches!(
+            frames.get(1),
+            Some(ExecuteStreamFrame::Exit { exit: 0, .. })
+        ));
+        assert!(
+            emitted_registered,
+            "registered event tracking must be updated"
+        );
+    }
+
     #[test]
     fn duplicate_retained_member_error_mentions_backend_slot_identity() {
         let err = duplicate_retained_member_error(
