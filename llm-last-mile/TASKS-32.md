@@ -5,7 +5,7 @@ Source plan: [PLAN-32.md](./PLAN-32.md)
 Source validation note: [REMAINING-family-1-scope-2026-05-30.md](./REMAINING-family-1-scope-2026-05-30.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: draft for review on `2026-05-30`
+Status: completed on `2026-05-30`
 
 ## Execution Packets
 
@@ -28,7 +28,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add a minimal orchestrator-only internal dispatch caller surface
+- [x] Task 1.1: Add a minimal orchestrator-only internal dispatch caller surface
   - Acceptance: an internal caller surface exists for the host orchestrator only; it is not exposed as a new public human CLI; it resolves the authoritative orchestration session and caller participant before any world execution attempt.
   - Verify:
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
@@ -37,7 +37,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/src/execution/agents_cmd.rs`](../crates/shell/src/execution/agents_cmd.rs) only if existing toolbox posture plumbing must expose the internal surface safely
 
-- [ ] Task 1.2: Add typed bootstrap request/outcome contract and fail-closed validation
+- [x] Task 1.2: Add typed bootstrap request/outcome contract and fail-closed validation
   - Acceptance: the slice has one shared contract for `run_world_task` and `spawn_world_worker`; invalid action/mode combinations fail closed; missing session/caller/backend/world-binding fields fail with stable, explanation-ready errors.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -66,7 +66,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Wire `run_world_task` into the existing world execution seam
+- [x] Task 2.1: Wire `run_world_task` into the existing world execution seam
   - Acceptance: the internal dispatch surface can launch exact backend world work as one-shot `ephemeral` work using the existing runtime path; no alternate execution plane is introduced.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -76,7 +76,7 @@ Session goal:
     - [`crates/shell/src/execution/routing/dispatch/world_ops.rs`](../crates/shell/src/execution/routing/dispatch/world_ops.rs)
     - [`crates/world-service/src/member_runtime.rs`](../crates/world-service/src/member_runtime.rs)
 
-- [ ] Task 2.2: Return a typed terminal outcome and keep the path non-retained
+- [x] Task 2.2: Return a typed terminal outcome and keep the path non-retained
   - Acceptance: `run_world_task` returns an explanation-ready terminal outcome such as `completed`, `failed`, `cancelled`, or `needs_retained_followup`; it does not silently create retained worker state or family-2 durable obligations.
   - Verify:
     - `cargo test -p shell control -- --nocapture`
@@ -105,7 +105,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Wire `spawn_world_worker` through exact retained worker launch
+- [x] Task 3.1: Wire `spawn_world_worker` through exact retained worker launch
   - Acceptance: the internal dispatch surface can allocate a retained world worker using the existing retained world-member runtime seam; exact backend and authoritative world-binding identity are preserved.
   - Verify:
     - `cargo test -p world-service member_runtime -- --nocapture`
@@ -115,7 +115,7 @@ Session goal:
     - [`crates/shell/src/execution/routing/dispatch/world_ops.rs`](../crates/shell/src/execution/routing/dispatch/world_ops.rs)
     - [`crates/world-service/src/member_runtime.rs`](../crates/world-service/src/member_runtime.rs)
 
-- [ ] Task 3.2: Return authoritative retained worker receipt without widening steering
+- [x] Task 3.2: Return authoritative retained worker receipt without widening steering
   - Acceptance: `spawn_world_worker` returns authoritative child identity and lineage/receipt fields; the slice does not claim `continue_world_worker`, messaging, or worker-to-host event support yet.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -144,7 +144,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Enforce orchestrator-only, same-session-only, and same-world-binding-only gating
+- [x] Task 4.1: Enforce orchestrator-only, same-session-only, and same-world-binding-only gating
   - Acceptance: unsupported callers, cross-session requests, cross-world-binding requests, and unsupported exact backend targets fail closed with stable deny buckets; no full policy-matrix rollout is required yet.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -154,7 +154,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
 
-- [ ] Task 4.2: Add audit/docs coverage without widening the surface
+- [x] Task 4.2: Add audit/docs coverage without widening the surface
   - Acceptance: any new trace rows or docs describe the caller surface as internal bootstrap-only; `docs/USAGE.md` and `docs/TRACE.md` remain honest about toolbox posture; no wording implies a broader execution plane than what actually landed.
   - Verify:
     - manual diff review
@@ -165,7 +165,7 @@ Session goal:
     - [`llm-last-mile/PLAN-32.md`](./PLAN-32.md)
     - [`llm-last-mile/TASKS-32.md`](./TASKS-32.md)
 
-- [ ] Task 4.3: Run the final validation wall
+- [x] Task 4.3: Run the final validation wall
   - Acceptance: formatting, clippy, the targeted shell/world-service suites, and the full workspace tests are green; no public CLI regression or unintended family-2 coupling appears.
   - Verify:
     - `cargo fmt --all -- --check`

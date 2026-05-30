@@ -5624,4 +5624,41 @@ mod tests {
             );
         });
     }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_world_dispatch_caller_rejects_cross_session_participant() {
+        with_store(|store| {
+            let orchestrator_a = live_orchestrator("codex", "sess_dispatch_a", "orch_dispatch_a");
+            let mut parent_a = active_parent(&orchestrator_a);
+            parent_a.set_world_binding("world-17", 2);
+
+            let orchestrator_b =
+                live_orchestrator("claude_code", "sess_dispatch_b", "orch_dispatch_b");
+            let mut parent_b = active_parent(&orchestrator_b);
+            parent_b.set_world_binding("world-17", 2);
+
+            store
+                .persist_orchestration_session(&parent_a)
+                .expect("persist session a");
+            store
+                .persist_participant(&orchestrator_a)
+                .expect("persist orchestrator a");
+            store
+                .persist_orchestration_session(&parent_b)
+                .expect("persist session b");
+            store
+                .persist_participant(&orchestrator_b)
+                .expect("persist orchestrator b");
+
+            let err = store
+                .resolve_internal_world_dispatch_caller("sess_dispatch_a", "orch_dispatch_b")
+                .expect_err("cross-session caller must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "caller_not_authoritative: orchestration session sess_dispatch_a authoritative orchestrator participant is orch_dispatch_a not orch_dispatch_b"
+            );
+        });
+    }
 }

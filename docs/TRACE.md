@@ -234,6 +234,9 @@ jq 'select(.request_id == "req_xxx")' ~/.substrate/trace.jsonl
 
 The internal orchestration toolbox (ADR-0026) appends tool-call audit records to `trace.jsonl` so control-plane activity is attributable and joinable without heuristics.
 
+Current scope note:
+- The first live caller path is bootstrap-only. Tool-call audit for world dispatch applies to orchestrator-issued internal `run_world_task` and `spawn_world_worker` requests only; it does not imply a public human CLI or a broader general-purpose execution plane.
+
 v1 uses explicit `event_type` values:
 - `toolbox_tool_call_start`
 - `toolbox_tool_call_complete`

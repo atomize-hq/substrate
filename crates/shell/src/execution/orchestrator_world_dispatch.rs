@@ -704,11 +704,17 @@ fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::agent_inventory::{
+        AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
+        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
+    };
     use crate::execution::agent_runtime::orchestration_session::{
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
+    use crate::execution::config_model::AgentCliMode;
     use serde_json::json;
     use substrate_common::agent_events::AgentEventKind;
+    use tempfile::tempdir;
 
     fn sample_session() -> OrchestrationSessionRecord {
         OrchestrationSessionRecord {
@@ -778,6 +784,40 @@ mod tests {
         .expect("validated spawn request")
     }
 
+    #[cfg(target_os = "linux")]
+    fn inventory_entry(agent_id: &str, scope: AgentExecutionScope) -> AgentInventoryEntryV1 {
+        AgentInventoryEntryV1 {
+            path: PathBuf::from(format!("{agent_id}.yaml")),
+            file: AgentFileV1 {
+                version: 1,
+                id: agent_id.to_string(),
+                config: AgentConfigV1 {
+                    enabled: true,
+                    kind: AgentConfigKind::Cli,
+                    protocol: Some("substrate.agent.session".to_string()),
+                    execution: AgentExecutionConfigV1 { scope: Some(scope) },
+                    cli: Some(AgentCliConfigV1 {
+                        binary: "sh".to_string(),
+                        mode: Some(AgentCliMode::Persistent),
+                        runtime_family: Some(AgentCliRuntimeFamily::Codex),
+                    }),
+                    api: None,
+                    capabilities: AgentCapabilitiesV1 {
+                        session_start: true,
+                        session_resume: true,
+                        session_fork: true,
+                        session_stop: true,
+                        status_snapshot: true,
+                        event_stream: true,
+                        llm: true,
+                        mcp_client: true,
+                    },
+                },
+                policy_overlay: None,
+            },
+        }
+    }
+
     #[test]
     fn authoritative_world_binding_accepts_matching_binding() {
         validate_authoritative_world_binding(&sample_session(), &sample_request())
@@ -794,6 +834,33 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "world_binding_mismatch: orchestration session sess_dispatch authoritative world_id is world-17 not world-18"
+        );
+    }
+
+    #[test]
+    fn authoritative_world_binding_rejects_world_generation_drift() {
+        let mut request = sample_request();
+        request.world_generation = 3;
+
+        let err = validate_authoritative_world_binding(&sample_session(), &request)
+            .expect_err("world generation drift must fail");
+        assert_eq!(
+            err.to_string(),
+            "world_binding_mismatch: orchestration session sess_dispatch authoritative world_generation is 2 not 3"
+        );
+    }
+
+    #[test]
+    fn authoritative_world_binding_rejects_missing_authoritative_binding() {
+        let mut session = sample_session();
+        session.world_id = None;
+        session.world_generation = None;
+
+        let err = validate_authoritative_world_binding(&session, &sample_request())
+            .expect_err("missing world binding must fail");
+        assert_eq!(
+            err.to_string(),
+            "missing_world_binding: orchestration session sess_dispatch has no authoritative world binding"
         );
     }
 
@@ -839,6 +906,38 @@ mod tests {
             transport.participant_id.starts_with("ash_"),
             "retained worker receipt should use participant-style identity: {}",
             transport.participant_id
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn resolve_world_dispatch_contract_rejects_host_scoped_backend_target() {
+        let temp = tempdir().expect("tempdir");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex_world".to_string(),
+            inventory_entry("codex_world", AgentExecutionScope::Host),
+        );
+        let context = InternalDispatchContext {
+            effective_config: SubstrateConfig::default(),
+            base_policy: Policy {
+                agents_allowed_backends: vec!["cli:codex_world".to_string()],
+                ..Policy::default()
+            },
+            inventory,
+        };
+
+        let err = resolve_world_dispatch_contract(
+            temp.path(),
+            &context,
+            &sample_request(),
+            "run_world_task",
+        )
+        .expect_err("host-scoped backend must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "unsupported_platform_or_posture: backend 'cli:codex_world' resolves only to a host-scoped runtime; run_world_task requires an exact world-scoped backend"
         );
     }
 

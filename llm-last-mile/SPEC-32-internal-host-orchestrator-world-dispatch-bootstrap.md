@@ -9,7 +9,7 @@ Related design stack:
 - [DESIGN-durable-orchestration-obligation-ledger.md](./DESIGN-durable-orchestration-obligation-ledger.md)
 - [AGENT_ORCHESTRATION_GAP_MATRIX.md](../AGENT_ORCHESTRATION_GAP_MATRIX.md)  
 Phase: `SPECIFY`  
-Status: draft for review on `2026-05-30`
+Status: implemented on `2026-05-30`
 
 ## Assumptions
 

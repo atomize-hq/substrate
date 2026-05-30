@@ -89,6 +89,7 @@ Operator-visible identity rules on these surfaces:
 - `substrate agent doctor` now includes a `runtime_realizability` check after `orchestrator_selection`. For the selected orchestrator, it fail-closes on unsupported `config.kind`, unsupported `cli.mode`, unsupported shell-owned backend mapping, or an unresolved `config.cli.binary`.
 - `substrate agent toolbox status` is a pre-runtime introspection surface: it projects the effective toolbox posture, the selected orchestrator identity, and either the active per-session UDS endpoint or the deterministic endpoint template when no orchestrator session is active yet.
 - `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current live host-scoped orchestrator session is present; otherwise it fails closed with exit `3`.
+- The first live toolbox-backed world-dispatch bootstrap remains internal-only in this slice. There is still no public human CLI for `run_world_task` or `spawn_world_worker`; those verbs stay limited to same-session, same-world-binding orchestrator control-plane calls.
 
 When the async REPL owns a shell-scoped orchestrator session, live session discovery is backed by the store-owned session root:
 - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`
