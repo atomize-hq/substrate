@@ -5,7 +5,7 @@ Source plan: [PLAN-31_25.md](./PLAN-31_25.md)
 Primary gap context: [TASKS-31.md](./TASKS-31.md), [CLOSEOUT-31-packet-4.md](./CLOSEOUT-31-packet-4.md)  
 Phase: `TASKS`  
 Execution model: three separate `/incremental-implementation` sessions  
-Status: draft for review on 2026-05-29
+Status: completed on 2026-05-30 after Packet 3 corrected tests/docs/closeout truth and the validation wall stayed green
 
 ## Execution Packets
 
@@ -27,14 +27,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Stop control-only attach startup from falling through to fresh attach execution
+- [x] Task 1.1: Stop control-only attach startup from falling through to fresh attach execution
   - Acceptance: when continuity session truth is absent, control-only attach startup fails closed before backend launch instead of calling a fresh attach helper; continuity-backed attach behavior remains unchanged.
   - Verify: `cargo test -p shell --lib reattach -- --nocapture`
   - Files:
     - [`crates/shell/src/repl/async_repl.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
     - [`crates/shell/src/execution/agents_cmd.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 
-- [ ] Task 1.2: Remove prompt-free fresh attach helpers from backend adapter plumbing
+- [x] Task 1.2: Remove prompt-free fresh attach helpers from backend adapter plumbing
   - Acceptance: there is no active `run_fresh_attach_control`-style helper for Codex or Claude in the runtime path; adapter code only exposes sanctioned prompt-bearing launch and continuity-backed attach behavior.
   - Verify: `cargo test -p shell prompt_fulfillment -- --nocapture`
   - Files:
@@ -58,7 +58,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Preserve continuity-first planning while rejecting fresh-needed execution
+- [x] Task 2.1: Preserve continuity-first planning while rejecting fresh-needed execution
   - Acceptance: automatic attach and manual attach planning still resolve from persisted truth; continuity-available cases proceed; continuity-missing/fresh-needed cases fail closed before backend launch with stable explanation-ready diagnostics.
   - Verify: `cargo test -p shell --lib auto_attach -- --nocapture`
   - Files:
@@ -66,7 +66,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Preserve manual/automatic attach interop under fail-closed fresh-needed outcomes
+- [x] Task 2.2: Preserve manual/automatic attach interop under fail-closed fresh-needed outcomes
   - Acceptance: manual `reattach` and automatic attach do not duplicate launches; fresh-needed cases settle or persist outcome state coherently without implying attached ownership; continuity-backed success cases remain unchanged.
   - Verify: `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
   - Files:
@@ -92,25 +92,25 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Replace fresh-attach-without-continuity regression expectations with fail-closed expectations
+- [x] Task 3.1: Replace fresh-attach-without-continuity regression expectations with fail-closed expectations
   - Acceptance: tests no longer assert that fresh attach without continuity is valid startup behavior; regression coverage instead asserts explicit fail-closed behavior and preserved continuity-backed attach.
   - Verify:
-    - `cargo test -p shell --lib hidden_owner_helper_attach_startup_allows_fresh_attach_without_continuity -- --nocapture`
-    - `cargo test -p shell --lib auto_attach_launch_plan_falls_back_to_fresh_when_continuity_is_unavailable -- --nocapture`
+    - `cargo test -p shell --lib hidden_owner_helper_attach_startup_fails_closed_without_continuity -- --nocapture`
+    - `cargo test -p shell --lib auto_attach_launch_plan_fails_closed_when_continuity_is_unavailable_and_fresh_would_be_required -- --nocapture`
   - Files:
     - [`crates/shell/src/repl/async_repl.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
     - [`crates/shell/src/execution/agent_runtime/auto_attach.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/auto_attach.rs)
 
-- [ ] Task 3.2: Write remediation-specific docs and closeout language
+- [x] Task 3.2: Write remediation-specific docs and closeout language
   - Acceptance: slice `31.25` artifacts clearly state the restored fail-closed contract and the deferred status of any future sanctioned fresh attach mechanism; the corrective record stands on its own without rewriting slice-31 planning docs.
   - Verify: manual diff review plus `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
   - Files:
     - [`llm-last-mile/SPEC-31_25.md`](/home/azureuser/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-31_25.md)
     - [`llm-last-mile/PLAN-31_25.md`](/home/azureuser/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-31_25.md)
     - [`llm-last-mile/TASKS-31_25.md`](/home/azureuser/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-31_25.md)
-    - `llm-last-mile/CLOSEOUT-31_25-*.md`
+    - [`llm-last-mile/CLOSEOUT-31_25-remediation-2026-05-30.md`](/home/azureuser/__Active_Code/atomize-hq/substrate/llm-last-mile/CLOSEOUT-31_25-remediation-2026-05-30.md)
 
-- [ ] Task 3.3: Run the final validation wall
+- [x] Task 3.3: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests pass after the remediation; closeout wording matches the observed green wall.
   - Verify:
     - `cargo fmt --all -- --check`
