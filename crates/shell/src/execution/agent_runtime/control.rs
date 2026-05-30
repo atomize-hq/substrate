@@ -45,6 +45,7 @@ use super::{
     OrchestrationSessionRecord, OrchestrationSessionState, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
 };
 use substrate_common::agent_events::{AgentEvent, MessageEventKind};
+use substrate_common::paths as substrate_paths;
 
 pub(crate) const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v1";
 pub(crate) const AGENT_API_TURN_LIFECYCLE_V1: &str = "agent_api.turn.lifecycle.v1";
@@ -53,7 +54,6 @@ const OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX: &str =
     "timed out waiting for authoritative owner-helper readiness for orchestration session ";
 const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
-#[cfg(unix)]
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
 #[cfg(unix)]
 const PRIVATE_PROMPT_READY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -654,6 +654,30 @@ pub(crate) fn hidden_owner_helper_startup_prompt_stream_path(
             .join(socket_name);
     }
     preferred
+}
+
+pub(crate) fn toolbox_transport_path_for_home(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> PathBuf {
+    let socket_name = format!("{orchestration_session_id}.sock");
+    let preferred = substrate_home
+        .join("run")
+        .join("agent-toolbox")
+        .join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-toolbox")
+            .join(socket_name);
+    }
+    preferred
+}
+
+pub(crate) fn toolbox_transport_path(orchestration_session_id: &str) -> Result<PathBuf> {
+    Ok(toolbox_transport_path_for_home(
+        &substrate_paths::substrate_home()?,
+        orchestration_session_id,
+    ))
 }
 
 #[cfg(unix)]

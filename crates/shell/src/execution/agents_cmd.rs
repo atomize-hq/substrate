@@ -9,10 +9,10 @@ use crate::execution::agent_runtime::control::PersistedWorldBinding;
 use crate::execution::agent_runtime::control::{
     launch_hidden_owner_helper, load_hidden_owner_helper_launch_plan, load_public_prompt_source,
     persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
-    remove_hidden_owner_helper_launch_plan, run_public_prompt_command, HiddenOwnerHelperLaunchPlan,
-    HiddenOwnerHelperLaunchReceipt, HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
-    OwnerHelperMode, PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput,
-    PublicSessionPosture,
+    remove_hidden_owner_helper_launch_plan, run_public_prompt_command, toolbox_transport_path,
+    toolbox_transport_path_for_home, HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperLaunchReceipt,
+    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan, OwnerHelperMode,
+    PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
@@ -2903,22 +2903,18 @@ fn toolbox_transport_label(transport: AgentToolboxBindTransport) -> &'static str
 fn toolbox_uds_endpoint(orchestration_session_id: &str) -> Result<String> {
     Ok(format!(
         "unix://{}",
-        substrate_paths::substrate_home()?
-            .join("run")
-            .join("agent-toolbox")
-            .join(format!("{orchestration_session_id}.sock"))
-            .display()
+        toolbox_transport_path(orchestration_session_id)?.display()
     ))
 }
 
 fn toolbox_uds_endpoint_template() -> Result<String> {
     Ok(format!(
         "unix://{}",
-        substrate_paths::substrate_home()?
-            .join("run")
-            .join("agent-toolbox")
-            .join("<orchestration_session_id>.sock")
-            .display()
+        toolbox_transport_path_for_home(
+            &substrate_paths::substrate_home()?,
+            "<orchestration_session_id>",
+        )
+        .display()
     ))
 }
 

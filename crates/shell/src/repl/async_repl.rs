@@ -41,9 +41,9 @@ use crate::execution::agent_runtime::control::{
     prompt_runtime_from_parts, register_private_prompt_transport, register_private_stop_transport,
     runtime_controls_parent_session, runtime_is_terminal, runtime_stop_transport_ids,
     spawn_local_private_prompt_owner, spawn_local_private_stop_owner, submit_host_prompt_turn,
-    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport,
-    PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
-    PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
+    toolbox_transport_path, HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
+    PrivatePromptTransport, PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport,
+    PublicPromptAction, PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
     SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -1939,11 +1939,8 @@ fn internal_toolbox_dispatch_request_channel() -> (
 }
 
 fn internal_toolbox_transport_path(orchestration_session_id: &str) -> PathBuf {
-    substrate_paths::substrate_home()
+    toolbox_transport_path(orchestration_session_id)
         .expect("substrate home must resolve for internal toolbox transport")
-        .join("run")
-        .join("agent-toolbox")
-        .join(format!("{orchestration_session_id}.sock"))
 }
 
 fn runtime_registered_message(role: &str) -> &'static str {

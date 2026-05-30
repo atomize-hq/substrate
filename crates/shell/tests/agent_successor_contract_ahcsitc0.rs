@@ -11,6 +11,7 @@ use substrate_broker::Policy;
 use tempfile::{Builder, TempDir};
 
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
+const TOOLBOX_UNIX_PATH_FALLBACK_THRESHOLD: usize = 100;
 
 #[derive(Clone, Copy)]
 enum CapabilityOverride<'a> {
@@ -45,6 +46,27 @@ fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
         "codex" | "codex_world" | "helper" => "codex",
         other => panic!("fixture runtime_family is not specified for agent `{other}`"),
     }
+}
+
+fn expected_toolbox_endpoint(substrate_home: &Path, orchestration_session_id: &str) -> String {
+    let socket_name = format!("{orchestration_session_id}.sock");
+    let preferred = substrate_home
+        .join("run")
+        .join("agent-toolbox")
+        .join(&socket_name);
+    let path = if preferred.as_os_str().len() > TOOLBOX_UNIX_PATH_FALLBACK_THRESHOLD {
+        PathBuf::from("/tmp")
+            .join("substrate-agent-toolbox")
+            .join(socket_name)
+    } else {
+        preferred
+    };
+
+    format!("unix://{}", path.display())
+}
+
+fn expected_toolbox_endpoint_template(substrate_home: &Path) -> String {
+    expected_toolbox_endpoint(substrate_home, "<orchestration_session_id>")
 }
 
 struct AgentSuccessorFixture {
@@ -1504,10 +1526,7 @@ fn agent_toolbox_status_json_reports_template_when_no_active_orchestrator_sessio
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
-    let expected_template = format!(
-        "unix://{}/run/agent-toolbox/<orchestration_session_id>.sock",
-        fixture.substrate_home.display()
-    );
+    let expected_template = expected_toolbox_endpoint_template(&fixture.substrate_home);
 
     let output = fixture.run(&["agent", "toolbox", "status", "--json"]);
     assert!(
@@ -1692,9 +1711,9 @@ fn agent_toolbox_env_prefers_live_manifest_over_trace_fallback() {
     );
 
     let json = parse_json_output(&output);
-    let expected = format!(
-        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa.sock",
-        fixture.substrate_home.display()
+    let expected = expected_toolbox_endpoint(
+        &fixture.substrate_home,
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
     );
     assert_eq!(
         json.pointer("/SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
@@ -2077,9 +2096,9 @@ fn agent_toolbox_status_json_omits_active_world_binding_non_fatally_for_live_hos
     );
 
     let json = parse_json_output(&output);
-    let expected = format!(
-        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2.sock",
-        fixture.substrate_home.display()
+    let expected = expected_toolbox_endpoint(
+        &fixture.substrate_home,
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2",
     );
     assert_eq!(
         json.pointer("/eligibility/state").and_then(Value::as_str),
@@ -2200,9 +2219,9 @@ fn agent_toolbox_surfaces_prefer_canonical_session_roots_over_flat_compatibility
         "toolbox env must resolve from the same canonical session-root record chosen by toolbox status: {env_output:?}"
     );
     let env_json = parse_json_output(&env_output);
-    let expected_endpoint = format!(
-        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb4.sock",
-        fixture.substrate_home.display()
+    let expected_endpoint = expected_toolbox_endpoint(
+        &fixture.substrate_home,
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb4",
     );
     assert_eq!(
         env_json
@@ -2252,9 +2271,9 @@ fn agent_toolbox_surfaces_fall_back_to_flat_participant_when_canonical_root_is_i
         "toolbox env must share the same flat compatibility fallback when the canonical participant is missing: {env_output:?}"
     );
     let env_json = parse_json_output(&env_output);
-    let expected_endpoint = format!(
-        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5.sock",
-        fixture.substrate_home.display()
+    let expected_endpoint = expected_toolbox_endpoint(
+        &fixture.substrate_home,
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
     );
     assert_eq!(
         env_json
@@ -2346,9 +2365,9 @@ fn agent_toolbox_surfaces_stay_orchestrator_anchored_when_live_member_exists() {
         "toolbox env must remain anchored to the orchestrator session when a live member exists: {env_output:?}"
     );
     let env_json = parse_json_output(&env_output);
-    let expected_endpoint = format!(
-        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb7.sock",
-        fixture.substrate_home.display()
+    let expected_endpoint = expected_toolbox_endpoint(
+        &fixture.substrate_home,
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb7",
     );
     assert_eq!(
         env_json
