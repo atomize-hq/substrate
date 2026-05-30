@@ -11,6 +11,9 @@
 5. Live scheduling policies should be configurable and conservative to avoid operator fatigue.
 6. The sentinel binary should stay thin so later live integration can embed library behavior inside
    broader Substrate flows.
+7. Replay-mode validation should use freshly regenerated current-schema compactor/analyzer bundles;
+   older dev/testing artifacts should be treated as invalid audit inputs unless they are explicitly
+   regenerated against the current contract.
 
 ## Objective
 
@@ -39,6 +42,9 @@ Success means:
     - task-frame objective, evidence, and confidence
     - explicit `wrong_plan_branch`, `ignoring_repo_truth`, and `dead_end_thrash` scores
     - `expected_next_step` for operator warnings
+  - freshly regenerated current-schema analyzer bundles for replay validation; do not rely on older
+    dev/testing artifacts unless they have been regenerated against the current compactor/analyzer
+    contract
   - bounded replay or live event windows
 - Optional model posture:
   - `gpt-5.4-mini`
@@ -169,11 +175,13 @@ Required test layers:
   - keep model adjudication optional and bounded
   - keep operator messaging evidence-backed and concise
   - support replay mode before live mode is treated as complete
+  - use freshly regenerated current-schema bundles for replay validation
 - Ask first:
   - automated steering or intervention
   - blocking the main agent based on sentinel output
   - deep runtime integration into shell/world flows
   - expanding model usage beyond bounded ambiguous cases
+  - adding backward-compatibility support for stale or mixed-version dev/testing bundles
 - Never:
   - make the model the sole explanation path
   - redefine transcript parsing inside the sentinel

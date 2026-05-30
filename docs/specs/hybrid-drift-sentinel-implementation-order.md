@@ -247,6 +247,12 @@ Why:
 - proves replay input handling
 - lands the scheduler before UI polish
 
+Packet 11 input note:
+
+- replay-mode validation should use freshly regenerated current-schema analyzer bundles
+- do not treat older dev/testing artifacts as valid Packet 11 audit inputs unless they have been
+  explicitly regenerated against the current compactor/analyzer contract
+
 ### Packet 12: Sentinel operator loop
 
 - `S4`

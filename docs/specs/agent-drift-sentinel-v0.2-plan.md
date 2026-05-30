@@ -13,6 +13,9 @@ The goal is to deliver a library-first crate with a thin CLI or sidecar that:
 
 This module is intentionally downstream of the compactor and analyzer and should not be built until
 their seams are trustworthy.
+Replay-mode validation should assume freshly regenerated current-schema analyzer bundles rather than
+older dev/testing artifacts unless those artifacts are explicitly regenerated against the current
+contract.
 
 ## Implementation Strategy
 
@@ -37,6 +40,8 @@ Deliver first:
 - checkpoint loading
 - replay-window loading if needed
 - stable checkpoint ordering and cursoring
+- explicit rejection or non-use of stale dev/testing bundles that do not match the current analyzer
+  contract
 
 Why first:
 
@@ -156,6 +161,19 @@ Mitigation:
 - replay mode is a hard prerequisite
 - live mode explicitly comes last in the sequencing
 
+### Risk 5: Replay validation uses stale artifacts and creates false failures
+
+Risk:
+
+- older dev/testing bundles may not match the current compactor/analyzer schema and could be
+  mistaken for sentinel regressions
+
+Mitigation:
+
+- use freshly regenerated current-schema bundles for replay validation
+- treat stale artifact failures as input-quality problems unless backward compatibility is explicitly
+  in scope
+
 ## Verification Checkpoints
 
 ### Checkpoint A: Replay Consumption Stable
@@ -167,6 +185,8 @@ Verify:
 Evidence:
 
 - replay-mode tests against fixture checkpoint bundles
+- replay validation notes that use freshly regenerated current-schema analyzer bundles rather than
+  older dev/testing leftovers
 
 ### Checkpoint B: Scheduler Useful
 
