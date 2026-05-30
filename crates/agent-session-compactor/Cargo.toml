@@ -1,0 +1,45 @@
+[package]
+name = "agent-session-compactor"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+description = "Deterministic Codex session compactor"
+license = "MIT"
+repository = "https://github.com/atomize-hq/substrate"
+publish = false
+
+[lib]
+name = "agent_session_compactor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "agent-session-compactor"
+path = "src/main.rs"
+doc = false
+
+[dependencies]
+anyhow = { workspace = true }
+blake3 = "1.5"
+camino = { version = "1.1", features = ["serde1"] }
+clap = { version = "4.5", features = ["derive"] }
+codex = { package = "unified-agent-api-codex", version = "=0.3.5" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = "1.0"
+time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde", "serde-well-known"] }
+walkdir = "2.5"
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+unused_crate_dependencies = "warn"
+
+[lints.clippy]
+dbg_macro = "warn"
+print_stdout = "allow"
+print_stderr = "allow"
+todo = "warn"
+unwrap_used = "warn"

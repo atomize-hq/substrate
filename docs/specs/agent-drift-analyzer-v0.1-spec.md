@@ -214,3 +214,7 @@ The spec is satisfied when:
 2. Which evidence refs belong in the checkpoint contract versus a separate expanded audit artifact?
 3. Should the analyzer emit only checkpoints, or also a machine-readable per-session evaluation
    report for calibration?
+
+## Gate Notes
+
+- `C11` compactor contract gate outcome on `2026-05-29`: the upstream compactor bundle is stable enough for analyzer planning with `manifest.json`, `rows.archival.jsonl`, `rows.compact.jsonl`, `dedupe-audit.jsonl`, and `summary.md` emitted deterministically from repeat runs against the same corpus.

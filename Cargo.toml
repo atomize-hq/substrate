@@ -45,6 +45,7 @@ members = [
     "crates/shell",
     "crates/gateway",
     "crates/lift",
+    "crates/agent-session-compactor",
     # New Phase 4 crates
     "crates/world-api",
     "crates/world",

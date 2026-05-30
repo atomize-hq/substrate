@@ -251,3 +251,8 @@ The spec is satisfied when:
 3. Should archived session directories outside `sessions/` be deferred entirely from v0.1?
 4. Which parser-seam gaps, if any, justify planned changes in `unified-agent-api-*` rather than
    downstream workarounds?
+
+## Gate Notes
+
+- `C5` gate outcome on `2026-05-29`: `cargo run -p agent-session-compactor -- --codex-home ~/.codex --output-dir target/agent-session-compactor/latest` completed against the real local Codex corpus without exposing a blocking parser-surface gap in `unified-agent-api-codex`. Downstream work can continue on the current rollout seam.
+- `C11` gate outcome on `2026-05-29`: the artifact contract is stable enough for downstream analyzer consumption. Repeated synthetic end-to-end runs are deterministic, and a real-session run for `019e767c-e64b-7b93-a540-7a33a90f780f` emitted the full five-file bundle successfully. The all-sessions corpus run hit a runtime budget limit because the local corpus is very large, not because the bundle contract drifted.

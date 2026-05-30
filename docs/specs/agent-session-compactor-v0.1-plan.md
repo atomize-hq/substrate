@@ -220,6 +220,7 @@ Evidence:
 
 - targeted fixture tests
 - at least one real-session dry run through the library pipeline
+- `2026-05-29`: `cargo run -p agent-session-compactor -- --codex-home ~/.codex --output-dir target/agent-session-compactor/latest` completed without revealing a rollout parser-surface gap that would require an upstream `unified-agent-api-*` change before normalization work.
 
 ### Checkpoint C: Deterministic Compaction
 
@@ -242,6 +243,9 @@ Evidence:
 
 - crate tests
 - end-to-end run using the documented `cargo run` command
+- `2026-05-29`: repeated `tests/end_to_end.rs` runs produced stable bundle artifacts for the same synthetic Codex corpus.
+- `2026-05-29`: a real-session run for `019e767c-e64b-7b93-a540-7a33a90f780f` produced `manifest.json`, `rows.archival.jsonl`, `rows.compact.jsonl`, `dedupe-audit.jsonl`, and `summary.md` with stable counts (`266` archival rows, `208` compact rows, `16` dedupe groups).
+- `2026-05-29`: the all-sessions command `cargo run -p agent-session-compactor -- --codex-home ~/.codex --output-dir target/agent-session-compactor/latest` progressed into export on a corpus of roughly `7,231` rollout files / `2.5G` but exceeded the available tool runtime budget before completion; treat that as an environment/runtime limit rather than an artifact-contract instability.
 
 ## Handoff To Next Module
 
