@@ -243,6 +243,21 @@ pub(crate) fn build_auto_attach_launch_plan(
             AttachModePreference::ContinuityPreferred
         }
     };
+    if attach_contract.continuity_uaa_session_id.is_none() {
+        match attach_contract.attach_launch_knobs.attach_mode_preference {
+            crate::execution::agent_runtime::orchestration_session::HostAttachModePreference::ContinuityRequired => {
+                anyhow::bail!(
+                    "owner_unreachable: persisted host attach contract no longer has continuity required for this attach launch"
+                );
+            }
+            crate::execution::agent_runtime::orchestration_session::HostAttachModePreference::ContinuityPreferred
+            | crate::execution::agent_runtime::orchestration_session::HostAttachModePreference::FreshAllowed => {
+                anyhow::bail!(
+                    "unsupported_attach_mode: orchestration session {orchestration_session_id} would require fresh control-only attach, and that mode is not sanctioned in this slice"
+                );
+            }
+        }
+    }
     let envelope = DispatchRequestEnvelope {
         caller_kind: DispatchCallerKind::HumanReattach,
         baseline_kind: DispatchBaselineKind::PersistedHostAttach,
@@ -419,7 +434,8 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn auto_attach_launch_plan_falls_back_to_fresh_when_continuity_is_unavailable() {
+    fn auto_attach_launch_plan_fails_closed_when_continuity_is_unavailable_and_fresh_would_be_required(
+    ) {
         with_store(|store| {
             let (mut session, participant) =
                 detached_orchestrator("sess_auto_attach_fresh", "ash_auto_attach_fresh_source");
@@ -442,14 +458,16 @@ mod tests {
                 .persist_participant(&participant)
                 .expect("persist participant");
 
-            let plan = build_auto_attach_launch_plan(store, "sess_auto_attach_fresh")
-                .expect("build fresh auto attach plan");
-            assert_eq!(plan.mode, OwnerHelperMode::Attach);
-            assert_eq!(plan.participant.internal_uaa_session_id, None);
-            assert!(!plan.requires_internal_session_id());
-            assert_eq!(
-                plan.participant.resumed_from_participant_id.as_deref(),
-                Some("ash_auto_attach_fresh_source")
+            let err = build_auto_attach_launch_plan(store, "sess_auto_attach_fresh")
+                .expect_err("fresh-needed automatic attach must fail closed");
+            assert!(
+                err.to_string().contains("unsupported_attach_mode"),
+                "error should classify the fresh-needed branch as unsupported: {err:#}"
+            );
+            assert!(
+                err.to_string()
+                    .contains("would require fresh control-only attach"),
+                "error should explain that continuity is missing and fresh attach is not allowed: {err:#}"
             );
         });
     }
