@@ -241,6 +241,38 @@ Do not compress across these gates:
 Those are the points most likely to reveal the wrong seam, the wrong downstream contract, or the
 wrong scope for the next packet.
 
+## Gate Policy
+
+Use these rules during incremental implementation:
+
+- `auto-continue`
+  - the agent should report the gate result in chat and continue automatically if the gate passes
+- `raise-to-user-if-failed`
+  - the agent should continue automatically on pass
+  - the agent should stop and raise a concrete issue in chat if the gate fails or exposes a real
+    seam problem
+- `always-check-with-user`
+  - the agent should stop for an explicit user decision before proceeding past the gate, even if the
+    implementation work appears technically ready
+
+Gate classification for this project:
+
+- `C5` = `raise-to-user-if-failed`
+  - parser-surface pressure test; escalate if `unified-agent-api-*` likely needs upstream changes
+- `C11` = `auto-continue`
+  - compactor artifact freeze; report status and continue if outputs are stable
+- `A3` = `raise-to-user-if-failed`
+  - analyzer contract gate; escalate if compactor artifacts are not sufficient without distorting
+    assumptions
+- `A12` = `auto-continue`
+  - analyzer checkpoint freeze; report status and continue if replay consumers have a stable contract
+- `S9` = `always-check-with-user`
+  - replay usefulness gate; confirm the operator value before treating the sentinel as ready to move
+    beyond replay validation
+- `S10` = `always-check-with-user`
+  - live integration gate; require an explicit user decision before starting live-mode or broader
+    runtime integration work
+
 ## Recommended Incremental-Implementation Order
 
 Use this order exactly unless a gate forces redesign:
