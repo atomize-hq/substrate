@@ -5,6 +5,17 @@ Keep concise, actionable, and security-focused.
 
 ## Next
 
+- **P1 – First-class observability for internal world-dispatch bootstrap**
+  - Problem: Slice 32 currently has asymmetric observability. `spawn_world_worker` is auditable through authoritative runtime/session state plus existing runtime event flows, but `run_world_task` is still reduced by the shell to terminal outcome plus a `saw_registered_event` hint. The docs should describe that honestly, and the runtime should eventually make the one-shot path explicit instead of implicit.
+  - Goal: make `run_world_task` observability first-class and explicit without weakening current redaction/safety rules.
+  - Work:
+    - Decide the additive mechanism for internal world-dispatch observability: structured runtime event publication, dedicated trace rows, or another explicit trace-safe surface.
+    - Once implemented, converge the docs on one contract term for that mechanism instead of mixing vocabulary: republished runtime events, dedicated trace rows, or another additive trace family.
+    - Ensure the chosen mechanism distinguishes one-shot `run_world_task` visibility from retained `spawn_world_worker` lifecycle visibility instead of conflating the two.
+    - Preserve existing safe-by-default posture: omit raw request/response payloads by default and reuse shared redaction rules.
+    - Update `docs/TRACE.md`, `docs/internals/trace/schema.md`, and any operator-facing CLI docs in lockstep when the runtime contract becomes real.
+  - Acceptance: operators can see explicit, queryable observability for `run_world_task` without relying on terminal-summary inference or the current `saw_registered_event` reduction; the change is additive and documented as such.
+
 - **P0 – In-world process execution tracing parity (match host-level visibility)**
   - Problem: host execution is richly observable via the shim (per-process exec logging), but world execution is primarily observable at the “one command per world execute” level. This creates blind spots for world-deps installs and wrapper-based tools (e.g. `nvm` wrappers invoking `bash -lc ...`), where internal subprocesses are not recorded as structured events.
   - Goal: in-world activity is traceable at the same granularity as the host: every spawned process (argv/env redaction/exit code/timing) is captured and attached to spans, so debugging and policy auditing do not depend on stdout/stderr inference.

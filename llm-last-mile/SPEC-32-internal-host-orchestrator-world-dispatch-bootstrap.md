@@ -40,6 +40,7 @@ Primary operator/runtime story:
    - authoritative retained worker receipt for `spawn_world_worker`,
 5. no ongoing conversational retained-worker messaging is claimed yet,
 6. no family-2 durable obligation production is required yet.
+7. observability in this slice stays limited to existing runtime/session state plus existing runtime event flows; it does not promise a dedicated toolbox trace family or first-class `run_world_task` trace publication.
 
 ## Frozen Direction
 

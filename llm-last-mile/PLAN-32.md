@@ -149,7 +149,7 @@ Verification checkpoint:
 Goal:
 
 1. land the minimum safety boundary needed for a truthful first slice,
-2. align docs and trace expectations,
+2. align docs and trace expectations, including the shipped asymmetry between authoritative retained-worker bootstrap visibility and terminal-only `run_world_task` visibility,
 3. run the validation wall.
 
 Primary touch surface:

@@ -111,6 +111,10 @@ Required join keys for router-derived rows:
 
 The current shipped trace surface does not emit dedicated toolbox tool-call rows.
 
+Current slice-32 bootstrap posture:
+- `spawn_world_worker` consumes a streamed `Registered` agent event, materializes an authoritative retained-worker receipt, and persists retained-worker identity into runtime/session state, but it does not append dedicated toolbox tool-call rows.
+- `run_world_task` currently reduces stream handling to terminal exit plus a `saw_registered_event` continuity hint and does not publish a dedicated first-class trace row from that internal dispatch path.
+
 Reserved future event types:
 - `toolbox_tool_call_start`
 - `toolbox_tool_call_complete`

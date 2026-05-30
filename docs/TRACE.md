@@ -188,7 +188,7 @@ The shell-owned UAA runtime translates external `agent_api` wrapper events into 
 - `provider` omitted
 - `auth_authority` omitted
 
-Bootstrap and lifecycle rows for the first host orchestrator caller path are emitted through the same canonical `agent_event` family; raw wrapper output stays outside `trace.jsonl`.
+Bootstrap and lifecycle rows that already flow through the shell-owned agent-event publisher use the same canonical `agent_event` family; raw wrapper output stays outside `trace.jsonl`. This is not a blanket claim that every internal world-dispatch stream frame is republished into canonical trace.
 
 Runtime-owned shell rows follow the same rule. Host stream chunks, shell command-completion events, and world-restart alerts emit orchestration-scoped `agent_event` rows only when a live parent orchestration session exists and supplies the real `orchestration_session_id`; otherwise stdout/stderr, `command_*` trace spans, and operator-facing terminal messaging continue without appending an orchestration-scoped `agent_event` row. Suppression here is additive only: missing orchestration context suppresses the shell-owned `agent_event` row, but it does not authorize heuristic recovery or synthetic correlation.
 
@@ -236,7 +236,8 @@ The internal orchestration toolbox bootstrap path does not currently append dedi
 
 Current shipped posture:
 - The live slice-32 caller path is bootstrap-only.
-- Internal `run_world_task` and `spawn_world_worker` activity is observable today through the existing retained-runtime/session state plus the structured agent events already emitted by the runtime flows.
+- `spawn_world_worker` is observable today through the streamed `registered` `agent_event` it requires for receipt validation, the authoritative retained-worker receipt the shell returns, the persisted session-root participant state under `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/`, and the live-runtime view consumed by `substrate agent status`.
+- `run_world_task` does not currently publish a first-class internal world-dispatch trace family or republish its consumed stream events into canonical trace. In [`orchestrator_world_dispatch.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/orchestrator_world_dispatch.rs:449), the shell currently reduces the stream to terminal exit status plus `saw_registered_event`, which only affects the returned terminal summary.
 - There is no shipped `component: "agent-toolbox"` record family yet, and no shipped `toolbox_tool_call_start` or `toolbox_tool_call_complete` rows to query in `trace.jsonl`.
 
 Reserved vocabulary:

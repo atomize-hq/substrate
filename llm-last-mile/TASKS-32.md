@@ -155,7 +155,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
 
 - [x] Task 4.2: Add audit/docs coverage without widening the surface
-  - Acceptance: any new trace rows or docs describe the caller surface as internal bootstrap-only; `docs/USAGE.md` and `docs/TRACE.md` remain honest about toolbox posture; no wording implies a broader execution plane than what actually landed.
+  - Acceptance: any new trace rows or docs describe the caller surface as internal bootstrap-only; `docs/USAGE.md` and `docs/TRACE.md` remain honest about toolbox posture; no wording implies a broader execution plane than what actually landed; `spawn_world_worker` may rely on existing runtime/session state plus runtime events, while `run_world_task` must not be described as already having first-class dedicated trace publication.
   - Verify:
     - manual diff review
   - Expected files touched:
