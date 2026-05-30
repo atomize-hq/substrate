@@ -13,17 +13,17 @@ This task list implements:
   - Files: `Cargo.toml`, `crates/agent-drift-analyzer/Cargo.toml`, `crates/agent-drift-analyzer/src/lib.rs`, `crates/agent-drift-analyzer/src/main.rs`
 
 - [ ] Task: Implement compactor artifact loading and contract checks
-  - Acceptance: the analyzer loads `manifest.json`, `rows.archival.jsonl`, `rows.compact.jsonl`, and `dedupe-audit.jsonl`, validates session scope, and fails clearly on malformed input.
+  - Acceptance: the analyzer loads `manifest.json`, `rows.archival.jsonl`, `rows.compact.jsonl`, and `dedupe-audit.jsonl`, validates session scope, respects the landed bundle publication contract, and fails clearly on malformed input.
   - Verify: `cargo test -p agent-drift-analyzer input_contract -- --nocapture`
   - Files: `crates/agent-drift-analyzer/src/input.rs`, `crates/agent-drift-analyzer/src/lib.rs`, `crates/agent-drift-analyzer/tests/input_contract.rs`
 
 - [ ] Task: Gate the compactor artifact surface before analyzer heuristics
-  - Acceptance: the analyzer no longer needs to guess around missing row information; if the gap is really upstream parser or compactor surface design, the implementation pauses for that decision rather than encoding distorted assumptions.
+  - Acceptance: the analyzer no longer needs to guess around missing row information; if the landed row contract is not sufficient for useful working-set inference, the implementation pauses for that compactor-contract decision rather than encoding distorted assumptions.
   - Verify: `cargo test -p agent-drift-analyzer input_contract -- --nocapture`
   - Files: `docs/specs/agent-drift-analyzer-v0.1-plan.md`, `docs/specs/agent-drift-analyzer-v0.1-spec.md`, `docs/specs/agent-session-compactor-v0.1-spec.md`
 
 - [ ] Task: Implement deterministic context assembly
-  - Acceptance: the analyzer derives objective, candidate truth artifacts, working-set paths, tools, and command families from session artifacts in a stable way.
+  - Acceptance: the analyzer derives objective, candidate truth artifacts, working-set paths, tools, and command families from the landed row kinds, dedupe identities, and payload text in a stable way.
   - Verify: `cargo test -p agent-drift-analyzer context_assembly -- --nocapture`
   - Files: `crates/agent-drift-analyzer/src/context/mod.rs`, `crates/agent-drift-analyzer/src/context/objective.rs`, `crates/agent-drift-analyzer/src/context/working_set.rs`, `crates/agent-drift-analyzer/tests/context_assembly.rs`
 

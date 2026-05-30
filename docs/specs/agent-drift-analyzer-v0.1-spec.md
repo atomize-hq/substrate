@@ -11,6 +11,9 @@
 6. The first consumer is the human operator evaluating drift, not an autonomous steering loop.
 7. If compactor pressure testing exposes parser-surface gaps in `unified-agent-api-*`, those should
    be resolved upstream before the analyzer is planned around distorted artifacts.
+8. The currently landed compactor contract is row-oriented and does not yet provide first-class
+   `file_read`, `file_edit`, or `command_summary` event kinds, so analyzer v0.1 must begin from the
+   actual row kinds and payload surfaces that now exist.
 
 ## Objective
 
@@ -42,6 +45,8 @@ Success means:
   - `rows.compact.jsonl`
   - `dedupe-audit.jsonl`
   - `manifest.json`
+  - atomically published final output directory whose `manifest.json` appears only after the other
+    analyzer-facing files are complete
 - Supporting dependencies:
   - `serde`
   - `serde_json`
@@ -119,6 +124,8 @@ docs/specs/agent-drift-analyzer-v0.1-spec.md
 ## Code Style
 
 Design the analyzer around evidence refs and explicit thresholds rather than prose-only summaries.
+The initial implementation should consume the actual compactor row surface that now exists, including
+stable `RowRef` identity by `source_file`, `line_number`, `event_index`, and `row_ordinal`.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -144,6 +151,8 @@ Conventions:
 - evidence references preferred over freeform explanation strings
 - no hidden model-like heuristics
 - binary remains a thin wrapper around library-owned behavior
+- infer files, tools, and command families from the landed row/payload surface unless the compactor
+  contract is explicitly widened
 
 ## Testing Strategy
 
@@ -160,7 +169,8 @@ Required test layers:
 2. Context assembly tests
    - objective extraction prefers literal user language
    - candidate truth artifacts rank explicit user mentions above inferred artifacts
-   - working-set assembly distinguishes files, tools, and command families
+   - working-set assembly distinguishes files, tools, and command families from the actual landed
+     row and payload surface
 3. Task-frame inference tests
    - the analyzer infers a usable task frame without any plan artifact
    - confidence drops when multiple plausible frames fit the evidence
@@ -181,6 +191,7 @@ Required test layers:
   - emit explicit evidence references for scored drift
   - preserve deterministic checkpoint ordering
   - use repetition-preserving evidence for thrash detection
+  - treat the compactor's current row kinds and payloads as the starting analyzer contract
 - Ask first:
   - cross-session aggregation or ranking
   - adding new drift classes beyond the initial three
@@ -188,6 +199,8 @@ Required test layers:
   - treating inferred truth artifacts as authoritative without user pinning
   - planning around distorted or incomplete compactor artifacts if the real issue is an upstream
     parser surface in `unified-agent-api-*`
+  - widening compactor output with first-class file or command summary event kinds if the current
+    row surface is not sufficient
 - Never:
   - parse raw Codex transcript files as the primary path
   - require a plan artifact
@@ -202,11 +215,13 @@ The spec is satisfied when:
 2. The crate consumes compactor artifacts rather than raw session files.
 3. The analyzer infers a session-scoped `task frame` without requiring a plan file.
 4. The analyzer scores exactly three deterministic drift classes in v0.1.
-5. Every flagged drift condition includes stable evidence references.
-6. The analyzer emits a reviewable bundle containing:
+5. The analyzer works from the landed compactor row contract, or explicitly stops at the artifact
+   gate with evidence that the contract must be widened first.
+6. Every flagged drift condition includes stable evidence references.
+7. The analyzer emits a reviewable bundle containing:
    - `checkpoints.jsonl`
    - `summary.md`
-7. The output is useful for human review before any live steering loop exists.
+8. The output is useful for human review before any live steering loop exists.
 
 ## Open Questions
 
@@ -214,6 +229,8 @@ The spec is satisfied when:
 2. Which evidence refs belong in the checkpoint contract versus a separate expanded audit artifact?
 3. Should the analyzer emit only checkpoints, or also a machine-readable per-session evaluation
    report for calibration?
+4. Does the landed compactor row surface support useful working-set inference as-is, or is a narrow
+   contract widening needed before analyzer heuristics go deeper?
 
 ## Gate Notes
 

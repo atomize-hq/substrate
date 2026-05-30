@@ -13,6 +13,8 @@ The goal is to deliver a library-first crate with a thin CLI that:
 - emits reviewable checkpoints
 
 This module depends on the compactor artifact contract being stable enough to consume directly.
+That contract is now concrete: analyzer work should assume the landed compactor bundle and row
+shapes first, not the richer hypothetical event taxonomy from earlier sentinel ideation.
 
 ## Implementation Strategy
 
@@ -41,6 +43,7 @@ Deliver first:
 - loading for `rows.compact.jsonl`
 - loading for `dedupe-audit.jsonl`
 - session-scope validation and ordering checks
+- row-contract validation against the landed `CompactionRow`, `RowRef`, and `DedupeGroup` shapes
 
 Critical rule:
 
@@ -53,7 +56,7 @@ Deliver second:
 
 - objective extraction from user-originated rows
 - candidate truth artifact ranking
-- observed working-set assembly
+- observed working-set assembly from the landed row kinds, dedupe identities, and payload text
 - command-family and tool summaries
 
 Why second:
@@ -141,6 +144,7 @@ Mitigation:
 
 - validate analyzer needs at the compactor handoff checkpoint
 - prefer improving the compactor contract over analyzer-side guessing
+- do not assume first-class file or command event kinds that the compactor does not currently emit
 
 ### Risk 2: Task-frame inference is too fuzzy
 
@@ -184,6 +188,8 @@ Verify:
 
 - analyzer loads compactor artifacts without guessing
 - session boundaries are explicit
+- the landed row contract is sufficient for initial context assembly, or the gap is documented as a
+  contract-widening decision
 
 Evidence:
 
