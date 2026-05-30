@@ -119,15 +119,6 @@ impl PromptFulfillmentBridge {
         }
     }
 
-    pub(crate) async fn run_fresh_attach_control(
-        &self,
-    ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
-        match self.backend_kind {
-            GatewayAdapterBackendKind::Codex => self.run_codex_fresh_attach_control().await,
-            GatewayAdapterBackendKind::ClaudeCode => self.run_claude_fresh_attach_control().await,
-        }
-    }
-
     async fn run_codex_attach_control(
         &self,
         session_id: &str,
@@ -148,81 +139,6 @@ impl PromptFulfillmentBridge {
         let control = client
             .stream_resume_with_env_overrides_control(
                 codex::ResumeRequest::with_id(session_id),
-                &BTreeMap::new(),
-            )
-            .await
-            .map_err(map_codex_stream_error)?;
-        let codex::ExecStreamControl {
-            events,
-            completion,
-            termination,
-        } = control;
-        let cancel_requested = Arc::new(AtomicBool::new(false));
-        let completion_cancel_requested = Arc::clone(&cancel_requested);
-
-        let events = Box::pin(events.map(|event| match event {
-            Ok(event) => map_codex_attach_event(event),
-            Err(err) => AgentWrapperEvent {
-                agent_kind: codex_kind(),
-                kind: AgentWrapperEventKind::Error,
-                channel: Some("error".to_string()),
-                text: None,
-                message: Some(format!("codex attach stream failed: {err}")),
-                data: None,
-            },
-        }));
-        let completion = Box::pin(async move {
-            let completion = completion.await.map_err(|err| {
-                if completion_cancel_requested.load(Ordering::SeqCst) {
-                    cancelled_wrapper_error()
-                } else {
-                    map_codex_stream_error(err)
-                }
-            })?;
-            Ok(AgentWrapperCompletion {
-                status: completion.status,
-                final_text: completion.last_message,
-                data: None,
-            })
-        });
-
-        Ok(PromptFulfillmentRunControl {
-            handle: AgentWrapperRunHandle { events, completion },
-            cancel: PromptFulfillmentCancelHandle::Codex {
-                handle: termination,
-                cancel_requested,
-            },
-        })
-    }
-
-    async fn run_codex_fresh_attach_control(
-        &self,
-    ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
-        let mut builder = codex::CodexClient::builder()
-            .json(true)
-            .mirror_stdout(false)
-            .quiet(true)
-            .color_mode(codex::ColorMode::Never)
-            .approval_policy(codex::ApprovalPolicy::Never)
-            .sandbox_mode(codex::SandboxMode::WorkspaceWrite)
-            .binary(self.binary_path.clone());
-        if let Some(working_dir) = current_working_dir()? {
-            builder = builder.working_dir(working_dir);
-        }
-
-        let client = builder.build();
-        let control = client
-            .stream_exec_with_env_overrides_control(
-                codex::ExecStreamRequest {
-                    prompt: String::new(),
-                    ephemeral: false,
-                    ignore_rules: false,
-                    ignore_user_config: false,
-                    idle_timeout: None,
-                    output_last_message: None,
-                    output_schema: None,
-                    json_event_log: None,
-                },
                 &BTreeMap::new(),
             )
             .await
@@ -307,68 +223,6 @@ impl PromptFulfillmentBridge {
                 channel: Some("error".to_string()),
                 text: None,
                 message: Some(format!("claude_code attach stream parse failed: {err}")),
-                data: None,
-            },
-        }));
-        let completion = Box::pin(async move {
-            let status = completion.await.map_err(|err| {
-                if completion_cancel_requested.load(Ordering::SeqCst) {
-                    cancelled_wrapper_error()
-                } else {
-                    map_claude_error(err)
-                }
-            })?;
-            Ok(AgentWrapperCompletion {
-                status,
-                final_text: None,
-                data: None,
-            })
-        });
-
-        Ok(PromptFulfillmentRunControl {
-            handle: AgentWrapperRunHandle { events, completion },
-            cancel: PromptFulfillmentCancelHandle::Claude {
-                handle: termination,
-                cancel_requested,
-            },
-        })
-    }
-
-    async fn run_claude_fresh_attach_control(
-        &self,
-    ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
-        let mut builder = claude_code::ClaudeClient::builder()
-            .binary(&self.binary_path)
-            .mirror_stdout(false)
-            .mirror_stderr(false);
-        if let Some(working_dir) = current_working_dir()? {
-            builder = builder.working_dir(working_dir);
-        }
-
-        let client = builder.build();
-        let request = claude_code::ClaudePrintRequest::new("substrate-attach")
-            .no_prompt()
-            .output_format(claude_code::ClaudeOutputFormat::StreamJson);
-        let control = client
-            .print_stream_json_control(request)
-            .await
-            .map_err(map_claude_error)?;
-        let claude_code::ClaudePrintStreamJsonControlHandle {
-            events,
-            completion,
-            termination,
-        } = control;
-        let cancel_requested = Arc::new(AtomicBool::new(false));
-        let completion_cancel_requested = Arc::clone(&cancel_requested);
-
-        let events = Box::pin(events.map(|event| match event {
-            Ok(event) => map_claude_attach_event(event),
-            Err(err) => AgentWrapperEvent {
-                agent_kind: claude_kind(),
-                kind: AgentWrapperEventKind::Error,
-                channel: Some("error".to_string()),
-                text: None,
-                message: Some(format!("claude-code attach stream failed: {err}")),
                 data: None,
             },
         }));

@@ -3230,7 +3230,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         });
     }
     let control = match if control_only_attach {
-        if let Some(continuity_session_id) = startup_extensions
+        let Some(continuity_session_id) = startup_extensions
             .get(AGENT_API_SESSION_RESUME_V1)
             .and_then(|value| value.as_object())
             .filter(|value| value.get("selector").and_then(serde_json::Value::as_str) == Some("id"))
@@ -3238,13 +3238,42 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             .and_then(serde_json::Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .map(ToOwned::to_owned)
-        {
-            prompt_fulfillment
-                .run_attach_control(&continuity_session_id)
-                .await
-        } else {
-            prompt_fulfillment.run_fresh_attach_control().await
-        }
+        else {
+            let failure = RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "unsupported_attach_mode: fresh control-only attach is not sanctioned in this slice".to_string(),
+            };
+            if let Some(backchannel) = startup_backchannel.as_ref() {
+                let (orchestration_snapshot, manifest_snapshot) = {
+                    let mut orchestration_guard = startup_context
+                        .orchestration_session
+                        .lock()
+                        .expect("orchestration session mutex poisoned");
+                    let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+                    orchestration_guard.mark_startup_prompt_failed(
+                        manifest_guard.handle.participant_id.as_str(),
+                        failure.message.clone(),
+                    );
+                    (orchestration_guard.clone(), manifest_guard.clone())
+                };
+                let _ = persist_runtime_snapshots(
+                    &startup_context.store,
+                    &orchestration_snapshot,
+                    &manifest_snapshot,
+                );
+                backchannel.send(startup_prompt_failed_envelope(failure.message.clone()));
+            }
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &failure.message,
+            );
+            return Err(failure);
+        };
+        prompt_fulfillment
+            .run_attach_control(&continuity_session_id)
+            .await
     } else {
         let request = agent_api::AgentWrapperRunRequest {
             prompt: match initial_prompt.as_ref() {
@@ -9417,14 +9446,44 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn hidden_owner_helper_attach_startup_allows_fresh_attach_without_continuity() {
-        let mut plan = super::HiddenOwnerHelperLaunchPlan {
+    fn hidden_owner_helper_attach_startup_fails_closed_without_continuity() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let (fake_codex, stdin_capture_path) = write_fake_codex_attach_capture_script(&temp);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file("codex", "host", "codex", &fake_codex),
+        )
+        .expect("write codex agent file");
+
+        let mut descriptor = test_runtime_selection_descriptor();
+        descriptor.binary_path = fake_codex.clone();
+        let plan = super::HiddenOwnerHelperLaunchPlan {
             mode: super::OwnerHelperMode::Attach,
-            descriptor: super::ResolvedRuntimeDescriptor::from(&test_runtime_selection_descriptor()),
+            descriptor: super::ResolvedRuntimeDescriptor::from(&descriptor),
             session: HiddenOwnerHelperSessionPlan {
                 orchestration_session_id: "orch-attach-fresh".to_string(),
                 shell_trace_session_id: "trace-attach-fresh".to_string(),
-                workspace_root: "/workspace".to_string(),
+                workspace_root: workspace_root.display().to_string(),
                 world_id: None,
                 world_generation: None,
             },
@@ -9460,15 +9519,67 @@ mod tests {
             owner_helper_startup_extensions(&plan).expect("fresh attach extensions should resolve");
         assert!(
             startup_extensions.is_empty(),
-            "fresh attach must not require a resume extension when continuity is absent: {startup_extensions:?}"
+            "fresh-needed attach should still carry no continuity selector before runtime rejection: {startup_extensions:?}"
         );
-        plan.participant.internal_uaa_session_id = Some("uaa-resume".to_string());
-        let startup_extensions = owner_helper_startup_extensions(&plan)
-            .expect("attach with continuity extensions should resolve");
+
+        let config = Arc::new(
+            owner_helper_shell_config(&plan)
+                .expect("owner helper attach shell config should resolve"),
+        );
+        let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
+            .expect("prepare hidden owner-helper attach runtime should succeed");
+        let store = prepared.startup_context.store.clone();
+        let mut telemetry = ReplSessionTelemetry::new(config, "async-test");
+
+        let failure = match tokio::runtime::Runtime::new()
+            .expect("tokio runtime")
+            .block_on(async {
+                start_host_orchestrator_runtime_with_prepared_prompt(
+                    Some(prepared),
+                    None,
+                    None,
+                    true,
+                    true,
+                    false,
+                    &ReplPrinter::Stdout,
+                    &mut telemetry,
+                )
+                .await
+            }) {
+            Ok(Some(_)) => panic!("fresh-needed control-only attach should fail closed"),
+            Ok(None) => {
+                panic!("fresh-needed control-only attach should not return an empty runtime")
+            }
+            Err(failure) => failure,
+        };
         assert!(
-            startup_extensions.contains_key(AGENT_API_SESSION_RESUME_V1),
-            "attach with continuity should still publish the resume extension: {startup_extensions:?}"
+            failure.message.contains("unsupported_attach_mode"),
+            "failure should explain the unsupported fresh control-only attach: {failure:?}"
         );
+        assert!(
+            !stdin_capture_path.exists(),
+            "backend launch must not run when continuity is missing"
+        );
+
+        let parent = store
+            .load_orchestration_session("orch-attach-fresh")
+            .expect("load orchestration session")
+            .expect("failed orchestration session should exist");
+        assert_eq!(parent.state, OrchestrationSessionState::Failed);
+
+        let manifest = store
+            .list_manifests()
+            .expect("list manifests")
+            .into_iter()
+            .find(|manifest| manifest.handle.participant_id == "ash-attach-fresh")
+            .expect("failed manifest should exist");
+        assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Failed);
+        assert_eq!(
+            manifest.internal.last_error_bucket.as_deref(),
+            Some("bootstrap_run")
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
