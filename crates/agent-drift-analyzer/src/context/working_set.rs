@@ -61,7 +61,10 @@ pub fn collect_truth_artifacts(
                     evidence: Vec::new(),
                 })
                 .evidence
-                .push(evidence_from_row(row, format!("truth artifact hint: {path}")));
+                .push(evidence_from_row(
+                    row,
+                    format!("truth artifact hint: {path}"),
+                ));
         }
     }
 
@@ -133,7 +136,10 @@ pub fn collect_tools(commands: &[CommandObservation]) -> Vec<ToolObservation> {
 
 pub fn collect_command_observations(rows: &[CompactionRow]) -> Vec<CommandObservation> {
     let mut commands = Vec::new();
-    for row in rows.iter().filter(|row| row.kind == CompactionKind::ToolCall) {
+    for row in rows
+        .iter()
+        .filter(|row| row.kind == CompactionKind::ToolCall)
+    {
         let tool_name = tool_name(row);
         let payload = serde_json::from_str::<Value>(&row.text).ok();
         let raw_command = payload
@@ -186,7 +192,11 @@ fn command_family(command: &str) -> Option<String> {
         .split(['\n', ';', '|', '&'])
         .flat_map(str::split_whitespace)
         .find(|token| !token.contains('=') && !token.is_empty())
-        .map(|token| token.trim_matches(|ch: char| matches!(ch, '(' | ')' | '"' | '\'')).to_string())
+        .map(|token| {
+            token
+                .trim_matches(|ch: char| matches!(ch, '(' | ')' | '"' | '\''))
+                .to_string()
+        })
 }
 
 fn extract_apply_patch_paths(text: &str) -> Vec<String> {
@@ -202,7 +212,10 @@ fn extract_apply_patch_paths(text: &str) -> Vec<String> {
 }
 
 fn is_read_like(family: &str) -> bool {
-    matches!(family, "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq" | "git")
+    matches!(
+        family,
+        "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq" | "git"
+    )
 }
 
 fn is_write_like(family: &str) -> bool {

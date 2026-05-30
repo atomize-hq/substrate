@@ -16,13 +16,12 @@ pub struct DiscoveredSessionArtifact {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DiscoveryError {
-    #[error("failed to resolve Codex home: neither --codex-home, CODEX_HOME, nor HOME were available")]
+    #[error(
+        "failed to resolve Codex home: neither --codex-home, CODEX_HOME, nor HOME were available"
+    )]
     MissingCodexHome,
     #[error("resolved Codex home from {origin} was not valid UTF-8: {path}")]
-    NonUtf8Path {
-        origin: &'static str,
-        path: PathBuf,
-    },
+    NonUtf8Path { origin: &'static str, path: PathBuf },
     #[error("Codex sessions directory does not exist: {0}")]
     MissingSessionsDirectory(Utf8PathBuf),
     #[error("failed to walk Codex sessions directory {root}: {source}")]

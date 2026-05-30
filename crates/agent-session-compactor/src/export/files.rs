@@ -17,9 +17,11 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         path: paths.parent_dir.clone(),
         source,
     })?;
-    fs::create_dir_all(&paths.staging_dir).map_err(|source| ExportError::CreateOutputDirectory {
-        path: paths.staging_dir.clone(),
-        source,
+    fs::create_dir_all(&paths.staging_dir).map_err(|source| {
+        ExportError::CreateOutputDirectory {
+            path: paths.staging_dir.clone(),
+            source,
+        }
     })?;
 
     let manifest = BundleManifest {
@@ -69,9 +71,12 @@ struct BundlePaths {
 
 impl BundlePaths {
     fn new(output_dir: &Utf8Path) -> Result<Self, ExportError> {
-        let bundle_name = output_dir.file_name().ok_or_else(|| ExportError::InvalidOutputDirectory {
-            path: output_dir.to_owned(),
-        })?;
+        let bundle_name =
+            output_dir
+                .file_name()
+                .ok_or_else(|| ExportError::InvalidOutputDirectory {
+                    path: output_dir.to_owned(),
+                })?;
         let parent_dir = output_parent_dir(output_dir);
         Ok(Self {
             parent_dir: parent_dir.clone(),
@@ -90,18 +95,25 @@ fn output_parent_dir(output_dir: &Utf8Path) -> camino::Utf8PathBuf {
         .to_owned()
 }
 
-fn unique_sibling_dir(parent_dir: &Utf8Path, bundle_name: &str, label: &str) -> camino::Utf8PathBuf {
+fn unique_sibling_dir(
+    parent_dir: &Utf8Path,
+    bundle_name: &str,
+    label: &str,
+) -> camino::Utf8PathBuf {
     let timestamp_nanos = OffsetDateTime::now_utc().unix_timestamp_nanos();
     let pid = std::process::id();
     for attempt in 0..1024 {
-        let candidate =
-            parent_dir.join(format!(".{bundle_name}.{label}-{timestamp_nanos}-{pid}-{attempt}"));
+        let candidate = parent_dir.join(format!(
+            ".{bundle_name}.{label}-{timestamp_nanos}-{pid}-{attempt}"
+        ));
         if !candidate.exists() {
             return candidate;
         }
     }
 
-    parent_dir.join(format!(".{bundle_name}.{label}-{timestamp_nanos}-{pid}-overflow"))
+    parent_dir.join(format!(
+        ".{bundle_name}.{label}-{timestamp_nanos}-{pid}-overflow"
+    ))
 }
 
 fn publish_bundle(paths: &BundlePaths) -> Result<(), ExportError> {
@@ -144,10 +156,7 @@ fn maybe_inject_failure(point: &str) -> Result<(), ExportError> {
     }
 }
 
-fn write_json_file<T: serde::Serialize>(
-    path: &Utf8Path,
-    value: &T,
-) -> Result<(), ExportError> {
+fn write_json_file<T: serde::Serialize>(path: &Utf8Path, value: &T) -> Result<(), ExportError> {
     let file = File::create(path).map_err(|source| ExportError::WriteFile {
         path: path.to_owned(),
         source,
@@ -163,10 +172,7 @@ fn write_json_file<T: serde::Serialize>(
     })
 }
 
-fn write_jsonl_file<T: serde::Serialize>(
-    path: &Utf8Path,
-    rows: &[T],
-) -> Result<(), ExportError> {
+fn write_jsonl_file<T: serde::Serialize>(path: &Utf8Path, rows: &[T]) -> Result<(), ExportError> {
     let file = File::create(path).map_err(|source| ExportError::WriteFile {
         path: path.to_owned(),
         source,

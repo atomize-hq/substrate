@@ -81,7 +81,10 @@ pub fn export_checkpoints(
 }
 
 fn render_summary(checkpoints: &[Checkpoint]) -> String {
-    let flagged = checkpoints.iter().filter(|checkpoint| checkpoint.flagged).count();
+    let flagged = checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.flagged)
+        .count();
     let sessions = checkpoints.len();
     let mut lines = vec![
         "# Agent Drift Analyzer Summary".to_string(),

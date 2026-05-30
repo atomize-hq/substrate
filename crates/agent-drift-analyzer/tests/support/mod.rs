@@ -17,7 +17,11 @@ pub struct BundleFixture {
 
 impl BundleFixture {
     pub fn sample() -> Self {
-        Self::from_rows(sample_archival_rows(), sample_compact_rows(), sample_dedupe_groups())
+        Self::from_rows(
+            sample_archival_rows(),
+            sample_compact_rows(),
+            sample_dedupe_groups(),
+        )
     }
 
     pub fn from_rows(

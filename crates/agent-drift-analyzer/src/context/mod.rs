@@ -11,8 +11,9 @@ use crate::input::BundleSession;
 
 pub use objective::{extract_objective, extract_verification_commands, ObjectiveSummary};
 pub use working_set::{
-    collect_command_observations, collect_tools, collect_truth_artifacts, collect_working_set_paths,
-    CandidateTruthArtifact, CommandObservation, ToolObservation, WorkingSetPath,
+    collect_command_observations, collect_tools, collect_truth_artifacts,
+    collect_working_set_paths, CandidateTruthArtifact, CommandObservation, ToolObservation,
+    WorkingSetPath,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,8 +32,11 @@ pub fn assemble_context(session: &BundleSession) -> ContextPack {
     let objective = extract_objective(&session.compact_rows);
     let truth_artifacts = collect_truth_artifacts(&session.compact_rows, &objective);
     let command_observations = collect_command_observations(&session.compact_rows);
-    let working_set_paths =
-        collect_working_set_paths(&session.compact_rows, &truth_artifacts, &command_observations);
+    let working_set_paths = collect_working_set_paths(
+        &session.compact_rows,
+        &truth_artifacts,
+        &command_observations,
+    );
     let tools = collect_tools(&command_observations);
     let command_families = unique_command_families(&command_observations);
     let supporting_evidence = collect_supporting_evidence(
@@ -64,8 +68,16 @@ fn collect_supporting_evidence(
     let mut deduped = Vec::new();
     for evidence in objective
         .iter()
-        .chain(truth_artifacts.iter().flat_map(|artifact| artifact.evidence.iter()))
-        .chain(working_set_paths.iter().flat_map(|path| path.evidence.iter()))
+        .chain(
+            truth_artifacts
+                .iter()
+                .flat_map(|artifact| artifact.evidence.iter()),
+        )
+        .chain(
+            working_set_paths
+                .iter()
+                .flat_map(|path| path.evidence.iter()),
+        )
         .chain(tools.iter().flat_map(|tool| tool.evidence.iter()))
     {
         let key = evidence_key(evidence);
@@ -89,7 +101,9 @@ fn unique_command_families(commands: &[CommandObservation]) -> Vec<String> {
     families.into_iter().map(|(family, _)| family).collect()
 }
 
-pub(crate) fn directive_rows(rows: &[agent_session_compactor::CompactionRow]) -> impl Iterator<Item = &agent_session_compactor::CompactionRow> {
+pub(crate) fn directive_rows(
+    rows: &[agent_session_compactor::CompactionRow],
+) -> impl Iterator<Item = &agent_session_compactor::CompactionRow> {
     rows.iter().filter(|row| {
         matches!(
             row.kind,
@@ -106,7 +120,10 @@ pub(crate) fn focusable_directive_rows(
     directive_rows(rows).filter(|row| row_text_is_focusable(row))
 }
 
-pub(crate) fn evidence_from_row(row: &agent_session_compactor::CompactionRow, reason: impl Into<String>) -> EvidenceRef {
+pub(crate) fn evidence_from_row(
+    row: &agent_session_compactor::CompactionRow,
+    reason: impl Into<String>,
+) -> EvidenceRef {
     EvidenceRef {
         row: RowRef::from_row(row),
         reason: reason.into(),

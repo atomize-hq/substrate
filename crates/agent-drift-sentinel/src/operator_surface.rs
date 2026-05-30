@@ -4,7 +4,9 @@ use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
 use camino::Utf8Path;
 
 use crate::input::{CheckpointCursor, ReplayCheckpointBundle};
-use crate::scheduler::{DecisionReason, EvaluationDecision, ReplayScheduler, SchedulerPolicy, TriggerClass};
+use crate::scheduler::{
+    DecisionReason, EvaluationDecision, ReplayScheduler, SchedulerPolicy, TriggerClass,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WarningPolicy {
@@ -49,10 +51,7 @@ impl CheckpointPresentation {
             WarningDisposition::Visible => "warning",
             WarningDisposition::Silent { .. } => "checkpoint",
         };
-        lines.push(format!(
-            "[{label}] {} ({})",
-            self.headline, self.severity
-        ));
+        lines.push(format!("[{label}] {} ({})", self.headline, self.severity));
         lines.push(format!("- Objective: {}", self.objective));
         lines.push(format!("- Drift: {}", self.drift_summary));
         lines.push(format!("- Expected next step: {}", self.expected_next_step));
@@ -203,18 +202,24 @@ pub fn present_checkpoint(
         trigger,
         disposition,
         severity,
-        headline: format!(
-            "{} @ {}",
-            checkpoint.checkpoint_id,
-            format_trigger(trigger)
+        headline: format!("{} @ {}", checkpoint.checkpoint_id, format_trigger(trigger)),
+        objective: truncate(
+            &checkpoint.task_frame.objective,
+            warning_policy.max_objective_chars,
         ),
-        objective: truncate(&checkpoint.task_frame.objective, warning_policy.max_objective_chars),
         drift_summary: if flagged_scores.is_empty() {
             "no flagged drift classes".to_string()
         } else {
             flagged_scores
                 .iter()
-                .map(|score| format!("{}={} ({})", drift_class_name(score.class), score.raw_score, confidence_name(score.confidence)))
+                .map(|score| {
+                    format!(
+                        "{}={} ({})",
+                        drift_class_name(score.class),
+                        score.raw_score,
+                        confidence_name(score.confidence)
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(", ")
         },
@@ -255,7 +260,8 @@ pub fn classify_checkpoint(
         };
     }
 
-    if matches!(decision.reason, DecisionReason::WarningDebounced) || !decision.visible_warning_allowed
+    if matches!(decision.reason, DecisionReason::WarningDebounced)
+        || !decision.visible_warning_allowed
     {
         return WarningDisposition::Silent {
             reason: "warning debounce suppressed a duplicate replay warning".to_string(),

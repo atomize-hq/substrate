@@ -43,7 +43,9 @@ fn rollout_ingest_parses_records_and_captures_unknown_and_invalid_lines() {
     assert_eq!(rollout.records[2].event_index, 2);
     assert_eq!(rollout.parse_failures[0].event_index, 3);
     assert_eq!(rollout.unknown_records[0].line_number, 3);
-    assert!(rollout.parse_failures[0].error.contains("failed to parse codex rollout JSONL"));
+    assert!(rollout.parse_failures[0]
+        .error
+        .contains("failed to parse codex rollout JSONL"));
 
     match &rollout.records[1].event {
         RolloutEvent::ResponseItem(item) => {

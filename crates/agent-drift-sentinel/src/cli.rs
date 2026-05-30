@@ -3,8 +3,8 @@ use camino::Utf8PathBuf;
 use clap::{Parser, ValueEnum};
 
 use crate::{
-    execute, AdjudicationConfig, CheckpointCursor, ReasoningEffort, SchedulerPolicy,
-    SentinelMode, SentinelRequest, WarningPolicy,
+    execute, AdjudicationConfig, CheckpointCursor, ReasoningEffort, SchedulerPolicy, SentinelMode,
+    SentinelRequest, WarningPolicy,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -88,13 +88,13 @@ impl Cli {
             bail!("live mode remains gated by S10; replay usefulness review must pass first");
         }
 
-        let cursor = self
-            .cursor_session_id
-            .zip(self.cursor_ordinal)
-            .map(|(session_id, ordinal)| CheckpointCursor {
-                session_id,
-                ordinal,
-            });
+        let cursor =
+            self.cursor_session_id
+                .zip(self.cursor_ordinal)
+                .map(|(session_id, ordinal)| CheckpointCursor {
+                    session_id,
+                    ordinal,
+                });
 
         Ok(SentinelRequest {
             checkpoint_dir: self.checkpoint_dir,

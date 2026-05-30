@@ -2,9 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 
-use agent_session_compactor::{
-    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef,
-};
+use agent_session_compactor::{BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -244,12 +242,17 @@ fn validate_surface(
                 | CompactionKind::SystemMessage
         ) && !row.text.trim().is_empty()
     });
-    let truth_artifact_hints = compact_rows.iter().any(|row| !extract_path_hints(&row.text).is_empty());
+    let truth_artifact_hints = compact_rows
+        .iter()
+        .any(|row| !extract_path_hints(&row.text).is_empty());
     let working_set_hints = compact_rows
         .iter()
         .filter(|row| row.kind == CompactionKind::ToolCall)
-        .any(|row| parse_tool_payload(&row.text).is_some() || !extract_path_hints(&row.text).is_empty());
-    let repetition_preserved = archival_rows.len() >= compact_rows.len() && !dedupe_groups.is_empty();
+        .any(|row| {
+            parse_tool_payload(&row.text).is_some() || !extract_path_hints(&row.text).is_empty()
+        });
+    let repetition_preserved =
+        archival_rows.len() >= compact_rows.len() && !dedupe_groups.is_empty();
     let stable_row_refs = archival_rows
         .iter()
         .map(RowRef::from_row)
@@ -279,7 +282,8 @@ fn validate_surface(
     }
     if !repetition_preserved {
         return Err(InputError::InsufficientContract {
-            reason: "archival rows do not preserve repetition beyond the compacted view".to_string(),
+            reason: "archival rows do not preserve repetition beyond the compacted view"
+                .to_string(),
         });
     }
     if !stable_row_refs {
@@ -349,7 +353,10 @@ pub(crate) fn extract_path_hints(text: &str) -> Vec<String> {
     for raw_token in text.split_whitespace() {
         let token = raw_token
             .trim_matches(|ch: char| {
-                matches!(ch, ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`')
+                matches!(
+                    ch,
+                    ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
+                )
             })
             .trim_end_matches('.');
         if looks_like_path(token) {
@@ -373,5 +380,10 @@ fn looks_like_path(token: &str) -> bool {
 }
 
 fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize, usize) {
-    (row.source_file, row.line_number, row.event_index, row.row_ordinal)
+    (
+        row.source_file,
+        row.line_number,
+        row.event_index,
+        row.row_ordinal,
+    )
 }

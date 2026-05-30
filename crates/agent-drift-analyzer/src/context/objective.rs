@@ -14,7 +14,12 @@ pub struct ObjectiveSummary {
 pub fn extract_objective(rows: &[CompactionRow]) -> ObjectiveSummary {
     let objective_row = rows
         .iter()
-        .filter(|row| matches!(row.kind, CompactionKind::UserMessage | CompactionKind::DeveloperMessage))
+        .filter(|row| {
+            matches!(
+                row.kind,
+                CompactionKind::UserMessage | CompactionKind::DeveloperMessage
+            )
+        })
         .filter(|row| !row.text.trim().is_empty())
         .max_by_key(|row| objective_score(row))
         .or_else(|| directive_rows(rows).find(|row| !row.text.trim().is_empty()));
@@ -49,9 +54,16 @@ fn objective_score(row: &CompactionRow) -> (i32, usize, usize) {
     if text.contains("Verify:") || text.contains("Verify with") {
         score += 200;
     }
-    if ["Complete ", "Implement ", "Fix ", "Add ", "Update ", "Wire "]
-        .iter()
-        .any(|needle| text.contains(needle))
+    if [
+        "Complete ",
+        "Implement ",
+        "Fix ",
+        "Add ",
+        "Update ",
+        "Wire ",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
     {
         score += 150;
     }
@@ -71,9 +83,7 @@ pub fn extract_verification_commands(text: &str) -> Vec<String> {
     while let Some(index) = cursor.find("cargo ") {
         let start = index;
         let remainder = &cursor[start..];
-        let end = remainder
-            .find(['`', '\n'])
-            .unwrap_or(remainder.len());
+        let end = remainder.find(['`', '\n']).unwrap_or(remainder.len());
         let candidate = remainder[..end].trim().trim_end_matches('.');
         if !candidate.is_empty() && !commands.iter().any(|command| command == candidate) {
             commands.push(candidate.to_string());

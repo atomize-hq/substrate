@@ -11,8 +11,8 @@ use serde as _;
 use serde_json as _;
 use tempfile::TempDir;
 use thiserror as _;
-use time::macros::datetime;
 use time as _;
+use time::macros::datetime;
 use walkdir as _;
 
 const EXPORT_FAIL_AT_ENV: &str = "AGENT_SESSION_COMPACTOR_EXPORT_FAIL_AT";

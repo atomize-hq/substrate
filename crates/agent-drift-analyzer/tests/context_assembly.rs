@@ -18,5 +18,8 @@ fn context_assembly_prefers_literal_user_objective_and_truth_paths() {
         .working_set_paths
         .iter()
         .any(|path| path.path == "crates/agent-drift-analyzer/src/lib.rs"));
-    assert!(context.command_families.iter().any(|family| family == "cargo"));
+    assert!(context
+        .command_families
+        .iter()
+        .any(|family| family == "cargo"));
 }

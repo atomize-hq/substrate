@@ -14,9 +14,9 @@ pub fn score_ignoring_repo_truth(context: &ContextPack, task_frame: &TaskFrame) 
 
     for command in &context.command_observations {
         let touches_truth = command.paths.iter().any(|path| {
-            truth_paths.iter().any(|truth| {
-                path == *truth || path.starts_with(*truth) || truth.starts_with(path)
-            })
+            truth_paths
+                .iter()
+                .any(|truth| path == *truth || path.starts_with(*truth) || truth.starts_with(path))
         });
         let before_first_action = first_action_index
             .zip(first_event_index(command))
@@ -68,5 +68,8 @@ pub fn score_ignoring_repo_truth(context: &ContextPack, task_frame: &TaskFrame) 
 }
 
 fn first_event_index(command: &crate::context::CommandObservation) -> Option<usize> {
-    command.evidence.first().map(|evidence| evidence.row.event_index)
+    command
+        .evidence
+        .first()
+        .map(|evidence| evidence.row.event_index)
 }

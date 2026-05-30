@@ -78,10 +78,7 @@ pub fn shape_request(
             &presentation.render_console_block(None),
             config.max_context_chars,
         ),
-        expected_next_step: truncate(
-            &presentation.expected_next_step,
-            config.max_context_chars,
-        ),
+        expected_next_step: truncate(&presentation.expected_next_step, config.max_context_chars),
         evidence: presentation
             .evidence_lines
             .iter()

@@ -123,7 +123,8 @@ impl ReplayScheduler {
         }
 
         if checkpoint_flagged && visible_warning_allowed {
-            self.state.last_visible_warning_fingerprint = warning_fingerprint.map(ToOwned::to_owned);
+            self.state.last_visible_warning_fingerprint =
+                warning_fingerprint.map(ToOwned::to_owned);
             self.state.checkpoints_since_last_visible_warning = 0;
         } else {
             self.state.checkpoints_since_last_visible_warning = next_warning_gap;

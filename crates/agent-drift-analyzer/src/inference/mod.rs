@@ -41,7 +41,9 @@ fn infer_counter_evidence(context: &ContextPack, truth_artifacts: &[String]) -> 
                 for item in &command.evidence {
                     let candidate = EvidenceRef {
                         row: item.row.clone(),
-                        reason: format!("observed path outside explicit truth artifact set: {path}"),
+                        reason: format!(
+                            "observed path outside explicit truth artifact set: {path}"
+                        ),
                     };
                     let key = format!(
                         "{}:{}:{}:{}:{}",
@@ -68,7 +70,12 @@ fn infer_confidence(context: &ContextPack, counter_evidence: &[EvidenceRef]) -> 
     let has_working_set = !context.working_set_paths.is_empty();
     let has_commands = !context.command_observations.is_empty();
 
-    match (has_objective, has_truth || has_working_set, has_commands, counter_evidence.len()) {
+    match (
+        has_objective,
+        has_truth || has_working_set,
+        has_commands,
+        counter_evidence.len(),
+    ) {
         (true, true, true, 0..=2) => Confidence::High,
         (true, true, _, _) | (true, _, true, _) => Confidence::Medium,
         _ => Confidence::Low,

@@ -2,7 +2,9 @@
 
 mod support;
 
-use agent_drift_sentinel::{execute, AdjudicationConfig, SchedulerPolicy, SentinelMode, SentinelRequest, WarningPolicy};
+use agent_drift_sentinel::{
+    execute, AdjudicationConfig, SchedulerPolicy, SentinelMode, SentinelRequest, WarningPolicy,
+};
 
 #[test]
 fn warning_policy_keeps_low_signal_or_duplicate_checkpoints_silent() {

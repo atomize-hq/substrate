@@ -40,9 +40,27 @@ pub(crate) fn sample_summary() -> &'static str {
 pub(crate) fn sample_checkpoints() -> Vec<Checkpoint> {
     vec![
         checkpoint("session-alpha", 1, 82, true, "align plan to repo truth"),
-        checkpoint("session-alpha", 2, 40, true, "re-read the task doc before editing"),
-        checkpoint("session-alpha", 3, 86, true, "re-read the task doc before editing"),
-        checkpoint("session-beta", 1, 0, false, "continue on the current task frame"),
+        checkpoint(
+            "session-alpha",
+            2,
+            40,
+            true,
+            "re-read the task doc before editing",
+        ),
+        checkpoint(
+            "session-alpha",
+            3,
+            86,
+            true,
+            "re-read the task doc before editing",
+        ),
+        checkpoint(
+            "session-beta",
+            1,
+            0,
+            false,
+            "continue on the current task frame",
+        ),
     ]
 }
 
@@ -77,7 +95,9 @@ pub(crate) fn checkpoint(
             working_set_paths: vec!["crates/agent-drift-sentinel/src/lib.rs".to_string()],
             tools: vec!["functions.shell_command".to_string()],
             command_families: vec!["cargo".to_string()],
-            verification_commands: vec!["cargo test -p agent-drift-sentinel -- --nocapture".to_string()],
+            verification_commands: vec![
+                "cargo test -p agent-drift-sentinel -- --nocapture".to_string()
+            ],
             supporting_evidence: vec![EvidenceRef {
                 row: row.clone(),
                 reason: "objective row".to_string(),

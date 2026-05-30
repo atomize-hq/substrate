@@ -54,7 +54,10 @@ fn discovery_sorts_paths_lexicographically() {
     let codex_home = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp path");
 
     let artifacts = discover_session_artifacts_in_home(codex_home, None).expect("discover files");
-    let paths: Vec<_> = artifacts.into_iter().map(|artifact| artifact.path).collect();
+    let paths: Vec<_> = artifacts
+        .into_iter()
+        .map(|artifact| artifact.path)
+        .collect();
 
     assert_eq!(
         paths,
@@ -77,7 +80,10 @@ fn discovery_filters_by_session_id_substring() {
 
     let artifacts =
         discover_session_artifacts_in_home(codex_home, Some("session-123")).expect("filtered");
-    let paths: Vec<_> = artifacts.into_iter().map(|artifact| artifact.path).collect();
+    let paths: Vec<_> = artifacts
+        .into_iter()
+        .map(|artifact| artifact.path)
+        .collect();
 
     assert_eq!(
         paths,
