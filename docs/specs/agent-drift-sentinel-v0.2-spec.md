@@ -33,7 +33,12 @@ Success means:
 - Product shape: library-first workspace crate plus thin binary or sidecar
 - Crate name: `agent-drift-sentinel`
 - Primary input contracts:
-  - analyzer checkpoints
+  - analyzer checkpoints with:
+    - deterministic `schema_version`, `session_id`, and `checkpoint_id`
+    - start/end `RowRef` boundaries
+    - task-frame objective, evidence, and confidence
+    - explicit `wrong_plan_branch`, `ignoring_repo_truth`, and `dead_end_thrash` scores
+    - `expected_next_step` for operator warnings
   - bounded replay or live event windows
 - Optional model posture:
   - `gpt-5.4-mini`

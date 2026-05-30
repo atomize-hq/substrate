@@ -235,3 +235,12 @@ The spec is satisfied when:
 ## Gate Notes
 
 - `C11` compactor contract gate outcome on `2026-05-29`: the upstream compactor bundle is stable enough for analyzer planning with `manifest.json`, `rows.archival.jsonl`, `rows.compact.jsonl`, `dedupe-audit.jsonl`, and `summary.md` emitted deterministically from repeat runs against the same corpus.
+- `A3` analyzer artifact gate outcome on `2026-05-30`: the landed compactor row contract is
+  sufficient for useful working-set inference without analyzer-side guessing because directive text
+  preserves literal file mentions, tool calls preserve raw argument JSON and tool names, archival
+  rows preserve repetition for thrash scoring, and `RowRef` remains stable at
+  `source_file`/`line_number`/`event_index`/`row_ordinal`.
+- `A12` replay freeze outcome on `2026-05-30`: the analyzer checkpoint contract is stable enough
+  for replay-mode sentinel consumption with session-scoped `checkpoints.jsonl` entries containing
+  deterministic boundaries, task-frame evidence, explicit drift scores, and an `expected_next_step`
+  field, plus operator-readable `summary.md`.

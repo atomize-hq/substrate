@@ -46,6 +46,7 @@ members = [
     "crates/gateway",
     "crates/lift",
     "crates/agent-session-compactor",
+    "crates/agent-drift-analyzer",
     # New Phase 4 crates
     "crates/world-api",
     "crates/world",
