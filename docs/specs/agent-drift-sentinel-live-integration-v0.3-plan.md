@@ -227,6 +227,9 @@ Evidence:
 
 - `live_end_to_end` tests
 - if a thin binary proof exists, a single documented command against repo-local fixtures
+- current bounded proof is library-only via
+  `crates/agent-drift-sentinel/tests/live_end_to_end.rs` over
+  `crates/agent-drift-sentinel/tests/fixtures/live/append_only_stream.jsonl`
 
 ### Checkpoint L-E: Runtime Integration Stays Deferred
 
@@ -238,6 +241,8 @@ Evidence:
 
 - task gate recorded as `always-check-with-user`
 - no touched files outside the sentinel crate and the relevant spec docs
+- `src/cli.rs` still rejects `--mode live`, so the next shell/world or host-runtime step remains a
+  separate approval conversation rather than implicit follow-on work
 
 ## Verification Wall Before Broader Runtime Integration
 

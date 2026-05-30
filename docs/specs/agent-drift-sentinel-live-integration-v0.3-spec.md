@@ -114,6 +114,8 @@ cargo run -p agent-drift-sentinel -- \
 ```
 
 That command is a bounded sentinel-local proof only. It is not shell/world integration.
+The current Packet 16 landing keeps live proof library-only; `src/cli.rs` still rejects
+`--mode live` so `S10` and the post-slice `L8` gate remain intact.
 
 ## Project Structure
 

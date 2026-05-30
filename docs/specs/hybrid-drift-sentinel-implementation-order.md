@@ -327,6 +327,13 @@ Why:
 - `L7`
 - `L8`
 
+Current landing evidence:
+
+- `crates/agent-drift-sentinel/tests/live_end_to_end.rs` proves the bounded sentinel-local live
+  seam over `tests/fixtures/live/append_only_stream.jsonl`
+- the packet still stops before shell/world or broader host-runtime wiring; `L8` remains an
+  explicit user gate even after the bounded proof passes
+
 Why:
 
 - proves the live slice over fixture-driven streams without pretending shell/world integration

@@ -23,28 +23,28 @@ This task list implements:
   - Files: `crates/agent-drift-sentinel/src/live_input.rs`, `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`, `docs/specs/agent-drift-sentinel-live-integration-v0.3-plan.md`
   - Gate: `raise-to-user-if-failed`
 
-- [ ] Task: Implement the library-owned live runtime on top of shared scheduler state
+- [x] Task: Implement the library-owned live runtime on top of shared scheduler state
   - Acceptance: the sentinel can accept incremental live events, update runtime state, and decide whether to evaluate without forking replay scheduler semantics.
   - Verify: `cargo test -p agent-drift-sentinel live_runtime -- --nocapture`
   - Files: `crates/agent-drift-sentinel/src/live_runtime.rs`, `crates/agent-drift-sentinel/src/scheduler.rs`, `crates/agent-drift-sentinel/src/lib.rs`
 
-- [ ] Task: Implement the live operator sink surface
+- [x] Task: Implement the live operator sink surface
   - Acceptance: visible warnings, silent checkpoints, and heartbeat/status events can be emitted through a structured sink surface instead of being hard-coded to direct console output.
   - Verify: `cargo test -p agent-drift-sentinel operator_sink -- --nocapture`
   - Files: `crates/agent-drift-sentinel/src/operator_sink.rs`, `crates/agent-drift-sentinel/src/operator_surface.rs`, `crates/agent-drift-sentinel/tests/operator_sink.rs`
 
-- [ ] Task: Preserve replay behavior while exposing the bounded live seam
+- [x] Task: Preserve replay behavior while exposing the bounded live seam
   - Acceptance: replay mode still passes unchanged while the library exports the new live runtime seam; any binary changes remain thin and fixture-oriented only.
-  - Verify: `cargo test -p agent-drift-sentinel replay_input -- --nocapture && cargo test -p agent-drift-sentinel warning_policy -- --nocapture`
+  - Verify: `cargo test -p agent-drift-sentinel replay_input -- --nocapture` and `cargo test -p agent-drift-sentinel warning_policy -- --nocapture`
   - Files: `crates/agent-drift-sentinel/src/lib.rs`, `crates/agent-drift-sentinel/src/cli.rs`, `crates/agent-drift-sentinel/tests/replay_input.rs`, `crates/agent-drift-sentinel/tests/warning_policy.rs`
 
-- [ ] Task: Run a bounded live end-to-end proof over fixture streams
+- [x] Task: Run a bounded live end-to-end proof over fixture streams
   - Acceptance: a synthetic or file-backed incremental stream produces stable live warning output without touching shell/world integration, and the proof is documented as sentinel-local only.
   - Verify: `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`
   - Files: `crates/agent-drift-sentinel/tests/live_end_to_end.rs`, `crates/agent-drift-sentinel/tests/fixtures/live/`, `docs/specs/agent-drift-sentinel-live-integration-v0.3-plan.md`
   - Gate: `always-check-with-user`
 
-- [ ] Task: Hold the post-slice runtime gate after the bounded live proof
+- [x] Task: Hold the post-slice runtime gate after the bounded live proof
   - Acceptance: the docs and implementation stop short of shell/world or host runtime wiring, and the next broader integration step is explicitly framed as a separate approval gate.
   - Verify: human review gate recorded in the plan/task docs before any runtime-wiring task starts
   - Files: `docs/specs/agent-drift-sentinel-live-integration-v0.3-spec.md`, `docs/specs/agent-drift-sentinel-live-integration-v0.3-plan.md`, `docs/specs/hybrid-drift-sentinel-implementation-order.md`
