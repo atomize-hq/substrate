@@ -288,6 +288,19 @@ impl ResolvedPublicControlTarget {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedInternalWorldDispatchCaller {
+    pub session: OrchestrationSessionRecord,
+    pub caller_participant: AgentRuntimeParticipantRecord,
+}
+
+impl ResolvedInternalWorldDispatchCaller {
+    #[allow(dead_code)]
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PublicTurnTargetKind {
@@ -934,6 +947,34 @@ impl AgentRuntimeStateStore {
             active_participant: resolved.participant,
             session_posture: resolved.session_posture,
             host_attach_contract,
+        })
+    }
+
+    pub(crate) fn resolve_internal_world_dispatch_caller(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+    ) -> Result<ResolvedInternalWorldDispatchCaller> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            anyhow::bail!(
+                "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
+                orchestration_session_id
+            );
+        };
+
+        let resolved = resolve_authoritative_session_control(&record, orchestration_session_id)?;
+        if resolved.participant.participant_id() != caller_participant_id {
+            anyhow::bail!(
+                "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
+                orchestration_session_id,
+                resolved.participant.participant_id(),
+                caller_participant_id
+            );
+        }
+
+        Ok(ResolvedInternalWorldDispatchCaller {
+            session: resolved.session,
+            caller_participant: resolved.participant,
         })
     }
 
@@ -5507,6 +5548,80 @@ mod tests {
                 .load_participant("ash_bad")
                 .expect_err("malformed participant must fail validation");
             assert!(!err.to_string().is_empty());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_world_dispatch_caller_returns_authoritative_orchestrator() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_dispatch", "orch_dispatch");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member(
+                "codex_world",
+                "sess_dispatch",
+                "member_dispatch",
+                "orch_dispatch",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_world_dispatch_caller("sess_dispatch", "orch_dispatch")
+                .expect("resolve authoritative caller");
+
+            assert_eq!(resolved.session.orchestration_session_id, "sess_dispatch");
+            assert_eq!(
+                resolved.caller_participant.participant_id(),
+                "orch_dispatch"
+            );
+            assert_eq!(resolved.caller_participant.handle.role, ORCHESTRATOR_ROLE);
+            assert_eq!(
+                resolved.caller_participant.handle.execution.scope,
+                AgentExecutionScope::Host
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_world_dispatch_caller_rejects_non_authoritative_participant() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_dispatch", "orch_dispatch");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member(
+                "codex_world",
+                "sess_dispatch",
+                "member_dispatch",
+                "orch_dispatch",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_world_dispatch_caller("sess_dispatch", "member_dispatch")
+                .expect_err("member caller must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "caller_not_authoritative: orchestration session sess_dispatch authoritative orchestrator participant is orch_dispatch not member_dispatch"
+            );
         });
     }
 }

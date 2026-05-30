@@ -23,7 +23,10 @@ pub(crate) use dispatch_contract::{
     resolve_persisted_host_attach_contract, AttachLaunchKnobs, AttachModePreference,
     DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
     DispatchRequestEnvelope, DispatchResolutionError, DispatchResolutionErrorKind,
-    HostExecutionClientStart, ResolvedLaunchContract,
+    HostExecutionClientStart, ResolvedLaunchContract, RunWorldTaskOutcomeV1,
+    SpawnWorldWorkerOutcomeV1, TaskPayloadV1, ValidatedWorldDispatchRequestV1,
+    WorkerSpawnPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
+    WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldTaskTerminalStateV1,
 };
 pub(crate) use mapping::{
     MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
@@ -45,7 +48,7 @@ pub(crate) use session::{
 #[allow(unused_imports)]
 pub(crate) use state_store::{
     AgentRuntimeSessionRecord, AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind,
-    ResolvedPublicTurnTarget, StartupPromptReplayState,
+    ResolvedInternalWorldDispatchCaller, ResolvedPublicTurnTarget, StartupPromptReplayState,
 };
 pub(crate) use validator::{
     backend_allowed, runtime_realizability_error_exit_code, validate_orchestrator_selection,

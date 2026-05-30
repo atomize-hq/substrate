@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use substrate_broker::{validate_backend_id, Policy};
 
 use crate::execution::agent_inventory::{
@@ -119,6 +120,232 @@ pub(crate) struct DispatchRequestEnvelope {
     pub capability_overrides: DispatchCapabilityOverrideSet,
     pub attach_launch_knobs: AttachLaunchKnobs,
     pub has_prompt_payload: bool,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldDispatchActionV1 {
+    RunWorldTask,
+    SpawnWorldWorker,
+}
+
+impl WorldDispatchActionV1 {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::RunWorldTask => "run_world_task",
+            Self::SpawnWorldWorker => "spawn_world_worker",
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldDispatchModeV1 {
+    Ephemeral,
+    Retained,
+}
+
+impl WorldDispatchModeV1 {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Ephemeral => "ephemeral",
+            Self::Retained => "retained",
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct TaskPayloadV1 {
+    pub prompt: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct WorkerSpawnPayloadV1 {
+    pub prompt: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "payload_kind", rename_all = "snake_case")]
+pub(crate) enum WorldDispatchPayloadV1 {
+    Task(TaskPayloadV1),
+    WorkerSpawn(WorkerSpawnPayloadV1),
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct WorldDispatchRequestV1 {
+    pub request_id: Option<String>,
+    pub idempotency_key: Option<String>,
+    pub orchestration_session_id: Option<String>,
+    pub caller_participant_id: Option<String>,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub target_backend_id: Option<String>,
+    pub world_id: Option<String>,
+    pub world_generation: Option<u64>,
+    pub payload: WorldDispatchPayloadV1,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ValidatedWorldDispatchRequestV1 {
+    pub request_id: String,
+    pub idempotency_key: String,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub payload: WorldDispatchPayloadV1,
+}
+
+impl WorldDispatchRequestV1 {
+    pub(crate) fn validate(self) -> anyhow::Result<ValidatedWorldDispatchRequestV1> {
+        validate_world_dispatch_action_mode(self.action, self.mode)?;
+        validate_world_dispatch_payload(self.action, &self.payload)?;
+
+        let request_id = required_world_dispatch_string("request_id", self.request_id)?;
+        let idempotency_key =
+            required_world_dispatch_string("idempotency_key", self.idempotency_key)?;
+        let orchestration_session_id = required_world_dispatch_string(
+            "orchestration_session_id",
+            self.orchestration_session_id,
+        )?;
+        let caller_participant_id =
+            required_world_dispatch_string("caller_participant_id", self.caller_participant_id)?;
+        let world_id = required_world_dispatch_string("world_id", self.world_id)?;
+        let world_generation = self.world_generation.ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing_dispatch_field: world dispatch request requires world_generation"
+            )
+        })?;
+        let target_backend_id =
+            required_world_dispatch_string("target_backend_id", self.target_backend_id)?;
+        validate_backend_id(&target_backend_id).map_err(|err| anyhow::anyhow!(err.to_string()))?;
+
+        Ok(ValidatedWorldDispatchRequestV1 {
+            request_id,
+            idempotency_key,
+            orchestration_session_id,
+            caller_participant_id,
+            action: self.action,
+            mode: self.mode,
+            target_backend_id,
+            world_id,
+            world_generation,
+            payload: self.payload,
+        })
+    }
+}
+
+fn required_world_dispatch_string(
+    field: &'static str,
+    value: Option<String>,
+) -> anyhow::Result<String> {
+    let value = value.ok_or_else(|| {
+        anyhow::anyhow!("missing_dispatch_field: world dispatch request requires {field}")
+    })?;
+    if value.trim().is_empty() {
+        anyhow::bail!("missing_dispatch_field: world dispatch request requires {field}");
+    }
+    Ok(value)
+}
+
+fn validate_world_dispatch_action_mode(
+    action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
+) -> anyhow::Result<()> {
+    match (action, mode) {
+        (WorldDispatchActionV1::RunWorldTask, WorldDispatchModeV1::Ephemeral)
+        | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
+        _ => anyhow::bail!(
+            "invalid_dispatch_action_mode: action {} is incompatible with mode {}",
+            action.as_str(),
+            mode.as_str(),
+        ),
+    }
+}
+
+fn validate_world_dispatch_payload(
+    action: WorldDispatchActionV1,
+    payload: &WorldDispatchPayloadV1,
+) -> anyhow::Result<()> {
+    match (action, payload) {
+        (WorldDispatchActionV1::RunWorldTask, WorldDispatchPayloadV1::Task(task)) => {
+            validate_world_dispatch_prompt(action, &task.prompt)
+        }
+        (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchPayloadV1::WorkerSpawn(worker)) => {
+            validate_world_dispatch_prompt(action, &worker.prompt)
+        }
+        _ => anyhow::bail!(
+            "invalid_dispatch_payload: action {} requires matching typed payload",
+            action.as_str(),
+        ),
+    }
+}
+
+fn validate_world_dispatch_prompt(
+    action: WorldDispatchActionV1,
+    prompt: &str,
+) -> anyhow::Result<()> {
+    if prompt.trim().is_empty() {
+        anyhow::bail!(
+            "missing_dispatch_payload: action {} requires non-empty prompt",
+            action.as_str(),
+        );
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldTaskTerminalStateV1 {
+    Completed,
+    Failed,
+    Cancelled,
+    NeedsRetainedFollowup,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RunWorldTaskOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub state: WorldTaskTerminalStateV1,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct SpawnWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "outcome_kind", rename_all = "snake_case")]
+pub(crate) enum WorldDispatchOutcomeV1 {
+    RunWorldTask(RunWorldTaskOutcomeV1),
+    SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -965,7 +1192,8 @@ mod tests {
         AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
         DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
         DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
-        FieldValueOrigin, HostExecutionClientStart,
+        FieldValueOrigin, HostExecutionClientStart, TaskPayloadV1, WorkerSpawnPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -1736,6 +1964,155 @@ mod tests {
         assert_eq!(
             error.kind,
             DispatchResolutionErrorKind::OverrideExceedsBaseline
+        );
+    }
+
+    fn base_world_dispatch_request(
+        action: WorldDispatchActionV1,
+        mode: WorldDispatchModeV1,
+        payload: WorldDispatchPayloadV1,
+    ) -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req-32".to_string()),
+            idempotency_key: Some("idem-32".to_string()),
+            orchestration_session_id: Some("sess-32".to_string()),
+            caller_participant_id: Some("orch-32".to_string()),
+            action,
+            mode,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload,
+        }
+    }
+
+    #[test]
+    fn world_dispatch_contract_accepts_run_world_task_ephemeral_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::RunWorldTask,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        )
+        .validate()
+        .expect("request should validate");
+
+        assert_eq!(validated.request_id, "req-32");
+        assert_eq!(validated.target_backend_id, "cli:codex_world");
+        assert_eq!(validated.world_generation, 2);
+    }
+
+    #[test]
+    fn world_dispatch_contract_accepts_spawn_world_worker_retained_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::SpawnWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                prompt: "own the failing integration investigation".to_string(),
+            }),
+        )
+        .validate()
+        .expect("request should validate");
+
+        assert_eq!(validated.orchestration_session_id, "sess-32");
+        assert_eq!(validated.caller_participant_id, "orch-32");
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_invalid_action_mode_combination() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::RunWorldTask,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        )
+        .validate()
+        .expect_err("action/mode mismatch must fail closed");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_action_mode: action run_world_task is incompatible with mode retained"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_missing_required_identity_fields() {
+        let request = base_world_dispatch_request(
+            WorldDispatchActionV1::SpawnWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                prompt: "own the failing integration investigation".to_string(),
+            }),
+        );
+
+        let mut orchestration_request = request.clone();
+        orchestration_request.orchestration_session_id = None;
+        let orchestration_error = orchestration_request
+            .validate()
+            .expect_err("missing orchestration session must fail");
+        assert_eq!(
+            orchestration_error.to_string(),
+            "missing_dispatch_field: world dispatch request requires orchestration_session_id"
+        );
+
+        let mut caller_request = request.clone();
+        caller_request.caller_participant_id = Some(" ".to_string());
+        let caller_error = caller_request
+            .validate()
+            .expect_err("blank caller participant must fail");
+        assert_eq!(
+            caller_error.to_string(),
+            "missing_dispatch_field: world dispatch request requires caller_participant_id"
+        );
+
+        let mut backend_request = request.clone();
+        backend_request.target_backend_id = None;
+        let backend_error = backend_request
+            .validate()
+            .expect_err("missing target backend must fail");
+        assert_eq!(
+            backend_error.to_string(),
+            "missing_dispatch_field: world dispatch request requires target_backend_id"
+        );
+
+        let mut world_id_request = request.clone();
+        world_id_request.world_id = Some(String::new());
+        let world_id_error = world_id_request
+            .validate()
+            .expect_err("blank world id must fail");
+        assert_eq!(
+            world_id_error.to_string(),
+            "missing_dispatch_field: world dispatch request requires world_id"
+        );
+
+        let mut world_generation_request = request;
+        world_generation_request.world_generation = None;
+        let world_generation_error = world_generation_request
+            .validate()
+            .expect_err("missing world_generation must fail");
+        assert_eq!(
+            world_generation_error.to_string(),
+            "missing_dispatch_field: world dispatch request requires world_generation"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_payload_action_mismatch() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::SpawnWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        )
+        .validate()
+        .expect_err("payload/action mismatch must fail closed");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
         );
     }
 }
