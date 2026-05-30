@@ -1,33 +1,31 @@
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::collections::BTreeMap;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::Result;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
 use uuid::Uuid;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
 #[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
 #[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::WorldTaskTerminalStateV1;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::{
     resolve_inventory_contract_for_exact_backend, AttachLaunchKnobs, AttachModePreference,
     DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
     DispatchRequestEnvelope, HostExecutionClientStart, ResolvedLaunchContract,
-    RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1,
-    WorldDispatchModeV1, WorldDispatchPayloadV1,
 };
 use crate::execution::agent_runtime::{
     AgentRuntimeParticipantRecord, AgentRuntimeStateStore, OrchestrationSessionRecord,
@@ -35,6 +33,11 @@ use crate::execution::agent_runtime::{
     WorldDispatchRequestV1,
 };
 #[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::{
+    RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1,
+    WorldDispatchModeV1, WorldDispatchPayloadV1,
+};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::config_model::{
     self, AgentExecutionScope, CliConfigOverrides, SubstrateConfig,
 };
@@ -106,7 +109,7 @@ async fn spawn_world_worker(
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 struct InternalDispatchContext {
     effective_config: SubstrateConfig,
     base_policy: Policy,
@@ -132,7 +135,7 @@ struct SpawnWorldWorkerReceipt {
     launch_span_id: String,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
     pub request: ValidatedWorldDispatchRequestV1,
     pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
@@ -180,7 +183,7 @@ async fn run_world_task(
     ))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) fn prepare_spawn_world_worker_bootstrap(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<PreparedSpawnWorldWorkerBootstrap> {
@@ -241,7 +244,7 @@ async fn spawn_world_worker(
     ))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn resolve_internal_dispatch_context(workspace_root: &Path) -> Result<InternalDispatchContext> {
     let effective_config =
         config_model::resolve_effective_config(workspace_root, &CliConfigOverrides::default())?;
@@ -257,7 +260,7 @@ fn resolve_internal_dispatch_context(workspace_root: &Path) -> Result<InternalDi
     })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn resolve_world_dispatch_contract(
     workspace_root: &Path,
     context: &InternalDispatchContext,
@@ -322,7 +325,7 @@ fn resolve_world_dispatch_contract(
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn permissive_inventory_selection_policy(
     inventory: &BTreeMap<String, AgentInventoryEntryV1>,
 ) -> Policy {
@@ -335,7 +338,7 @@ fn permissive_inventory_selection_policy(
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn validate_authoritative_world_binding(
     session: &OrchestrationSessionRecord,
     request: &ValidatedWorldDispatchRequestV1,
