@@ -1210,6 +1210,32 @@ mod tests {
     }
 
     #[test]
+    fn registered_event_surfaces_authoritative_bootstrap_identity() {
+        let event = registered_event_from_data(
+            &sample_stream_context(),
+            &sample_world_binding(),
+            "spn_bootstrap",
+            Some(&json!({
+                "schema": SESSION_HANDLE_SCHEMA_V1,
+                "session": {
+                    "id": "uaa_session"
+                }
+            })),
+            "codex_world",
+        )
+        .expect("registered event");
+
+        assert_eq!(event.kind, AgentEventKind::Registered);
+        assert_eq!(event.participant_id.as_deref(), Some("ash_member"));
+        assert_eq!(event.parent_participant_id, None);
+        assert_eq!(event.resumed_from_participant_id, None);
+        assert_eq!(event.backend_id.as_deref(), Some("cli:codex"));
+        assert_eq!(event.world_id.as_deref(), Some("world_123"));
+        assert_eq!(event.world_generation, Some(7));
+        assert_eq!(event.span_id.as_deref(), Some("spn_bootstrap"));
+    }
+
+    #[test]
     fn bootstrap_completion_with_session_handle_emits_registered_then_exit() {
         let mut emitted_registered = false;
         let frames = frames_from_completion(

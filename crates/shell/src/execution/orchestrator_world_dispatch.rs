@@ -14,7 +14,8 @@ use crate::execution::agent_runtime::{
     AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
     DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
     HostExecutionClientStart, OrchestrationSessionRecord, ResolvedLaunchContract,
-    RunWorldTaskOutcomeV1, TaskPayloadV1, ValidatedWorldDispatchRequestV1, WorldDispatchActionV1,
+    RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
+    ValidatedWorldDispatchRequestV1, WorkerSpawnPayloadV1, WorldDispatchActionV1,
     WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
     WorldTaskTerminalStateV1,
 };
@@ -66,9 +67,7 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
 ) -> Result<WorldDispatchOutcomeV1> {
     match prepared.request.action {
         WorldDispatchActionV1::RunWorldTask => run_world_task(prepared).await,
-        WorldDispatchActionV1::SpawnWorldWorker => anyhow::bail!(
-            "unsupported_dispatch_action: action spawn_world_worker is not implemented until packet 3"
-        ),
+        WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
     }
 }
 
@@ -78,6 +77,15 @@ async fn run_world_task(
 ) -> Result<WorldDispatchOutcomeV1> {
     anyhow::bail!(
         "unsupported_platform_or_posture: run_world_task world dispatch bootstrap is supported only on linux in v1"
+    );
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn spawn_world_worker(
+    _prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    anyhow::bail!(
+        "unsupported_platform_or_posture: spawn_world_worker world dispatch bootstrap is supported only on linux in v1"
     );
 }
 
@@ -94,6 +102,19 @@ struct RunWorldTaskStreamResult {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct SpawnWorldWorkerReceipt {
+    participant_id: String,
+    orchestrator_participant_id: String,
+    parent_participant_id: Option<String>,
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    launch_span_id: String,
+}
+
+#[cfg(target_os = "linux")]
 async fn run_world_task(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
@@ -101,7 +122,12 @@ async fn run_world_task(
 
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let context = resolve_internal_dispatch_context(&workspace_root)?;
-    let resolved = resolve_run_world_task_contract(&workspace_root, &context, &prepared.request)?;
+    let resolved = resolve_world_dispatch_contract(
+        &workspace_root,
+        &context,
+        &prepared.request,
+        "run_world_task",
+    )?;
     let descriptor = materialize_runtime_descriptor(&resolved).map_err(|err| {
         anyhow::anyhow!(
             "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
@@ -131,6 +157,53 @@ async fn run_world_task(
 }
 
 #[cfg(target_os = "linux")]
+async fn spawn_world_worker(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    validate_authoritative_world_binding(&prepared.session, &prepared.request)?;
+
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let context = resolve_internal_dispatch_context(&workspace_root)?;
+    let resolved = resolve_world_dispatch_contract(
+        &workspace_root,
+        &context,
+        &prepared.request,
+        "spawn_world_worker",
+    )?;
+    let descriptor = materialize_runtime_descriptor(&resolved).map_err(|err| {
+        anyhow::anyhow!(
+            "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+            resolved.agent_id,
+            err.reason
+        )
+    })?;
+    let transport_request =
+        build_spawn_world_worker_transport_request(&prepared.request, &descriptor)?;
+    let receipt =
+        execute_spawn_world_worker_stream(&workspace_root, &transport_request, &prepared.request)
+            .await?;
+    let summary = summarize_spawn_world_worker_result(&receipt);
+
+    Ok(WorldDispatchOutcomeV1::SpawnWorldWorker(
+        SpawnWorldWorkerOutcomeV1 {
+            request_id: prepared.request.request_id,
+            orchestration_session_id: prepared.request.orchestration_session_id,
+            action: WorldDispatchActionV1::SpawnWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            participant_id: receipt.participant_id,
+            orchestrator_participant_id: receipt.orchestrator_participant_id,
+            parent_participant_id: receipt.parent_participant_id,
+            resumed_from_participant_id: receipt.resumed_from_participant_id,
+            target_backend_id: receipt.backend_id,
+            world_id: receipt.world_id,
+            world_generation: receipt.world_generation,
+            launch_span_id: receipt.launch_span_id,
+            summary,
+        },
+    ))
+}
+
+#[cfg(target_os = "linux")]
 fn resolve_internal_dispatch_context(workspace_root: &Path) -> Result<InternalDispatchContext> {
     let effective_config =
         config_model::resolve_effective_config(workspace_root, &CliConfigOverrides::default())?;
@@ -147,10 +220,11 @@ fn resolve_internal_dispatch_context(workspace_root: &Path) -> Result<InternalDi
 }
 
 #[cfg(target_os = "linux")]
-fn resolve_run_world_task_contract(
+fn resolve_world_dispatch_contract(
     workspace_root: &Path,
     context: &InternalDispatchContext,
     request: &ValidatedWorldDispatchRequestV1,
+    action_label: &str,
 ) -> Result<ResolvedLaunchContract> {
     let world_envelope = DispatchRequestEnvelope {
         caller_kind: DispatchCallerKind::OrchestratorMemberStart,
@@ -196,8 +270,9 @@ fn resolve_run_world_task_contract(
 
             if host_match.is_some() {
                 anyhow::bail!(
-                    "unsupported_platform_or_posture: backend '{}' resolves only to a host-scoped runtime; run_world_task requires an exact world-scoped backend",
-                    request.target_backend_id
+                    "unsupported_platform_or_posture: backend '{}' resolves only to a host-scoped runtime; {} requires an exact world-scoped backend",
+                    request.target_backend_id,
+                    action_label,
                 );
             }
 
@@ -273,6 +348,35 @@ fn build_run_world_task_transport_request(
     Ok(MemberDispatchTransportRequest {
         orchestration_session_id: request.orchestration_session_id.clone(),
         participant_id: format!("awm_{}", Uuid::now_v7()),
+        orchestrator_participant_id: request.caller_participant_id.clone(),
+        parent_participant_id: None,
+        resumed_from_participant_id: None,
+        backend_id: descriptor.backend_id.clone(),
+        protocol: descriptor.protocol.clone(),
+        run_id: request.request_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        initial_prompt: Some(prompt.clone()),
+        backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
+        binary_path: descriptor.binary_path.display().to_string(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn build_spawn_world_worker_transport_request(
+    request: &ValidatedWorldDispatchRequestV1,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> Result<MemberDispatchTransportRequest> {
+    let WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) = &request.payload
+    else {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+        );
+    };
+
+    Ok(MemberDispatchTransportRequest {
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        participant_id: format!("ash_{}", Uuid::now_v7()),
         orchestrator_participant_id: request.caller_participant_id.clone(),
         parent_participant_id: None,
         resumed_from_participant_id: None,
@@ -391,6 +495,171 @@ async fn execute_run_world_task_stream(
 }
 
 #[cfg(target_os = "linux")]
+async fn execute_spawn_world_worker_stream(
+    workspace_root: &Path,
+    request: &MemberDispatchTransportRequest,
+    dispatch_request: &ValidatedWorldDispatchRequestV1,
+) -> Result<SpawnWorldWorkerReceipt> {
+    use http_body_util::BodyExt as _;
+    use substrate_common::agent_events::AgentEventKind;
+    use transport_api_types::ExecuteStreamFrame;
+
+    let (client, execute_request, _agent_id) =
+        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root)
+            .context("failed to build member dispatch execute request for spawn_world_worker")?;
+    let response = client
+        .execute_stream(execute_request)
+        .await
+        .context("failed to launch spawn_world_worker over world member dispatch")?;
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    let mut launch_span_id = None::<String>;
+
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.map_err(|err| anyhow::anyhow!("stream frame error: {err}"))?;
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+
+        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=pos).collect();
+            if line.len() <= 1 {
+                continue;
+            }
+            let payload = &line[..line.len() - 1];
+            if payload.is_empty() {
+                continue;
+            }
+            let frame: ExecuteStreamFrame = serde_json::from_slice(payload).with_context(|| {
+                format!(
+                    "invalid spawn_world_worker stream frame: {}",
+                    String::from_utf8_lossy(payload)
+                )
+            })?;
+
+            match frame {
+                ExecuteStreamFrame::Start { span_id } => {
+                    launch_span_id = Some(span_id);
+                }
+                ExecuteStreamFrame::Event { event } if event.kind == AgentEventKind::Registered => {
+                    let launch_span_id = launch_span_id.clone().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "spawn_world_worker registered without a streamed execute span_id"
+                        )
+                    })?;
+                    return receipt_from_registered_event(
+                        event,
+                        request,
+                        dispatch_request,
+                        launch_span_id,
+                    );
+                }
+                ExecuteStreamFrame::Event { .. }
+                | ExecuteStreamFrame::Stdout { .. }
+                | ExecuteStreamFrame::Stderr { .. } => {}
+                ExecuteStreamFrame::Exit { exit, .. } => {
+                    anyhow::bail!(
+                        "retained_bootstrap_failed: spawn_world_worker exited with status {} before authoritative registration",
+                        exit
+                    );
+                }
+                ExecuteStreamFrame::Error { message } => {
+                    anyhow::bail!(message);
+                }
+            }
+        }
+    }
+
+    anyhow::bail!(
+        "retained_bootstrap_failed: spawn_world_worker ended without authoritative registration"
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn receipt_from_registered_event(
+    event: substrate_common::agent_events::AgentEvent,
+    transport_request: &MemberDispatchTransportRequest,
+    dispatch_request: &ValidatedWorldDispatchRequestV1,
+    launch_span_id: String,
+) -> Result<SpawnWorldWorkerReceipt> {
+    let participant_id = event.participant_id.ok_or_else(|| {
+        anyhow::anyhow!(
+            "protocol error: spawn_world_worker registered event omitted participant_id"
+        )
+    })?;
+    if participant_id != transport_request.participant_id {
+        anyhow::bail!(
+            "protocol error: spawn_world_worker registered participant_id {} did not match requested {}",
+            participant_id,
+            transport_request.participant_id,
+        );
+    }
+
+    let backend_id = event.backend_id.ok_or_else(|| {
+        anyhow::anyhow!("protocol error: spawn_world_worker registered event omitted backend_id")
+    })?;
+    if backend_id != dispatch_request.target_backend_id {
+        anyhow::bail!(
+            "protocol error: spawn_world_worker registered backend_id {} did not match requested {}",
+            backend_id,
+            dispatch_request.target_backend_id,
+        );
+    }
+
+    let world_id = event.world_id.ok_or_else(|| {
+        anyhow::anyhow!("protocol error: spawn_world_worker registered event omitted world_id")
+    })?;
+    if world_id != dispatch_request.world_id {
+        anyhow::bail!(
+            "protocol error: spawn_world_worker registered world_id {} did not match requested {}",
+            world_id,
+            dispatch_request.world_id,
+        );
+    }
+
+    let world_generation = event.world_generation.ok_or_else(|| {
+        anyhow::anyhow!(
+            "protocol error: spawn_world_worker registered event omitted world_generation"
+        )
+    })?;
+    if world_generation != dispatch_request.world_generation {
+        anyhow::bail!(
+            "protocol error: spawn_world_worker registered world_generation {} did not match requested {}",
+            world_generation,
+            dispatch_request.world_generation,
+        );
+    }
+
+    if event.parent_participant_id != transport_request.parent_participant_id {
+        anyhow::bail!(
+            "protocol error: spawn_world_worker registered parent_participant_id {:?} did not match requested {:?}",
+            event.parent_participant_id,
+            transport_request.parent_participant_id,
+        );
+    }
+    if event.resumed_from_participant_id != transport_request.resumed_from_participant_id {
+        anyhow::bail!(
+            "protocol error: spawn_world_worker registered resumed_from_participant_id {:?} did not match requested {:?}",
+            event.resumed_from_participant_id,
+            transport_request.resumed_from_participant_id,
+        );
+    }
+
+    Ok(SpawnWorldWorkerReceipt {
+        participant_id,
+        orchestrator_participant_id: transport_request.orchestrator_participant_id.clone(),
+        parent_participant_id: event.parent_participant_id,
+        resumed_from_participant_id: event.resumed_from_participant_id,
+        backend_id,
+        world_id,
+        world_generation,
+        launch_span_id,
+    })
+}
+
+#[cfg(target_os = "linux")]
 fn summarize_run_world_task_result(
     backend_id: &str,
     exit_code: i32,
@@ -424,12 +693,22 @@ fn summarize_run_world_task_result(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> String {
+    format!(
+        "spawn_world_worker launched retained worker {} on backend {}; launch receipt is authoritative but ongoing steering remains out of scope for this packet",
+        receipt.participant_id, receipt.backend_id
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::execution::agent_runtime::orchestration_session::{
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
+    use serde_json::json;
+    use substrate_common::agent_events::AgentEventKind;
 
     fn sample_session() -> OrchestrationSessionRecord {
         OrchestrationSessionRecord {
@@ -480,6 +759,25 @@ mod tests {
         .expect("validated request")
     }
 
+    fn sample_spawn_request() -> ValidatedWorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_spawn".to_string()),
+            idempotency_key: Some("idem_spawn".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::SpawnWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                prompt: "open a retained worker".to_string(),
+            }),
+        }
+        .validate()
+        .expect("validated spawn request")
+    }
+
     #[test]
     fn authoritative_world_binding_accepts_matching_binding() {
         validate_authoritative_world_binding(&sample_session(), &sample_request())
@@ -509,6 +807,132 @@ mod tests {
         assert!(
             summary.contains("without retained shell state"),
             "summary should stay explicit about non-retained behavior: {summary}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn build_spawn_world_worker_transport_request_preserves_authoritative_binding() {
+        let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
+            agent_id: "codex_world".to_string(),
+            backend_id: "cli:codex_world".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            execution_scope: crate::execution::config_model::AgentExecutionScope::World,
+            binary_path: PathBuf::from("/bin/true"),
+        };
+
+        let request = sample_spawn_request();
+        let transport =
+            build_spawn_world_worker_transport_request(&request, &descriptor).expect("transport");
+
+        assert_eq!(transport.orchestration_session_id, "sess_dispatch");
+        assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(transport.backend_id, "cli:codex_world");
+        assert_eq!(transport.world_id, "world-17");
+        assert_eq!(transport.world_generation, 2);
+        assert_eq!(
+            transport.initial_prompt.as_deref(),
+            Some("open a retained worker")
+        );
+        assert!(
+            transport.participant_id.starts_with("ash_"),
+            "retained worker receipt should use participant-style identity: {}",
+            transport.participant_id
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn registered_receipt_requires_exact_authoritative_identity() {
+        let request = sample_spawn_request();
+        let transport_request = MemberDispatchTransportRequest {
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            participant_id: "ash_member_receipt".to_string(),
+            orchestrator_participant_id: request.caller_participant_id.clone(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: request.target_backend_id.clone(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: request.request_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            initial_prompt: Some("open a retained worker".to_string()),
+            backend_kind: transport_api_types::MemberRuntimeBackendKindV1::Codex,
+            binary_path: "/bin/true".to_string(),
+        };
+
+        let mut event = substrate_common::agent_events::AgentEvent {
+            ts: chrono::Utc::now(),
+            kind: AgentEventKind::Registered,
+            data: json!({}),
+            agent_id: "codex_world".to_string(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            run_id: request.request_id.clone(),
+            parent_run_id: None,
+            participant_id: Some("ash_member_receipt".to_string()),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: Some(request.target_backend_id.clone()),
+            thread_id: None,
+            role: Some("member".to_string()),
+            world_id: Some(request.world_id.clone()),
+            world_generation: Some(request.world_generation),
+            cmd_id: None,
+            span_id: Some("spn_spawn".to_string()),
+            channel: None,
+            identity_tuple: None,
+            placement_posture: None,
+            project: None,
+        };
+        event.set_pure_agent_telemetry_identity("codex_world".to_string());
+
+        let receipt = receipt_from_registered_event(
+            event.clone(),
+            &transport_request,
+            &request,
+            "spn_spawn".to_string(),
+        )
+        .expect("receipt");
+        assert_eq!(receipt.participant_id, "ash_member_receipt");
+        assert_eq!(receipt.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(receipt.backend_id, "cli:codex_world");
+        assert_eq!(receipt.world_id, "world-17");
+        assert_eq!(receipt.world_generation, 2);
+        assert_eq!(receipt.launch_span_id, "spn_spawn");
+
+        event.backend_id = Some("cli:other_world".to_string());
+        let err = receipt_from_registered_event(
+            event,
+            &transport_request,
+            &request,
+            "spn_spawn".to_string(),
+        )
+        .expect_err("backend drift must fail");
+        assert!(
+            err.to_string().contains(
+                "registered backend_id cli:other_world did not match requested cli:codex_world"
+            ),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn spawn_world_worker_summary_keeps_follow_up_out_of_scope() {
+        let summary = summarize_spawn_world_worker_result(&SpawnWorldWorkerReceipt {
+            participant_id: "ash_member_receipt".to_string(),
+            orchestrator_participant_id: "orch_dispatch".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            launch_span_id: "spn_spawn".to_string(),
+        });
+        assert!(
+            summary.contains("ongoing steering remains out of scope"),
+            "summary must stay explicit about Packet 3 scope: {summary}"
         );
     }
 }

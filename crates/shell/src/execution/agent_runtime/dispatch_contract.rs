@@ -334,9 +334,12 @@ pub(crate) struct SpawnWorldWorkerOutcomeV1 {
     pub mode: WorldDispatchModeV1,
     pub participant_id: String,
     pub orchestrator_participant_id: String,
+    pub parent_participant_id: Option<String>,
+    pub resumed_from_participant_id: Option<String>,
     pub target_backend_id: String,
     pub world_id: String,
     pub world_generation: u64,
+    pub launch_span_id: String,
     pub summary: String,
 }
 
