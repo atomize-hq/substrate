@@ -1048,9 +1048,9 @@ impl AgentRuntimeStateStore {
         }
 
         let candidate = candidates.pop().expect("candidate count checked above");
-        if candidate.kind == PublicTurnTargetKind::World && !cfg!(target_os = "linux") {
+        if candidate.kind == PublicTurnTargetKind::World && !cfg!(unix) {
             anyhow::bail!(
-                "unsupported_platform_or_posture: orchestration session {} backend {} requires Linux world-sensitive follow-up posture",
+                "unsupported_platform_or_posture: orchestration session {} backend {} requires Unix world-sensitive follow-up posture",
                 orchestration_session_id,
                 backend_id
             );
