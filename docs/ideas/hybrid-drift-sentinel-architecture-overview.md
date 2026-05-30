@@ -353,6 +353,11 @@ Current gate note:
   integration remained intentionally deferred because replay usefulness was only reviewed as
   "useful but somewhat noisy" and no explicit user approval was given to widen scope into runtime
   wiring.
+- `2026-05-30` post-`S10` design approval: the next bounded slice is the sentinel-local live
+  integration seam defined by
+  [agent-drift-sentinel-live-integration-v0.3-spec.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-spec.md:1),
+  which consumes incremental analyzer checkpoints and emits live warning events without widening
+  into shell/world runtime wiring.
 
 ## Recommended Follow-On Design Docs
 
@@ -374,11 +379,12 @@ After this umbrella doc, split into focused design docs:
    - threshold rules
    - checkpoint schema
 
-3. `agent-drift-sentinel-v0.2` or later
-   - live triggers
-   - optional model adjudication
-   - operator surface
-   - runtime integration
+3. `agent-drift-sentinel-live-integration-v0.3`
+   - incremental live checkpoint intake
+   - live trigger handling over the existing scheduler
+   - operator sink surface
+   - bounded sentinel-local live proof
+   - deferred broader runtime integration
 
 ## Current Locked Decisions
 

@@ -8,6 +8,7 @@ Primary sources:
 - [agent-session-compactor-artifact-finalization-followup-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-session-compactor-artifact-finalization-followup-tasks.md:1)
 - [agent-drift-analyzer-v0.1-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-v0.1-tasks.md:1)
 - [agent-drift-sentinel-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-v0.2-tasks.md:1)
+- [agent-drift-sentinel-live-integration-v0.3-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-tasks.md:1)
 
 ## Task IDs
 
@@ -62,6 +63,17 @@ Primary sources:
 - `S9` gate replay-mode usefulness before live work starts
 - `S10` gate live-mode entry and only then scope live integration work
 
+### Sentinel Live Integration
+
+- `L1` define the incremental live checkpoint event contract
+- `L2` implement the bounded live input adapter or fixture loader
+- `L3` gate analyzer compatibility for incremental live consumption
+- `L4` implement the library-owned live runtime
+- `L5` implement the live operator sink surface
+- `L6` preserve replay behavior while exposing the bounded live seam
+- `L7` run a bounded live end-to-end proof over fixture streams
+- `L8` hold the post-slice runtime gate after the bounded live proof
+
 ## Dependency Chart
 
 ```mermaid
@@ -83,11 +95,12 @@ flowchart TD
     S3 --> S5
     S4 --> S5
     S5 --> S6 --> S7 --> S8 --> S9 --> S10
+    S10 --> L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8
 ```
 
 ## Recommended Packeting
 
-Recommended total: `14 packets`
+Recommended total: `17 packets`
 
 This is the best balance between forward progress and safe checkpoints. It keeps each packet
 focused, gives you clean stop points at the high-risk gates, and preserves the module dependency
@@ -285,9 +298,43 @@ Packet 13 gate note:
   even though evidence ranking remained somewhat noisy. `S10` stayed explicitly deferred because no
   user approval was given for live-mode or broader runtime integration work.
 
+### Packet 14: Sentinel live contract and compatibility gate
+
+- `L1`
+- `L2`
+- `L3`
+
+Why:
+
+- defines what live mode actually consumes without touching broader runtime code
+- forces the analyzer-to-sentinel seam check before a live loop exists
+- keeps the first post-`S10` packet library-first and testable
+
+### Packet 15: Sentinel live runtime and operator sink
+
+- `L4`
+- `L5`
+- `L6`
+
+Why:
+
+- lands the reusable live runtime only after the contract is stable
+- keeps replay behavior fixed while the live seam is exposed
+- preserves thin-binary discipline
+
+### Packet 16: Bounded live proof and post-slice runtime gate
+
+- `L7`
+- `L8`
+
+Why:
+
+- proves the live slice over fixture-driven streams without pretending shell/world integration
+- ends with a fresh approval gate before any broader runtime wiring starts
+
 ## If You Want Fewer Packets
 
-Minimum safe compression: `11 packets`
+Minimum safe compression: `14 packets`
 
 Safe merges:
 
@@ -296,6 +343,8 @@ Safe merges:
   code and test coverage
 - merge Packet 8 and Packet 9 if analyzer scoring is landing quickly
 - merge Packet 12 and Packet 13 only if replay-mode usefulness is already obvious
+- no additional live-slice merges are recommended because `L3`, `L7`, and `L8` are the point of
+  keeping the post-`S10` work bounded
 
 Do not compress across these gates:
 
@@ -306,6 +355,9 @@ Do not compress across these gates:
 - `A12`
 - `S9`
 - `S10`
+- `L3`
+- `L7`
+- `L8`
 
 Those are the points most likely to reveal the wrong seam, the wrong downstream contract, or the
 wrong scope for the next packet.
@@ -344,6 +396,15 @@ Gate classification for this project:
 - `S10` = `always-check-with-user`
   - live integration gate; require an explicit user decision before starting live-mode or broader
     runtime integration work
+- `L3` = `raise-to-user-if-failed`
+  - live analyzer-compatibility gate; escalate if incremental live consumption needs analyzer
+    contract changes instead of patching around them in the sentinel
+- `L7` = `always-check-with-user`
+  - bounded live-proof usefulness gate; require human review of noise and operator value before
+    treating the sentinel-local live seam as approved
+- `L8` = `always-check-with-user`
+  - post-slice runtime gate; require a new explicit decision before any shell/world or broader
+    host-runtime wiring starts
 
 ## Recommended Incremental-Implementation Order
 
@@ -354,6 +415,8 @@ Use this order exactly unless a gate forces redesign:
 3. Packets 6 through 10: finish analyzer and freeze its checkpoint contract
 4. Packets 11 through 13: finish replay-mode sentinel and stop before live integration unless the
    replay gate passes cleanly
+5. Packets 14 through 16: implement only the bounded sentinel-local live slice and stop again
+   before broader runtime integration
 
 ## Practical Start Point
 
@@ -370,3 +433,8 @@ Only do that if you are intentionally optimizing for early `unified-agent-api-*`
 If compactor `C1-C11` has already landed and you are resuming from the current state, start with:
 
 - Packet 5A
+
+If replay-mode sentinel `S1-S10` has landed and you are resuming after the explicit live-slice
+approval, start with:
+
+- Packet 14
