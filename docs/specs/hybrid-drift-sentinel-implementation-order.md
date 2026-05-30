@@ -182,6 +182,13 @@ Why:
 - proves the compactor contract is truly usable
 - stops early if the analyzer needs contract changes upstream
 
+Packet 6 gate note:
+
+- `2026-05-30`: `A3` passed without widening the compactor contract because the landed row surface
+  preserves literal directive text, stable `RowRef`s, repetition-preserving archival rows, and
+  tool-call argument JSON plus `dedupe_identity`, which is sufficient for deterministic objective,
+  path, tool, and command-family inference.
+
 ### Packet 7: Analyzer context model
 
 - `A4`
@@ -220,6 +227,13 @@ Why:
 
 - finishes the reviewable checkpoint bundle
 - freezes the replay contract for sentinel consumers
+
+Packet 10 gate note:
+
+- `2026-05-30`: `A12` froze a replay-facing checkpoint contract with one deterministic checkpoint
+  per analyzed session, stable start/end `RowRef` boundaries, task-frame evidence, three explicit
+  drift scores, and an `expected_next_step` field exported through `checkpoints.jsonl` and
+  `summary.md`.
 
 ### Packet 11: Sentinel replay core
 
