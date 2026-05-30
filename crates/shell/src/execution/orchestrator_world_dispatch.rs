@@ -1,27 +1,44 @@
+#[cfg(target_os = "linux")]
 use std::collections::BTreeMap;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use anyhow::Context;
+use anyhow::Result;
+#[cfg(target_os = "linux")]
 use substrate_broker::Policy;
+#[cfg(target_os = "linux")]
 use uuid::Uuid;
 
+#[cfg(target_os = "linux")]
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
+#[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
+#[cfg(any(target_os = "linux", test))]
+use crate::execution::agent_runtime::WorldTaskTerminalStateV1;
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::{
-    resolve_inventory_contract_for_exact_backend, AgentRuntimeParticipantRecord,
-    AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
-    DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
-    HostExecutionClientStart, OrchestrationSessionRecord, ResolvedLaunchContract,
-    RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
-    ValidatedWorldDispatchRequestV1, WorkerSpawnPayloadV1, WorldDispatchActionV1,
-    WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-    WorldTaskTerminalStateV1,
+    resolve_inventory_contract_for_exact_backend, AttachLaunchKnobs, AttachModePreference,
+    DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
+    DispatchRequestEnvelope, HostExecutionClientStart, ResolvedLaunchContract,
+    RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1,
+    WorldDispatchModeV1, WorldDispatchPayloadV1,
 };
+use crate::execution::agent_runtime::{
+    AgentRuntimeParticipantRecord, AgentRuntimeStateStore, OrchestrationSessionRecord,
+    ValidatedWorldDispatchRequestV1, WorldDispatchActionV1, WorldDispatchOutcomeV1,
+    WorldDispatchRequestV1,
+};
+#[cfg(target_os = "linux")]
 use crate::execution::config_model::{
     self, AgentExecutionScope, CliConfigOverrides, SubstrateConfig,
 };
+#[cfg(target_os = "linux")]
 use crate::execution::routing::{
     build_agent_client_and_member_dispatch_request_for_cwd, MemberDispatchTransportRequest,
 };
@@ -89,6 +106,7 @@ async fn spawn_world_worker(
     );
 }
 
+#[cfg(target_os = "linux")]
 struct InternalDispatchContext {
     effective_config: SubstrateConfig,
     base_policy: Policy,
@@ -297,6 +315,7 @@ fn permissive_inventory_selection_policy(
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn validate_authoritative_world_binding(
     session: &OrchestrationSessionRecord,
     request: &ValidatedWorldDispatchRequestV1,
@@ -659,7 +678,7 @@ fn receipt_from_registered_event(
     })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", test))]
 fn summarize_run_world_task_result(
     backend_id: &str,
     exit_code: i32,
@@ -704,6 +723,7 @@ fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
@@ -711,9 +731,18 @@ mod tests {
     use crate::execution::agent_runtime::orchestration_session::{
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
+    use crate::execution::agent_runtime::{
+        TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+    };
+    #[cfg(target_os = "linux")]
     use crate::execution::config_model::AgentCliMode;
+    #[cfg(target_os = "linux")]
     use serde_json::json;
+    #[cfg(target_os = "linux")]
     use substrate_common::agent_events::AgentEventKind;
+    #[cfg(target_os = "linux")]
     use tempfile::tempdir;
 
     fn sample_session() -> OrchestrationSessionRecord {
@@ -765,6 +794,7 @@ mod tests {
         .expect("validated request")
     }
 
+    #[cfg(target_os = "linux")]
     fn sample_spawn_request() -> ValidatedWorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_spawn".to_string()),
