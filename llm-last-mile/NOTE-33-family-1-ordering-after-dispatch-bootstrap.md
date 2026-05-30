@@ -25,19 +25,21 @@ The current tree now has real family-1 bootstrap code:
 
 1. typed internal world-dispatch contract scaffolding exists,
 2. authoritative internal orchestrator caller validation exists,
-3. Linux `run_world_task` routing exists over the world-member dispatch seam.
+3. Linux `run_world_task` routing exists over the world-member dispatch seam,
+4. `spawn_world_worker` now returns authoritative retained-worker bootstrap identity through the real runtime path.
 
-### 2. Slice `32` is still not the full retained-worker floor yet
+### 2. Slice `32` now reaches the retained-worker bootstrap floor
 
-The current tree still shows:
+The current tree now shows:
 
 1. `spawn_world_worker` typed contract scaffolding exists,
-2. but live runtime dispatch still rejects that action with an explicit "not implemented until packet 3" error.
+2. live runtime dispatch launches retained worker bootstrap and returns authoritative receipt data,
+3. the REPL-owned orchestrator runtime can materialize the same retained bootstrap through the internal dispatch surface.
 
 Repo-truth implication:
 
-1. planning the next slice is still valid,
-2. but implementation of that next slice must treat real retained worker allocation as a prerequisite.
+1. planning the next slice is valid,
+2. implementation of the next slice no longer depends on a missing retained-worker allocation prerequisite.
 
 ### 3. Exact retained follow-up primitives already exist below the missing family-1 seam
 
@@ -61,6 +63,18 @@ The current tree still does not have:
 3. exact retained-worker thread/attention contract semantics,
 4. fuller steering/action hardening for retained follow-up verbs.
 
+### 5. Post-32 observability truth-sync does not change the ordering decision
+
+The current tree and docs now distinguish:
+
+1. `spawn_world_worker` bootstrap visibility through authoritative retained-worker state plus the existing `registered` runtime event path,
+2. `run_world_task` terminal-only reduction rather than first-class dedicated internal dispatch trace publication.
+
+Repo-truth implication:
+
+1. this observability clarification does not reorder family-1 work,
+2. the next missing seam is still internal retained-worker continue plus typed event bootstrap.
+
 ## Ordering Decision
 
 The next narrow family-1 slice should be:
@@ -76,4 +90,4 @@ Why:
 
 ## Blocking Rule
 
-If slice `32` closes without a real `spawn_world_worker` runtime path, the next slice stays blocked until that retained allocation prerequisite is actually landed.
+The retained-worker allocation prerequisite is satisfied on the current tree. Reopen this note only if a later regression removes the real `spawn_world_worker` runtime path or breaks the exact retained member-turn seam that Slice `33` plans to reuse.

@@ -17,7 +17,7 @@ Status: draft for review on `2026-05-30`
 
 ASSUMPTIONS I'M MAKING:
 
-1. Slice `32` will close at its intended floor before this slice is implemented. The current tree already lands internal dispatch validation plus Linux `run_world_task`, but `spawn_world_worker` is still stubbed in live code today and must become real first.
+1. Slice `32` has already reached the retained-worker bootstrap floor on the current tree: internal dispatch validation is real, Linux `run_world_task` is real, and `spawn_world_worker` now returns authoritative retained-worker bootstrap identity instead of remaining stubbed.
 2. The next family-1 slice remains internal-only and orchestrator-only. It does not widen public `substrate agent ...` caller surfaces and it does not turn toolbox into an execution plane.
 3. The next narrow slice should reuse the already-landed exact retained-member follow-up/runtime seam rather than creating a second world execution path.
 4. The first retained-worker follow-up slice should land `continue_world_worker` plus a minimal typed worker-event normalization contract, not the full later steering/action matrix.
@@ -238,4 +238,4 @@ This slice is done only when all of the following are true:
 
 ## Open Questions
 
-1. No open design question is being left for implementation, other than the explicit prerequisite that slice `32` must land real retained worker allocation before this slice begins coding.
+1. No open design question is being left for implementation.
