@@ -4,8 +4,9 @@ use std::io::{BufRead, BufReader};
 use agent_drift_analyzer::Checkpoint;
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CheckpointCursor {
     pub session_id: String,
     pub ordinal: usize,

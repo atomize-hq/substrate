@@ -7,17 +7,17 @@ This task list implements:
 
 ## Task List
 
-- [ ] Task: Define the incremental live checkpoint event contract
+- [x] Task: Define the incremental live checkpoint event contract
   - Acceptance: `agent-drift-sentinel` has a library-owned event contract for `CheckpointReady`, `Heartbeat`, `RepeatedFailure`, and `ManualReview`, with stable cursor and ordering rules documented in code and tests.
   - Verify: `cargo test -p agent-drift-sentinel live_input -- --nocapture`
   - Files: `crates/agent-drift-sentinel/src/live_input.rs`, `crates/agent-drift-sentinel/src/lib.rs`, `crates/agent-drift-sentinel/tests/live_input.rs`
 
-- [ ] Task: Implement a bounded live input adapter or fixture loader
+- [x] Task: Implement a bounded live input adapter or fixture loader
   - Acceptance: the sentinel can consume append-only live checkpoint events from a fixture-backed source or equivalent adapter seam without depending on shell/world runtime code.
   - Verify: `cargo test -p agent-drift-sentinel live_input_adapter -- --nocapture`
   - Files: `crates/agent-drift-sentinel/src/live_input.rs`, `crates/agent-drift-sentinel/tests/live_input_adapter.rs`, `crates/agent-drift-sentinel/tests/fixtures/live/`
 
-- [ ] Task: Gate analyzer compatibility for incremental live consumption
+- [x] Task: Gate analyzer compatibility for incremental live consumption
   - Acceptance: the implementation proves that existing analyzer checkpoints are sufficient for live warning evaluation, or stops and documents the exact upstream analyzer contract gap without papering over it inside the sentinel.
   - Verify: `cargo test -p agent-drift-sentinel live_checkpoint_compatibility -- --nocapture`
   - Files: `crates/agent-drift-sentinel/src/live_input.rs`, `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`, `docs/specs/agent-drift-sentinel-live-integration-v0.3-plan.md`

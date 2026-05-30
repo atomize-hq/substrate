@@ -9,6 +9,7 @@ use camino::Utf8PathBuf;
 pub mod adjudication;
 pub mod cli;
 pub mod input;
+pub mod live_input;
 pub mod operator_surface;
 pub mod scheduler;
 
@@ -17,6 +18,11 @@ pub use adjudication::{
     ReasoningEffort,
 };
 pub use input::{CheckpointCursor, InputError, ReplayCheckpointBundle};
+pub use live_input::{
+    load_live_fixture, validate_live_event_sequence, verify_live_checkpoint_compatibility,
+    FixtureLiveCheckpointSource, LiveCheckpointCompatibility, LiveCheckpointEvent,
+    LiveCheckpointSource, LiveInputError,
+};
 pub use operator_surface::{
     CheckpointPresentation, ReplayReport, WarningDisposition, WarningPolicy,
 };
@@ -75,9 +81,7 @@ pub fn execute(request: &SentinelRequest) -> Result<SentinelResult, SentinelErro
     let adjudication_requests = report
         .visible_warnings
         .iter()
-        .filter_map(|presentation| {
-            adjudication::shape_request(presentation, &request.adjudication)
-        })
+        .filter_map(|presentation| adjudication::shape_request(presentation, &request.adjudication))
         .collect();
 
     Ok(SentinelResult {
