@@ -33,9 +33,12 @@ pub struct CompactionRow {
     pub turn_id: Option<String>,
     pub event_index: usize,
     pub line_number: usize,
+    pub row_ordinal: usize,
     #[serde(with = "time::serde::rfc3339::option")]
     pub timestamp: Option<OffsetDateTime>,
     pub kind: CompactionKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dedupe_identity: Option<String>,
     pub text: String,
     pub canonical_text: String,
     pub text_hash_hex: String,

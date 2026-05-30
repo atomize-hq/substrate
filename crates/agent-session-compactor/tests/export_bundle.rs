@@ -13,8 +13,8 @@ use serde as _;
 use serde_json as _;
 use tempfile::TempDir;
 use thiserror as _;
-use time::macros::datetime;
 use time as _;
+use time::macros::datetime;
 use walkdir as _;
 
 #[test]
@@ -22,7 +22,13 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
     let temp_dir = TempDir::new().expect("temp dir");
     let output_dir = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp path");
     let archival_rows = vec![
-        row("/tmp/rollout-a.jsonl", 1, 0, CompactionKind::UserMessage, "user"),
+        row(
+            "/tmp/rollout-a.jsonl",
+            1,
+            0,
+            CompactionKind::UserMessage,
+            "user",
+        ),
         row(
             "/tmp/rollout-b.jsonl",
             2,
@@ -93,8 +99,10 @@ fn row(
         turn_id: Some("turn-abc".to_string()),
         event_index,
         line_number,
+        row_ordinal: 0,
         timestamp: Some(datetime!(2026-05-29 12:00:00 UTC)),
         kind,
+        dedupe_identity: None,
         text: text.to_string(),
         canonical_text,
         text_hash_hex,

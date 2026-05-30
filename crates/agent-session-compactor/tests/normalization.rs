@@ -47,6 +47,7 @@ fn normalization_maps_rollout_events_into_provenance_preserving_rows() {
         vec![
             CompactionKind::SystemMessage,
             CompactionKind::SystemMessage,
+            CompactionKind::Unknown,
             CompactionKind::Status,
             CompactionKind::UserMessage,
             CompactionKind::Reasoning,
@@ -58,17 +59,29 @@ fn normalization_maps_rollout_events_into_provenance_preserving_rows() {
     );
     assert_eq!(rows[0].turn_id, None);
     assert_eq!(rows[1].turn_id.as_deref(), Some("turn-abc"));
-    assert_eq!(rows[3].turn_id.as_deref(), Some("turn-abc"));
-    assert_eq!(rows[3].text, "Ship the packet");
-    assert_eq!(rows[4].text, "Check parser seams first");
-    assert_eq!(rows[5].text, "{\"cmd\":\"pwd\"}");
-    assert_eq!(rows[6].text, "/tmp/worktree");
-    assert_eq!(rows[7].text, "Packet complete");
-    assert_eq!(rows[8].kind, CompactionKind::Error);
-    assert!(rows[8].text.contains("failed to parse codex rollout JSONL"));
-    assert_eq!(rows[7].line_number, 9);
-    assert_eq!(rows[8].event_index, 9);
+    assert_eq!(rows[1].row_ordinal, 0);
+    assert_eq!(rows[2].row_ordinal, 1);
+    assert_eq!(rows[2].turn_id.as_deref(), Some("turn-abc"));
+    assert_eq!(rows[2].text, "{\"payload\":{\"turn_id\":\"turn-abc\",\"user_instructions\":\"Repo-local rules\"},\"type\":\"turn_context\"}");
+    assert_eq!(rows[4].turn_id.as_deref(), Some("turn-abc"));
+    assert_eq!(rows[4].text, "Ship the packet");
+    assert_eq!(rows[5].text, "Check parser seams first");
+    assert_eq!(rows[6].text, "{\"cmd\":\"pwd\"}");
+    assert_eq!(
+        rows[6].dedupe_identity.as_deref(),
+        Some("{\"call_id\":\"call-1\",\"name\":\"exec_command\",\"type\":\"function_call\"}")
+    );
+    assert_eq!(rows[7].text, "/tmp/worktree");
+    assert_eq!(
+        rows[7].dedupe_identity.as_deref(),
+        Some("{\"call_id\":\"call-1\",\"type\":\"function_call_output\"}")
+    );
+    assert_eq!(rows[8].text, "Packet complete");
+    assert_eq!(rows[9].kind, CompactionKind::Error);
+    assert!(rows[9].text.contains("failed to parse codex rollout JSONL"));
+    assert_eq!(rows[8].line_number, 9);
+    assert_eq!(rows[9].event_index, 9);
     assert!(!rows.iter().any(|row| row.text.contains("token_count")));
-    assert!(rows[3].canonical_text.contains("Ship the packet"));
-    assert_eq!(rows[3].text_hash_hex.len(), 64);
+    assert!(rows[4].canonical_text.contains("Ship the packet"));
+    assert_eq!(rows[4].text_hash_hex.len(), 64);
 }

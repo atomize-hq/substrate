@@ -1,26 +1,26 @@
 #![forbid(unsafe_code)]
 
-use camino as _;
 use blake3 as _;
+use camino as _;
+use camino::Utf8PathBuf;
+use codex as _;
 use serde as _;
 use serde_json as _;
-use time as _;
 #[cfg(test)]
 use tempfile as _;
-use codex as _;
-use camino::Utf8PathBuf;
+use time as _;
 use time::OffsetDateTime;
 
+pub mod canonicalize;
+pub mod cli;
 pub mod dedupe;
 pub mod discovery;
 pub mod export;
-pub mod normalize;
-pub mod canonicalize;
-pub mod cli;
 pub mod ingest;
+pub mod normalize;
 
-pub use dedupe::{DedupeGroup, RowRef};
 pub use dedupe::{dedupe_rows_exact, DedupeResult};
+pub use dedupe::{DedupeGroup, RowRef};
 pub use discovery::{
     discover_session_artifacts, resolve_codex_home, DiscoverOptions, DiscoveredSessionArtifact,
     DiscoveryError,
@@ -113,9 +113,7 @@ mod core_types_tests {
     use camino::Utf8PathBuf;
     use time::macros::datetime;
 
-    use crate::{
-        BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind,
-    };
+    use crate::{BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind};
 
     #[test]
     fn core_types_preserve_manifest_and_row_contracts() {
@@ -126,8 +124,10 @@ mod core_types_tests {
             turn_id: Some("turn-456".to_string()),
             event_index: 7,
             line_number: 11,
+            row_ordinal: 0,
             timestamp: Some(datetime!(2026-05-29 12:00:00 UTC)),
             kind: CompactionKind::AssistantMessage,
+            dedupe_identity: None,
             text: "raw".to_string(),
             canonical_text: "raw".to_string(),
             text_hash_hex: "abc123".to_string(),
@@ -141,6 +141,7 @@ mod core_types_tests {
                 source_file: Utf8PathBuf::from("/tmp/session/rollout-2.jsonl"),
                 line_number: 12,
                 event_index: 8,
+                row_ordinal: 0,
             }],
         };
         let manifest = BundleManifest {

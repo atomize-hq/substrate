@@ -1,18 +1,21 @@
+use std::fs;
+
 use anyhow as _;
 use blake3 as _;
 
 use agent_session_compactor::canonicalize::canonicalize_row_text;
 use agent_session_compactor::dedupe::dedupe_rows_exact;
+use agent_session_compactor::ingest::ingest_rollout_file;
 use agent_session_compactor::normalize::{CompactionKind, CompactionRow, SourceKind};
 use camino::Utf8PathBuf;
 use clap as _;
 use codex as _;
 use serde as _;
 use serde_json as _;
-use tempfile as _;
+use tempfile::TempDir;
 use thiserror as _;
-use time::macros::datetime;
 use time as _;
+use time::macros::datetime;
 use walkdir as _;
 
 #[test]
@@ -53,12 +56,44 @@ fn dedupe_keeps_first_exact_match_per_kind_and_emits_audit_group() {
     assert_eq!(result.compact_rows[0].source_file, first.source_file);
     assert_eq!(result.compact_rows[1].kind, different_kind.kind);
     assert_eq!(result.dedupe_groups.len(), 1);
-    assert_eq!(result.dedupe_groups[0].representative.source_file, first.source_file);
+    assert_eq!(
+        result.dedupe_groups[0].representative.source_file,
+        first.source_file
+    );
     assert_eq!(result.dedupe_groups[0].duplicates.len(), 1);
     assert_eq!(
         result.dedupe_groups[0].duplicates[0].source_file,
         Utf8PathBuf::from("/tmp/rollout-b.jsonl")
     );
+}
+
+#[test]
+fn dedupe_preserves_distinct_tool_events_with_matching_visible_text() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let rollout_path = temp_dir.path().join("rollout-dedupe.jsonl");
+    fs::write(
+        &rollout_path,
+        concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-123\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:00Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"shell\",\"arguments\":\"{\\\"cmd\\\":\\\"pwd\\\"}\",\"call_id\":\"call-1\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"shell\",\"arguments\":\"{\\\"cmd\\\":\\\"pwd\\\"}\",\"call_id\":\"call-2\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"output\":\"/tmp/worktree\",\"call_id\":\"call-1\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:03Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"output\":\"/tmp/worktree\",\"call_id\":\"call-2\"}}\n"
+        ),
+    )
+    .expect("write rollout fixture");
+
+    let ingested = ingest_rollout_file(
+        camino::Utf8Path::from_path(&rollout_path).expect("rollout path should be valid UTF-8"),
+    )
+    .expect("ingest rollout");
+    let rows = agent_session_compactor::normalize::normalize_rollout_file(&ingested);
+    let result = dedupe_rows_exact(&rows);
+
+    assert_eq!(rows.len(), 4);
+    assert_eq!(result.archival_rows.len(), 4);
+    assert_eq!(result.compact_rows.len(), 4);
+    assert!(result.dedupe_groups.is_empty());
 }
 
 fn row(
@@ -76,8 +111,10 @@ fn row(
         turn_id: Some("turn-abc".to_string()),
         event_index,
         line_number,
+        row_ordinal: 0,
         timestamp: Some(datetime!(2026-05-29 12:00:00 UTC)),
         kind,
+        dedupe_identity: None,
         text: text.to_string(),
         canonical_text,
         text_hash_hex,
