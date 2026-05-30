@@ -53,7 +53,7 @@ jq 'select(.policy_decision.action == "deny")' ~/.substrate/trace.jsonl
 - `event_type` (string)
 - `session_id` (shell trace session id)
 
-Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orchestration_session_id`, `run_id`, `backend_id`, router/workflow/toolbox ids). These fields are not limited to command spans; they appear on other record families appended to `trace.jsonl` (router derived events, structured agent events, toolbox tool-call events, etc.). See ADR-0028 for the canonical field vocabulary and the per-family required/optional matrix.
+Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orchestration_session_id`, `run_id`, `backend_id`, router/workflow/toolbox ids). These fields are not limited to command spans; they appear on other record families appended to `trace.jsonl` (for example router-derived events and structured agent events). Dedicated toolbox tool-call rows are not emitted on the current shipped surface; the toolbox-related identifiers remain reserved so future additive families can join cleanly with existing records. See ADR-0028 for the canonical field vocabulary and the per-family required/optional matrix.
 
 Operator note (non-negotiable):
 - Do not rely on heuristic joins. Prefer explicit join keys (`session_id`, `orchestration_session_id`, `run_id`, explicit cause refs) as defined in ADR-0028/Phase 8 contracts.
@@ -230,34 +230,30 @@ jq 'select(.component == "workflow-router")' ~/.substrate/trace.jsonl
 jq 'select(.request_id == "req_xxx")' ~/.substrate/trace.jsonl
 ```
 
-### Toolbox Tool-Call Event Families (internal orchestration toolbox; Phase 8)
+### Toolbox Correlation Reservation (internal orchestration toolbox; Phase 8)
 
-The internal orchestration toolbox (ADR-0026) appends tool-call audit records to `trace.jsonl` so control-plane activity is attributable and joinable without heuristics.
+The internal orchestration toolbox bootstrap path does not currently append dedicated tool-call audit rows to `trace.jsonl`.
 
-Current scope note:
-- The first live caller path is bootstrap-only. Tool-call audit for world dispatch applies to orchestrator-issued internal `run_world_task` and `spawn_world_worker` requests only; it does not imply a public human CLI or a broader general-purpose execution plane.
+Current shipped posture:
+- The live slice-32 caller path is bootstrap-only.
+- Internal `run_world_task` and `spawn_world_worker` activity is observable today through the existing retained-runtime/session state plus the structured agent events already emitted by the runtime flows.
+- There is no shipped `component: "agent-toolbox"` record family yet, and no shipped `toolbox_tool_call_start` or `toolbox_tool_call_complete` rows to query in `trace.jsonl`.
 
-v1 uses explicit `event_type` values:
-- `toolbox_tool_call_start`
-- `toolbox_tool_call_complete`
+Reserved vocabulary:
+- `tool_call_id`
+- `toolbox_version`
+- `tool_name`
+- reserved future `event_type` values: `toolbox_tool_call_start`, `toolbox_tool_call_complete`
 
-At minimum, expect stable join keys on these records (see ADR-0028 for the authoritative matrix):
-- `tool_call_id` (primary join key for start ⇄ complete)
-- `orchestration_session_id`, `run_id`
-- `agent_id`, `role` (v1 caller is the orchestrator)
-- `backend_id`
-- tool identity: `toolbox_version`, `tool_name`
-
-Safe-by-default note:
-- Tool-call records omit full request args and full response bodies in v1 (`args_omitted=true`, `result_omitted=true`). Treat tool I/O payloads as potentially sensitive; only capture them under an explicit future debug/trace mode with redaction/caps.
+If dedicated toolbox trace rows are added later, they should remain additive, use the reserved identifiers above, and continue to omit sensitive request/response payloads by default.
 
 Example filters:
 
 ```bash
-# Show toolbox tool-call audit records
+# No dedicated toolbox rows are emitted on the current shipped surface
 jq 'select(.component == "agent-toolbox")' ~/.substrate/trace.jsonl
 
-# Follow one tool_call_id from start to completion
+# Future additive rows would be joinable on tool_call_id
 jq 'select(.tool_call_id == "tcall_xxx")' ~/.substrate/trace.jsonl
 ```
 

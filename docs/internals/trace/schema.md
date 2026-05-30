@@ -107,13 +107,18 @@ Required join keys for router-derived rows:
   - `source_cmd_id`
 - `rule_id`
 
-### Toolbox tool-call event examples
+### Reserved toolbox tool-call vocabulary
 
+The current shipped trace surface does not emit dedicated toolbox tool-call rows.
+
+Reserved future event types:
 - `toolbox_tool_call_start`
 - `toolbox_tool_call_complete`
 
-Required fields:
+Reserved future component label:
 - `component: "agent-toolbox"`
+
+Reserved future join fields:
 - `session_id`
 - `orchestration_session_id`
 - `run_id`
@@ -122,10 +127,4 @@ Required fields:
 - `tool_call_id`
 - `tool_name`
 
-Completion rows must also include:
-- `outcome`
-- `duration_ms`
-
-Safe-by-default payload rule:
-- canonical toolbox records must not embed full request args or full tool response bodies
-- use omission markers such as `args_omitted: true` and `result_omitted: true`
+If a dedicated toolbox trace family is added later, it should use the reserved identifiers above and continue to omit full request/response payloads by default.

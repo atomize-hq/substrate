@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::env;
+use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -69,12 +70,17 @@ use crate::execution::agent_runtime::{
     AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
     DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
     HostExecutionClientStart, OrchestrationSessionRecord, OrchestrationSessionState,
-    ResolvedLaunchContract, MEMBER_ROLE, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
-    SESSION_HANDLE_SCHEMA_V1,
+    ResolvedLaunchContract, SpawnWorldWorkerOutcomeV1, WorkerSpawnPayloadV1, WorldDispatchActionV1,
+    WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1, MEMBER_ROLE,
+    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, SESSION_HANDLE_SCHEMA_V1,
 };
 use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
+use crate::execution::orchestrator_world_dispatch::{
+    dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
+    prepare_spawn_world_worker_bootstrap,
+};
 use crate::execution::prompt_fulfillment::{
     PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
 };
@@ -584,6 +590,14 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         };
         let mut member_runtimes = RetainedMemberRuntimeMap::new();
         let mut pending_member_replacements = PendingMemberReplacementMap::new();
+        let (toolbox_request_tx, mut toolbox_request_rx) =
+            internal_toolbox_dispatch_request_channel();
+        ensure_internal_toolbox_transport_registered(
+            agent_runtime.as_mut(),
+            startup_context.as_ref(),
+            &toolbox_request_tx,
+        )
+        .await?;
 
         let mut should_exit = false;
         let mut termination_cause = ReplTerminationCause::NormalExit;
@@ -628,6 +642,17 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     maybe_event = agent_rx.recv() => {
                         if let Some(event) = maybe_event {
                             handle_agent_event(event, &mut telemetry, &agent_printer);
+                        }
+                    }
+                    maybe_toolbox_request = toolbox_request_rx.recv() => {
+                        if let Some(request) = maybe_toolbox_request {
+                            handle_internal_toolbox_dispatch_request(
+                                request,
+                                startup_context.as_ref(),
+                                &mut member_runtimes,
+                                &agent_printer,
+                                &mut telemetry,
+                            ).await;
                         }
                     }
                     maybe_resize = resize_rx.recv() => {
@@ -744,6 +769,17 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         };
 
                         if let Err(err) = result {
+                            fatal_runtime_error = Some(err);
+                            should_exit = true;
+                            continue 'repl_loop;
+                        }
+                        if let Err(err) = ensure_internal_toolbox_transport_registered(
+                            agent_runtime.as_mut(),
+                            startup_context.as_ref(),
+                            &toolbox_request_tx,
+                        )
+                        .await
+                        {
                             fatal_runtime_error = Some(err);
                             should_exit = true;
                             continue 'repl_loop;
@@ -1112,6 +1148,17 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     } else {
                                         agent_printer.print(format_event_line(&event));
                                     }
+                                }
+                            }
+                            maybe_toolbox_request = toolbox_request_rx.recv() => {
+                                if let Some(request) = maybe_toolbox_request {
+                                    handle_internal_toolbox_dispatch_request(
+                                        request,
+                                        startup_context.as_ref(),
+                                        &mut member_runtimes,
+                                        &agent_printer,
+                                        &mut telemetry,
+                                    ).await;
                                 }
                             }
                             _maybe_resize = resize_rx.recv() => {}
@@ -1821,6 +1868,23 @@ struct RemoteRetainedRunControl {
     observe_task: Option<tokio::task::JoinHandle<()>>,
 }
 
+#[derive(Debug)]
+struct InternalToolboxDispatchRequest {
+    request: WorldDispatchRequestV1,
+    response_tx: tokio::sync::oneshot::Sender<Result<WorldDispatchOutcomeV1, String>>,
+}
+
+type InternalToolboxDispatchRequestReceiver =
+    mpsc::UnboundedReceiver<InternalToolboxDispatchRequest>;
+type InternalToolboxDispatchRequestSender = mpsc::UnboundedSender<InternalToolboxDispatchRequest>;
+
+#[derive(Debug)]
+struct InternalToolboxTransport {
+    shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    task: Option<tokio::task::JoinHandle<()>>,
+    path: PathBuf,
+}
+
 enum RetainedRunControl {
     Local(LocalRetainedRunControl),
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1844,12 +1908,43 @@ struct AsyncReplAgentRuntime {
     stop_owner_task: Option<tokio::task::JoinHandle<()>>,
     prompt_transport: Option<PrivatePromptTransport>,
     prompt_owner_task: Option<tokio::task::JoinHandle<()>>,
+    toolbox_transport: Option<InternalToolboxTransport>,
     heartbeat_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
     heartbeat_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 type RetainedMemberRuntimeMap = BTreeMap<String, AsyncReplAgentRuntime>;
 type PendingMemberReplacementMap = BTreeMap<String, AgentRuntimeParticipantRecord>;
+
+impl InternalToolboxTransport {
+    async fn close(&mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        if let Some(task) = self.task.take() {
+            let _ = task.await;
+        }
+        #[cfg(unix)]
+        {
+            let _ = tokio::fs::remove_file(&self.path).await;
+        }
+    }
+}
+
+fn internal_toolbox_dispatch_request_channel() -> (
+    InternalToolboxDispatchRequestSender,
+    InternalToolboxDispatchRequestReceiver,
+) {
+    mpsc::unbounded_channel()
+}
+
+fn internal_toolbox_transport_path(orchestration_session_id: &str) -> PathBuf {
+    substrate_paths::substrate_home()
+        .expect("substrate home must resolve for internal toolbox transport")
+        .join("run")
+        .join("agent-toolbox")
+        .join(format!("{orchestration_session_id}.sock"))
+}
 
 fn runtime_registered_message(role: &str) -> &'static str {
     if role == MEMBER_ROLE {
@@ -2611,6 +2706,7 @@ async fn wait_for_hidden_owner_helper_completion(
         mut stop_owner_task,
         mut prompt_transport,
         mut prompt_owner_task,
+        mut toolbox_transport,
         mut heartbeat_stop_tx,
         mut heartbeat_task,
     } = runtime;
@@ -2633,6 +2729,7 @@ async fn wait_for_hidden_owner_helper_completion(
                     stop_owner_task: &mut stop_owner_task,
                     prompt_transport: &mut prompt_transport,
                     prompt_owner_task: &mut prompt_owner_task,
+                    toolbox_transport: &mut toolbox_transport,
                     heartbeat_stop_tx: &mut heartbeat_stop_tx,
                     heartbeat_task: &mut heartbeat_task,
                 },
@@ -2682,6 +2779,7 @@ async fn wait_for_hidden_owner_helper_completion(
                                         stop_owner_task,
                                         prompt_transport,
                                         prompt_owner_task,
+                                        toolbox_transport,
                                         heartbeat_stop_tx,
                                         heartbeat_task,
                                     },
@@ -2763,6 +2861,7 @@ struct HiddenOwnerHelperLocalRuntimeContext<'a> {
     stop_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
     prompt_transport: &'a mut Option<PrivatePromptTransport>,
     prompt_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
+    toolbox_transport: &'a mut Option<InternalToolboxTransport>,
     heartbeat_stop_tx: &'a mut Option<tokio::sync::oneshot::Sender<()>>,
     heartbeat_task: &'a mut Option<tokio::task::JoinHandle<()>>,
 }
@@ -2786,6 +2885,7 @@ async fn wait_for_hidden_owner_helper_local_runtime(
         stop_owner_task,
         prompt_transport,
         prompt_owner_task,
+        toolbox_transport,
         heartbeat_stop_tx,
         heartbeat_task,
     } = context;
@@ -2820,6 +2920,7 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                         stop_owner_task: stop_owner_task.take(),
                         prompt_transport: prompt_transport.take(),
                         prompt_owner_task: prompt_owner_task.take(),
+                        toolbox_transport: toolbox_transport.take(),
                         heartbeat_stop_tx: heartbeat_stop_tx.take(),
                         heartbeat_task: heartbeat_task.take(),
                     },
@@ -2873,6 +2974,9 @@ async fn wait_for_hidden_owner_helper_local_runtime(
             }
             if let Some(mut owned_prompt_transport) = prompt_transport.take() {
                 owned_prompt_transport.close().await;
+            }
+            if let Some(mut owned_toolbox_transport) = toolbox_transport.take() {
+                owned_toolbox_transport.close().await;
             }
             if let Some(task) = prompt_owner_task.take() {
                 let _ = task.await;
@@ -2946,6 +3050,7 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                         stop_owner_task: stop_owner_task.take(),
                         prompt_transport: prompt_transport.take(),
                         prompt_owner_task: prompt_owner_task.take(),
+                        toolbox_transport: toolbox_transport.take(),
                         heartbeat_stop_tx: heartbeat_stop_tx.take(),
                         heartbeat_task: heartbeat_task.take(),
                     },
@@ -3132,20 +3237,22 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             .clone()
     };
     let controls_parent_session = runtime_controls_parent_session(&runtime_role);
-    if let Err(err) = persist_world_binding_authority(
-        &startup_context.store,
-        &startup_context.orchestration_session,
-        initial_world_binding,
-    ) {
-        mark_orchestration_session_failed(
+    if controls_parent_session || initial_world_binding.is_some() {
+        if let Err(err) = persist_world_binding_authority(
             &startup_context.store,
             &startup_context.orchestration_session,
-            format!("failed to persist startup world binding: {err:#}"),
-        );
-        return Err(RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: format!("failed to persist startup world binding: {err:#}"),
-        });
+            initial_world_binding,
+        ) {
+            mark_orchestration_session_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                format!("failed to persist startup world binding: {err:#}"),
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!("failed to persist startup world binding: {err:#}"),
+            });
+        }
     }
     let persist_participant_result = {
         let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
@@ -4180,6 +4287,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         stop_owner_task,
         prompt_transport: Some(prompt_transport),
         prompt_owner_task: Some(prompt_owner_task),
+        toolbox_transport: None,
         heartbeat_stop_tx,
         heartbeat_task,
     }))
@@ -4508,6 +4616,422 @@ async fn dispatch_targeted_follow_up_turn(
     }
 
     Ok(TargetedTurnDispatchStatus::Submitted)
+}
+
+fn internal_toolbox_surface_enabled(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    runtime: &AsyncReplAgentRuntime,
+) -> bool {
+    let Some(startup_context) = startup_context else {
+        return false;
+    };
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let policy_allowed =
+        backend_allowed(&startup_context.base_policy, &runtime.descriptor.backend_id);
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let policy_allowed = false;
+
+    runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .is_host_orchestrator()
+        && startup_context.effective_config.agents.enabled
+        && startup_context.effective_config.agents.toolbox.enabled
+        && matches!(
+            startup_context
+                .effective_config
+                .agents
+                .toolbox
+                .bind
+                .transport,
+            crate::execution::config_model::AgentToolboxBindTransport::Uds
+        )
+        && policy_allowed
+}
+
+#[cfg(unix)]
+async fn register_internal_toolbox_transport(
+    runtime: &AsyncReplAgentRuntime,
+    request_tx: InternalToolboxDispatchRequestSender,
+) -> Result<InternalToolboxTransport> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixListener;
+
+    let orchestration_session_id = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .handle
+        .orchestration_session_id
+        .clone();
+    let path = internal_toolbox_transport_path(&orchestration_session_id);
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "internal toolbox transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    match fs::symlink_metadata(&path) {
+        Ok(_) => fs::remove_file(&path).with_context(|| {
+            format!(
+                "failed to remove stale internal toolbox transport {}",
+                path.display()
+            )
+        })?,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err).with_context(|| {
+                format!(
+                    "failed to inspect internal toolbox transport {}",
+                    path.display()
+                )
+            });
+        }
+    }
+    let listener = UnixListener::bind(&path).with_context(|| {
+        format!(
+            "failed to bind internal toolbox transport {}",
+            path.display()
+        )
+    })?;
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
+    let path_for_task = path.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                accept = listener.accept() => {
+                    let Ok((stream, _)) = accept else {
+                        break;
+                    };
+                    let request_tx = request_tx.clone();
+                    tokio::spawn(async move {
+                        let mut reader = BufReader::new(stream);
+                        let mut line = String::new();
+                        let response = match reader.read_line(&mut line).await {
+                            Ok(0) => Err("empty internal toolbox request".to_string()),
+                            Ok(_) => {
+                                let request = serde_json::from_str::<WorldDispatchRequestV1>(line.trim())
+                                    .map_err(|err| format!("failed to decode internal toolbox request: {err}"));
+                                match request {
+                                    Ok(request) => {
+                                        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
+                                        if request_tx
+                                            .send(InternalToolboxDispatchRequest { request, response_tx })
+                                            .is_err()
+                                        {
+                                            Err("internal toolbox owner is no longer available".to_string())
+                                        } else {
+                                            match response_rx.await {
+                                                Ok(result) => result,
+                                                Err(_) => Err("internal toolbox owner closed before responding".to_string()),
+                                            }
+                                        }
+                                    }
+                                    Err(err) => Err(err),
+                                }
+                            }
+                            Err(err) => Err(format!("failed to read internal toolbox request: {err}")),
+                        };
+
+                        let mut stream = reader.into_inner();
+                        let payload = match response {
+                            Ok(outcome) => serde_json::json!({
+                                "version": 1,
+                                "ok": true,
+                                "outcome": outcome,
+                            }),
+                            Err(message) => serde_json::json!({
+                                "version": 1,
+                                "ok": false,
+                                "error": message,
+                            }),
+                        };
+                        let serialized = serde_json::to_string(&payload).unwrap_or_else(|_| {
+                            "{\"version\":1,\"ok\":false,\"error\":\"internal toolbox response serialization failed\"}".to_string()
+                        });
+                        let _ = stream.write_all(serialized.as_bytes()).await;
+                        let _ = stream.write_all(b"\n").await;
+                        let _ = stream.flush().await;
+                    });
+                }
+            }
+        }
+        let _ = tokio::fs::remove_file(&path_for_task).await;
+    });
+
+    Ok(InternalToolboxTransport {
+        shutdown_tx: Some(shutdown_tx),
+        task: Some(task),
+        path,
+    })
+}
+
+#[cfg(not(unix))]
+async fn register_internal_toolbox_transport(
+    _runtime: &AsyncReplAgentRuntime,
+    _request_tx: InternalToolboxDispatchRequestSender,
+) -> Result<InternalToolboxTransport> {
+    Ok(InternalToolboxTransport {
+        shutdown_tx: None,
+        task: None,
+        path: PathBuf::new(),
+    })
+}
+
+async fn ensure_internal_toolbox_transport_registered(
+    runtime: Option<&mut AsyncReplAgentRuntime>,
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    request_tx: &InternalToolboxDispatchRequestSender,
+) -> Result<()> {
+    let Some(runtime) = runtime else {
+        return Ok(());
+    };
+    if runtime.toolbox_transport.is_some()
+        || !internal_toolbox_surface_enabled(startup_context, runtime)
+    {
+        return Ok(());
+    }
+
+    runtime.toolbox_transport = Some(
+        register_internal_toolbox_transport(runtime, request_tx.clone())
+            .await
+            .context("failed to register internal toolbox transport")?,
+    );
+    Ok(())
+}
+
+fn runtime_launch_span_id(runtime: &AsyncReplAgentRuntime) -> Option<String> {
+    match &runtime.retained_control {
+        // Local retained runtimes do not originate from a streamed /v1/execute span.
+        // Their persisted run_id is the authoritative bootstrap receipt available to
+        // the current runtime rules, so use that instead of inventing a new identifier.
+        RetainedRunControl::Local(_) => runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned")
+            .internal
+            .latest_run_id
+            .clone(),
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        RetainedRunControl::Remote(retained_control) => Some(retained_control.span_id.clone()),
+    }
+}
+
+#[cfg(all(test, unix))]
+async fn request_internal_toolbox_world_dispatch(
+    path: &Path,
+    request: &WorldDispatchRequestV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixStream;
+
+    let mut stream = UnixStream::connect(path).await.with_context(|| {
+        format!(
+            "failed to connect to internal toolbox transport {}",
+            path.display()
+        )
+    })?;
+    stream
+        .write_all(serde_json::to_string(request)?.as_bytes())
+        .await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).await?;
+    let payload: serde_json::Value = serde_json::from_str(line.trim()).with_context(|| {
+        format!(
+            "failed to decode internal toolbox response from {}",
+            path.display()
+        )
+    })?;
+    if payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+        return serde_json::from_value(
+            payload
+                .get("outcome")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("internal toolbox response omitted outcome"))?,
+        )
+        .context("failed to decode internal toolbox outcome");
+    }
+
+    let message = payload
+        .get("error")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("internal toolbox request failed");
+    anyhow::bail!("{message}");
+}
+
+async fn handle_internal_toolbox_dispatch_request(
+    request: InternalToolboxDispatchRequest,
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) {
+    let response = handle_internal_toolbox_world_dispatch_request(
+        request.request,
+        startup_context,
+        member_runtimes,
+        agent_printer,
+        telemetry,
+    )
+    .await
+    .map_err(|err| err.to_string());
+    let _ = request.response_tx.send(response);
+}
+
+async fn handle_internal_toolbox_world_dispatch_request(
+    request: WorldDispatchRequestV1,
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> Result<WorldDispatchOutcomeV1> {
+    let Some(startup_context) = startup_context else {
+        anyhow::bail!(
+            "owner_unreachable: internal world dispatch bootstrap requires a live orchestrator runtime"
+        );
+    };
+
+    match request.action {
+        WorldDispatchActionV1::RunWorldTask => {
+            dispatch_orchestrator_world_request(&startup_context.store, request).await
+        }
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        WorldDispatchActionV1::SpawnWorldWorker => {
+            let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;
+            let spawn = prepare_spawn_world_worker_bootstrap(prepared)?;
+            let prompt = match &spawn.request.payload {
+                WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) => {
+                    prompt.clone()
+                }
+                _ => anyhow::bail!(
+                    "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+                ),
+            };
+            let world_binding = PersistedWorldBinding {
+                world_id: spawn.request.world_id.clone(),
+                world_generation: spawn.request.world_generation,
+            };
+            let prepared_runtime = prepare_member_runtime_startup_for_descriptor(
+                startup_context,
+                spawn.descriptor,
+                &world_binding,
+                None,
+            )
+            .map_err(|failure| anyhow::anyhow!(failure.message))?;
+            let runtime = start_internal_dispatch_member_runtime(
+                prepared_runtime,
+                prompt,
+                agent_printer,
+                telemetry,
+            )
+            .await
+            .map_err(|failure| anyhow::anyhow!(failure.message))?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: spawn_world_worker did not return a retained runtime"
+                )
+            })?;
+            let manifest = runtime_manifest_snapshot(&runtime);
+            let launch_span_id = runtime_launch_span_id(&runtime).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: spawn_world_worker did not retain a launch span"
+                )
+            })?;
+            let target_backend_id = runtime_backend_id(&runtime);
+            let participant_id = manifest.handle.participant_id.clone();
+            let world_id = manifest.handle.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!("retained_bootstrap_failed: retained member omitted world_id")
+            })?;
+            let world_generation = manifest.handle.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: retained member omitted world_generation"
+                )
+            })?;
+            let orchestrator_participant_id = manifest
+                .handle
+                .orchestrator_participant_id
+                .clone()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "retained_bootstrap_failed: retained member omitted orchestrator_participant_id"
+                    )
+                })?;
+            let summary = format!(
+                "spawn_world_worker launched retained worker {} on backend {}; launch receipt is authoritative but ongoing steering remains out of scope for this packet",
+                participant_id, target_backend_id
+            );
+            let outcome = WorldDispatchOutcomeV1::SpawnWorldWorker(SpawnWorldWorkerOutcomeV1 {
+                request_id: spawn.request.request_id,
+                orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: spawn.request.mode,
+                participant_id,
+                orchestrator_participant_id,
+                parent_participant_id: manifest.handle.parent_participant_id.clone(),
+                resumed_from_participant_id: manifest.handle.resumed_from_participant_id.clone(),
+                target_backend_id,
+                world_id,
+                world_generation,
+                launch_span_id,
+                summary,
+            });
+            member_runtimes.insert(runtime_backend_id(&runtime), runtime);
+            Ok(outcome)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        WorldDispatchActionV1::SpawnWorldWorker => anyhow::bail!(
+            "unsupported_platform_or_posture: spawn_world_worker world dispatch bootstrap is supported only on linux in v1"
+        ),
+    }
+}
+
+#[cfg(all(test, unix))]
+async fn start_internal_dispatch_member_runtime(
+    prepared: PreparedAgentRuntime,
+    _initial_prompt: String,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    start_member_runtime_with_prepared(Some(prepared), agent_printer, telemetry).await
+}
+
+#[cfg(all(not(test), any(target_os = "linux", target_os = "macos")))]
+async fn start_internal_dispatch_member_runtime(
+    prepared: PreparedAgentRuntime,
+    initial_prompt: String,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    start_remote_member_runtime_with_prepared(
+        Some(prepared),
+        Some(initial_prompt),
+        agent_printer,
+        telemetry,
+    )
+    .await
+}
+
+#[cfg(not(any(
+    all(test, unix),
+    all(not(test), any(target_os = "linux", target_os = "macos"))
+)))]
+async fn start_internal_dispatch_member_runtime(
+    _prepared: PreparedAgentRuntime,
+    _initial_prompt: String,
+    _agent_printer: &ReplPrinter,
+    _telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    Err(RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: "world-scoped member runtime dispatch is supported on Linux only".to_string(),
+    })
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -5442,6 +5966,7 @@ async fn start_remote_member_runtime_with_prepared(
         stop_owner_task: Some(stop_owner_task),
         prompt_transport: Some(prompt_transport),
         prompt_owner_task: Some(prompt_owner_task),
+        toolbox_transport: None,
         heartbeat_stop_tx: None,
         heartbeat_task: None,
     }))
@@ -6006,6 +6531,9 @@ async fn shutdown_host_orchestrator_runtime_with_mode(
     if let Some(mut prompt_transport) = runtime.prompt_transport.take() {
         prompt_transport.close().await;
     }
+    if let Some(mut toolbox_transport) = runtime.toolbox_transport.take() {
+        toolbox_transport.close().await;
+    }
     if let Some(task) = runtime.prompt_owner_task.take() {
         let _ = task.await;
     }
@@ -6146,6 +6674,9 @@ async fn park_host_orchestrator_runtime(
     }
     if let Some(mut prompt_transport) = runtime.prompt_transport.take() {
         prompt_transport.close().await;
+    }
+    if let Some(mut toolbox_transport) = runtime.toolbox_transport.take() {
+        toolbox_transport.close().await;
     }
     if let Some(task) = runtime.prompt_owner_task.take() {
         task.abort();
@@ -7997,7 +8528,8 @@ mod tests {
     };
     #[cfg(unix)]
     use crate::execution::agent_runtime::control::{
-        HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+        private_prompt_transport_path, HiddenOwnerHelperParticipantPlan,
+        HiddenOwnerHelperSessionPlan,
     };
     #[cfg(unix)]
     use crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs;
@@ -9859,8 +10391,7 @@ mod tests {
         fs::create_dir_all(&workspace_root).expect("workspace root");
         fs::create_dir_all(&substrate_home).expect("substrate home");
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let fake_orchestrator =
-            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_orchestrator = write_fake_codex_script(&temp, true);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
@@ -9941,6 +10472,213 @@ mod tests {
 
             shutdown_host_orchestrator_runtime(
                 member_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn orchestrator_world_dispatch_surface_spawns_authoritative_member_runtime() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+        )
+        .expect("write codex agent file");
+        fs::write(
+            agents_dir.join("codex_world.yaml"),
+            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+        )
+        .expect("write codex_world agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let world_binding = PersistedWorldBinding {
+                world_id: "wld_toolbox_dispatch".to_string(),
+                world_generation: 9,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let mut host_runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+                Some(prepared),
+                Some(&world_binding),
+                Some(InitialExecPromptPlan::Replace(
+                    "internal toolbox bootstrap".to_string(),
+                )),
+                false,
+                false,
+                false,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("host runtime start should succeed")
+            .expect("host runtime");
+
+            let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
+            ensure_internal_toolbox_transport_registered(
+                Some(&mut host_runtime),
+                Some(&startup_context),
+                &toolbox_tx,
+            )
+            .await
+            .expect("register toolbox transport");
+
+            let request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_spawn".to_string()),
+                idempotency_key: Some("idem_toolbox_spawn".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(
+                    runtime_manifest_snapshot(&host_runtime).handle.participant_id,
+                ),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex_world".to_string()),
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "own the failing integration investigation".to_string(),
+                }),
+            };
+            let transport_path =
+                internal_toolbox_transport_path(&startup_context.orchestration_session_id());
+            let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            let request_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                let request = request.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(&transport_path, &request).await
+                }
+            });
+            let request = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for internal toolbox request")
+                .expect("toolbox request");
+            handle_internal_toolbox_dispatch_request(
+                request,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let outcome = tokio::time::timeout(Duration::from_secs(15), request_task)
+                .await
+                .expect("timed out waiting for internal toolbox response")
+                .expect("internal toolbox task should join")
+                .expect("internal toolbox spawn should succeed");
+
+            let spawn = match outcome {
+                WorldDispatchOutcomeV1::SpawnWorldWorker(outcome) => outcome,
+                other => panic!("expected spawn_world_worker outcome, got {other:?}"),
+            };
+
+            assert_eq!(spawn.target_backend_id, "cli:codex_world");
+            assert_eq!(spawn.world_id, world_binding.world_id);
+            assert_eq!(spawn.world_generation, world_binding.world_generation);
+            let host_participant_id = runtime_manifest_snapshot(&host_runtime).handle.participant_id;
+            let persisted_participant = startup_context
+                .store
+                .load_participant(&spawn.participant_id)
+                .expect("load spawned participant")
+                .expect("spawned participant must persist");
+            assert!(
+                persisted_participant.is_authoritative_live(),
+                "spawned participant must persist authoritative retained runtime ownership"
+            );
+            assert_eq!(
+                persisted_participant
+                    .handle
+                    .orchestrator_participant_id
+                    .as_deref(),
+                Some(host_participant_id.as_str()),
+                "spawned participant must retain exact host orchestrator linkage"
+            );
+            assert_eq!(
+                persisted_participant.handle.world_id.as_deref(),
+                Some(world_binding.world_id.as_str())
+            );
+            assert_eq!(
+                persisted_participant.handle.world_generation,
+                Some(world_binding.world_generation)
+            );
+            let persisted_session = startup_context
+                .store
+                .load_session(&startup_context.orchestration_session_id())
+                .expect("load orchestration session")
+                .expect("orchestration session must persist");
+            assert_eq!(
+                persisted_session.session.active_participant_id(),
+                Some(host_participant_id.as_str()),
+                "spawned worker must not replace the authoritative host participant"
+            );
+            assert_eq!(
+                persisted_session.session.world_id.as_deref(),
+                Some(world_binding.world_id.as_str())
+            );
+            assert_eq!(
+                persisted_session.session.world_generation,
+                Some(world_binding.world_generation)
+            );
+
+            let resolved = startup_context
+                .store
+                .resolve_public_turn_target(
+                    &startup_context.orchestration_session_id(),
+                    "cli:codex_world",
+                )
+                .expect("public turn target must rediscover the spawned retained worker");
+            assert_eq!(resolved.participant.handle.participant_id, spawn.participant_id);
+
+            let prompt_path = private_prompt_transport_path(
+                &startup_context.store,
+                &startup_context.orchestration_session_id(),
+                &spawn.participant_id,
+            );
+            assert!(
+                prompt_path.exists(),
+                "spawned retained worker must publish its prompt transport so current runtime rules can steer it"
+            );
+
+            shutdown_host_orchestrator_runtime(
+                host_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            shutdown_all_member_runtimes(
+                &mut member_runtimes,
                 &ReplPrinter::Stdout,
                 &mut telemetry,
             )

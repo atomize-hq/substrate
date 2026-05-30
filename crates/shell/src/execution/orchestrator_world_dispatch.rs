@@ -133,6 +133,12 @@ struct SpawnWorldWorkerReceipt {
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
+    pub request: ValidatedWorldDispatchRequestV1,
+    pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+}
+
+#[cfg(target_os = "linux")]
 async fn run_world_task(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
@@ -175,9 +181,9 @@ async fn run_world_task(
 }
 
 #[cfg(target_os = "linux")]
-async fn spawn_world_worker(
+pub(crate) fn prepare_spawn_world_worker_bootstrap(
     prepared: PreparedOrchestratorWorldDispatch,
-) -> Result<WorldDispatchOutcomeV1> {
+) -> Result<PreparedSpawnWorldWorkerBootstrap> {
     validate_authoritative_world_binding(&prepared.session, &prepared.request)?;
 
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
@@ -195,8 +201,22 @@ async fn spawn_world_worker(
             err.reason
         )
     })?;
+
+    Ok(PreparedSpawnWorldWorkerBootstrap {
+        request: prepared.request,
+        descriptor,
+    })
+}
+
+#[cfg(target_os = "linux")]
+async fn spawn_world_worker(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    let prepared = prepare_spawn_world_worker_bootstrap(prepared)?;
+    let workspace_root = std::env::current_dir()
+        .context("failed to resolve cwd for direct spawn_world_worker bootstrap")?;
     let transport_request =
-        build_spawn_world_worker_transport_request(&prepared.request, &descriptor)?;
+        build_spawn_world_worker_transport_request(&prepared.request, &prepared.descriptor)?;
     let receipt =
         execute_spawn_world_worker_stream(&workspace_root, &transport_request, &prepared.request)
             .await?;
