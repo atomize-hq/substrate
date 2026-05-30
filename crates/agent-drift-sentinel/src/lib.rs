@@ -10,6 +10,8 @@ pub mod adjudication;
 pub mod cli;
 pub mod input;
 pub mod live_input;
+pub mod live_runtime;
+pub mod operator_sink;
 pub mod operator_surface;
 pub mod scheduler;
 
@@ -22,6 +24,11 @@ pub use live_input::{
     load_live_fixture, validate_live_event_sequence, verify_live_checkpoint_compatibility,
     FixtureLiveCheckpointSource, LiveCheckpointCompatibility, LiveCheckpointEvent,
     LiveCheckpointSource, LiveInputError,
+};
+pub use live_runtime::{LiveObservation, LiveRuntime, LiveRuntimeError, LiveRuntimeSnapshot};
+pub use operator_sink::{
+    build_operator_events, emit_operator_events, HeartbeatEvent, OperatorEvent, OperatorSink,
+    RecordingOperatorSink, SilentCheckpointEvent, StatusEvent, VisibleWarningEvent,
 };
 pub use operator_surface::{
     CheckpointPresentation, ReplayReport, WarningDisposition, WarningPolicy,
