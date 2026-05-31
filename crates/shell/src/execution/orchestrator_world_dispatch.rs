@@ -71,15 +71,17 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     let request = request.validate()?;
     let (session, caller_participant, target_participant) = match request.action {
         WorldDispatchActionV1::ContinueWorldWorker => {
-            let resolved = store.resolve_internal_continue_world_dispatch_target(
-                &request.orchestration_session_id,
-                &request.caller_participant_id,
-                request
-                    .target_participant_id
-                    .as_deref()
-                    .expect("validated continue request must include target_participant_id"),
-                &request.target_backend_id,
-            )?;
+            let resolved = store
+                .resolve_internal_continue_world_dispatch_target(
+                    &request.orchestration_session_id,
+                    &request.caller_participant_id,
+                    request
+                        .target_participant_id
+                        .as_deref()
+                        .expect("validated continue request must include target_participant_id"),
+                    &request.target_backend_id,
+                )
+                .map_err(map_world_dispatch_resolution_error)?;
             (
                 resolved.session,
                 resolved.caller_participant,
@@ -87,20 +89,25 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
             )
         }
         _ => {
-            let authority = store.resolve_internal_world_dispatch_caller(
-                &request.orchestration_session_id,
-                &request.caller_participant_id,
-            )?;
+            let authority = store
+                .resolve_internal_world_dispatch_caller(
+                    &request.orchestration_session_id,
+                    &request.caller_participant_id,
+                )
+                .map_err(map_world_dispatch_resolution_error)?;
             (authority.session, authority.caller_participant, None)
         }
     };
 
-    Ok(PreparedOrchestratorWorldDispatch {
+    let prepared = PreparedOrchestratorWorldDispatch {
         request,
         session,
         caller_participant,
         target_participant,
-    })
+    };
+    validate_authoritative_session_boundary(&prepared)?;
+
+    Ok(prepared)
 }
 
 #[allow(dead_code)]
@@ -193,10 +200,9 @@ pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
 async fn run_world_task(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
-    validate_authoritative_world_binding(&prepared.session, &prepared.request)?;
-
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let context = resolve_internal_dispatch_context(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
     let resolved = resolve_world_dispatch_contract(
         &workspace_root,
         &context,
@@ -235,10 +241,9 @@ async fn run_world_task(
 pub(crate) fn prepare_spawn_world_worker_bootstrap(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<PreparedSpawnWorldWorkerBootstrap> {
-    validate_authoritative_world_binding(&prepared.session, &prepared.request)?;
-
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let context = resolve_internal_dispatch_context(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
     let resolved = resolve_world_dispatch_contract(
         &workspace_root,
         &context,
@@ -296,7 +301,9 @@ async fn spawn_world_worker(
 async fn continue_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
-    validate_authoritative_world_binding(&prepared.session, &prepared.request)?;
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
     let stream_result = execute_continue_world_worker_stream(&submit_request).await?;
@@ -324,9 +331,7 @@ async fn continue_world_worker(
 fn resolve_internal_dispatch_context(workspace_root: &Path) -> Result<InternalDispatchContext> {
     let effective_config =
         config_model::resolve_effective_config(workspace_root, &CliConfigOverrides::default())?;
-    let (base_policy, _) =
-        substrate_broker::resolve_effective_policy_with_explain(workspace_root, false)
-            .map_err(|err| config_model::user_error(err.to_string()))?;
+    let base_policy = resolve_internal_dispatch_policy(workspace_root)?;
     let inventory = load_effective_agent_inventory(workspace_root, &base_policy)?;
 
     Ok(InternalDispatchContext {
@@ -334,6 +339,14 @@ fn resolve_internal_dispatch_context(workspace_root: &Path) -> Result<InternalDi
         base_policy,
         inventory,
     })
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn resolve_internal_dispatch_policy(workspace_root: &Path) -> Result<Policy> {
+    let (base_policy, _) =
+        substrate_broker::resolve_effective_policy_with_explain(workspace_root, false)
+            .map_err(|err| config_model::user_error(err.to_string()))?;
+    Ok(base_policy)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -458,6 +471,139 @@ fn steering_policy_denial(
     detail: impl AsRef<str>,
 ) -> anyhow::Error {
     anyhow::anyhow!("{}", bucket.format_message(detail))
+}
+
+fn map_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error {
+    let message = err.to_string();
+    if message.starts_with("caller_not_authoritative:")
+        || message.starts_with("target_not_in_session:")
+        || message.starts_with("ambiguous_target_participant:")
+    {
+        return steering_policy_denial(
+            WorldDispatchSteeringDenialV1::CrossSessionSteeringDenied,
+            message,
+        );
+    }
+    if message.starts_with("world_binding_mismatch:") {
+        return steering_policy_denial(
+            WorldDispatchSteeringDenialV1::CrossWorldBindingSteeringDenied,
+            message,
+        );
+    }
+
+    err
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn enforce_world_dispatch_steering_policy(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    base_policy: &Policy,
+) -> Result<()> {
+    let steering_policy = base_policy.world_dispatch_policy();
+    if !steering_policy.enabled {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::WorldDispatchDisabled,
+            "host-to-world steering is disabled by effective policy",
+        ));
+    }
+    if !steering_policy
+        .allowed_actions
+        .iter()
+        .any(|value| value == prepared.request.action.as_str())
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::ActionNotAllowed,
+            format!(
+                "effective policy does not allow {}",
+                prepared.request.action.as_str()
+            ),
+        ));
+    }
+    if !steering_policy
+        .allowed_modes
+        .iter()
+        .any(|value| value == prepared.request.mode.as_str())
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::ModeNotAllowed,
+            format!(
+                "effective policy does not allow {}",
+                prepared.request.mode.as_str()
+            ),
+        ));
+    }
+    if !steering_policy
+        .allowed_backends
+        .iter()
+        .any(|value| value == &prepared.request.target_backend_id)
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::BackendNotAllowed,
+            format!(
+                "effective policy does not allow backend {}",
+                prepared.request.target_backend_id
+            ),
+        ));
+    }
+
+    validate_authoritative_session_boundary(prepared)?;
+    validate_authoritative_world_binding_for_steering(prepared)?;
+
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn validate_authoritative_session_boundary(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<()> {
+    let authoritative_session_id = &prepared.session.orchestration_session_id;
+    let target_crosses_session = prepared
+        .target_participant
+        .as_ref()
+        .is_some_and(|participant| {
+            participant.handle.orchestration_session_id != *authoritative_session_id
+        });
+    if prepared.request.orchestration_session_id != *authoritative_session_id
+        || prepared.caller_participant.handle.orchestration_session_id != *authoritative_session_id
+        || target_crosses_session
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::CrossSessionSteeringDenied,
+            format!(
+                "request must stay within authoritative orchestration session {}",
+                authoritative_session_id
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn validate_authoritative_world_binding_for_steering(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<()> {
+    validate_authoritative_world_binding(&prepared.session, &prepared.request).map_err(|err| {
+        steering_policy_denial(
+            WorldDispatchSteeringDenialV1::CrossWorldBindingSteeringDenied,
+            err.to_string(),
+        )
+    })?;
+
+    if let Some(target_participant) = prepared.target_participant.as_ref() {
+        if !target_participant.matches_authoritative_parent_world_binding(&prepared.session) {
+            return Err(steering_policy_denial(
+                WorldDispatchSteeringDenialV1::CrossWorldBindingSteeringDenied,
+                format!(
+                    "retained worker {} no longer matches the authoritative world binding for session {}",
+                    target_participant.participant_id(),
+                    prepared.session.orchestration_session_id
+                ),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -1490,6 +1636,48 @@ mod tests {
         }
         .validate()
         .expect("validated request")
+    }
+
+    fn sample_world_dispatch_policy() -> Policy {
+        Policy {
+            agents_world_dispatch_enabled: true,
+            agents_world_dispatch_allowed_backends: vec!["cli:codex_world".to_string()],
+            agents_world_dispatch_allowed_actions: vec![
+                "run_world_task".to_string(),
+                "spawn_world_worker".to_string(),
+                "continue_world_worker".to_string(),
+            ],
+            agents_world_dispatch_allowed_modes: vec![
+                "ephemeral".to_string(),
+                "retained".to_string(),
+            ],
+            agents_world_dispatch_same_session_only: true,
+            agents_world_dispatch_same_world_binding_only: true,
+            ..Policy::default()
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn write_allowed_world_dispatch_policy(
+        substrate_home: &Path,
+        backend_id: &str,
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        let actions = allowed_actions
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let modes = allowed_modes
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let policy = format!(
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"{backend_id}\"\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n"
+        );
+        fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
     }
 
     #[cfg(target_os = "linux")]
@@ -2699,6 +2887,12 @@ mod tests {
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["continue_world_worker"],
+            &["retained"],
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(
             &store,
@@ -2833,6 +3027,141 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "missing_world_binding: orchestration session sess_dispatch has no authoritative world binding"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_disabled_world_dispatch() {
+        let err = enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request: sample_request(),
+                session: sample_session(),
+                caller_participant: sample_orchestrator_participant(),
+                target_participant: None,
+            },
+            &Policy::default(),
+        )
+        .expect_err("disabled steering must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "world_dispatch_disabled: host-to-world steering is disabled by effective policy"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_action_not_allowed() {
+        let mut policy = sample_world_dispatch_policy();
+        policy.agents_world_dispatch_allowed_actions = vec!["spawn_world_worker".to_string()];
+
+        let err = enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request: sample_request(),
+                session: sample_session(),
+                caller_participant: sample_orchestrator_participant(),
+                target_participant: None,
+            },
+            &policy,
+        )
+        .expect_err("disallowed action must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "action_not_allowed: effective policy does not allow run_world_task"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_mode_not_allowed() {
+        let mut policy = sample_world_dispatch_policy();
+        policy.agents_world_dispatch_allowed_modes = vec!["retained".to_string()];
+
+        let err = enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request: sample_request(),
+                session: sample_session(),
+                caller_participant: sample_orchestrator_participant(),
+                target_participant: None,
+            },
+            &policy,
+        )
+        .expect_err("disallowed mode must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "mode_not_allowed: effective policy does not allow ephemeral"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_backend_not_allowed() {
+        let mut policy = sample_world_dispatch_policy();
+        policy.agents_world_dispatch_allowed_backends = vec!["cli:other_world".to_string()];
+
+        let err = enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request: sample_request(),
+                session: sample_session(),
+                caller_participant: sample_orchestrator_participant(),
+                target_participant: None,
+            },
+            &policy,
+        )
+        .expect_err("disallowed backend must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "backend_not_allowed: effective policy does not allow backend cli:codex_world"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_cross_session_boundary() {
+        let mut caller = sample_orchestrator_participant();
+        caller.handle.orchestration_session_id = "sess_other".to_string();
+
+        let err = enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request: sample_request(),
+                session: sample_session(),
+                caller_participant: caller,
+                target_participant: None,
+            },
+            &sample_world_dispatch_policy(),
+        )
+        .expect_err("cross-session steering must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "cross_session_steering_denied: request must stay within authoritative orchestration session sess_dispatch"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_cross_world_binding_boundary() {
+        let mut request = sample_continue_request();
+        request.world_generation = 3;
+
+        let err = enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request,
+                session: sample_session(),
+                caller_participant: sample_orchestrator_participant(),
+                target_participant: Some(sample_member_participant()),
+            },
+            &sample_world_dispatch_policy(),
+        )
+        .expect_err("cross-world steering must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "cross_world_binding_steering_denied: world_binding_mismatch: orchestration session sess_dispatch authoritative world_generation is 2 not 3"
         );
     }
 

@@ -491,6 +491,22 @@ agents:
   allowed_backends:
     - cli:claude_code
     - {member_backend_id}
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - {member_backend_id}
+    allowed_actions:
+      - "run_world_task"
+      - "spawn_world_worker"
+      - "continue_world_worker"
+    allowed_modes:
+      - "ephemeral"
+      - "retained"
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 8
+    max_concurrent_ephemeral: 8
 "#
     );
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");

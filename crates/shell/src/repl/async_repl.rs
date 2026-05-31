@@ -10499,7 +10499,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"spawn_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
