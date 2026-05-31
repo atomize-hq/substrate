@@ -1173,7 +1173,7 @@ fn validate_capability_override_shape(
                 kind: DispatchResolutionErrorKind::OverrideNotSupportedForCaller,
                 field,
                 rejecting_layer: DispatchRejectingLayer::CallerContract,
-                reason: "dispatch-time capability override is unsupported for this field in slice 29.5; only session_resume, session_fork, session_stop, status_snapshot, and event_stream may narrow from true to false".to_string(),
+                reason: "dispatch-time capability override is unsupported for this field in slice 29.75; only session_resume, session_fork, session_stop, status_snapshot, and event_stream may narrow from true to false".to_string(),
             });
         }
     }
@@ -1191,7 +1191,7 @@ fn validate_capability_override_shape(
                 field,
                 rejecting_layer: DispatchRejectingLayer::CallerContract,
                 reason:
-                    "dispatch-time capability override must be narrowing-only; only true-to-false is supported in slice 29.5"
+                    "dispatch-time capability override must be narrowing-only; only true-to-false is supported in slice 29.75"
                         .to_string(),
             });
         }
@@ -1282,7 +1282,7 @@ fn apply_supported_capability_override(
                 field,
                 rejecting_layer: DispatchRejectingLayer::CallerContract,
                 reason:
-                    "dispatch-time capability override must be narrowing-only; only true-to-false is supported in slice 29.5"
+                    "dispatch-time capability override must be narrowing-only; only true-to-false is supported in slice 29.75"
                         .to_string(),
             });
         }
@@ -2064,7 +2064,7 @@ mod tests {
             );
             assert_eq!(
                 error.reason,
-                "dispatch-time capability override is unsupported for this field in slice 29.5; only session_resume, session_fork, session_stop, status_snapshot, and event_stream may narrow from true to false"
+                "dispatch-time capability override is unsupported for this field in slice 29.75; only session_resume, session_fork, session_stop, status_snapshot, and event_stream may narrow from true to false"
             );
         }
     }
