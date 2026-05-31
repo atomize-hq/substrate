@@ -148,7 +148,6 @@ mod core_types_tests {
             representative: row_ref.clone(),
             duplicates: vec![RowRef {
                 source_file: Utf8PathBuf::from("/tmp/session/rollout-2.jsonl"),
-                line_number: 12,
                 event_index: 8,
                 row_ordinal: 0,
             }],
@@ -167,15 +166,20 @@ mod core_types_tests {
                 BundleFileV0_2 {
                     id: 0,
                     path: Utf8PathBuf::from("/tmp/session/rollout-2.jsonl"),
+                    session_id: Some("session-123".to_string()),
+                    turns: vec!["turn-456".to_string()],
                 },
                 BundleFileV0_2 {
                     id: 1,
                     path: Utf8PathBuf::from("/tmp/session/rollout.jsonl"),
+                    session_id: Some("session-123".to_string()),
+                    turns: vec!["turn-456".to_string()],
                 },
             ],
         };
 
-        assert_eq!(row_ref.line_number, row.line_number);
+        assert_eq!(row_ref.event_index, row.event_index);
+        assert_eq!(row_ref.row_ordinal, row.row_ordinal);
         assert_eq!(dedupe_group.duplicates.len(), 1);
         assert_eq!(manifest.schema_version, "v0.2");
     }

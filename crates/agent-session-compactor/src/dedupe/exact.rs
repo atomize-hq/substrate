@@ -58,8 +58,8 @@ pub fn dedupe_rows_exact(rows: &[CompactionRow]) -> DedupeResult {
             )
             .then(
                 left.representative
-                    .line_number
-                    .cmp(&right.representative.line_number),
+                    .row_ordinal
+                    .cmp(&right.representative.row_ordinal),
             )
     });
 

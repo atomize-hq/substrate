@@ -330,12 +330,16 @@ Packet 10B note:
   fixtures only after `BC7` passes against a current `v0.2` compactor bundle
 - do not treat temporary mixed `v0.1`/`v0.2` loader logic as an acceptable resting state for this
   packet
+- follow-up contract tightening may move row `session_id` and repeated `turn_id` strings onto
+  manifest file entries, but do not infer session or turn identity from filenames or row order;
+  `source_file_id -> manifest file entry` must stay the authoritative resolution path
 - `2026-05-31`: `BC2-BC7` landed on session `019e79dc-456c-7e92-bcbc-3b677d9e8b3f`. The
   compactor emitted a `v0.2` bundle with `252` archival rows, `197` compact rows, `26` dedupe
-  groups, and a single manifest file-table entry; the analyzer consumed it and emitted `17`
-  checkpoints. The five-file bundle measured `1,294,344` bytes versus an estimated `1,356,876`
-  bytes for the equivalent inline-path `v0.1` export shape, reducing the bundle by `62,532`
-  bytes.
+  groups, and a single manifest file-table entry carrying session provenance; row JSONL omits
+  repeated `source_file`, repeated `session_id`, and repeated `turn_id`. File entries also carry
+  file-scoped `turns`. The analyzer consumed it and emitted `17` checkpoints. The five-file
+  bundle measured `1,256,480` bytes versus `1,271,759` bytes for the equivalent contract with
+  inline row `turn_id`, reducing the bundle by `15,279` bytes.
 
 ### Packet 11: Sentinel replay core
 

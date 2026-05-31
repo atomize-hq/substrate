@@ -138,16 +138,16 @@ artifact contract and are narrow by design.
 pub struct BundleFileV0_2 {
     pub id: u32,
     pub path: Utf8PathBuf,
+    pub session_id: Option<String>,
+    pub turns: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExportRowV0_2 {
     pub source_file_id: u32,
     pub source_kind: SourceKind,
-    pub session_id: Option<String>,
-    pub turn_id: Option<String>,
+    pub turn_id_ref: Option<u16>,
     pub event_index: usize,
-    pub line_number: usize,
     pub row_ordinal: usize,
     pub timestamp: Option<OffsetDateTime>,
     pub kind: CompactionKind,
@@ -160,7 +160,6 @@ pub struct ExportRowV0_2 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RowRefV0_2 {
     pub source_file_id: u32,
-    pub line_number: usize,
     pub event_index: usize,
     pub row_ordinal: usize,
 }
@@ -230,11 +229,16 @@ The spec is satisfied when:
 2. `rows.archival.jsonl` and `rows.compact.jsonl` no longer repeat full `source_file` paths per
    row.
 3. A bundle-level file table exists and row refs resolve through compact stable file ids.
-4. Dedupe audit output preserves stable representative/duplicate references under the new contract.
-5. `agent-drift-analyzer` can load the new `v0.2` bundles with `source_file_id`.
-6. Existing analyzer checkpoint and evidence behavior remains semantically stable.
-7. A bounded real-session smoke run confirms bundle size reduction and analyzer compatibility.
-8. The source Codex home and source rollout files remain unchanged.
+4. Row-level `session_id` duplication is removed by storing session provenance on manifest file
+   entries.
+5. Row-level `turn_id` duplication is removed by storing file-scoped turn tables on manifest file
+   entries and `turn_id_ref` on rows.
+6. Dedupe audit output preserves stable representative/duplicate references under the new contract.
+7. `agent-drift-analyzer` can load the new `v0.2` bundles with `source_file_id` and
+   `turn_id_ref`.
+8. Existing analyzer checkpoint and evidence behavior remains semantically stable.
+9. A bounded real-session smoke run confirms bundle size reduction and analyzer compatibility.
+10. The source Codex home and source rollout files remain unchanged.
 
 ## Planning Resolutions
 
@@ -248,6 +252,12 @@ The following contract choices are locked for the `v0.2` plan/task slice:
    readability in this slice; the id-backed contract change stops at the compactor/analyzer input
    boundary.
 4. File ids use `u32`.
+5. `session_id` moves from exported rows onto `BundleFileV0_2.session_id`; analyzer session
+   grouping resolves from `source_file_id -> manifest file entry` rather than filename parsing.
+6. `turn_id` also compacts in `v0.2` by moving repeated turn strings onto
+   `BundleFileV0_2.turns`; exported rows carry `turn_id_ref: Option<u16>` scoped by
+   `source_file_id`, and analyzer reconstruction resolves through
+   `source_file_id -> manifest file entry -> turns[turn_id_ref]`.
 
 ## Gate Notes
 
@@ -260,6 +270,8 @@ The following contract choices are locked for the `v0.2` plan/task slice:
   `canonical_text` fix but still meaningful, and the bigger benefit is cleaner contract design.
 - `BC7` smoke on `2026-05-31`: session `019e79dc-456c-7e92-bcbc-3b677d9e8b3f` emitted a `v0.2`
   bundle with `252` archival rows, `197` compact rows, `26` dedupe groups, and `17` analyzer
-  checkpoints. The published five-file bundle totaled `1,294,344` bytes versus an estimated
-  `1,356,876` bytes for the equivalent inline-path `v0.1` contract, for a measured reduction of
-  `62,532` bytes without analyzer breakage.
+  checkpoints. Manifest file entries carry `session_id` plus file-scoped `turns`, and row JSONL
+  omits repeated `source_file`, repeated `session_id`, and repeated `turn_id`. The published
+  five-file bundle totaled `1,256,480` bytes versus `1,271,759` bytes for the equivalent
+  contract with inline row `turn_id`, for a measured reduction of `15,279` bytes without analyzer
+  breakage.

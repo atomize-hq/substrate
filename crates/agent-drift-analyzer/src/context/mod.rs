@@ -139,9 +139,8 @@ pub(crate) fn row_text_is_focusable(row: &agent_session_compactor::CompactionRow
 
 fn evidence_key(evidence: &EvidenceRef) -> String {
     format!(
-        "{}:{}:{}:{}:{}",
+        "{}:{}:{}:{}",
         evidence.row.source_file,
-        evidence.row.line_number,
         evidence.row.event_index,
         evidence.row.row_ordinal,
         evidence.reason

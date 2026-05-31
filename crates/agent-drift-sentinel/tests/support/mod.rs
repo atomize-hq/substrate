@@ -73,7 +73,6 @@ pub(crate) fn checkpoint(
 ) -> Checkpoint {
     let row = RowRef {
         source_file: Utf8PathBuf::from(format!("/tmp/{session_id}.jsonl")),
-        line_number: ordinal,
         event_index: ordinal,
         row_ordinal: 0,
     };

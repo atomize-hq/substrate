@@ -13,6 +13,10 @@ pub use files::export_bundle;
 pub struct BundleFileV0_2 {
     pub id: u32,
     pub path: Utf8PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub turns: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,10 +38,9 @@ pub struct BundleManifest {
 pub struct ExportRowV0_2 {
     pub source_file_id: u32,
     pub source_kind: SourceKind,
-    pub session_id: Option<String>,
-    pub turn_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_id_ref: Option<u16>,
     pub event_index: usize,
-    pub line_number: usize,
     pub row_ordinal: usize,
     #[serde(with = "time::serde::rfc3339::option")]
     pub timestamp: Option<OffsetDateTime>,
@@ -53,7 +56,6 @@ pub struct ExportRowV0_2 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RowRefV0_2 {
     pub source_file_id: u32,
-    pub line_number: usize,
     pub event_index: usize,
     pub row_ordinal: usize,
 }
@@ -120,6 +122,16 @@ pub enum ExportError {
     SourceFileIdOverflow,
     #[error("row provenance path was not registered in the manifest file table: {path}")]
     UnregisteredSourceFile { path: Utf8PathBuf },
+    #[error("row turn_id was not registered in the manifest turn table for {path}: {turn_id}")]
+    UnregisteredTurnId { path: Utf8PathBuf, turn_id: String },
+    #[error("source file {path} carried conflicting session ids: {left:?} vs {right:?}")]
+    ConflictingSourceFileSessionIds {
+        path: Utf8PathBuf,
+        left: Option<String>,
+        right: Option<String>,
+    },
+    #[error("source file {path} overflowed the v0.2 u16 turn_id_ref space")]
+    SourceFileTurnIdOverflow { path: Utf8PathBuf },
     #[error("export interrupted at {point}")]
     InjectedFailure { point: String },
 }

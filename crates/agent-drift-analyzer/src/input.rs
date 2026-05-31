@@ -39,6 +39,13 @@ pub struct InputBundle {
     pub surface: AnalyzerSurface,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileEntry {
+    path: Utf8PathBuf,
+    session_id: Option<String>,
+    turns: Vec<String>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum InputError {
     #[error("required compactor artifact is missing: {path}")]
@@ -68,10 +75,18 @@ pub enum InputError {
     DuplicateSourceFileId { id: u32 },
     #[error("manifest file registry repeats path {path}")]
     DuplicateSourceFilePath { path: Utf8PathBuf },
+    #[error("manifest file registry repeats turn_id {turn_id} for source file {path}")]
+    DuplicateSourceFileTurnId { path: Utf8PathBuf, turn_id: String },
     #[error("artifact {path} references unknown source_file_id {source_file_id}")]
     UnknownSourceFileId {
         path: Utf8PathBuf,
         source_file_id: u32,
+    },
+    #[error("artifact {path} references unknown turn_id_ref {turn_id_ref} for source_file_id {source_file_id}")]
+    UnknownTurnIdRef {
+        path: Utf8PathBuf,
+        source_file_id: u32,
+        turn_id_ref: u16,
     },
     #[error("bundle {input_dir} does not contain any session-scoped rows")]
     NoSessions { input_dir: Utf8PathBuf },
@@ -145,13 +160,21 @@ fn validate_manifest_schema(manifest: &BundleManifest, path: &Utf8Path) -> Resul
     Ok(())
 }
 
-fn build_file_registry(
-    manifest: &BundleManifest,
-) -> Result<BTreeMap<u32, Utf8PathBuf>, InputError> {
+fn build_file_registry(manifest: &BundleManifest) -> Result<BTreeMap<u32, FileEntry>, InputError> {
     let mut files_by_id = BTreeMap::new();
     let mut seen_paths = BTreeSet::new();
     for file in &manifest.files {
-        if files_by_id.insert(file.id, file.path.clone()).is_some() {
+        if files_by_id
+            .insert(
+                file.id,
+                FileEntry {
+                    path: file.path.clone(),
+                    session_id: file.session_id.clone(),
+                    turns: file.turns.clone(),
+                },
+            )
+            .is_some()
+        {
             return Err(InputError::DuplicateSourceFileId { id: file.id });
         }
         if !seen_paths.insert(file.path.clone()) {
@@ -159,26 +182,39 @@ fn build_file_registry(
                 path: file.path.clone(),
             });
         }
+        let mut seen_turns = BTreeSet::new();
+        for turn_id in &file.turns {
+            if !seen_turns.insert(turn_id.clone()) {
+                return Err(InputError::DuplicateSourceFileTurnId {
+                    path: file.path.clone(),
+                    turn_id: turn_id.clone(),
+                });
+            }
+        }
     }
     Ok(files_by_id)
 }
 
 fn resolve_rows(
     artifact_path: &Utf8Path,
-    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    file_registry: &BTreeMap<u32, FileEntry>,
     rows: &[ExportRowV0_2],
 ) -> Result<Vec<CompactionRow>, InputError> {
     rows.iter()
         .map(|row| {
-            let source_file =
-                resolve_source_file(artifact_path, file_registry, row.source_file_id)?;
+            let file_entry = resolve_file_entry(artifact_path, file_registry, row.source_file_id)?;
             Ok(CompactionRow {
-                source_file,
+                source_file: file_entry.path.clone(),
                 source_kind: row.source_kind,
-                session_id: row.session_id.clone(),
-                turn_id: row.turn_id.clone(),
+                session_id: file_entry.session_id.clone(),
+                turn_id: resolve_turn_id(
+                    artifact_path,
+                    file_entry,
+                    row.source_file_id,
+                    row.turn_id_ref,
+                )?,
                 event_index: row.event_index,
-                line_number: row.line_number,
+                line_number: row.event_index + 1,
                 row_ordinal: row.row_ordinal,
                 timestamp: row.timestamp,
                 kind: row.kind,
@@ -194,7 +230,7 @@ fn resolve_rows(
 
 fn resolve_dedupe_groups(
     artifact_path: &Utf8Path,
-    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    file_registry: &BTreeMap<u32, FileEntry>,
     groups: &[DedupeGroupV0_2],
 ) -> Result<Vec<DedupeGroup>, InputError> {
     groups
@@ -220,28 +256,59 @@ fn resolve_dedupe_groups(
 
 fn resolve_row_ref(
     artifact_path: &Utf8Path,
-    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    file_registry: &BTreeMap<u32, FileEntry>,
     row_ref: &RowRefV0_2,
 ) -> Result<RowRef, InputError> {
     Ok(RowRef {
         source_file: resolve_source_file(artifact_path, file_registry, row_ref.source_file_id)?,
-        line_number: row_ref.line_number,
         event_index: row_ref.event_index,
         row_ordinal: row_ref.row_ordinal,
     })
 }
 
-fn resolve_source_file(
+fn resolve_file_entry<'a>(
     artifact_path: &Utf8Path,
-    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    file_registry: &'a BTreeMap<u32, FileEntry>,
     source_file_id: u32,
-) -> Result<Utf8PathBuf, InputError> {
+) -> Result<&'a FileEntry, InputError> {
     file_registry
         .get(&source_file_id)
-        .cloned()
         .ok_or_else(|| InputError::UnknownSourceFileId {
             path: artifact_path.to_owned(),
             source_file_id,
+        })
+}
+
+fn resolve_source_file(
+    artifact_path: &Utf8Path,
+    file_registry: &BTreeMap<u32, FileEntry>,
+    source_file_id: u32,
+) -> Result<Utf8PathBuf, InputError> {
+    Ok(
+        resolve_file_entry(artifact_path, file_registry, source_file_id)?
+            .path
+            .clone(),
+    )
+}
+
+fn resolve_turn_id(
+    artifact_path: &Utf8Path,
+    file_entry: &FileEntry,
+    source_file_id: u32,
+    turn_id_ref: Option<u16>,
+) -> Result<Option<String>, InputError> {
+    let Some(turn_id_ref) = turn_id_ref else {
+        return Ok(None);
+    };
+    file_entry
+        .turns
+        .get(usize::from(turn_id_ref))
+        .cloned()
+        .map(Some)
+        .ok_or_else(|| InputError::UnknownTurnIdRef {
+            path: artifact_path.to_owned(),
+            source_file_id,
+            turn_id_ref,
         })
 }
 
@@ -442,18 +509,11 @@ fn validate_surface(
 
 fn sort_rows(rows: &mut [CompactionRow]) {
     rows.sort_by(|left, right| {
-        (
-            &left.source_file,
-            left.event_index,
-            left.line_number,
-            left.row_ordinal,
-        )
-            .cmp(&(
-                &right.source_file,
-                right.event_index,
-                right.line_number,
-                right.row_ordinal,
-            ))
+        (&left.source_file, left.event_index, left.row_ordinal).cmp(&(
+            &right.source_file,
+            right.event_index,
+            right.row_ordinal,
+        ))
     });
 }
 
@@ -461,17 +521,8 @@ fn rows_are_stable(rows: &[CompactionRow]) -> bool {
     rows.windows(2).all(|pair| {
         let left = &pair[0];
         let right = &pair[1];
-        (
-            &left.source_file,
-            left.event_index,
-            left.line_number,
-            left.row_ordinal,
-        ) <= (
-            &right.source_file,
-            right.event_index,
-            right.line_number,
-            right.row_ordinal,
-        )
+        (&left.source_file, left.event_index, left.row_ordinal)
+            <= (&right.source_file, right.event_index, right.row_ordinal)
     })
 }
 
@@ -517,11 +568,6 @@ fn looks_like_path(token: &str) -> bool {
     has_separator || has_extension
 }
 
-fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize, usize) {
-    (
-        row.source_file,
-        row.line_number,
-        row.event_index,
-        row.row_ordinal,
-    )
+fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize) {
+    (row.source_file, row.event_index, row.row_ordinal)
 }

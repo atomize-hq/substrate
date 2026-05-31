@@ -122,6 +122,7 @@ fn write_jsonl<T: serde::Serialize>(path: Utf8PathBuf, items: &[T]) {
 struct TestFileRegistry {
     files: Vec<BundleFileV0_2>,
     ids_by_path: BTreeMap<Utf8PathBuf, u32>,
+    turn_ids_by_path: BTreeMap<Utf8PathBuf, BTreeMap<String, u16>>,
 }
 
 fn build_file_registry(
@@ -134,6 +135,15 @@ fn build_file_registry(
         .map(|row| row.source_file.clone())
         .chain(compact_rows.iter().map(|row| row.source_file.clone()))
         .collect::<BTreeSet<_>>();
+    let mut turns_by_path: BTreeMap<Utf8PathBuf, BTreeSet<String>> = BTreeMap::new();
+    for row in archival_rows.iter().chain(compact_rows.iter()) {
+        if let Some(turn_id) = row.turn_id.as_ref() {
+            turns_by_path
+                .entry(row.source_file.clone())
+                .or_default()
+                .insert(turn_id.clone());
+        }
+    }
     for group in dedupe_groups {
         paths.insert(group.representative.source_file.clone());
         for duplicate in &group.duplicates {
@@ -143,16 +153,36 @@ fn build_file_registry(
 
     let mut files = Vec::with_capacity(paths.len());
     let mut ids_by_path = BTreeMap::new();
+    let mut turn_ids_by_path = BTreeMap::new();
     for (index, path) in paths.into_iter().enumerate() {
         let id = u32::try_from(index).expect("test file id");
+        let turns = turns_by_path
+            .remove(&path)
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let mut turn_ids = BTreeMap::new();
+        for (turn_index, turn_id) in turns.iter().enumerate() {
+            turn_ids.insert(
+                turn_id.clone(),
+                u16::try_from(turn_index).expect("test turn id"),
+            );
+        }
         files.push(BundleFileV0_2 {
             id,
             path: path.clone(),
+            session_id: Some("session-alpha".to_string()),
+            turns,
         });
         ids_by_path.insert(path, id);
+        turn_ids_by_path.insert(files.last().expect("file").path.clone(), turn_ids);
     }
 
-    TestFileRegistry { files, ids_by_path }
+    TestFileRegistry {
+        files,
+        ids_by_path,
+        turn_ids_by_path,
+    }
 }
 
 fn export_rows(rows: &[CompactionRow], registry: &TestFileRegistry) -> Vec<ExportRowV0_2> {
@@ -163,10 +193,14 @@ fn export_rows(rows: &[CompactionRow], registry: &TestFileRegistry) -> Vec<Expor
                 .get(&row.source_file)
                 .expect("registered path"),
             source_kind: row.source_kind,
-            session_id: row.session_id.clone(),
-            turn_id: row.turn_id.clone(),
+            turn_id_ref: row.turn_id.as_ref().map(|turn_id| {
+                *registry
+                    .turn_ids_by_path
+                    .get(&row.source_file)
+                    .and_then(|turn_ids| turn_ids.get(turn_id))
+                    .expect("registered turn id")
+            }),
             event_index: row.event_index,
-            line_number: row.line_number,
             row_ordinal: row.row_ordinal,
             timestamp: row.timestamp,
             kind: row.kind,
@@ -203,7 +237,6 @@ fn export_row_ref(row_ref: &RowRef, registry: &TestFileRegistry) -> RowRefV0_2 {
             .ids_by_path
             .get(&row_ref.source_file)
             .expect("registered ref path"),
-        line_number: row_ref.line_number,
         event_index: row_ref.event_index,
         row_ordinal: row_ref.row_ordinal,
     }
@@ -317,13 +350,11 @@ fn sample_dedupe_groups() -> Vec<DedupeGroup> {
         canonical_text_hash_hex: "dup-hash".to_string(),
         representative: RowRef {
             source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
-            line_number: 4,
             event_index: 3,
             row_ordinal: 0,
         },
         duplicates: vec![RowRef {
             source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
-            line_number: 5,
             event_index: 4,
             row_ordinal: 0,
         }],

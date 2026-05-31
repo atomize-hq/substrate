@@ -216,10 +216,8 @@ fn export_rows(
             Ok(ExportRowV0_2 {
                 source_file_id: file_registry.source_file_id(&row.source_file)?,
                 source_kind: row.source_kind,
-                session_id: row.session_id.clone(),
-                turn_id: row.turn_id.clone(),
+                turn_id_ref: file_registry.turn_id_ref(&row.source_file, row.turn_id.as_deref())?,
                 event_index: row.event_index,
-                line_number: row.line_number,
                 row_ordinal: row.row_ordinal,
                 timestamp: row.timestamp,
                 kind: row.kind,
@@ -259,7 +257,6 @@ fn export_row_ref(
 ) -> Result<RowRefV0_2, ExportError> {
     Ok(RowRefV0_2 {
         source_file_id: file_registry.source_file_id(&row_ref.source_file)?,
-        line_number: row_ref.line_number,
         event_index: row_ref.event_index,
         row_ordinal: row_ref.row_ordinal,
     })
@@ -269,6 +266,7 @@ fn export_row_ref(
 struct FileRegistry {
     files: Vec<BundleFileV0_2>,
     ids_by_path: BTreeMap<Utf8PathBuf, u32>,
+    turn_ids_by_path: BTreeMap<Utf8PathBuf, BTreeMap<String, u16>>,
 }
 
 impl FileRegistry {
@@ -277,11 +275,33 @@ impl FileRegistry {
         compact_rows: &[CompactionRow],
         dedupe_groups: &[DedupeGroup],
     ) -> Result<Self, ExportError> {
-        let mut paths = archival_rows
-            .iter()
-            .map(|row| row.source_file.clone())
-            .chain(compact_rows.iter().map(|row| row.source_file.clone()))
-            .collect::<BTreeSet<_>>();
+        let mut sessions_by_path: BTreeMap<Utf8PathBuf, Option<String>> = BTreeMap::new();
+        let mut turns_by_path: BTreeMap<Utf8PathBuf, BTreeSet<String>> = BTreeMap::new();
+        for row in archival_rows.iter().chain(compact_rows.iter()) {
+            match sessions_by_path.entry(row.source_file.clone()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(row.session_id.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(entry)
+                    if entry.get() != &row.session_id =>
+                {
+                    return Err(ExportError::ConflictingSourceFileSessionIds {
+                        path: row.source_file.clone(),
+                        left: entry.get().clone(),
+                        right: row.session_id.clone(),
+                    });
+                }
+                std::collections::btree_map::Entry::Occupied(_) => {}
+            }
+            if let Some(turn_id) = row.turn_id.as_ref() {
+                turns_by_path
+                    .entry(row.source_file.clone())
+                    .or_default()
+                    .insert(turn_id.clone());
+            }
+        }
+
+        let mut paths = sessions_by_path.keys().cloned().collect::<BTreeSet<_>>();
         for group in dedupe_groups {
             paths.insert(group.representative.source_file.clone());
             for duplicate in &group.duplicates {
@@ -291,16 +311,35 @@ impl FileRegistry {
 
         let mut files = Vec::with_capacity(paths.len());
         let mut ids_by_path = BTreeMap::new();
+        let mut turn_ids_by_path = BTreeMap::new();
         for (index, path) in paths.into_iter().enumerate() {
             let id = u32::try_from(index).map_err(|_| ExportError::SourceFileIdOverflow)?;
+            let turns = turns_by_path
+                .remove(&path)
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
+            let mut turn_ids = BTreeMap::new();
+            for (turn_index, turn_id) in turns.iter().enumerate() {
+                let turn_id_ref = u16::try_from(turn_index)
+                    .map_err(|_| ExportError::SourceFileTurnIdOverflow { path: path.clone() })?;
+                turn_ids.insert(turn_id.clone(), turn_id_ref);
+            }
             files.push(BundleFileV0_2 {
                 id,
                 path: path.clone(),
+                session_id: sessions_by_path.get(&path).cloned().unwrap_or(None),
+                turns,
             });
             ids_by_path.insert(path, id);
+            turn_ids_by_path.insert(files.last().expect("file").path.clone(), turn_ids);
         }
 
-        Ok(Self { files, ids_by_path })
+        Ok(Self {
+            files,
+            ids_by_path,
+            turn_ids_by_path,
+        })
     }
 
     fn source_file_id(&self, path: &Utf8Path) -> Result<u32, ExportError> {
@@ -309,6 +348,24 @@ impl FileRegistry {
             .copied()
             .ok_or_else(|| ExportError::UnregisteredSourceFile {
                 path: path.to_owned(),
+            })
+    }
+
+    fn turn_id_ref(
+        &self,
+        path: &Utf8Path,
+        turn_id: Option<&str>,
+    ) -> Result<Option<u16>, ExportError> {
+        let Some(turn_id) = turn_id else {
+            return Ok(None);
+        };
+        self.turn_ids_by_path
+            .get(path)
+            .and_then(|turn_ids| turn_ids.get(turn_id).copied())
+            .map(Some)
+            .ok_or_else(|| ExportError::UnregisteredTurnId {
+                path: path.to_owned(),
+                turn_id: turn_id.to_string(),
             })
     }
 }

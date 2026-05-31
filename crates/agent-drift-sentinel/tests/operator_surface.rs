@@ -25,6 +25,6 @@ fn operator_surface_renders_evidence_backed_visible_warning_blocks() {
     assert!(rendered.contains("Visible warnings:"));
     assert!(rendered.contains("Expected next step: align plan to repo truth"));
     assert!(
-        rendered.contains("Evidence: session-alpha.jsonl:1#1 flagged score for session-alpha:1")
+        rendered.contains("Evidence: session-alpha.jsonl#1:0 flagged score for session-alpha:1")
     );
 }

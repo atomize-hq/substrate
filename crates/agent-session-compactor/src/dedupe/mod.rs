@@ -11,7 +11,6 @@ pub use exact::dedupe_rows_exact;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RowRef {
     pub source_file: Utf8PathBuf,
-    pub line_number: usize,
     pub event_index: usize,
     pub row_ordinal: usize,
 }
@@ -20,7 +19,6 @@ impl RowRef {
     pub fn from_row(row: &CompactionRow) -> Self {
         Self {
             source_file: row.source_file.clone(),
-            line_number: row.line_number,
             event_index: row.event_index,
             row_ordinal: row.row_ordinal,
         }

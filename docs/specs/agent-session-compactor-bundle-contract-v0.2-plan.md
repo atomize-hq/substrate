@@ -49,12 +49,16 @@ on-disk seam in one direct cutover.
 - file ids use `u32`
 - the manifest file registry is derived from the paths actually referenced by exported rows and
   dedupe refs, ordered lexicographically by path
+- manifest file entries also own session provenance as `session_id: Option<String>`
+- manifest file entries also own file-scoped turn registries as `turns: Vec<String>`
 - internal `CompactionRow` and `dedupe::RowRef` remain path-backed in this slice; only export DTOs
   and the analyzer input boundary change
 - analyzer checkpoint and evidence outputs continue to render resolved file paths for operator
   readability
 - analyzer input does not guess across mixed contracts; compactor export and analyzer load logic
   cut over together to `v0.2`
+- repeated `turn_id` values compact through explicit file-scoped turn registries on manifest file
+  entries; rows carry `turn_id_ref: Option<u16>` scoped by `source_file_id`
 
 ## Major Components
 
@@ -63,7 +67,9 @@ on-disk seam in one direct cutover.
 Deliver first:
 
 - `BundleManifest` upgraded to `schema_version = "v0.2"`
-- explicit manifest-owned file entries such as `BundleFileV0_2 { id, path }`
+- explicit manifest-owned file entries such as `BundleFileV0_2 { id, path, turns }`
+- manifest-owned file entries carry `session_id` so rows do not repeat it
+- manifest-owned file entries also carry file-scoped `turns` so rows do not repeat turn strings
 - replacement of the old manifest `source_files` list with the explicit file registry
 - validation that every exported row and dedupe ref resolves through the manifest registry
 
@@ -77,6 +83,7 @@ Why first:
 Deliver second:
 
 - `ExportRowV0_2` for archival and compact row JSONL
+- row DTOs drop `session_id` and replace inline `turn_id` with file-scoped `turn_id_ref`
 - `RowRefV0_2` plus any dedupe-audit export wrapper needed to keep refs explicit
 - conversion helpers from internal `CompactionRow` and `DedupeGroup` into export DTOs
 
@@ -103,10 +110,11 @@ Why third:
 Deliver fourth:
 
 - input-side `v0.2` DTO parsing
-- manifest file-registry loading and id-to-path resolution
+- manifest file-registry loading plus `source_file_id -> {path, session_id, turns}` resolution
 - reconstruction of existing internal `CompactionRow` and `RowRef` values before session grouping,
   sorting, surface validation, inference, and checkpoint export
-- clear failure for unknown file ids, duplicate file ids, or incomplete registry state
+- clear failure for unknown file ids, duplicate file ids, unknown turn refs, or incomplete
+  registry state
 
 Why fourth:
 
@@ -179,7 +187,7 @@ Risk:
 
 Mitigation:
 
-- keep `line_number`, `event_index`, and `row_ordinal` unchanged
+- keep `event_index` and `row_ordinal` unchanged
 - verify that all dedupe refs still point to archival rows that exist after the export migration
 
 ### Risk 4: The repo ends up carrying dual bundle contracts longer than intended
@@ -248,9 +256,11 @@ BC7 smoke note:
 
 - `2026-05-31`: session `019e79dc-456c-7e92-bcbc-3b677d9e8b3f` produced a `v0.2` bundle with
   `252` archival rows, `197` compact rows, `26` dedupe groups, and a single manifest file-table
-  entry. `agent-drift-analyzer` consumed the bundle successfully and emitted `17` checkpoints. The
-  five compactor files totaled `1,294,344` bytes versus an estimated `1,356,876` bytes for the
-  equivalent inline-path `v0.1` shape, a measured reduction of `62,532` bytes.
+  entry. File entries now carry `session_id` plus file-scoped `turns`, while row JSONL omits
+  repeated `source_file`, repeated `session_id`, and repeated `turn_id`. `agent-drift-analyzer`
+  consumed the bundle successfully and emitted `17` checkpoints. The five compactor files totaled
+  `1,256,480` bytes versus `1,271,759` bytes for the equivalent contract with inline row
+  `turn_id`, a measured reduction of `15,279` bytes.
 
 ## Handoff To Later Slices
 

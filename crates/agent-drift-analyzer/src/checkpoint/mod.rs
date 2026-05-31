@@ -175,11 +175,6 @@ fn row_text_is_focusable(row: &CompactionRow) -> bool {
         && row.text != "[encrypted_reasoning]"
 }
 
-fn row_key(row: &CompactionRow) -> (Utf8PathBuf, usize, usize, usize) {
-    (
-        row.source_file.clone(),
-        row.event_index,
-        row.line_number,
-        row.row_ordinal,
-    )
+fn row_key(row: &CompactionRow) -> (Utf8PathBuf, usize, usize) {
+    (row.source_file.clone(), row.event_index, row.row_ordinal)
 }

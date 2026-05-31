@@ -125,7 +125,7 @@ docs/specs/agent-drift-analyzer-v0.1-spec.md
 
 Design the analyzer around evidence refs and explicit thresholds rather than prose-only summaries.
 The initial implementation should consume the actual compactor row surface that now exists, including
-stable `RowRef` identity by `source_file`, `line_number`, `event_index`, and `row_ordinal`.
+stable `RowRef` identity by `source_file`, `event_index`, and `row_ordinal`.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -239,7 +239,7 @@ The spec is satisfied when:
   sufficient for useful working-set inference without analyzer-side guessing because directive text
   preserves literal file mentions, tool calls preserve raw argument JSON and tool names, archival
   rows preserve repetition for thrash scoring, and `RowRef` remains stable at
-  `source_file`/`line_number`/`event_index`/`row_ordinal`.
+  `source_file`/`event_index`/`row_ordinal`.
 - `A12` replay freeze outcome on `2026-05-30`: the analyzer checkpoint contract is stable enough
   for replay-mode sentinel consumption with session-scoped `checkpoints.jsonl` entries containing
   deterministic boundaries, task-frame evidence, explicit drift scores, and an `expected_next_step`

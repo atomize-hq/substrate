@@ -28,7 +28,7 @@ fn adjudication_fallback_keeps_analyzer_evidence_visible() {
 
     assert!(fallback.contains("using analyzer evidence only"));
     assert!(
-        fallback.contains("Evidence: session-alpha.jsonl:1#1 flagged score for session-alpha:1")
+        fallback.contains("Evidence: session-alpha.jsonl#1:0 flagged score for session-alpha:1")
     );
     assert!(warning
         .render_console_block(Some(&success_note(&AdjudicationResponse {

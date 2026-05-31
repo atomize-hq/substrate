@@ -329,10 +329,10 @@ fn format_trigger(trigger: TriggerClass) -> &'static str {
 
 fn format_evidence_ref(reference: &EvidenceRef) -> String {
     format!(
-        "{}:{}#{} {}",
+        "{}#{}:{} {}",
         file_name(&reference.row.source_file),
-        reference.row.line_number,
         reference.row.event_index,
+        reference.row.row_ordinal,
         truncate(&reference.reason, 96)
     )
 }

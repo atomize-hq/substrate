@@ -523,13 +523,12 @@ fn boundary_end_observation(
         })
 }
 
-type RowRefKey = (Utf8PathBuf, usize, usize, usize);
+type RowRefKey = (Utf8PathBuf, usize, usize);
 
 fn row_ref_key(row_ref: RowRef) -> RowRefKey {
     (
         row_ref.source_file,
         row_ref.event_index,
-        row_ref.line_number,
         row_ref.row_ordinal,
     )
 }

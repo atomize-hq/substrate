@@ -70,16 +70,36 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
                 .collect::<Vec<_>>(),
             vec![0, 1, 2]
         );
+        assert!(manifest
+            .files
+            .iter()
+            .all(|file| file.session_id.as_deref() == Some("session-123")));
+        assert!(manifest
+            .files
+            .iter()
+            .all(|file| file.turns == vec!["turn-abc".to_string()]));
 
         let compact_rows = read_jsonl::<ExportRowV0_2>(output_dir.join("rows.compact.jsonl"));
         assert_eq!(compact_rows.len(), 2);
-        assert!(compact_rows
-            .iter()
-            .all(|row| row.session_id.as_deref() == Some("session-123")));
         assert!(compact_rows.iter().any(|row| row.source_file_id == 0));
+        assert!(compact_rows.iter().all(|row| row.turn_id_ref == Some(0)));
         assert!(compact_rows
             .iter()
             .all(|row| row.user_message_role.is_some() || row.kind != CompactionKind::UserMessage));
+        let compact_rows_raw =
+            fs::read_to_string(output_dir.join("rows.compact.jsonl")).expect("compact raw");
+        assert!(compact_rows_raw
+            .lines()
+            .all(|line| !line.contains("\"session_id\"")));
+        assert!(compact_rows_raw
+            .lines()
+            .all(|line| !line.contains("\"line_number\"")));
+        assert!(compact_rows_raw
+            .lines()
+            .all(|line| !line.contains("\"turn_id\"")));
+        assert!(compact_rows_raw
+            .lines()
+            .all(|line| line.contains("\"turn_id_ref\"")));
 
         let archival_rows = read_jsonl::<ExportRowV0_2>(output_dir.join("rows.archival.jsonl"));
         assert_eq!(archival_rows.len(), 3);
@@ -90,6 +110,11 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
                 .collect::<Vec<_>>(),
             vec![0, 1, 2]
         );
+        assert!(fs::read_to_string(output_dir.join("rows.archival.jsonl"))
+            .expect("archival raw")
+            .lines()
+            .all(|line| !line.contains("\"line_number\"")));
+        assert!(archival_rows.iter().all(|row| row.turn_id_ref == Some(0)));
 
         let audit_rows = read_jsonl::<DedupeGroupV0_2>(output_dir.join("dedupe-audit.jsonl"));
         assert_eq!(audit_rows.len(), 1);
@@ -116,6 +141,54 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
             "bundle"
         )
         .is_empty());
+    });
+}
+
+#[test]
+fn export_bundle_moves_turn_ids_into_file_scoped_turn_tables() {
+    with_export_failure(None, || {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let output_dir = Utf8Path::from_path(temp_dir.path())
+            .expect("utf8 temp path")
+            .join("bundle");
+
+        let row_a = row(
+            "/tmp/rollout-a.jsonl",
+            1,
+            0,
+            CompactionKind::UserMessage,
+            "first",
+        );
+        let mut row_b = row_a.clone();
+        row_b.line_number = 2;
+        row_b.event_index = 1;
+        row_b.text = "second".to_string();
+        let (canonical_text, text_hash_hex) = canonicalize_row_text(&row_b.text);
+        row_b.canonical_text = canonical_text;
+        row_b.text_hash_hex = text_hash_hex;
+        row_b.turn_id = Some("turn-def".to_string());
+
+        let fixture = ExportFixture::from_rows(vec![row_a, row_b], vec![], vec![]);
+        export_bundle(&fixture.request(&output_dir)).expect("export bundle");
+
+        let manifest: BundleManifest = serde_json::from_str(
+            &fs::read_to_string(output_dir.join("manifest.json")).expect("manifest"),
+        )
+        .expect("manifest json");
+        assert_eq!(manifest.files.len(), 1);
+        assert_eq!(
+            manifest.files[0].turns,
+            vec!["turn-abc".to_string(), "turn-def".to_string()]
+        );
+
+        let archival_rows = read_jsonl::<ExportRowV0_2>(output_dir.join("rows.archival.jsonl"));
+        assert_eq!(
+            archival_rows
+                .iter()
+                .map(|row| row.turn_id_ref)
+                .collect::<Vec<_>>(),
+            vec![Some(0), Some(1)]
+        );
     });
 }
 
@@ -264,6 +337,26 @@ impl ExportFixture {
             archival_rows: dedupe_result.archival_rows,
             compact_rows: dedupe_result.compact_rows,
             dedupe_groups: dedupe_result.dedupe_groups,
+        }
+    }
+
+    fn from_rows(
+        archival_rows: Vec<CompactionRow>,
+        compact_rows: Vec<CompactionRow>,
+        dedupe_groups: Vec<DedupeGroup>,
+    ) -> Self {
+        let mut source_files = archival_rows
+            .iter()
+            .map(|row| row.source_file.clone())
+            .chain(compact_rows.iter().map(|row| row.source_file.clone()))
+            .collect::<Vec<_>>();
+        source_files.sort();
+        source_files.dedup();
+        Self {
+            source_files,
+            archival_rows,
+            compact_rows,
+            dedupe_groups,
         }
     }
 

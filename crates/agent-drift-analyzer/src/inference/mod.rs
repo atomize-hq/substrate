@@ -46,9 +46,8 @@ fn infer_counter_evidence(context: &ContextPack, truth_artifacts: &[String]) -> 
                         ),
                     };
                     let key = format!(
-                        "{}:{}:{}:{}:{}",
+                        "{}:{}:{}:{}",
                         candidate.row.source_file,
-                        candidate.row.line_number,
                         candidate.row.event_index,
                         candidate.row.row_ordinal,
                         candidate.reason
