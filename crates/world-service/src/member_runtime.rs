@@ -649,6 +649,7 @@ fn agent_event_from_wrapper_event(
     mode: MemberStreamMode,
     agent_id: &str,
 ) -> Option<AgentEvent> {
+    let surfaced_thread_id = surfaced_uaa_thread_id_from_data(wrapper_event.data.as_ref());
     if mode == MemberStreamMode::Bootstrap {
         if let Some(event) = registered_event_from_data(
             context,
@@ -720,6 +721,7 @@ fn agent_event_from_wrapper_event(
         span_id,
         wrapper_event.channel,
     );
+    event.thread_id = surfaced_thread_id;
 
     if let Some(data) = wrapper_event.data {
         if let Some(obj) = event.data.as_object_mut() {
@@ -755,7 +757,7 @@ fn registered_event_from_data(
         parent_participant_id: context.parent_participant_id.clone(),
         resumed_from_participant_id: context.resumed_from_participant_id.clone(),
         backend_id: Some(context.backend_id.clone()),
-        thread_id: None,
+        thread_id: surfaced_uaa_thread_id_from_data(Some(data)),
         role: Some(MEMBER_ROLE.to_string()),
         world_id: Some(binding.world_id.clone()),
         world_generation: Some(binding.world_generation),
@@ -795,6 +797,24 @@ fn surfaced_uaa_session_id_from_data(data: Option<&serde_json::Value>) -> Option
     for pointer in ["/internal/uaa_session_id", "/session/id"] {
         if let Some(session_id) = data.pointer(pointer).and_then(serde_json::Value::as_str) {
             let trimmed = session_id.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn surfaced_uaa_thread_id_from_data(data: Option<&serde_json::Value>) -> Option<String> {
+    let data = data?;
+    for pointer in [
+        "/thread_id",
+        "/session/id",
+        "/raw_event/thread_id",
+        "/raw_event/session/id",
+    ] {
+        if let Some(thread_id) = data.pointer(pointer).and_then(serde_json::Value::as_str) {
+            let trimmed = thread_id.trim();
             if !trimmed.is_empty() {
                 return Some(trimmed.to_string());
             }
@@ -1081,6 +1101,30 @@ mod tests {
     }
 
     #[test]
+    fn surfaced_uaa_thread_id_prefers_explicit_thread_then_session_id() {
+        let payload = json!({
+            "thread_id": "thread-explicit",
+            "session": {
+                "id": "thread-session"
+            }
+        });
+        assert_eq!(
+            surfaced_uaa_thread_id_from_data(Some(&payload)).as_deref(),
+            Some("thread-explicit")
+        );
+
+        let payload = json!({
+            "session": {
+                "id": "thread-session"
+            }
+        });
+        assert_eq!(
+            surfaced_uaa_thread_id_from_data(Some(&payload)).as_deref(),
+            Some("thread-session")
+        );
+    }
+
+    #[test]
     fn validate_submit_turn_request_accepts_matching_retained_identity() {
         validate_submit_turn_request(&sample_submit_turn_request(), sample_retained_identity())
             .expect("matching retained member identity should validate");
@@ -1230,9 +1274,42 @@ mod tests {
         assert_eq!(event.parent_participant_id, None);
         assert_eq!(event.resumed_from_participant_id, None);
         assert_eq!(event.backend_id.as_deref(), Some("cli:codex"));
+        assert_eq!(event.thread_id.as_deref(), Some("uaa_session"));
         assert_eq!(event.world_id.as_deref(), Some("world_123"));
         assert_eq!(event.world_generation, Some(7));
         assert_eq!(event.span_id.as_deref(), Some("spn_bootstrap"));
+    }
+
+    #[test]
+    fn submitted_turn_event_surfaces_thread_id_from_uaa_payload() {
+        let wrapper_event = AgentWrapperEvent {
+            agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+            kind: AgentWrapperEventKind::Status,
+            channel: Some("status".to_string()),
+            text: None,
+            message: Some("submitted turn".to_string()),
+            data: Some(json!({
+                "thread_id": "thread-submitted",
+                "turn_id": "turn-2"
+            })),
+        };
+
+        let event = agent_event_from_wrapper_event(
+            &sample_stream_context(),
+            &sample_world_binding(),
+            "spn_submitted",
+            wrapper_event,
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        )
+        .expect("submitted turn event");
+
+        assert_eq!(event.thread_id.as_deref(), Some("thread-submitted"));
+        assert_eq!(event.participant_id.as_deref(), Some("ash_member"));
+        assert_eq!(event.backend_id.as_deref(), Some("cli:codex"));
+        assert_eq!(event.world_id.as_deref(), Some("world_123"));
+        assert_eq!(event.world_generation, Some(7));
     }
 
     #[test]

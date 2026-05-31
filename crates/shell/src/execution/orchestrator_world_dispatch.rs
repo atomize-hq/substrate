@@ -16,6 +16,10 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 #[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::dispatch_contract::{
+    ContinueWorldWorkerOutcomeV1, WorkerContinuePayloadV1,
+};
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
@@ -43,7 +47,8 @@ use crate::execution::config_model::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::routing::{
-    build_agent_client_and_member_dispatch_request_for_cwd, MemberDispatchTransportRequest,
+    build_agent_client_and_member_dispatch_request_for_cwd,
+    build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
 };
 
 #[allow(dead_code)]
@@ -153,6 +158,12 @@ struct InternalDispatchContext {
 struct RunWorldTaskStreamResult {
     exit_code: i32,
     saw_registered_event: bool,
+}
+
+#[cfg(target_os = "linux")]
+struct ContinueWorldWorkerStreamResult {
+    exit_code: i32,
+    surfaced_thread_id: Option<String>,
 }
 
 #[cfg(target_os = "linux")]
@@ -279,11 +290,29 @@ async fn spawn_world_worker(
 
 #[cfg(target_os = "linux")]
 async fn continue_world_worker(
-    _prepared: PreparedOrchestratorWorldDispatch,
+    prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
-    anyhow::bail!(
-        "unsupported_platform_or_posture: continue_world_worker exact-target validation is available in v1, but retained-worker routing remains out of scope until packet 2"
-    );
+    validate_authoritative_world_binding(&prepared.session, &prepared.request)?;
+
+    let submit_request = build_continue_world_worker_submit_request(&prepared)?;
+    let stream_result = execute_continue_world_worker_stream(&submit_request).await?;
+    let summary = summarize_continue_world_worker_result(&submit_request, stream_result.exit_code);
+
+    Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
+        ContinueWorldWorkerOutcomeV1 {
+            request_id: prepared.request.request_id,
+            orchestration_session_id: submit_request.orchestration_session_id.clone(),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: prepared.request.mode,
+            orchestrator_participant_id: submit_request.orchestrator_participant_id.clone(),
+            target_participant_id: submit_request.participant_id.clone(),
+            target_backend_id: submit_request.backend_id.clone(),
+            world_id: submit_request.world_id.clone(),
+            world_generation: submit_request.world_generation,
+            thread_id: stream_result.surfaced_thread_id,
+            summary,
+        },
+    ))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -476,6 +505,58 @@ fn build_spawn_world_worker_transport_request(
 }
 
 #[cfg(target_os = "linux")]
+fn build_continue_world_worker_submit_request(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    let target = prepared.target_participant.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid_dispatch_target: continue_world_worker requires an exact retained target participant"
+        )
+    })?;
+    let WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 { prompt, .. }) =
+        &prepared.request.payload
+    else {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
+        );
+    };
+    let orchestrator_participant_id = target
+        .handle
+        .orchestrator_participant_id
+        .clone()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid_dispatch_target: retained worker {} omitted orchestrator_participant_id",
+                target.handle.participant_id
+            )
+        })?;
+    let world_id = target.handle.world_id.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid_dispatch_target: retained worker {} omitted world_id",
+            target.handle.participant_id
+        )
+    })?;
+    let world_generation = target.handle.world_generation.ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid_dispatch_target: retained worker {} omitted world_generation",
+            target.handle.participant_id
+        )
+    })?;
+
+    Ok(transport_api_types::MemberTurnSubmitRequestV1 {
+        schema_version: 1,
+        orchestration_session_id: target.handle.orchestration_session_id.clone(),
+        participant_id: target.handle.participant_id.clone(),
+        orchestrator_participant_id,
+        backend_id: target.handle.backend_id.clone(),
+        run_id: prepared.request.request_id.clone(),
+        world_id,
+        world_generation,
+        prompt: prompt.clone(),
+    })
+}
+
+#[cfg(target_os = "linux")]
 fn member_runtime_backend_kind(
     backend_kind: AgentRuntimeBackendKind,
 ) -> transport_api_types::MemberRuntimeBackendKindV1 {
@@ -662,6 +743,110 @@ async fn execute_spawn_world_worker_stream(
 }
 
 #[cfg(target_os = "linux")]
+async fn execute_continue_world_worker_stream(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+) -> Result<ContinueWorldWorkerStreamResult> {
+    use http_body_util::BodyExt as _;
+    use transport_api_types::ExecuteStreamFrame;
+
+    let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()
+        .context("failed to build member turn submit client for continue_world_worker")?;
+    let response = client
+        .submit_member_turn_stream(request.clone())
+        .await
+        .context("failed to submit continue_world_worker over world member turn seam")?;
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    let mut exit_code = None::<i32>;
+    let mut surfaced_thread_id = None::<String>;
+
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.map_err(|err| anyhow::anyhow!("stream frame error: {err}"))?;
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+
+        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=pos).collect();
+            if line.len() <= 1 {
+                continue;
+            }
+            let payload = &line[..line.len() - 1];
+            if payload.is_empty() {
+                continue;
+            }
+            let frame: ExecuteStreamFrame = serde_json::from_slice(payload).with_context(|| {
+                format!(
+                    "invalid continue_world_worker stream frame: {}",
+                    String::from_utf8_lossy(payload)
+                )
+            })?;
+
+            match frame {
+                ExecuteStreamFrame::Start { .. } => {}
+                ExecuteStreamFrame::Event { event } => {
+                    if surfaced_thread_id.is_none() {
+                        surfaced_thread_id = surfaced_thread_id_from_event(&event);
+                    }
+                }
+                ExecuteStreamFrame::Exit { exit, .. } => {
+                    exit_code = Some(exit);
+                    break;
+                }
+                ExecuteStreamFrame::Error { message } => {
+                    anyhow::bail!(message);
+                }
+                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
+            }
+        }
+
+        if exit_code.is_some() {
+            break;
+        }
+    }
+
+    let exit_code = exit_code.ok_or_else(|| {
+        anyhow::anyhow!("continue_world_worker stream ended without a terminal exit frame")
+    })?;
+
+    Ok(ContinueWorldWorkerStreamResult {
+        exit_code,
+        surfaced_thread_id,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn surfaced_thread_id_from_event(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Option<String> {
+    if let Some(thread_id) = event
+        .thread_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|thread_id| !thread_id.is_empty())
+    {
+        return Some(thread_id.to_string());
+    }
+
+    for pointer in ["/uaa_event/thread_id", "/uaa_event/session/id"] {
+        if let Some(thread_id) = event
+            .data
+            .pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+        {
+            let trimmed = thread_id.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "linux")]
 fn receipt_from_registered_event(
     event: substrate_common::agent_events::AgentEvent,
     transport_request: &MemberDispatchTransportRequest,
@@ -785,6 +970,24 @@ fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> Str
     )
 }
 
+#[cfg(target_os = "linux")]
+fn summarize_continue_world_worker_result(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    exit_code: i32,
+) -> String {
+    if exit_code == 0 {
+        format!(
+            "continue_world_worker completed on retained worker {} via the existing member-turn seam",
+            request.participant_id
+        )
+    } else {
+        format!(
+            "continue_world_worker submitted retained worker {} via the existing member-turn seam, but the turn exited with status {}",
+            request.participant_id, exit_code
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -861,6 +1064,89 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_continue_request() -> ValidatedWorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_continue".to_string()),
+            idempotency_key: Some("idem_continue".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "follow up".to_string(),
+                thread_id: Some("thread-root".to_string()),
+            }),
+        }
+        .validate()
+        .expect("validated continue request")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_orchestrator_participant() -> AgentRuntimeParticipantRecord {
+        serde_json::from_value(json!({
+            "participant_id": "orch_dispatch",
+            "orchestration_session_id": "sess_dispatch",
+            "agent_id": "codex",
+            "backend_id": "cli:codex",
+            "role": "orchestrator",
+            "protocol": "substrate.agent.session",
+            "execution": { "scope": "host" },
+            "state": "running",
+            "opened_at": "2026-05-01T00:00:00Z",
+            "last_transition_at": "2026-05-01T00:00:00Z",
+            "internal": {
+                "resolved_agent_kind": "codex",
+                "resolved_binary_path": "/usr/bin/codex",
+                "shell_owner_pid": 42,
+                "lease_token": "lease_orch",
+                "cancel_supported": true,
+                "control_owner_retained": true,
+                "event_stream_active": true,
+                "completion_observer_retained": true,
+                "ownership_mode": "attached_control",
+                "ownership_valid": true
+            }
+        }))
+        .expect("orchestrator participant")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_member_participant() -> AgentRuntimeParticipantRecord {
+        serde_json::from_value(json!({
+            "participant_id": "ash_member",
+            "orchestration_session_id": "sess_dispatch",
+            "agent_id": "codex_world",
+            "backend_id": "cli:codex_world",
+            "role": "member",
+            "protocol": "substrate.agent.session",
+            "execution": { "scope": "world" },
+            "state": "running",
+            "opened_at": "2026-05-01T00:00:00Z",
+            "last_transition_at": "2026-05-01T00:00:00Z",
+            "world_id": "world-17",
+            "world_generation": 2,
+            "orchestrator_participant_id": "orch_dispatch",
+            "internal": {
+                "resolved_agent_kind": "codex",
+                "resolved_binary_path": "/usr/bin/codex",
+                "shell_owner_pid": 42,
+                "lease_token": "lease_member",
+                "cancel_supported": true,
+                "control_owner_retained": true,
+                "event_stream_active": true,
+                "completion_observer_retained": true,
+                "ownership_mode": "member_runtime",
+                "ownership_valid": true
+            }
+        }))
+        .expect("member participant")
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_spawn_request() -> ValidatedWorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_spawn".to_string()),
@@ -879,6 +1165,75 @@ mod tests {
         }
         .validate()
         .expect("validated spawn request")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_submit_request_uses_authoritative_retained_identity() {
+        let prepared = PreparedOrchestratorWorldDispatch {
+            request: sample_continue_request(),
+            session: sample_session(),
+            caller_participant: sample_orchestrator_participant(),
+            target_participant: Some(sample_member_participant()),
+        };
+
+        let submit =
+            build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
+
+        assert_eq!(submit.orchestration_session_id, "sess_dispatch");
+        assert_eq!(submit.participant_id, "ash_member");
+        assert_eq!(submit.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(submit.backend_id, "cli:codex_world");
+        assert_eq!(submit.run_id, "req_continue");
+        assert_eq!(submit.world_id, "world-17");
+        assert_eq!(submit.world_generation, 2);
+        assert_eq!(submit.prompt, "follow up");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_thread_surface_prefers_event_field_then_uaa_payload() {
+        let direct = substrate_common::agent_events::AgentEvent {
+            ts: chrono::Utc::now(),
+            kind: AgentEventKind::TaskProgress,
+            data: json!({}),
+            agent_id: "codex_world".to_string(),
+            orchestration_session_id: "sess_dispatch".to_string(),
+            run_id: "req_continue".to_string(),
+            parent_run_id: None,
+            participant_id: Some("ash_member".to_string()),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: Some("cli:codex_world".to_string()),
+            thread_id: Some("thread-direct".to_string()),
+            role: Some("member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            cmd_id: None,
+            span_id: Some("spn_continue".to_string()),
+            channel: None,
+            identity_tuple: None,
+            placement_posture: None,
+            project: None,
+        };
+        assert_eq!(
+            surfaced_thread_id_from_event(&direct).as_deref(),
+            Some("thread-direct")
+        );
+
+        let fallback = substrate_common::agent_events::AgentEvent {
+            thread_id: None,
+            data: json!({
+                "uaa_event": {
+                    "thread_id": "thread-from-uaa"
+                }
+            }),
+            ..direct
+        };
+        assert_eq!(
+            surfaced_thread_id_from_event(&fallback).as_deref(),
+            Some("thread-from-uaa")
+        );
     }
 
     #[cfg(target_os = "linux")]
