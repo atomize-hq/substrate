@@ -418,7 +418,68 @@ pub(crate) struct ContinueWorldWorkerOutcomeV1 {
     pub world_generation: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_event: Option<ContinueWorldWorkerEventV1>,
     pub summary: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ContinueWorldWorkerEventClassV1 {
+    Reply,
+    ProgressUpdate,
+    Result,
+    Failure,
+    FollowUpQuestion,
+    Blocked,
+}
+
+impl ContinueWorldWorkerEventClassV1 {
+    pub(crate) fn from_wire_label(label: &str) -> Option<Self> {
+        match label.trim() {
+            "reply" => Some(Self::Reply),
+            "progress_update" => Some(Self::ProgressUpdate),
+            "result" => Some(Self::Result),
+            "failure" => Some(Self::Failure),
+            "follow_up_question" => Some(Self::FollowUpQuestion),
+            "blocked" => Some(Self::Blocked),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn attention_required_by_default(self) -> bool {
+        matches!(self, Self::FollowUpQuestion | Self::Blocked)
+    }
+
+    pub(crate) fn is_deferred_wire_label(label: &str) -> bool {
+        matches!(
+            label.trim(),
+            "approval_request"
+                | "approval_response"
+                | "fork_request"
+                | "fork_recommendation"
+                | "fork_command"
+                | "control_directive"
+                | "control_ack"
+                | "attention_required"
+        )
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct ContinueWorldWorkerEventV1 {
+    pub event_class: ContinueWorldWorkerEventClassV1,
+    pub source_participant_id: String,
+    pub target_participant_id: String,
+    pub source_backend_id: String,
+    pub attention_required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream_channel: Option<String>,
+    pub payload: serde_json::Value,
 }
 
 #[allow(dead_code)]
@@ -1271,12 +1332,12 @@ mod tests {
 
     use super::{
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
-        AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
-        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
-        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
-        FieldValueOrigin, HostExecutionClientStart, TaskPayloadV1, WorkerContinuePayloadV1,
-        WorkerSpawnPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1,
+        AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference,
+        ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
+        DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
+        DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
+        HostExecutionClientStart, TaskPayloadV1, WorkerContinuePayloadV1, WorkerSpawnPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2287,5 +2348,31 @@ mod tests {
             error.to_string(),
             "invalid_dispatch_payload: action continue_world_worker requires non-empty thread_id when provided"
         );
+    }
+
+    #[test]
+    fn continue_world_worker_event_class_attention_semantics_stay_packet_three_narrow() {
+        assert!(!ContinueWorldWorkerEventClassV1::Reply.attention_required_by_default());
+        assert!(!ContinueWorldWorkerEventClassV1::ProgressUpdate.attention_required_by_default());
+        assert!(!ContinueWorldWorkerEventClassV1::Result.attention_required_by_default());
+        assert!(!ContinueWorldWorkerEventClassV1::Failure.attention_required_by_default());
+        assert!(ContinueWorldWorkerEventClassV1::FollowUpQuestion.attention_required_by_default());
+        assert!(ContinueWorldWorkerEventClassV1::Blocked.attention_required_by_default());
+        assert_eq!(
+            ContinueWorldWorkerEventClassV1::from_wire_label("approval_request"),
+            None
+        );
+        assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "approval_request"
+        ));
+        assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "fork_request"
+        ));
+        assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "control_directive"
+        ));
+        assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "reply"
+        ));
     }
 }

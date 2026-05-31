@@ -17,7 +17,8 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
-    ContinueWorldWorkerOutcomeV1, WorkerContinuePayloadV1,
+    ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1,
+    WorkerContinuePayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -164,6 +165,7 @@ struct RunWorldTaskStreamResult {
 struct ContinueWorldWorkerStreamResult {
     exit_code: i32,
     surfaced_thread_id: Option<String>,
+    surfaced_worker_event: Option<ContinueWorldWorkerEventV1>,
 }
 
 #[cfg(target_os = "linux")]
@@ -310,6 +312,7 @@ async fn continue_world_worker(
             world_id: submit_request.world_id.clone(),
             world_generation: submit_request.world_generation,
             thread_id: stream_result.surfaced_thread_id,
+            worker_event: stream_result.surfaced_worker_event,
             summary,
         },
     ))
@@ -760,6 +763,7 @@ async fn execute_continue_world_worker_stream(
     let mut buffer = Vec::new();
     let mut exit_code = None::<i32>;
     let mut surfaced_thread_id = None::<String>;
+    let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
 
     while let Some(frame) = body.as_mut().frame().await {
         let frame = frame.map_err(|err| anyhow::anyhow!("stream frame error: {err}"))?;
@@ -790,6 +794,11 @@ async fn execute_continue_world_worker_stream(
                     if surfaced_thread_id.is_none() {
                         surfaced_thread_id = surfaced_thread_id_from_event(&event);
                     }
+                    if let Some(classified_event) =
+                        classify_continue_world_worker_event(request, &event)?
+                    {
+                        surfaced_worker_event = Some(classified_event);
+                    }
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
                     exit_code = Some(exit);
@@ -814,6 +823,7 @@ async fn execute_continue_world_worker_stream(
     Ok(ContinueWorldWorkerStreamResult {
         exit_code,
         surfaced_thread_id,
+        surfaced_worker_event,
     })
 }
 
@@ -830,7 +840,12 @@ fn surfaced_thread_id_from_event(
         return Some(thread_id.to_string());
     }
 
-    for pointer in ["/uaa_event/thread_id", "/uaa_event/session/id"] {
+    for pointer in [
+        "/uaa_event/thread_id",
+        "/uaa_event/session/id",
+        "/uaa_event/raw_event/thread_id",
+        "/uaa_event/raw_event/session/id",
+    ] {
         if let Some(thread_id) = event
             .data
             .pointer(pointer)
@@ -844,6 +859,135 @@ fn surfaced_thread_id_from_event(
     }
 
     None
+}
+
+#[cfg(target_os = "linux")]
+fn classify_continue_world_worker_event(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Result<Option<ContinueWorldWorkerEventV1>> {
+    let Some(event_class_label) = continue_world_worker_event_class_label(event) else {
+        return Ok(None);
+    };
+
+    let Some(event_class) = ContinueWorldWorkerEventClassV1::from_wire_label(event_class_label)
+    else {
+        if ContinueWorldWorkerEventClassV1::is_deferred_wire_label(event_class_label) {
+            anyhow::bail!(
+                "unsupported_worker_event_class: continue_world_worker does not yet accept worker event class {}",
+                event_class_label.trim()
+            );
+        }
+        return Ok(None);
+    };
+
+    let source_participant_id =
+        continue_world_worker_identity_field(event.participant_id.as_deref())
+            .unwrap_or(&request.participant_id);
+    if source_participant_id != request.participant_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event participant_id {} did not match targeted retained worker {}",
+            source_participant_id,
+            request.participant_id,
+        );
+    }
+
+    let source_backend_id = continue_world_worker_identity_field(event.backend_id.as_deref())
+        .unwrap_or(&request.backend_id);
+    if source_backend_id != request.backend_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event backend_id {} did not match targeted backend {}",
+            source_backend_id,
+            request.backend_id,
+        );
+    }
+
+    let attention_required = event_class.attention_required_by_default()
+        || continue_world_worker_attention_required(event).unwrap_or(false);
+
+    Ok(Some(ContinueWorldWorkerEventV1 {
+        event_class,
+        source_participant_id: source_participant_id.to_string(),
+        target_participant_id: request.orchestrator_participant_id.clone(),
+        source_backend_id: source_backend_id.to_string(),
+        attention_required,
+        thread_id: surfaced_thread_id_from_event(event),
+        stream_channel: event.channel.clone(),
+        payload: continue_world_worker_event_payload(event),
+    }))
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_event_class_label(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Option<&str> {
+    continue_world_worker_string_field(
+        &event.data,
+        &[
+            "/event_class",
+            "/uaa_event/event_class",
+            "/uaa_event/raw_event/event_class",
+            "/raw_event/event_class",
+        ],
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_attention_required(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Option<bool> {
+    continue_world_worker_bool_field(
+        &event.data,
+        &[
+            "/attention_required",
+            "/uaa_event/attention_required",
+            "/uaa_event/raw_event/attention_required",
+            "/raw_event/attention_required",
+        ],
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_event_payload(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> serde_json::Value {
+    for pointer in [
+        "/payload",
+        "/uaa_event/payload",
+        "/uaa_event/raw_event/payload",
+        "/raw_event/payload",
+    ] {
+        if let Some(payload) = event.data.pointer(pointer) {
+            return payload.clone();
+        }
+    }
+
+    event.data.clone()
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_string_field<'a>(
+    data: &'a serde_json::Value,
+    pointers: &[&str],
+) -> Option<&'a str> {
+    pointers.iter().find_map(|pointer| {
+        data.pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_bool_field(data: &serde_json::Value, pointers: &[&str]) -> Option<bool> {
+    pointers
+        .iter()
+        .find_map(|pointer| data.pointer(pointer).and_then(serde_json::Value::as_bool))
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_identity_field(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
 }
 
 #[cfg(target_os = "linux")]
@@ -1168,6 +1312,50 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_continue_submit_request() -> transport_api_types::MemberTurnSubmitRequestV1 {
+        transport_api_types::MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "sess_dispatch".to_string(),
+            participant_id: "ash_member".to_string(),
+            orchestrator_participant_id: "orch_dispatch".to_string(),
+            backend_id: "cli:codex_world".to_string(),
+            run_id: "req_continue".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            prompt: "follow up".to_string(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_continue_stream_event(
+        data: serde_json::Value,
+    ) -> substrate_common::agent_events::AgentEvent {
+        substrate_common::agent_events::AgentEvent {
+            ts: chrono::Utc::now(),
+            kind: AgentEventKind::TaskProgress,
+            data,
+            agent_id: "codex_world".to_string(),
+            orchestration_session_id: "sess_dispatch".to_string(),
+            run_id: "req_continue".to_string(),
+            parent_run_id: None,
+            participant_id: Some("ash_member".to_string()),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: Some("cli:codex_world".to_string()),
+            thread_id: Some("thread-direct".to_string()),
+            role: Some("member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            cmd_id: None,
+            span_id: Some("spn_continue".to_string()),
+            channel: Some("worker.reply".to_string()),
+            identity_tuple: None,
+            placement_posture: None,
+            project: None,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn continue_world_worker_submit_request_uses_authoritative_retained_identity() {
         let prepared = PreparedOrchestratorWorldDispatch {
@@ -1193,29 +1381,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn continue_world_worker_thread_surface_prefers_event_field_then_uaa_payload() {
-        let direct = substrate_common::agent_events::AgentEvent {
-            ts: chrono::Utc::now(),
-            kind: AgentEventKind::TaskProgress,
-            data: json!({}),
-            agent_id: "codex_world".to_string(),
-            orchestration_session_id: "sess_dispatch".to_string(),
-            run_id: "req_continue".to_string(),
-            parent_run_id: None,
-            participant_id: Some("ash_member".to_string()),
-            parent_participant_id: None,
-            resumed_from_participant_id: None,
-            backend_id: Some("cli:codex_world".to_string()),
-            thread_id: Some("thread-direct".to_string()),
-            role: Some("member".to_string()),
-            world_id: Some("world-17".to_string()),
-            world_generation: Some(2),
-            cmd_id: None,
-            span_id: Some("spn_continue".to_string()),
-            channel: None,
-            identity_tuple: None,
-            placement_posture: None,
-            project: None,
-        };
+        let direct = sample_continue_stream_event(json!({}));
         assert_eq!(
             surfaced_thread_id_from_event(&direct).as_deref(),
             Some("thread-direct")
@@ -1228,11 +1394,151 @@ mod tests {
                     "thread_id": "thread-from-uaa"
                 }
             }),
-            ..direct
+            ..direct.clone()
         };
         assert_eq!(
             surfaced_thread_id_from_event(&fallback).as_deref(),
             Some("thread-from-uaa")
+        );
+
+        let raw_event_fallback = substrate_common::agent_events::AgentEvent {
+            thread_id: None,
+            data: json!({
+                "uaa_event": {
+                    "raw_event": {
+                        "thread_id": "thread-from-raw-event"
+                    }
+                }
+            }),
+            ..direct
+        };
+        assert_eq!(
+            surfaced_thread_id_from_event(&raw_event_fallback).as_deref(),
+            Some("thread-from-raw-event")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_classifies_packet_three_worker_events() {
+        let submit = sample_continue_submit_request();
+        let cases = [
+            ("reply", false),
+            ("progress_update", false),
+            ("result", false),
+            ("failure", false),
+            ("follow_up_question", true),
+            ("blocked", true),
+        ];
+
+        for (event_class, attention_required) in cases {
+            let classified = classify_continue_world_worker_event(
+                &submit,
+                &sample_continue_stream_event(json!({
+                    "event_class": event_class,
+                    "payload": {
+                        "message": format!("payload for {event_class}")
+                    }
+                })),
+            )
+            .unwrap_or_else(|_| panic!("classification must accept {event_class}"))
+            .unwrap_or_else(|| panic!("classification must surface {event_class}"));
+
+            assert_eq!(
+                serde_json::to_value(&classified)
+                    .expect("serialize classified event")
+                    .get("event_class")
+                    .and_then(serde_json::Value::as_str),
+                Some(event_class)
+            );
+            assert_eq!(classified.source_participant_id, "ash_member");
+            assert_eq!(classified.target_participant_id, "orch_dispatch");
+            assert_eq!(classified.source_backend_id, "cli:codex_world");
+            assert_eq!(classified.thread_id.as_deref(), Some("thread-direct"));
+            assert_eq!(classified.stream_channel.as_deref(), Some("worker.reply"));
+            assert_eq!(classified.attention_required, attention_required);
+            assert_eq!(
+                classified
+                    .payload
+                    .get("message")
+                    .and_then(serde_json::Value::as_str),
+                Some(format!("payload for {event_class}").as_str())
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_respects_explicit_attention_for_in_scope_events() {
+        let submit = sample_continue_submit_request();
+        let classified = classify_continue_world_worker_event(
+            &submit,
+            &sample_continue_stream_event(json!({
+                "event_class": "result",
+                "attention_required": true,
+                "payload": {
+                    "summary": "needs review"
+                }
+            })),
+        )
+        .expect("classification should succeed")
+        .expect("result should surface");
+
+        assert!(classified.attention_required);
+        assert_eq!(
+            classified.event_class,
+            ContinueWorldWorkerEventClassV1::Result
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_rejects_deferred_worker_event_classes() {
+        let submit = sample_continue_submit_request();
+        for deferred in [
+            "approval_request",
+            "fork_request",
+            "control_directive",
+            "attention_required",
+        ] {
+            let err = classify_continue_world_worker_event(
+                &submit,
+                &sample_continue_stream_event(json!({
+                    "event_class": deferred,
+                    "payload": {
+                        "message": "not yet in packet 3"
+                    }
+                })),
+            )
+            .expect_err("deferred worker event classes must fail closed");
+            assert!(
+                err.to_string().contains("unsupported_worker_event_class"),
+                "unexpected error for {deferred}: {err}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_rejects_worker_event_identity_drift() {
+        let submit = sample_continue_submit_request();
+        let drifted = substrate_common::agent_events::AgentEvent {
+            participant_id: Some("ash_other".to_string()),
+            ..sample_continue_stream_event(json!({
+                "event_class": "reply",
+                "payload": {
+                    "message": "identity drift"
+                }
+            }))
+        };
+
+        let err = classify_continue_world_worker_event(&submit, &drifted)
+            .expect_err("participant drift must fail");
+        assert!(
+            err.to_string().contains(
+                "participant_id ash_other did not match targeted retained worker ash_member"
+            ),
+            "unexpected error: {err}"
         );
     }
 
