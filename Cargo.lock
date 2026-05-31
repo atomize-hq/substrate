@@ -5109,6 +5109,7 @@ dependencies = [
  "futures",
  "gethostname",
  "http-body-util",
+ "hyper 0.14.32",
  "hyper 1.9.0",
  "hyperlocal 0.8.0",
  "lazy_static",
@@ -5155,6 +5156,7 @@ dependencies = [
  "world-api",
  "world-backend-factory",
  "world-mac-lima",
+ "world-service",
  "world-windows-wsl",
 ]
 
