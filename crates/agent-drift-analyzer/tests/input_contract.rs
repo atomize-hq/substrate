@@ -48,3 +48,29 @@ fn input_contract_accepts_compact_rows_without_canonical_text() {
     assert_eq!(bundle.sessions.len(), 1);
     assert!(bundle.surface.literal_objective_rows);
 }
+
+#[test]
+fn input_contract_accepts_archival_rows_without_canonical_text() {
+    let fixture = BundleFixture::sample();
+    let archival_path = fixture.input_dir.join("rows.archival.jsonl");
+    let rewritten = fs::read_to_string(&archival_path)
+        .expect("read archival rows")
+        .lines()
+        .map(|line| {
+            let mut row: serde_json::Value =
+                serde_json::from_str(line).expect("archival row json");
+            row.as_object_mut()
+                .expect("archival row object")
+                .remove("canonical_text");
+            serde_json::to_string(&row).expect("serialize archival row")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(archival_path, format!("{rewritten}\n"))
+        .expect("write archival rows without canonical");
+
+    let bundle = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect("load archival rows without canonical text");
+    assert_eq!(bundle.sessions.len(), 1);
+    assert!(bundle.surface.literal_objective_rows);
+}

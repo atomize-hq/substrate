@@ -39,7 +39,7 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         source_files: request.source_files.to_vec(),
     };
 
-    write_jsonl_file(
+    write_compact_rows_file(
         &paths.staging_dir.join("rows.archival.jsonl"),
         request.archival_rows,
     )?;

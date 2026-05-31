@@ -59,7 +59,7 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
             fs::read_to_string(output_dir.join("rows.archival.jsonl")).expect("archival");
         assert!(archival_rows
             .lines()
-            .all(|line| line.contains("\"canonical_text\"")));
+            .all(|line| !line.contains("\"canonical_text\"")));
 
         let audit_rows = fs::read_to_string(output_dir.join("dedupe-audit.jsonl")).expect("audit");
         assert_eq!(audit_rows.lines().count(), 1);
