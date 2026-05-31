@@ -8,6 +8,8 @@ use assert_cmd::Command;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tempfile::{Builder, TempDir};
 
 pub use common::{binary_path, ensure_substrate_built, substrate_shell_driver, temp_dir};
@@ -96,6 +98,72 @@ pub fn substrate_command_for_home(fixture: &ShellEnvFixture) -> Command {
 
 pub fn path_str(path: &Path) -> String {
     path.to_string_lossy().into_owned()
+}
+
+pub fn wait_for_min_member_dispatch_requests(
+    records: &Arc<Mutex<ReplWorldAgentRecords>>,
+    min_requests: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.member_dispatch_requests.len() >= min_requests {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for member_dispatch requests >= {min_requests}; got {}; records: {guard:#?}",
+        guard.member_dispatch_requests.len(),
+    );
+}
+
+pub fn wait_for_min_member_turn_submit_requests(
+    records: &Arc<Mutex<ReplWorldAgentRecords>>,
+    min_requests: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.member_turn_submit_requests.len() >= min_requests {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for member_turn_submit requests >= {min_requests}; got {}; records: {guard:#?}",
+        guard.member_turn_submit_requests.len(),
+    );
+}
+
+pub fn wait_for_min_execute_cancel_requests(
+    records: &Arc<Mutex<ReplWorldAgentRecords>>,
+    min_requests: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.execute_cancel_requests.len() >= min_requests {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for execute_cancel requests >= {min_requests}; got {}; records: {guard:#?}",
+        guard.execute_cancel_requests.len(),
+    );
 }
 
 pub fn payload_lines(stdout: &[u8]) -> Vec<String> {

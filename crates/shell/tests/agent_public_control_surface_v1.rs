@@ -21,7 +21,10 @@ use support::{
     substrate_shell_driver,
 };
 #[cfg(target_os = "linux")]
-use support::{MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior};
+use support::{
+    wait_for_min_member_dispatch_requests, wait_for_min_member_turn_submit_requests,
+    MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior,
+};
 use tempfile::TempDir;
 
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
@@ -626,51 +629,115 @@ fn wait_for_pid_exit(pid: u32, timeout: Duration) -> bool {
     false
 }
 
+fn try_single_active_session(fixture: &AgentControlFixture) -> Option<(String, String)> {
+    let sessions_dir = fixture.substrate_home.join("run/agent-hub/sessions");
+    let entries = fs::read_dir(&sessions_dir).ok()?;
+    let mut dirs = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    dirs.sort();
+    let dir = dirs.into_iter().next()?;
+    let session = read_json_file(&dir.join("session.json"));
+    if session.get("state").and_then(Value::as_str) != Some("active") {
+        return None;
+    }
+
+    let participant_id = session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .map(str::to_string)?;
+    let participant = read_json_file(
+        &dir.join("participants")
+            .join(format!("{participant_id}.json")),
+    );
+    let participant_ready = participant
+        .get("state")
+        .and_then(Value::as_str)
+        .is_some_and(|state| matches!(state, "ready" | "running"));
+    if !participant_ready {
+        return None;
+    }
+
+    Some((
+        session["orchestration_session_id"]
+            .as_str()
+            .expect("session id")
+            .to_string(),
+        participant_id,
+    ))
+}
+
+fn session_state_snapshot(fixture: &AgentControlFixture) -> Vec<Value> {
+    let sessions_dir = fixture.substrate_home.join("run/agent-hub/sessions");
+    let Ok(entries) = fs::read_dir(&sessions_dir) else {
+        return Vec::new();
+    };
+
+    let mut snapshot = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .map(|dir| {
+            let session = read_json_file(&dir.join("session.json"));
+            let active_session_handle_id = session
+                .get("active_session_handle_id")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let active_participant_state = active_session_handle_id
+                .as_ref()
+                .map(|participant_id| {
+                    let participant_path = dir
+                        .join("participants")
+                        .join(format!("{participant_id}.json"));
+                    if participant_path.exists() {
+                        read_json_file(&participant_path)
+                            .get("state")
+                            .cloned()
+                            .unwrap_or(Value::Null)
+                    } else {
+                        Value::Null
+                    }
+                })
+                .unwrap_or(Value::Null);
+            json!({
+                "dir": dir.file_name().and_then(|name| name.to_str()),
+                "orchestration_session_id": session.get("orchestration_session_id"),
+                "state": session.get("state"),
+                "posture": session.get("posture"),
+                "active_session_handle_id": active_session_handle_id,
+                "active_participant_state": active_participant_state,
+            })
+        })
+        .collect::<Vec<_>>();
+    snapshot.sort_by(|left, right| {
+        left.get("orchestration_session_id")
+            .and_then(Value::as_str)
+            .cmp(
+                &right
+                    .get("orchestration_session_id")
+                    .and_then(Value::as_str),
+            )
+    });
+    snapshot
+}
+
 fn wait_for_single_active_session(
     fixture: &AgentControlFixture,
     timeout: Duration,
 ) -> (String, String) {
     let start = Instant::now();
     while start.elapsed() < timeout {
-        let sessions_dir = fixture.substrate_home.join("run/agent-hub/sessions");
-        if let Ok(entries) = fs::read_dir(&sessions_dir) {
-            let mut dirs = entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| path.is_dir())
-                .collect::<Vec<_>>();
-            dirs.sort();
-            if let Some(dir) = dirs.into_iter().next() {
-                let session = read_json_file(&dir.join("session.json"));
-                if session.get("state").and_then(Value::as_str) == Some("active") {
-                    if let Some(participant_id) = session
-                        .get("active_session_handle_id")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                    {
-                        if read_json_file(
-                            &dir.join("participants")
-                                .join(format!("{participant_id}.json")),
-                        )
-                        .get("state")
-                        .and_then(Value::as_str)
-                        .is_some_and(|state| matches!(state, "ready" | "running"))
-                        {
-                            return (
-                                session["orchestration_session_id"]
-                                    .as_str()
-                                    .expect("session id")
-                                    .to_string(),
-                                participant_id,
-                            );
-                        }
-                    }
-                }
-            }
+        if let Some(session) = try_single_active_session(fixture) {
+            return session;
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    panic!("timed out waiting for a single active orchestration session");
+    panic!(
+        "timed out waiting for a single active orchestration session; sessions: {:#?}",
+        session_state_snapshot(fixture),
+    );
 }
 
 fn wait_for_session_posture(
@@ -1486,6 +1553,58 @@ impl PtyRepl {
         let output = self.output.lock().expect("output lock").clone();
         (code, output)
     }
+}
+
+#[cfg(target_os = "linux")]
+fn repl_output_string(repl: &PtyRepl) -> String {
+    String::from_utf8_lossy(&repl.output.lock().expect("output lock")).into_owned()
+}
+
+#[cfg(target_os = "linux")]
+fn repl_output_len(repl: &PtyRepl) -> usize {
+    repl.output.lock().expect("output lock").len()
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_output_after(
+    repl: &PtyRepl,
+    needle: &str,
+    offset: usize,
+    timeout: Duration,
+) -> Option<usize> {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        let output = repl.output.lock().expect("output lock");
+        if output.len() >= offset {
+            if let Ok(text) = std::str::from_utf8(&output[offset..]) {
+                if let Some(pos) = text.find(needle) {
+                    return Some(offset + pos);
+                }
+            }
+        }
+        drop(output);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_shell_owned_session_ready(
+    fixture: &AgentControlFixture,
+    repl: &PtyRepl,
+    output_offset: usize,
+    timeout: Duration,
+) -> (String, String) {
+    let session = wait_for_single_active_session(fixture, timeout);
+    wait_for_output_after(repl, "substrate>", output_offset, Duration::from_secs(2))
+        .unwrap_or_else(|| {
+            panic!(
+                "timed out waiting for prompt after shell-owned session became active; output:\n{}\nsessions: {:#?}",
+                repl_output_string(repl),
+                session_state_snapshot(fixture),
+            )
+        });
+    session
 }
 
 #[test]
@@ -4090,19 +4209,26 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     repl.wait_for_output("substrate>", Duration::from_secs(2))
         .expect("prompt");
 
+    let host_runtime_launch_offset = repl_output_len(&repl);
     repl.send_line("::cli:codex start retained host runtime");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
+    let (orchestration_session_id, owner_participant_id) = wait_for_shell_owned_session_ready(
+        &fixture,
+        &repl,
+        host_runtime_launch_offset,
+        Duration::from_secs(5),
+    );
+
+    let first_world_turn_offset = repl_output_len(&repl);
+    repl.send_line("::cli:codex_world member targeted first turn");
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
+    wait_for_output_after(
+        &repl,
+        "substrate>",
+        first_world_turn_offset,
         Duration::from_secs(5),
     )
-    .expect("host runtime ready");
+    .expect("prompt after initial world turn");
 
-    repl.send_line("::cli:codex_world member targeted first turn");
-    repl.wait_for_output("substrate>", Duration::from_secs(5))
-        .expect("prompt after initial world turn");
-
-    let (orchestration_session_id, owner_participant_id) =
-        wait_for_single_active_session(&fixture, Duration::from_secs(5));
     let owner_pid = fixture.load_orchestration_session(&orchestration_session_id)["shell_owner_pid"]
         .as_u64()
         .expect("owner pid") as u32;
@@ -4183,6 +4309,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
         Some("active")
     );
 
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(5));
     let live_members = wait_for_live_world_member_count(
         &fixture,
         &orchestration_session_id,
