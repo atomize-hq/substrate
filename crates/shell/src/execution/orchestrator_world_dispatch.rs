@@ -1516,8 +1516,10 @@ mod tests {
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::agent_runtime::orchestration_session::{
-        HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionState,
+        OrchestrationSessionPosture, OrchestrationSessionState,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
@@ -1639,6 +1641,7 @@ mod tests {
         .expect("validated request")
     }
 
+    #[cfg(target_os = "linux")]
     fn sample_world_dispatch_policy() -> Policy {
         Policy {
             agents_world_dispatch_enabled: true,
