@@ -51,6 +51,8 @@ use crate::execution::routing::{
     build_agent_client_and_member_dispatch_request_for_cwd,
     build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
 };
+#[cfg(target_os = "linux")]
+use transport_api_types::ExecuteCancelRequestV1;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -761,12 +763,19 @@ async fn execute_continue_world_worker_stream(
 
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
+    let mut active_span_id = None::<String>;
     let mut exit_code = None::<i32>;
     let mut surfaced_thread_id = None::<String>;
     let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
 
     while let Some(frame) = body.as_mut().frame().await {
-        let frame = frame.map_err(|err| anyhow::anyhow!("stream frame error: {err}"))?;
+        let frame = match frame {
+            Ok(frame) => frame,
+            Err(err) => {
+                cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+                return Err(anyhow::anyhow!("stream frame error: {err}"));
+            }
+        };
         let Some(data) = frame.data_ref() else {
             continue;
         };
@@ -781,22 +790,41 @@ async fn execute_continue_world_worker_stream(
             if payload.is_empty() {
                 continue;
             }
-            let frame: ExecuteStreamFrame = serde_json::from_slice(payload).with_context(|| {
-                format!(
-                    "invalid continue_world_worker stream frame: {}",
-                    String::from_utf8_lossy(payload)
-                )
-            })?;
+            let frame: ExecuteStreamFrame =
+                match serde_json::from_slice(payload).with_context(|| {
+                    format!(
+                        "invalid continue_world_worker stream frame: {}",
+                        String::from_utf8_lossy(payload)
+                    )
+                }) {
+                    Ok(frame) => frame,
+                    Err(err) => {
+                        cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+                        return Err(err);
+                    }
+                };
 
             match frame {
-                ExecuteStreamFrame::Start { .. } => {}
+                ExecuteStreamFrame::Start { span_id } => {
+                    active_span_id = Some(span_id);
+                }
                 ExecuteStreamFrame::Event { event } => {
                     if surfaced_thread_id.is_none() {
                         surfaced_thread_id = surfaced_thread_id_from_event(&event);
                     }
-                    if let Some(classified_event) =
-                        classify_continue_world_worker_event(request, &event)?
-                    {
+                    let classified_event =
+                        match classify_continue_world_worker_event(request, &event) {
+                            Ok(classified_event) => classified_event,
+                            Err(err) => {
+                                cancel_continue_world_worker_turn(
+                                    &client,
+                                    active_span_id.as_deref(),
+                                )
+                                .await;
+                                return Err(err);
+                            }
+                        };
+                    if let Some(classified_event) = classified_event {
                         surfaced_worker_event = Some(classified_event);
                     }
                 }
@@ -805,6 +833,7 @@ async fn execute_continue_world_worker_stream(
                     break;
                 }
                 ExecuteStreamFrame::Error { message } => {
+                    cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
                     anyhow::bail!(message);
                 }
                 ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
@@ -818,13 +847,33 @@ async fn execute_continue_world_worker_stream(
 
     let exit_code = exit_code.ok_or_else(|| {
         anyhow::anyhow!("continue_world_worker stream ended without a terminal exit frame")
-    })?;
+    });
+    if exit_code.is_err() {
+        cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+    }
+    let exit_code = exit_code?;
 
     Ok(ContinueWorldWorkerStreamResult {
         exit_code,
         surfaced_thread_id,
         surfaced_worker_event,
     })
+}
+
+#[cfg(target_os = "linux")]
+async fn cancel_continue_world_worker_turn(
+    client: &transport_api_client::AgentClient,
+    span_id: Option<&str>,
+) {
+    let Some(span_id) = span_id.map(str::trim).filter(|span_id| !span_id.is_empty()) else {
+        return;
+    };
+    let _ = client
+        .cancel_execute(ExecuteCancelRequestV1 {
+            span_id: span_id.to_string(),
+            sig: "INT".to_string(),
+        })
+        .await;
 }
 
 #[cfg(target_os = "linux")]
@@ -866,19 +915,25 @@ fn classify_continue_world_worker_event(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     event: &substrate_common::agent_events::AgentEvent,
 ) -> Result<Option<ContinueWorldWorkerEventV1>> {
-    let Some(event_class_label) = continue_world_worker_event_class_label(event) else {
-        return Ok(None);
-    };
-
-    let Some(event_class) = ContinueWorldWorkerEventClassV1::from_wire_label(event_class_label)
-    else {
-        if ContinueWorldWorkerEventClassV1::is_deferred_wire_label(event_class_label) {
-            anyhow::bail!(
-                "unsupported_worker_event_class: continue_world_worker does not yet accept worker event class {}",
-                event_class_label.trim()
-            );
-        }
-        return Ok(None);
+    let event_class = if let Some(event_class_label) =
+        continue_world_worker_event_class_label(event)
+    {
+        let Some(event_class) = ContinueWorldWorkerEventClassV1::from_wire_label(event_class_label)
+        else {
+            if ContinueWorldWorkerEventClassV1::is_deferred_wire_label(event_class_label) {
+                anyhow::bail!(
+                    "unsupported_worker_event_class: continue_world_worker does not yet accept worker event class {}",
+                    event_class_label.trim()
+                );
+            }
+            return Ok(None);
+        };
+        event_class
+    } else {
+        let Some(event_class) = continue_world_worker_event_class_from_stream_shape(event) else {
+            return Ok(None);
+        };
+        event_class
     };
 
     let source_participant_id =
@@ -915,6 +970,88 @@ fn classify_continue_world_worker_event(
         stream_channel: event.channel.clone(),
         payload: continue_world_worker_event_payload(event),
     }))
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_event_class_from_stream_shape(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Option<ContinueWorldWorkerEventClassV1> {
+    let event_type = continue_world_worker_stream_event_type(event)?;
+    match event_type {
+        "thread.started" | "thread.resumed" | "turn.started" => None,
+        "turn.completed" => Some(ContinueWorldWorkerEventClassV1::Result),
+        "turn.failed" | "item.failed" | "error" => Some(ContinueWorldWorkerEventClassV1::Failure),
+        "item.started" | "item.created" | "item.delta" | "item.updated" | "item.completed" => {
+            match continue_world_worker_stream_item_type(event) {
+                Some("agent_message")
+                    if event_type == "item.completed"
+                        || continue_world_worker_stream_item_status(event) == Some("completed") =>
+                {
+                    Some(ContinueWorldWorkerEventClassV1::Reply)
+                }
+                Some("error") => Some(ContinueWorldWorkerEventClassV1::Failure),
+                Some(_) | None => Some(ContinueWorldWorkerEventClassV1::ProgressUpdate),
+            }
+        }
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_stream_event_type(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Option<&str> {
+    continue_world_worker_string_field(
+        &event.data,
+        &[
+            "/type",
+            "/uaa_event/type",
+            "/uaa_event/raw_event/type",
+            "/raw_event/type",
+        ],
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_stream_item_type(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Option<&str> {
+    continue_world_worker_string_field(
+        &event.data,
+        &[
+            "/item_type",
+            "/item/item_type",
+            "/item/type",
+            "/uaa_event/item_type",
+            "/uaa_event/item/item_type",
+            "/uaa_event/item/type",
+            "/uaa_event/raw_event/item_type",
+            "/uaa_event/raw_event/item/item_type",
+            "/uaa_event/raw_event/item/type",
+            "/raw_event/item_type",
+            "/raw_event/item/item_type",
+            "/raw_event/item/type",
+        ],
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_stream_item_status(
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Option<&str> {
+    continue_world_worker_string_field(
+        &event.data,
+        &[
+            "/status",
+            "/item/status",
+            "/uaa_event/status",
+            "/uaa_event/item/status",
+            "/uaa_event/raw_event/status",
+            "/uaa_event/raw_event/item/status",
+            "/raw_event/status",
+            "/raw_event/item/status",
+        ],
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -1151,11 +1288,21 @@ mod tests {
     #[cfg(target_os = "linux")]
     use crate::execution::config_model::AgentCliMode;
     #[cfg(target_os = "linux")]
+    use crate::execution::world_env_guard;
+    #[cfg(target_os = "linux")]
     use serde_json::json;
+    #[cfg(target_os = "linux")]
+    use std::sync::{Arc, Mutex};
     #[cfg(target_os = "linux")]
     use substrate_common::agent_events::AgentEventKind;
     #[cfg(target_os = "linux")]
     use tempfile::tempdir;
+    #[cfg(target_os = "linux")]
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    #[cfg(target_os = "linux")]
+    use tokio::net::UnixListener;
+    #[cfg(target_os = "linux")]
+    use transport_api_types::ExecuteCancelRequestV1;
 
     fn sample_session() -> OrchestrationSessionRecord {
         OrchestrationSessionRecord {
@@ -1356,6 +1503,110 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_continue_stream_uaa_event(
+        raw_event: serde_json::Value,
+    ) -> substrate_common::agent_events::AgentEvent {
+        sample_continue_stream_event(json!({
+            "uaa_event": raw_event,
+            "protocol": "substrate.agent.session",
+        }))
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn read_http_request(stream: &mut tokio::net::UnixStream) -> Option<(String, Vec<u8>)> {
+        let mut buf = Vec::new();
+        let mut header_end = None;
+        let mut expected_len = None;
+
+        for _ in 0..64 {
+            let mut tmp = [0u8; 1024];
+            let n =
+                tokio::time::timeout(std::time::Duration::from_millis(250), stream.read(&mut tmp))
+                    .await
+                    .ok()?
+                    .ok()?;
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+
+            if header_end.is_none() {
+                if let Some(pos) = buf.windows(4).position(|window| window == b"\r\n\r\n") {
+                    header_end = Some(pos + 4);
+                    let header = String::from_utf8_lossy(&buf[..pos + 4]).to_string();
+                    expected_len = header.lines().find_map(|line| {
+                        let (key, value) = line.split_once(':')?;
+                        if key.eq_ignore_ascii_case("content-length") {
+                            value.trim().parse::<usize>().ok()
+                        } else {
+                            None
+                        }
+                    });
+                }
+            }
+
+            match (header_end, expected_len) {
+                (Some(header_end), Some(len)) if buf.len() >= header_end + len => {
+                    let header = String::from_utf8_lossy(&buf[..header_end]).to_string();
+                    let body = buf[header_end..header_end + len].to_vec();
+                    return Some((header, body));
+                }
+                (Some(header_end), None) => {
+                    let header = String::from_utf8_lossy(&buf[..header_end]).to_string();
+                    return Some((header, Vec::new()));
+                }
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn write_http_json(stream: &mut tokio::net::UnixStream, status_line: &str, body: &str) {
+        let response = format!(
+            "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
+        let _ = stream.shutdown().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn write_http_stream_start(stream: &mut tokio::net::UnixStream) {
+        let response = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+        let _ = stream.write_all(response.as_bytes()).await;
+        let _ = stream.flush().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn write_chunked_bytes(stream: &mut tokio::net::UnixStream, payload: &[u8]) {
+        let header = format!("{:X}\r\n", payload.len());
+        let _ = stream.write_all(header.as_bytes()).await;
+        let _ = stream.write_all(payload).await;
+        let _ = stream.write_all(b"\r\n").await;
+        let _ = stream.flush().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn write_chunked_frame(
+        stream: &mut tokio::net::UnixStream,
+        frame: &transport_api_types::ExecuteStreamFrame,
+    ) {
+        let mut payload = serde_json::to_vec(frame).expect("serialize stream frame");
+        payload.push(b'\n');
+        write_chunked_bytes(stream, &payload).await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn finish_chunked_stream(stream: &mut tokio::net::UnixStream) {
+        let _ = stream.write_all(b"0\r\n\r\n").await;
+        let _ = stream.flush().await;
+        let _ = stream.shutdown().await;
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn continue_world_worker_submit_request_uses_authoritative_retained_identity() {
         let prepared = PreparedOrchestratorWorldDispatch {
@@ -1423,26 +1674,94 @@ mod tests {
     fn continue_world_worker_dispatch_contract_classifies_packet_three_worker_events() {
         let submit = sample_continue_submit_request();
         let cases = [
-            ("reply", false),
-            ("progress_update", false),
-            ("result", false),
-            ("failure", false),
-            ("follow_up_question", true),
-            ("blocked", true),
-        ];
-
-        for (event_class, attention_required) in cases {
-            let classified = classify_continue_world_worker_event(
-                &submit,
-                &sample_continue_stream_event(json!({
-                    "event_class": event_class,
-                    "payload": {
-                        "message": format!("payload for {event_class}")
+            (
+                sample_continue_stream_uaa_event(json!({
+                    "type": "item.completed",
+                    "thread_id": "thread-from-uaa",
+                    "turn_id": "turn-1",
+                    "item_id": "msg-1",
+                    "status": "completed",
+                    "item_type": "agent_message",
+                    "content": {
+                        "text": "reply from worker"
                     }
                 })),
-            )
-            .unwrap_or_else(|_| panic!("classification must accept {event_class}"))
-            .unwrap_or_else(|| panic!("classification must surface {event_class}"));
+                "reply",
+                false,
+                "/uaa_event/content/text",
+                Some("reply from worker"),
+            ),
+            (
+                sample_continue_stream_uaa_event(json!({
+                    "type": "item.started",
+                    "thread_id": "thread-from-uaa",
+                    "turn_id": "turn-1",
+                    "item_id": "cmd-1",
+                    "status": "in_progress",
+                    "item_type": "command_execution",
+                    "content": {
+                        "command": "cargo test"
+                    }
+                })),
+                "progress_update",
+                false,
+                "/uaa_event/content/command",
+                Some("cargo test"),
+            ),
+            (
+                sample_continue_stream_uaa_event(json!({
+                    "type": "turn.completed",
+                    "thread_id": "thread-from-uaa",
+                    "turn_id": "turn-1",
+                    "last_item_id": "msg-1"
+                })),
+                "result",
+                false,
+                "/uaa_event/type",
+                Some("turn.completed"),
+            ),
+            (
+                sample_continue_stream_uaa_event(json!({
+                    "type": "turn.failed",
+                    "thread_id": "thread-from-uaa",
+                    "turn_id": "turn-1",
+                    "message": "worker failed"
+                })),
+                "failure",
+                false,
+                "/uaa_event/message",
+                Some("worker failed"),
+            ),
+            (
+                sample_continue_stream_event(json!({
+                    "event_class": "follow_up_question",
+                    "payload": {
+                        "message": "need clarification"
+                    }
+                })),
+                "follow_up_question",
+                true,
+                "/message",
+                Some("need clarification"),
+            ),
+            (
+                sample_continue_stream_event(json!({
+                    "event_class": "blocked",
+                    "payload": {
+                        "message": "blocked on input"
+                    }
+                })),
+                "blocked",
+                true,
+                "/message",
+                Some("blocked on input"),
+            ),
+        ];
+
+        for (event, event_class, attention_required, payload_pointer, payload_value) in cases {
+            let classified = classify_continue_world_worker_event(&submit, &event)
+                .unwrap_or_else(|_| panic!("classification must accept {event_class}"))
+                .unwrap_or_else(|| panic!("classification must surface {event_class}"));
 
             assert_eq!(
                 serde_json::to_value(&classified)
@@ -1460,9 +1779,9 @@ mod tests {
             assert_eq!(
                 classified
                     .payload
-                    .get("message")
+                    .pointer(payload_pointer)
                     .and_then(serde_json::Value::as_str),
-                Some(format!("payload for {event_class}").as_str())
+                payload_value
             );
         }
     }
@@ -1473,12 +1792,11 @@ mod tests {
         let submit = sample_continue_submit_request();
         let classified = classify_continue_world_worker_event(
             &submit,
-            &sample_continue_stream_event(json!({
-                "event_class": "result",
+            &sample_continue_stream_uaa_event(json!({
+                "type": "turn.completed",
+                "thread_id": "thread-from-uaa",
+                "turn_id": "turn-1",
                 "attention_required": true,
-                "payload": {
-                    "summary": "needs review"
-                }
             })),
         )
         .expect("classification should succeed")
@@ -1540,6 +1858,114 @@ mod tests {
             ),
             "unexpected error: {err}"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn continue_world_worker_fail_closed_stream_errors_cancel_live_submitted_turn() {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let cancel_requests = Arc::new(Mutex::new(Vec::<ExecuteCancelRequestV1>::new()));
+        let cancel_requests_for_server = cancel_requests.clone();
+
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(json!({
+                                "event_class": "approval_request",
+                                "payload": {
+                                    "message": "requires approval"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("execute cancel request");
+                    cancel_requests_for_server
+                        .lock()
+                        .expect("cancel request mutex poisoned")
+                        .push(parsed);
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"delivered":true}"#,
+                    )
+                    .await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let previous_socket = std::env::var("SUBSTRATE_WORLD_SOCKET").ok();
+        std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let err =
+            match execute_continue_world_worker_stream(&sample_continue_submit_request()).await {
+                Ok(_) => panic!("deferred worker event classes must fail closed"),
+                Err(err) => err,
+            };
+        assert!(
+            err.to_string().contains("unsupported_worker_event_class"),
+            "unexpected continue stream error: {err}"
+        );
+
+        let recorded = cancel_requests
+            .lock()
+            .expect("cancel request mutex poisoned")
+            .clone();
+        assert_eq!(
+            recorded.len(),
+            1,
+            "expected one cancel request: {recorded:?}"
+        );
+        assert_eq!(recorded[0].span_id, "member-turn-span");
+        assert_eq!(recorded[0].sig, "INT");
+
+        if let Some(previous_socket) = previous_socket {
+            std::env::set_var("SUBSTRATE_WORLD_SOCKET", previous_socket);
+        } else {
+            std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
+        }
+
+        server.await.expect("stub world server task");
     }
 
     #[cfg(target_os = "linux")]

@@ -10,8 +10,8 @@ use tempfile::tempdir;
 use tokio::time::timeout;
 use transport_api_types::{
     ExecuteCancelRequestV1, ExecuteRequest, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
-    PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
-    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
+    MemberTurnSubmitRequestV1, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
+    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
 };
 use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
 use world_service::WorldService;
@@ -109,6 +109,28 @@ fn make_member_dispatch_request_with_backend(
         },
     });
     request
+}
+
+fn make_member_turn_submit_request(
+    orchestration_session_id: &str,
+    participant_id: &str,
+    backend_id: &str,
+    world_id: &str,
+    world_generation: u64,
+    run_id: &str,
+    prompt: &str,
+) -> MemberTurnSubmitRequestV1 {
+    MemberTurnSubmitRequestV1 {
+        schema_version: 1,
+        orchestration_session_id: orchestration_session_id.to_string(),
+        participant_id: participant_id.to_string(),
+        orchestrator_participant_id: "ash_orchestrator_cancel_test".to_string(),
+        backend_id: backend_id.to_string(),
+        run_id: run_id.to_string(),
+        world_id: world_id.to_string(),
+        world_generation,
+        prompt: prompt.to_string(),
+    }
 }
 
 fn write_fake_member_runtime(temp: &Path) -> std::path::PathBuf {
@@ -432,6 +454,188 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
     assert!(cancel.delivered, "expected member cancel delivery");
 
     assert_stream_exit_for_span(&mut body, &mut buffer, &span_id).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn submit_member_turn_cancel_releases_active_slot_for_next_turn() {
+    let service = match WorldService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping member submitted-turn cancel test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let tmp = tempdir().expect("tempdir");
+    let codex_member_binary = write_fake_member_runtime(tmp.path());
+    let orchestration_session_id = "orch-streamed-member-submit-cancel";
+    let participant_id = "ash_member_submit_cancel_test";
+    let backend_id = "cli:codex";
+    let world_spec = WorldSpec {
+        reuse_session: true,
+        reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+            orchestration_session_id: orchestration_session_id.to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        }),
+        isolate_network: false,
+        limits: world_api::ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains: Vec::new(),
+        project_dir: tmp.path().to_path_buf(),
+        always_isolate: true,
+        fs_mode: substrate_common::WorldFsMode::Writable,
+    };
+    let world = match service.ensure_session_world(&world_spec) {
+        Ok(world) => world,
+        Err(err) => {
+            eprintln!(
+                "skipping member submitted-turn cancel test: failed to ensure shared world: {err}"
+            );
+            return;
+        }
+    };
+    let Some(binding) = world.shared_binding.clone() else {
+        eprintln!("skipping member submitted-turn cancel test: shared world binding missing");
+        return;
+    };
+
+    let launch_request = make_member_dispatch_request_with_backend(
+        tmp.path(),
+        &codex_member_binary,
+        &binding.world_id,
+        binding.world_generation,
+        orchestration_session_id,
+        participant_id,
+        "run-member-submit-bootstrap",
+        backend_id,
+        MemberRuntimeBackendKindV1::Codex,
+    );
+    let launch_response = service
+        .execute_stream(launch_request)
+        .await
+        .expect("member launch should succeed");
+    let mut launch_body = launch_response.into_body();
+    let mut launch_buffer = Vec::new();
+    let launch_start = next_stream_frame_value(&mut launch_body, &mut launch_buffer).await;
+    let launch_span_id = frame_start_span_id(&launch_start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {launch_start:?}"));
+    let launch_ready =
+        next_registered_frame(&mut launch_body, &mut launch_buffer, &launch_span_id).await;
+    assert_registered_event(
+        &launch_ready,
+        participant_id,
+        backend_id,
+        &binding.world_id,
+        binding.world_generation,
+        &launch_span_id,
+    );
+
+    let first_turn = make_member_turn_submit_request(
+        orchestration_session_id,
+        participant_id,
+        backend_id,
+        &binding.world_id,
+        binding.world_generation,
+        "run-member-submit-turn-1",
+        "first follow-up",
+    );
+    let first_turn_response = service
+        .submit_member_turn_stream(first_turn.clone())
+        .await
+        .expect("first member submit should succeed");
+    let mut first_turn_body = first_turn_response.into_body();
+    let mut first_turn_buffer = Vec::new();
+    let first_turn_start =
+        next_stream_frame_value(&mut first_turn_body, &mut first_turn_buffer).await;
+    let first_turn_span_id = frame_start_span_id(&first_turn_start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {first_turn_start:?}"));
+
+    let concurrent_err = service
+        .submit_member_turn_stream(make_member_turn_submit_request(
+            orchestration_session_id,
+            participant_id,
+            backend_id,
+            &binding.world_id,
+            binding.world_generation,
+            "run-member-submit-turn-conflict",
+            "conflicting follow-up",
+        ))
+        .await
+        .expect_err("concurrent submitted turn should fail closed");
+    assert!(
+        concurrent_err
+            .to_string()
+            .contains("already has an active submitted turn"),
+        "unexpected concurrent submit error: {concurrent_err}"
+    );
+
+    let cancel = service
+        .execute_cancel(ExecuteCancelRequestV1 {
+            span_id: first_turn_span_id.clone(),
+            sig: "INT".to_string(),
+        })
+        .await
+        .expect("submitted-turn execute_cancel should succeed");
+    assert!(cancel.delivered, "expected submitted-turn cancel delivery");
+    assert_stream_exit_for_span(
+        &mut first_turn_body,
+        &mut first_turn_buffer,
+        &first_turn_span_id,
+    )
+    .await;
+
+    let second_turn_response = service
+        .submit_member_turn_stream(make_member_turn_submit_request(
+            orchestration_session_id,
+            participant_id,
+            backend_id,
+            &binding.world_id,
+            binding.world_generation,
+            "run-member-submit-turn-2",
+            "second follow-up",
+        ))
+        .await
+        .expect("submitted-turn slot should reopen after cancel cleanup");
+    let mut second_turn_body = second_turn_response.into_body();
+    let mut second_turn_buffer = Vec::new();
+    let second_turn_start =
+        next_stream_frame_value(&mut second_turn_body, &mut second_turn_buffer).await;
+    let second_turn_span_id = frame_start_span_id(&second_turn_start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {second_turn_start:?}"));
+
+    let second_cancel = service
+        .execute_cancel(ExecuteCancelRequestV1 {
+            span_id: second_turn_span_id.clone(),
+            sig: "INT".to_string(),
+        })
+        .await
+        .expect("second submitted-turn execute_cancel should succeed");
+    assert!(
+        second_cancel.delivered,
+        "expected second submitted-turn cancel delivery"
+    );
+    assert_stream_exit_for_span(
+        &mut second_turn_body,
+        &mut second_turn_buffer,
+        &second_turn_span_id,
+    )
+    .await;
+
+    let launch_cancel = service
+        .execute_cancel(ExecuteCancelRequestV1 {
+            span_id: launch_span_id.clone(),
+            sig: "INT".to_string(),
+        })
+        .await
+        .expect("member launch execute_cancel should succeed");
+    assert!(
+        launch_cancel.delivered,
+        "expected member launch cancel delivery"
+    );
+    assert_stream_exit_for_span(&mut launch_body, &mut launch_buffer, &launch_span_id).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
