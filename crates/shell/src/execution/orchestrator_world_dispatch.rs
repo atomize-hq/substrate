@@ -144,7 +144,7 @@ async fn continue_world_worker(
     _prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
     anyhow::bail!(
-        "unsupported_platform_or_posture: continue_world_worker exact-target validation is available in v1, but retained-worker routing remains out of scope until packet 2"
+        "unsupported_platform_or_posture: continue_world_worker exact-target validation is available in v1, but retained-worker routing is supported only on linux in v1"
     );
 }
 

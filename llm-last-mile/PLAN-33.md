@@ -3,7 +3,7 @@
 Source spec: [SPEC-33-internal-retained-world-worker-continue-and-event-bootstrap.md](./SPEC-33-internal-retained-world-worker-continue-and-event-bootstrap.md)  
 Source validation note: [NOTE-33-family-1-ordering-after-dispatch-bootstrap.md](./NOTE-33-family-1-ordering-after-dispatch-bootstrap.md)  
 Plan type: second implementation-bearing family-1 control-plane slice  
-Status: draft for review on `2026-05-30`
+Status: implemented and validated on `2026-05-31`
 
 ## Objective
 
@@ -28,7 +28,7 @@ The repo already has the difficult runtime primitives needed for this slice:
 4. existing worker stream/thread metadata from the agent runtime,
 5. a durable family-2 obligation/inbox stack that can remain adjacent rather than being reopened here.
 
-What is still missing is the internal retained-worker continue contract that would let the host orchestrator steer a real retained worker through typed follow-up outcomes instead of human/operator caller paths.
+What this slice was responsible for landing was the internal retained-worker continue contract that lets the host orchestrator steer a real retained worker through typed follow-up outcomes instead of falling back to human/operator caller paths.
 
 The narrowest honest implementation order is therefore:
 
@@ -36,6 +36,13 @@ The narrowest honest implementation order is therefore:
 2. reuse the existing retained member-turn seam for the actual continued turn,
 3. classify the minimal worker-event subset needed for typed messaging truth,
 4. finish with the minimum gating, docs, and validation needed to keep the slice honest.
+
+That work is now landed on the current tree:
+
+1. `continue_world_worker` exists as the internal retained-worker follow-up verb,
+2. the path reuses the existing retained member-turn/runtime seam,
+3. the first typed worker-event subset is classified explicitly, and
+4. later steering-policy hardening remains the next follow-on instead of being partially implied here.
 
 Messaging/continue comes before fuller steering-policy hardening because the repo already has hard identity boundaries but still lacks the first concrete retained-worker follow-up verb. The policy matrix is safer to harden after this slice makes the exact continue/event surface real instead of gating a hypothetical future contract.
 

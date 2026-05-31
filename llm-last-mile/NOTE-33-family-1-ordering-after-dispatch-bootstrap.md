@@ -15,7 +15,7 @@ Validated against live code in:
 
 ## Purpose
 
-Record the current repo truth for the next family-1 slice after `32`, and make explicit why retained-worker continue/messaging still comes before fuller host-to-world steering-policy hardening.
+Record the current repo truth after Slice `33`, and make explicit why fuller host-to-world steering-policy hardening now comes next.
 
 ## Current Repo Truth
 
@@ -54,14 +54,20 @@ Repo-truth implication:
 1. the next family-1 gap is not basic retained turn transport,
 2. the gap is the internal orchestrator-facing retained-worker continue and typed event contract.
 
-### 4. Retained-worker messaging and steering remain genuinely unimplemented
+### 4. Slice `33` landed the narrow retained-worker continue and event bootstrap
+
+The current tree now has:
+
+1. `continue_world_worker` in the internal dispatch action set,
+2. typed retained-worker message/event protocol shapes for the first in-scope subset,
+3. exact retained-worker thread/attention contract semantics for `reply`, `progress_update`, `follow_up_question`, `blocked`, `result`, and `failure`,
+4. fail-closed denials for deferred approval, fork, and control-directive worker-event classes.
 
 The current tree still does not have:
 
-1. `continue_world_worker` in the internal dispatch action set,
-2. typed retained-worker message/event protocol shapes,
-3. exact retained-worker thread/attention contract semantics,
-4. fuller steering/action hardening for retained follow-up verbs.
+1. fuller steering/action hardening for retained follow-up verbs,
+2. inspect/cancel/stop/fork retained-worker verbs,
+3. approval or fork autonomy event classes as accepted Slice `33` behavior.
 
 ### 5. Post-32 observability truth-sync does not change the ordering decision
 
@@ -73,21 +79,21 @@ The current tree and docs now distinguish:
 Repo-truth implication:
 
 1. this observability clarification does not reorder family-1 work,
-2. the next missing seam is still internal retained-worker continue plus typed event bootstrap.
+2. the next missing seam is now steering-policy hardening against the concrete continue/event surface that Slice `33` landed.
 
 ## Ordering Decision
 
 The next narrow family-1 slice should be:
 
-1. internal retained-world-worker continue and minimal typed event bootstrap first,
-2. fuller host-to-world steering-policy hardening second.
+1. fuller host-to-world steering-policy hardening first,
+2. later verb expansion such as inspect/cancel/stop/fork only after that hardening exists.
 
 Why:
 
-1. the repo already has concrete exact-identity and retained turn-routing primitives to reuse,
-2. the missing seam is the first internal retained-worker continue contract,
-3. the policy matrix should harden against a real continue/event surface and real denial buckets rather than a hypothetical future contract.
+1. the repo now has concrete exact-identity, retained turn-routing, and minimal typed event primitives to reuse,
+2. the next missing seam is no longer contract bootstrap but policy hardening,
+3. the policy matrix can now harden against a real continue/event surface and real denial buckets instead of a hypothetical future contract.
 
 ## Blocking Rule
 
-The retained-worker allocation prerequisite is satisfied on the current tree. Reopen this note only if a later regression removes the real `spawn_world_worker` runtime path or breaks the exact retained member-turn seam that Slice `33` plans to reuse.
+The retained-worker allocation and first continue/event bootstrap prerequisites are satisfied on the current tree. Reopen this note only if a later regression removes the real `spawn_world_worker` runtime path, breaks the exact retained member-turn seam that Slice `33` reuses, or regresses the narrow typed continue/event contract that has now landed.

@@ -5,7 +5,7 @@ Source plan: [PLAN-33.md](./PLAN-33.md)
 Source validation note: [NOTE-33-family-1-ordering-after-dispatch-bootstrap.md](./NOTE-33-family-1-ordering-after-dispatch-bootstrap.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: draft for review on `2026-05-30`
+Status: completed on `2026-05-31`
 
 ## Execution Packets
 
@@ -28,7 +28,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Extend the internal dispatch contract with `continue_world_worker`
+- [x] Task 1.1: Extend the internal dispatch contract with `continue_world_worker`
   - Acceptance: the internal family-1 contract has a `continue_world_worker` action, exact payload shape, and typed outcome scaffolding; unsupported action/payload combinations fail closed with stable errors.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -36,7 +36,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
 
-- [ ] Task 1.2: Add authoritative retained-worker target resolution
+- [x] Task 1.2: Add authoritative retained-worker target resolution
   - Acceptance: the internal continue path resolves only the authoritative host orchestrator and an exact retained worker in the same orchestration session and authoritative world binding; ambiguous or stale targets fail closed.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -64,7 +64,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Route `continue_world_worker` over the retained member-turn/runtime seam
+- [x] Task 2.1: Route `continue_world_worker` over the retained member-turn/runtime seam
   - Acceptance: the internal continue path submits exact retained follow-up through the existing member-turn/runtime seam; no second execution path is introduced.
   - Verify:
     - `cargo test -p world-service member_runtime -- --nocapture`
@@ -74,7 +74,7 @@ Session goal:
     - [`crates/shell/src/execution/routing/dispatch/world_ops.rs`](../crates/shell/src/execution/routing/dispatch/world_ops.rs)
     - [`crates/world-service/src/member_runtime.rs`](../crates/world-service/src/member_runtime.rs)
 
-- [ ] Task 2.2: Return a stable continued-turn outcome envelope
+- [x] Task 2.2: Return a stable continued-turn outcome envelope
   - Acceptance: `continue_world_worker` returns a typed internal outcome envelope that preserves exact retained-worker identity and surfaced stream metadata needed by later event classification; invalidated or mismatched targets fail closed.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -103,7 +103,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add non-attention worker-event classes for the first retained-worker messaging slice
+- [x] Task 3.1: Add non-attention worker-event classes for the first retained-worker messaging slice
   - Acceptance: the internal continue outcome can classify and surface `reply`, `progress_update`, `result`, and `failure` without implying richer steering policy or lifecycle verbs.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -111,7 +111,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
 
-- [ ] Task 3.2: Add explicit attention-driving worker-event classes and keep later classes deferred
+- [x] Task 3.2: Add explicit attention-driving worker-event classes and keep later classes deferred
   - Acceptance: the internal continue outcome can classify `follow_up_question` and `blocked`, set explicit `attention_required` semantics for them, and still reject approval/fork/control-directive classes as out of scope for this slice.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -140,7 +140,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Enforce exact boundary checks for continued retained-worker turns
+- [x] Task 4.1: Enforce exact boundary checks for continued retained-worker turns
   - Acceptance: unsupported callers, cross-session requests, cross-world-binding requests, stale retained targets, and unsupported worker-event classes fail closed with stable deny buckets.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -150,7 +150,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 4.2: Align the planning/docs truth without widening the slice
+- [x] Task 4.2: Align the planning/docs truth without widening the slice
   - Acceptance: the repo-local sequencing note and any touched docs describe the slice as internal retained-worker continue plus minimal worker-event bootstrap only; no wording implies fuller policy hardening or broader verb coverage has already landed.
   - Verify:
     - manual diff review
@@ -161,7 +161,7 @@ Session goal:
     - [`llm-last-mile/PLAN-33.md`](./PLAN-33.md)
     - [`llm-last-mile/TASKS-33.md`](./TASKS-33.md)
 
-- [ ] Task 4.3: Run the final validation wall
+- [x] Task 4.3: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell/world-service suites, and the full workspace tests are green; no public CLI regression or unintended family-2 coupling appears.
   - Verify:
     - `cargo fmt --all -- --check`
