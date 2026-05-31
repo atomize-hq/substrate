@@ -518,6 +518,7 @@ struct AgentsEffectiveDisplayV1 {
     allowed_backends: Vec<String>,
     fail_closed: AgentsFailClosedEffectiveDisplayV1,
     host_credentials: AgentsHostCredentialsEffectiveDisplayV1,
+    world_dispatch: AgentsWorldDispatchEffectiveDisplayV1,
 }
 
 #[derive(Debug, Serialize)]
@@ -536,6 +537,20 @@ struct AgentsHostCredentialsEffectiveDisplayV1 {
 #[serde(deny_unknown_fields)]
 struct AgentsHostCredentialsReadEffectiveDisplayV1 {
     allowed_backends: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsWorldDispatchEffectiveDisplayV1 {
+    enabled: bool,
+    allowed_backends: Vec<String>,
+    allowed_actions: Vec<String>,
+    allowed_modes: Vec<String>,
+    same_session_only: bool,
+    same_world_binding_only: bool,
+    allow_capability_narrowing: bool,
+    max_live_retained_workers: u32,
+    max_concurrent_ephemeral: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -636,6 +651,18 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
                 read: AgentsHostCredentialsReadEffectiveDisplayV1 {
                     allowed_backends: policy.agents_host_credentials_read_allowed_backends.clone(),
                 },
+            },
+            world_dispatch: AgentsWorldDispatchEffectiveDisplayV1 {
+                enabled: policy.agents_world_dispatch_enabled,
+                allowed_backends: policy.agents_world_dispatch_allowed_backends.clone(),
+                allowed_actions: policy.agents_world_dispatch_allowed_actions.clone(),
+                allowed_modes: policy.agents_world_dispatch_allowed_modes.clone(),
+                same_session_only: policy.agents_world_dispatch_same_session_only,
+                same_world_binding_only: policy.agents_world_dispatch_same_world_binding_only,
+                allow_capability_narrowing: policy
+                    .agents_world_dispatch_allow_capability_narrowing,
+                max_live_retained_workers: policy.agents_world_dispatch_max_live_retained_workers,
+                max_concurrent_ephemeral: policy.agents_world_dispatch_max_concurrent_ephemeral,
             },
         },
         workflow: WorkflowEffectiveDisplayV1 {
