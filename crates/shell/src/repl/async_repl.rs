@@ -4896,7 +4896,7 @@ async fn handle_internal_toolbox_world_dispatch_request(
     };
 
     match request.action {
-        WorldDispatchActionV1::RunWorldTask => {
+        WorldDispatchActionV1::RunWorldTask | WorldDispatchActionV1::ContinueWorldWorker => {
             dispatch_orchestrator_world_request(&startup_context.store, request).await
         }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -10562,6 +10562,7 @@ mod tests {
                 action: WorldDispatchActionV1::SpawnWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
                 target_backend_id: Some("cli:codex_world".to_string()),
+                target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {

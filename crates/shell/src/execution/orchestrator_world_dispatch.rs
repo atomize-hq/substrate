@@ -52,6 +52,7 @@ pub(crate) struct PreparedOrchestratorWorldDispatch {
     pub request: ValidatedWorldDispatchRequestV1,
     pub session: OrchestrationSessionRecord,
     pub caller_participant: AgentRuntimeParticipantRecord,
+    pub target_participant: Option<AgentRuntimeParticipantRecord>,
 }
 
 #[allow(dead_code)]
@@ -60,15 +61,37 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     request: WorldDispatchRequestV1,
 ) -> Result<PreparedOrchestratorWorldDispatch> {
     let request = request.validate()?;
-    let authority = store.resolve_internal_world_dispatch_caller(
-        &request.orchestration_session_id,
-        &request.caller_participant_id,
-    )?;
+    let (session, caller_participant, target_participant) = match request.action {
+        WorldDispatchActionV1::ContinueWorldWorker => {
+            let resolved = store.resolve_internal_continue_world_dispatch_target(
+                &request.orchestration_session_id,
+                &request.caller_participant_id,
+                request
+                    .target_participant_id
+                    .as_deref()
+                    .expect("validated continue request must include target_participant_id"),
+                &request.target_backend_id,
+            )?;
+            (
+                resolved.session,
+                resolved.caller_participant,
+                Some(resolved.target_participant),
+            )
+        }
+        _ => {
+            let authority = store.resolve_internal_world_dispatch_caller(
+                &request.orchestration_session_id,
+                &request.caller_participant_id,
+            )?;
+            (authority.session, authority.caller_participant, None)
+        }
+    };
 
     Ok(PreparedOrchestratorWorldDispatch {
         request,
-        session: authority.session,
-        caller_participant: authority.caller_participant,
+        session,
+        caller_participant,
+        target_participant,
     })
 }
 
@@ -88,6 +111,7 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
     match prepared.request.action {
         WorldDispatchActionV1::RunWorldTask => run_world_task(prepared).await,
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
+        WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
     }
 }
 
@@ -106,6 +130,15 @@ async fn spawn_world_worker(
 ) -> Result<WorldDispatchOutcomeV1> {
     anyhow::bail!(
         "unsupported_platform_or_posture: spawn_world_worker world dispatch bootstrap is supported only on linux in v1"
+    );
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn continue_world_worker(
+    _prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    anyhow::bail!(
+        "unsupported_platform_or_posture: continue_world_worker exact-target validation is available in v1, but retained-worker routing remains out of scope until packet 2"
     );
 }
 
@@ -242,6 +275,15 @@ async fn spawn_world_worker(
             summary,
         },
     ))
+}
+
+#[cfg(target_os = "linux")]
+async fn continue_world_worker(
+    _prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    anyhow::bail!(
+        "unsupported_platform_or_posture: continue_world_worker exact-target validation is available in v1, but retained-worker routing remains out of scope until packet 2"
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -807,6 +849,7 @@ mod tests {
             action: WorldDispatchActionV1::RunWorldTask,
             mode: WorldDispatchModeV1::Ephemeral,
             target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
             payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
@@ -827,6 +870,7 @@ mod tests {
             action: WorldDispatchActionV1::SpawnWorldWorker,
             mode: WorldDispatchModeV1::Retained,
             target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
             payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {

@@ -128,6 +128,7 @@ pub(crate) struct DispatchRequestEnvelope {
 pub(crate) enum WorldDispatchActionV1 {
     RunWorldTask,
     SpawnWorldWorker,
+    ContinueWorldWorker,
 }
 
 impl WorldDispatchActionV1 {
@@ -135,6 +136,7 @@ impl WorldDispatchActionV1 {
         match self {
             Self::RunWorldTask => "run_world_task",
             Self::SpawnWorldWorker => "spawn_world_worker",
+            Self::ContinueWorldWorker => "continue_world_worker",
         }
     }
 }
@@ -170,10 +172,19 @@ pub(crate) struct WorkerSpawnPayloadV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct WorkerContinuePayloadV1 {
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "payload_kind", rename_all = "snake_case")]
 pub(crate) enum WorldDispatchPayloadV1 {
     Task(TaskPayloadV1),
     WorkerSpawn(WorkerSpawnPayloadV1),
+    WorkerContinue(WorkerContinuePayloadV1),
 }
 
 #[allow(dead_code)]
@@ -186,6 +197,7 @@ pub(crate) struct WorldDispatchRequestV1 {
     pub action: WorldDispatchActionV1,
     pub mode: WorldDispatchModeV1,
     pub target_backend_id: Option<String>,
+    pub target_participant_id: Option<String>,
     pub world_id: Option<String>,
     pub world_generation: Option<u64>,
     pub payload: WorldDispatchPayloadV1,
@@ -201,6 +213,7 @@ pub(crate) struct ValidatedWorldDispatchRequestV1 {
     pub action: WorldDispatchActionV1,
     pub mode: WorldDispatchModeV1,
     pub target_backend_id: String,
+    pub target_participant_id: Option<String>,
     pub world_id: String,
     pub world_generation: u64,
     pub payload: WorldDispatchPayloadV1,
@@ -220,6 +233,8 @@ impl WorldDispatchRequestV1 {
         )?;
         let caller_participant_id =
             required_world_dispatch_string("caller_participant_id", self.caller_participant_id)?;
+        let target_participant_id =
+            validate_world_dispatch_target(self.action, self.target_participant_id)?;
         let world_id = required_world_dispatch_string("world_id", self.world_id)?;
         let world_generation = self.world_generation.ok_or_else(|| {
             anyhow::anyhow!(
@@ -238,6 +253,7 @@ impl WorldDispatchRequestV1 {
             action: self.action,
             mode: self.mode,
             target_backend_id,
+            target_participant_id,
             world_id,
             world_generation,
             payload: self.payload,
@@ -264,7 +280,8 @@ fn validate_world_dispatch_action_mode(
 ) -> anyhow::Result<()> {
     match (action, mode) {
         (WorldDispatchActionV1::RunWorldTask, WorldDispatchModeV1::Ephemeral)
-        | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
+        | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_action_mode: action {} is incompatible with mode {}",
             action.as_str(),
@@ -284,10 +301,38 @@ fn validate_world_dispatch_payload(
         (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchPayloadV1::WorkerSpawn(worker)) => {
             validate_world_dispatch_prompt(action, &worker.prompt)
         }
+        (
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchPayloadV1::WorkerContinue(worker),
+        ) => {
+            validate_world_dispatch_prompt(action, &worker.prompt)?;
+            validate_optional_world_dispatch_string(action, "thread_id", &worker.thread_id)
+        }
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action {} requires matching typed payload",
             action.as_str(),
         ),
+    }
+}
+
+fn validate_world_dispatch_target(
+    action: WorldDispatchActionV1,
+    value: Option<String>,
+) -> anyhow::Result<Option<String>> {
+    match action {
+        WorldDispatchActionV1::ContinueWorldWorker => Ok(Some(required_world_dispatch_string(
+            "target_participant_id",
+            value,
+        )?)),
+        _ => {
+            if value.is_some() {
+                anyhow::bail!(
+                    "invalid_dispatch_target: action {} does not accept target_participant_id",
+                    action.as_str(),
+                );
+            }
+            Ok(None)
+        }
     }
 }
 
@@ -300,6 +345,22 @@ fn validate_world_dispatch_prompt(
             "missing_dispatch_payload: action {} requires non-empty prompt",
             action.as_str(),
         );
+    }
+    Ok(())
+}
+
+fn validate_optional_world_dispatch_string(
+    action: WorldDispatchActionV1,
+    field: &'static str,
+    value: &Option<String>,
+) -> anyhow::Result<()> {
+    if let Some(value) = value {
+        if value.trim().is_empty() {
+            anyhow::bail!(
+                "invalid_dispatch_payload: action {} requires non-empty {field} when provided",
+                action.as_str(),
+            );
+        }
     }
     Ok(())
 }
@@ -345,10 +406,28 @@ pub(crate) struct SpawnWorldWorkerOutcomeV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct ContinueWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    pub target_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "outcome_kind", rename_all = "snake_case")]
 pub(crate) enum WorldDispatchOutcomeV1 {
     RunWorldTask(RunWorldTaskOutcomeV1),
     SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
+    ContinueWorldWorker(ContinueWorldWorkerOutcomeV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1195,8 +1274,9 @@ mod tests {
         AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
         DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
         DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
-        FieldValueOrigin, HostExecutionClientStart, TaskPayloadV1, WorkerSpawnPayloadV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        FieldValueOrigin, HostExecutionClientStart, TaskPayloadV1, WorkerContinuePayloadV1,
+        WorkerSpawnPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -1983,9 +2063,21 @@ mod tests {
             action,
             mode,
             target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
             payload,
+        }
+    }
+
+    trait WorldDispatchRequestTestExt {
+        fn with_target_participant_id(self, participant_id: &str) -> Self;
+    }
+
+    impl WorldDispatchRequestTestExt for WorldDispatchRequestV1 {
+        fn with_target_participant_id(mut self, participant_id: &str) -> Self {
+            self.target_participant_id = Some(participant_id.to_string());
+            self
         }
     }
 
@@ -2020,6 +2112,26 @@ mod tests {
 
         assert_eq!(validated.orchestration_session_id, "sess-32");
         assert_eq!(validated.caller_participant_id, "orch-32");
+    }
+
+    #[test]
+    fn world_dispatch_contract_accepts_continue_world_worker_retained_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "continue with the integration trace".to_string(),
+                thread_id: Some("thread-root".to_string()),
+            }),
+        )
+        .with_target_participant_id("ash-worker-32")
+        .validate()
+        .expect("continue request should validate");
+
+        assert_eq!(
+            validated.target_participant_id.as_deref(),
+            Some("ash-worker-32")
+        );
     }
 
     #[test]
@@ -2102,6 +2214,44 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_rejects_continue_world_worker_without_exact_target() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "continue with the integration trace".to_string(),
+                thread_id: None,
+            }),
+        )
+        .validate()
+        .expect_err("continue target must be mandatory");
+
+        assert_eq!(
+            error.to_string(),
+            "missing_dispatch_field: world dispatch request requires target_participant_id"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_target_participant_id_for_non_continue_actions() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::RunWorldTask,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        )
+        .with_target_participant_id("ash-worker-32")
+        .validate()
+        .expect_err("non-continue target must fail closed");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_target: action run_world_task does not accept target_participant_id"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_payload_action_mismatch() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::SpawnWorldWorker,
@@ -2116,6 +2266,26 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_blank_continue_thread_id_when_provided() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "continue with the integration trace".to_string(),
+                thread_id: Some(" ".to_string()),
+            }),
+        )
+        .with_target_participant_id("ash-worker-32")
+        .validate()
+        .expect_err("blank thread id must fail closed");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty thread_id when provided"
         );
     }
 }

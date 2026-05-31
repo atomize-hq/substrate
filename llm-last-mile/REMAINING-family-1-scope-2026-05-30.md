@@ -1,6 +1,6 @@
-# Remaining Family-1 Scope After Slices 31 And 31.25
+# Remaining Family-1 Scope After Slice 32 Bootstrap
 
-Date: `2026-05-30`  
+Date: `2026-05-31`  
 Validated against:
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)
@@ -10,6 +10,7 @@ Validated against:
 - [AGENT_ORCHESTRATION_GAP_MATRIX.md](../AGENT_ORCHESTRATION_GAP_MATRIX.md)
 - live runtime code in:
   - [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs)
+  - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
   - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
   - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
   - [`crates/shell/src/execution/routing/dispatch/world_ops.rs`](../crates/shell/src/execution/routing/dispatch/world_ops.rs)
@@ -17,12 +18,16 @@ Validated against:
   - [`docs/USAGE.md`](../docs/USAGE.md)
   - [`docs/TRACE.md`](../docs/TRACE.md)
   - [`docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`](../docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md)
+  - [NOTE-33-family-1-ordering-after-dispatch-bootstrap.md](./NOTE-33-family-1-ordering-after-dispatch-bootstrap.md)
+  - [SPEC-33-internal-retained-world-worker-continue-and-event-bootstrap.md](./SPEC-33-internal-retained-world-worker-continue-and-event-bootstrap.md)
+  - [PLAN-33.md](./PLAN-33.md)
+  - [TASKS-33.md](./TASKS-33.md)
 
 ## Objective
 
 Record the repo-truth answer to one question:
 
-1. after the family-2 `31` / `31.25` work, what remains for the separate host-orchestrator to world control-plane family,
+1. after Slice `32` and its post-landing truth-sync patches, what remains for the separate host-orchestrator to world control-plane family,
 2. and what is the narrowest honest next slice to spec before code work begins?
 
 This note is a validation artifact, not an implementation spec.
@@ -58,6 +63,19 @@ Repo-truth implication:
 1. family 1 is not blocked on basic world-member runtime capability,
 2. the missing seam is the host-orchestrator control plane that would call into those primitives.
 
+### 1.5. Slice `32` bootstrap is now landed
+
+The repo now also supports:
+
+1. internal `run_world_task` dispatch over the real world-member execute seam,
+2. internal `spawn_world_worker` retained bootstrap with authoritative worker identity and launch receipt,
+3. orchestrator-only internal caller validation plus exact same-session and same-world-binding checks.
+
+Repo-truth implication:
+
+1. family 1 is no longer design-only end to end,
+2. the remaining work starts after dispatch/bootstrap rather than before it.
+
 ### 2. The narrow public control surface is not the family-1 control plane
 
 The repo already ships public `substrate agent start|turn|reattach|fork|stop` and REPL targeted turns.
@@ -87,35 +105,36 @@ Repo-truth implication:
 
 ## What Is Still Missing
 
-Family 1 remains genuinely unimplemented as a distinct control plane.
+Family 1 remains incomplete as a distinct control plane even though its first bootstrap slice is now landed.
 
-### 1. No landed host-to-world dispatch verb surface
+### 1. No landed retained-worker continue verb surface
 
 The family-1 verb names:
 
-1. `run_world_task`
-2. `spawn_world_worker`
-3. `continue_world_worker`
-4. `inspect_world_worker`
-5. `fork_world_worker`
-6. `cancel_world_work`
-7. `stop_world_worker`
+1. `continue_world_worker`
+2. `inspect_world_worker`
+3. `fork_world_worker`
+4. `cancel_world_work`
+5. `stop_world_worker`
 
-currently appear in the design docs, not in runtime types or live command/control code.
+do not yet exist as landed internal follow-up/runtime control-plane actions in the current tree.
 
-### 2. No landed retained-worker messaging/event protocol
+### 2. No landed retained-worker continue/event protocol
 
-The typed message and event families described in the design docs:
+The next required messaging/event layer described in the design docs is still missing as runtime truth. In particular, the current tree does not yet have a landed internal continue contract that classifies the first retained-worker event subset:
 
-1. `WorldWorkerMessageV1`
-2. `WorldWorkerEventV1`
-3. `instruction`
-4. `follow_up_question`
-5. `approval_request`
-6. `fork_request`
-7. `fork_recommendation`
+1. `reply`
+2. `progress_update`
+3. `follow_up_question`
+4. `blocked`
+5. `result`
+6. `failure`
+7. explicit `attention_required` semantics for the attention-driving classes
 
-do not yet exist as runtime protocol shapes in the current tree.
+Repo-truth implication:
+
+1. the next missing seam is internal retained-worker continue plus minimal typed event bootstrap,
+2. fuller approval/fork/control-directive classes still come later.
 
 ### 3. No landed steering-policy layer for host-orchestrator world control
 
@@ -129,6 +148,16 @@ The current tree does not show a dedicated host-to-world steering layer that sep
 4. same-session boundary,
 5. same-world-binding boundary,
 6. worker fork autonomy.
+
+### 4. No landed later verb expansion after continue
+
+Even after the next continue/event slice, the later family-1 verbs still remain:
+
+1. `inspect_world_worker`
+2. `cancel_world_work`
+3. `stop_world_worker`
+4. `fork_world_worker`
+5. approval/fork event classes and worker-requested fork autonomy
 
 ## Why Dispatch Comes First
 
@@ -154,26 +183,30 @@ The current repo evidence supports that order:
 
 The narrowest honest next slice is:
 
-1. **Slice `32`: internal host-orchestrator world dispatch bootstrap**
+1. **Slice `33`: internal retained-world-worker continue and minimal typed event bootstrap**
 
 This slice should:
 
 1. stay internal-only,
-2. introduce the first orchestrator-callable control-plane entry seam,
-3. support only initial allocation verbs:
-   - `run_world_task`
-   - `spawn_world_worker`
-4. reuse the already-landed world-member runtime path rather than inventing a second execution plane,
-5. return typed allocation outcomes and authoritative child identity,
-6. defer retained-worker messaging, ongoing steering, fork, stop/cancel expansion, and the fuller policy matrix.
+2. introduce only `continue_world_worker` as the next family-1 verb,
+3. reuse the already-landed retained member-turn seam rather than inventing a second execution plane,
+4. classify only the first typed worker-event subset:
+   - `reply`
+   - `progress_update`
+   - `follow_up_question`
+   - `blocked`
+   - `result`
+   - `failure`
+5. keep `attention_required` explicit for the in-scope attention-driving classes,
+6. defer fuller steering-policy hardening, approval/fork event classes, and the later inspect/cancel/stop/fork verbs.
 
 ## Boundary Against Family 2
 
 This slice should come before any further family-2 expansion because:
 
 1. family 2 already has landed local obligation-ledger and auto-attach mechanics,
-2. family 1 still lacks its first live control-plane entry seam entirely,
-3. future family-2 producers such as worker follow-up, approval, blocked, and fork-request obligations depend on the later messaging contract that in turn depends on the dispatch bootstrap.
+2. family 1 still lacks its first live retained-worker continue and typed event seam,
+3. future family-2 producers such as worker follow-up, approval, blocked, and fork-request obligations depend on the later messaging contract that now sits on top of the landed dispatch bootstrap.
 
 What stays out of scope here:
 
@@ -184,8 +217,9 @@ What stays out of scope here:
 
 ## Bottom Line
 
-Family 1 is still design-only in the current repo:
+Family 1 is no longer design-only in the current repo:
 
 1. world-member runtime primitives are landed,
-2. the host-orchestrator control plane that would consume them is not,
-3. the correct next move is a bounded `SPEC/PLAN/TASKS` slice for internal dispatch bootstrap rather than a giant omnibus orchestration spec.
+2. the first internal dispatch/bootstrap slice is landed,
+3. the next missing slice is internal retained-worker continue plus minimal typed event bootstrap,
+4. the remaining follow-on work after that is fuller steering-policy hardening and only then later verb expansion.
