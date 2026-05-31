@@ -659,8 +659,7 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
                 allowed_modes: policy.agents_world_dispatch_allowed_modes.clone(),
                 same_session_only: policy.agents_world_dispatch_same_session_only,
                 same_world_binding_only: policy.agents_world_dispatch_same_world_binding_only,
-                allow_capability_narrowing: policy
-                    .agents_world_dispatch_allow_capability_narrowing,
+                allow_capability_narrowing: policy.agents_world_dispatch_allow_capability_narrowing,
                 max_live_retained_workers: policy.agents_world_dispatch_max_live_retained_workers,
                 max_concurrent_ephemeral: policy.agents_world_dispatch_max_concurrent_ephemeral,
             },
