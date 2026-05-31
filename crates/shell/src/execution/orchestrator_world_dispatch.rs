@@ -1362,7 +1362,7 @@ mod tests {
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
     use crate::execution::agent_runtime::orchestration_session::{
-        OrchestrationSessionPosture, OrchestrationSessionState,
+        HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionState,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
@@ -1377,6 +1377,8 @@ mod tests {
     use hyper014::body::{to_bytes, HttpBody};
     #[cfg(target_os = "linux")]
     use serde_json::json;
+    #[cfg(target_os = "linux")]
+    use serial_test::serial;
     #[cfg(target_os = "linux")]
     use std::collections::HashMap;
     #[cfg(target_os = "linux")]
@@ -1405,6 +1407,32 @@ mod tests {
     use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
     #[cfg(target_os = "linux")]
     use world_service::WorldService;
+
+    #[cfg(target_os = "linux")]
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl EnvVarGuard {
+        fn set_path(key: &'static str, value: &Path) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = self.previous.as_deref() {
+                std::env::set_var(self.key, previous);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
 
     fn sample_session() -> OrchestrationSessionRecord {
         OrchestrationSessionRecord {
@@ -1457,7 +1485,7 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    fn sample_continue_request() -> ValidatedWorldDispatchRequestV1 {
+    fn sample_continue_world_dispatch_request() -> WorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_continue".to_string()),
             idempotency_key: Some("idem_continue".to_string()),
@@ -1474,8 +1502,13 @@ mod tests {
                 thread_id: Some("thread-root".to_string()),
             }),
         }
-        .validate()
-        .expect("validated continue request")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_continue_request() -> ValidatedWorldDispatchRequestV1 {
+        sample_continue_world_dispatch_request()
+            .validate()
+            .expect("validated continue request")
     }
 
     #[cfg(target_os = "linux")]
@@ -1694,6 +1727,70 @@ mod tests {
             world_generation,
             ..sample_continue_submit_request()
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn persist_authoritative_continue_dispatch_state(
+        store: &AgentRuntimeStateStore,
+        workspace_root: &Path,
+        world_id: &str,
+        world_generation: u64,
+    ) {
+        let mut session = sample_session();
+        session.workspace_root = workspace_root.display().to_string();
+        session.shell_owner_pid = std::process::id();
+        session.world_id = Some(world_id.to_string());
+        session.world_generation = Some(world_generation);
+
+        let mut orchestrator = sample_orchestrator_participant();
+        orchestrator.internal.shell_owner_pid = std::process::id();
+        orchestrator.internal.uaa_session_id = Some("uaa_orch_dispatch".to_string());
+        orchestrator.internal.attached_client_present = true;
+        orchestrator.internal.last_attached_at = Some(chrono::Utc::now());
+        orchestrator.internal.resume_eligible = true;
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&orchestrator);
+
+        let mut member = sample_member_participant();
+        member.internal.shell_owner_pid = std::process::id();
+        member.internal.uaa_session_id = Some("uaa_member_dispatch".to_string());
+        member.handle.world_id = Some(world_id.to_string());
+        member.handle.world_generation = Some(world_generation);
+
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist authoritative session");
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist authoritative orchestrator");
+        store
+            .persist_participant(&member)
+            .expect("persist retained worker");
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn dispatch_real_continue_world_worker_request(
+        store: &AgentRuntimeStateStore,
+        request_id: &str,
+        idempotency_key: &str,
+        world_id: &str,
+        world_generation: u64,
+    ) -> ContinueWorldWorkerOutcomeV1 {
+        let mut request = sample_continue_world_dispatch_request();
+        request.request_id = Some(request_id.to_string());
+        request.idempotency_key = Some(idempotency_key.to_string());
+        request.world_id = Some(world_id.to_string());
+        request.world_generation = Some(world_generation);
+
+        let prepared = prepare_orchestrator_world_dispatch(store, request)
+            .expect("prepare continue dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch prepared continue request");
+
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+            panic!("expected continue_world_worker outcome envelope");
+        };
+        outcome
     }
 
     #[cfg(target_os = "linux")]
@@ -2461,6 +2558,192 @@ mod tests {
         } else {
             std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
         }
+
+        server.abort();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_world_worker_dispatch_returns_real_typed_internal_outcome() {
+        let _env_guard = world_env_guard();
+        let service = match WorldService::new() {
+            Ok(service) => service,
+            Err(err) => {
+                eprintln!(
+                    "skipping continue_world_worker dispatch test: service init failed: {err}"
+                );
+                return;
+            }
+        };
+
+        let temp = tempdir().expect("tempdir");
+        let runtime_path = write_fake_continue_world_worker_runtime(temp.path());
+        let world_spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+                orchestration_session_id: "sess_dispatch".to_string(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+            isolate_network: false,
+            limits: world_api::ResourceLimits::default(),
+            enable_preload: false,
+            allowed_domains: Vec::new(),
+            project_dir: temp.path().to_path_buf(),
+            always_isolate: true,
+            fs_mode: substrate_common::WorldFsMode::Writable,
+        };
+        let world = match service.ensure_session_world(&world_spec) {
+            Ok(world) => world,
+            Err(err) => {
+                eprintln!(
+                    "skipping continue_world_worker dispatch test: failed to ensure shared world: {err}"
+                );
+                return;
+            }
+        };
+        let Some(binding) = world.shared_binding.clone() else {
+            eprintln!("skipping continue_world_worker dispatch test: shared world binding missing");
+            return;
+        };
+
+        let launch = service
+            .execute_stream(make_member_dispatch_execute_request(
+                temp.path(),
+                &runtime_path,
+                &binding.world_id,
+                binding.world_generation,
+                "run-bootstrap",
+            ))
+            .await
+            .expect("member bootstrap should succeed");
+        let mut launch_body = launch.into_body();
+        let mut launch_buffer = Vec::new();
+        let launch_start = next_stream_frame_value(&mut launch_body, &mut launch_buffer).await;
+        let launch_span_id = frame_start_span_id(&launch_start)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| panic!("expected start frame, got {launch_start:?}"));
+        let registered = next_registered_frame(&mut launch_body, &mut launch_buffer).await;
+        assert_eq!(
+            frame_event(&registered)
+                .and_then(|event| event.get("participant_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("ash_member")
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let service_for_server = service.clone();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    let response = service_for_server
+                        .submit_member_turn_stream(parsed)
+                        .await
+                        .expect("world-service member turn stream");
+                    let bytes = to_bytes(response.into_body())
+                        .await
+                        .expect("collect member turn response bytes");
+                    write_http_body(
+                        &mut stream,
+                        "200 OK",
+                        "application/x-ndjson",
+                        bytes.as_ref(),
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("execute cancel request");
+                    let response = service_for_server
+                        .execute_cancel(parsed)
+                        .await
+                        .expect("world-service execute cancel");
+                    let body = serde_json::to_vec(&response).expect("serialize cancel response");
+                    write_http_body(&mut stream, "200 OK", "application/json", &body).await;
+                    continue;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(
+            &store,
+            temp.path(),
+            &binding.world_id,
+            binding.world_generation,
+        );
+
+        let reply_outcome = dispatch_real_continue_world_worker_request(
+            &store,
+            "req_continue_reply",
+            "idem_continue_reply",
+            &binding.world_id,
+            binding.world_generation,
+        )
+        .await;
+        assert_eq!(reply_outcome.thread_id.as_deref(), Some("thread-real"));
+
+        let outcome = dispatch_real_continue_world_worker_request(
+            &store,
+            "req_continue_progress",
+            "idem_continue_progress",
+            &binding.world_id,
+            binding.world_generation,
+        )
+        .await;
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-real"));
+        let worker_event = outcome
+            .worker_event
+            .expect("continue dispatch should surface worker event");
+        assert_eq!(
+            worker_event.event_class,
+            ContinueWorldWorkerEventClassV1::ProgressUpdate
+        );
+        assert_eq!(
+            worker_event
+                .payload
+                .pointer("/uaa_event/tool/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("command_execution")
+        );
+
+        let delivered = service
+            .execute_cancel(ExecuteCancelRequestV1 {
+                span_id: launch_span_id,
+                sig: "INT".to_string(),
+            })
+            .await
+            .expect("bootstrap cancel should succeed");
+        assert!(
+            delivered.delivered,
+            "expected retained bootstrap cancel delivery"
+        );
 
         server.abort();
     }
