@@ -1097,6 +1097,33 @@ impl AgentRuntimeStateStore {
         })
     }
 
+    pub(crate) fn count_authoritative_live_retained_workers(
+        &self,
+        orchestration_session_id: &str,
+        authoritative_orchestrator_participant_id: &str,
+    ) -> Result<usize> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            anyhow::bail!(
+                "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
+                orchestration_session_id
+            );
+        };
+
+        Ok(record
+            .participants
+            .iter()
+            .filter(|participant| {
+                participant.handle.role == MEMBER_ROLE
+                    && participant.handle.execution.scope == AgentExecutionScope::World
+                    && participant.handle.orchestrator_participant_id.as_deref()
+                        == Some(authoritative_orchestrator_participant_id)
+                    && participant.matches_authoritative_parent_world_binding(&record.session)
+                    && participant.is_authoritative_live()
+                    && owner_process_is_alive(participant)
+            })
+            .count())
+    }
+
     // Public turn routing stays exact:
     // (orchestration_session_id, backend_id) selects one authoritative retained slot,
     // or it fails closed without falling back to fuzzy inventory guesses.
@@ -5945,6 +5972,70 @@ mod tests {
                 err.to_string(),
                 "stale_linkage: orchestration session sess_continue retained worker ash_continue is no longer authoritative-live"
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn count_authoritative_live_retained_workers_ignores_non_authoritative_entries() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_dispatch", "orch_dispatch");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let live = live_member("codex_world", "sess_dispatch", "ash_live", "orch_dispatch");
+            let mut invalidated = live_member(
+                "codex_world",
+                "sess_dispatch",
+                "ash_invalidated",
+                "orch_dispatch",
+            );
+            invalidated.transition_state(AgentRuntimeSessionState::Invalidated);
+            invalidated.internal.shell_owner_pid = std::process::id();
+
+            let mut drifted = live_member(
+                "codex_world",
+                "sess_dispatch",
+                "ash_drifted",
+                "orch_dispatch",
+            );
+            drifted.handle.world_generation = Some(3);
+
+            let mut relinked =
+                live_member("codex_world", "sess_dispatch", "ash_relinked", "orch_other");
+            relinked.internal.shell_owner_pid = std::process::id();
+
+            let mut stale =
+                live_member("codex_world", "sess_dispatch", "ash_stale", "orch_dispatch");
+            stale.internal.shell_owner_pid = 999_999_999;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store
+                .persist_participant(&live)
+                .expect("persist live member");
+            store
+                .persist_participant(&invalidated)
+                .expect("persist invalidated member");
+            store
+                .persist_participant(&drifted)
+                .expect("persist drifted member");
+            store
+                .persist_participant(&relinked)
+                .expect("persist relinked member");
+            store
+                .persist_participant(&stale)
+                .expect("persist stale member");
+
+            let count = store
+                .count_authoritative_live_retained_workers("sess_dispatch", "orch_dispatch")
+                .expect("count live retained workers");
+
+            assert_eq!(count, 1);
         });
     }
 }

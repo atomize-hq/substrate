@@ -2,6 +2,8 @@
 use std::collections::BTreeMap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+use std::sync::{LazyLock, Mutex};
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -61,6 +63,57 @@ pub(crate) struct PreparedOrchestratorWorldDispatch {
     pub session: OrchestrationSessionRecord,
     pub caller_participant: AgentRuntimeParticipantRecord,
     pub target_participant: Option<AgentRuntimeParticipantRecord>,
+    pub live_retained_worker_count: usize,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[derive(Default)]
+struct WorldDispatchConcurrencyTracker {
+    ephemeral_by_session: BTreeMap<String, usize>,
+    retained_bootstrap_by_session: BTreeMap<String, usize>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[derive(Clone, Copy, Debug)]
+enum WorldDispatchConcurrencyKind {
+    Ephemeral,
+    RetainedBootstrap,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[derive(Debug)]
+struct WorldDispatchConcurrencyGuard {
+    session_id: String,
+    kind: WorldDispatchConcurrencyKind,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+impl Drop for WorldDispatchConcurrencyGuard {
+    fn drop(&mut self) {
+        let mut tracker = world_dispatch_concurrency_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let counts = match self.kind {
+            WorldDispatchConcurrencyKind::Ephemeral => &mut tracker.ephemeral_by_session,
+            WorldDispatchConcurrencyKind::RetainedBootstrap => {
+                &mut tracker.retained_bootstrap_by_session
+            }
+        };
+        match counts.get_mut(&self.session_id) {
+            Some(count) if *count > 1 => *count -= 1,
+            Some(_) => {
+                counts.remove(&self.session_id);
+            }
+            None => {}
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurrencyTracker> {
+    static TRACKER: LazyLock<Mutex<WorldDispatchConcurrencyTracker>> =
+        LazyLock::new(|| Mutex::new(WorldDispatchConcurrencyTracker::default()));
+    &TRACKER
 }
 
 #[allow(dead_code)]
@@ -81,7 +134,7 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
                         .expect("validated continue request must include target_participant_id"),
                     &request.target_backend_id,
                 )
-                .map_err(map_world_dispatch_resolution_error)?;
+                .map_err(map_continue_world_dispatch_resolution_error)?;
             (
                 resolved.session,
                 resolved.caller_participant,
@@ -98,12 +151,17 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
             (authority.session, authority.caller_participant, None)
         }
     };
+    let live_retained_worker_count = store.count_authoritative_live_retained_workers(
+        &session.orchestration_session_id,
+        caller_participant.participant_id(),
+    )?;
 
     Ok(PreparedOrchestratorWorldDispatch {
         request,
         session,
         caller_participant,
         target_participant,
+        live_retained_worker_count,
     })
 }
 
@@ -191,6 +249,7 @@ struct SpawnWorldWorkerReceipt {
 pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
     pub request: ValidatedWorldDispatchRequestV1,
     pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
 }
 
 #[cfg(target_os = "linux")]
@@ -206,6 +265,8 @@ async fn run_world_task(
         &prepared.request,
         "run_world_task",
     )?;
+    let _concurrency_guard =
+        acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
     let descriptor = materialize_runtime_descriptor(&resolved).map_err(|err| {
         anyhow::anyhow!(
             "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
@@ -254,10 +315,13 @@ pub(crate) fn prepare_spawn_world_worker_bootstrap(
             err.reason
         )
     })?;
+    let concurrency_guard =
+        acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
 
     Ok(PreparedSpawnWorldWorkerBootstrap {
         request: prepared.request,
         descriptor,
+        _concurrency_guard: concurrency_guard,
     })
 }
 
@@ -489,6 +553,85 @@ fn map_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error {
     }
 
     err
+}
+
+fn map_continue_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error {
+    let message = err.to_string();
+    if message.starts_with("stale_linkage:") {
+        return steering_policy_denial(
+            WorldDispatchSteeringDenialV1::InvalidatedWorkerNotRoutable,
+            message,
+        );
+    }
+
+    map_world_dispatch_resolution_error(err)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn acquire_world_dispatch_concurrency_guard(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    base_policy: &Policy,
+) -> Result<Option<WorldDispatchConcurrencyGuard>> {
+    let steering_policy = base_policy.world_dispatch_policy();
+    let session_id = prepared.request.orchestration_session_id.clone();
+    let mut tracker = world_dispatch_concurrency_tracker()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    match prepared.request.action {
+        WorldDispatchActionV1::RunWorldTask => {
+            let cap = steering_policy.max_concurrent_ephemeral as usize;
+            let current = tracker
+                .ephemeral_by_session
+                .get(&session_id)
+                .copied()
+                .unwrap_or(0);
+            if current >= cap {
+                return Err(steering_policy_denial(
+                    WorldDispatchSteeringDenialV1::WorkerConcurrencyCapExceeded,
+                    format!(
+                        "effective policy allows at most {cap} concurrent ephemeral world dispatches for orchestration session {}",
+                        prepared.request.orchestration_session_id
+                    ),
+                ));
+            }
+            *tracker
+                .ephemeral_by_session
+                .entry(session_id.clone())
+                .or_default() += 1;
+            Ok(Some(WorldDispatchConcurrencyGuard {
+                session_id,
+                kind: WorldDispatchConcurrencyKind::Ephemeral,
+            }))
+        }
+        WorldDispatchActionV1::SpawnWorldWorker => {
+            let cap = steering_policy.max_live_retained_workers as usize;
+            let reserved = tracker
+                .retained_bootstrap_by_session
+                .get(&session_id)
+                .copied()
+                .unwrap_or(0);
+            if prepared.live_retained_worker_count.saturating_add(reserved) >= cap {
+                return Err(steering_policy_denial(
+                    WorldDispatchSteeringDenialV1::WorkerConcurrencyCapExceeded,
+                    format!(
+                        "effective policy allows at most {cap} live retained workers for orchestration session {}; authoritative live count is {}",
+                        prepared.request.orchestration_session_id,
+                        prepared.live_retained_worker_count
+                    ),
+                ));
+            }
+            *tracker
+                .retained_bootstrap_by_session
+                .entry(session_id.clone())
+                .or_default() += 1;
+            Ok(Some(WorldDispatchConcurrencyGuard {
+                session_id,
+                kind: WorldDispatchConcurrencyKind::RetainedBootstrap,
+            }))
+        }
+        WorldDispatchActionV1::ContinueWorldWorker => Ok(None),
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
@@ -1657,6 +1800,8 @@ mod tests {
             ],
             agents_world_dispatch_same_session_only: true,
             agents_world_dispatch_same_world_binding_only: true,
+            agents_world_dispatch_max_live_retained_workers: 4,
+            agents_world_dispatch_max_concurrent_ephemeral: 4,
             ..Policy::default()
         }
     }
@@ -2183,6 +2328,7 @@ mod tests {
             session: sample_session(),
             caller_participant: sample_orchestrator_participant(),
             target_participant: Some(sample_member_participant()),
+            live_retained_worker_count: 1,
         };
 
         let submit =
@@ -3043,6 +3189,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
                 target_participant: None,
+                live_retained_worker_count: 0,
             },
             &Policy::default(),
         )
@@ -3066,6 +3213,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
                 target_participant: None,
+                live_retained_worker_count: 0,
             },
             &policy,
         )
@@ -3089,6 +3237,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
                 target_participant: None,
+                live_retained_worker_count: 0,
             },
             &policy,
         )
@@ -3112,6 +3261,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
                 target_participant: None,
+                live_retained_worker_count: 0,
             },
             &policy,
         )
@@ -3135,6 +3285,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: caller,
                 target_participant: None,
+                live_retained_worker_count: 0,
             },
             &sample_world_dispatch_policy(),
         )
@@ -3160,6 +3311,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: caller,
                 target_participant: None,
+                live_retained_worker_count: 0,
             },
             &policy,
         )
@@ -3178,6 +3330,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
                 target_participant: Some(sample_member_participant()),
+                live_retained_worker_count: 1,
             },
             &sample_world_dispatch_policy(),
         )
@@ -3203,6 +3356,7 @@ mod tests {
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
                 target_participant: Some(sample_member_participant()),
+                live_retained_worker_count: 1,
             },
             &policy,
         )
@@ -3219,6 +3373,67 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "cross_session_steering_denied: request tried to steer outside the authoritative orchestration session"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_maps_stale_retained_worker_to_invalidated_worker_denial() {
+        let err = map_continue_world_dispatch_resolution_error(anyhow::anyhow!(
+            "stale_linkage: orchestration session sess_dispatch retained worker ash_member is no longer authoritative-live"
+        ));
+
+        assert_eq!(
+            err.to_string(),
+            "invalidated_worker_not_routable: stale_linkage: orchestration session sess_dispatch retained worker ash_member is no longer authoritative-live"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_ephemeral_concurrency_cap_exceeded() {
+        let mut policy = sample_world_dispatch_policy();
+        policy.agents_world_dispatch_max_concurrent_ephemeral = 1;
+
+        let prepared = PreparedOrchestratorWorldDispatch {
+            request: sample_request(),
+            session: sample_session(),
+            caller_participant: sample_orchestrator_participant(),
+            target_participant: None,
+            live_retained_worker_count: 0,
+        };
+        let _guard = acquire_world_dispatch_concurrency_guard(&prepared, &policy)
+            .expect("first ephemeral dispatch should reserve the only slot");
+
+        let err = acquire_world_dispatch_concurrency_guard(&prepared, &policy)
+            .expect_err("second ephemeral dispatch should fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 concurrent ephemeral world dispatches for orchestration session sess_dispatch"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_rejects_live_retained_worker_cap_exceeded() {
+        let mut policy = sample_world_dispatch_policy();
+        policy.agents_world_dispatch_max_live_retained_workers = 1;
+
+        let prepared = PreparedOrchestratorWorldDispatch {
+            request: sample_spawn_request(),
+            session: sample_session(),
+            caller_participant: sample_orchestrator_participant(),
+            target_participant: None,
+            live_retained_worker_count: 1,
+        };
+
+        let err = acquire_world_dispatch_concurrency_guard(&prepared, &policy)
+            .expect_err("spawn above retained worker cap must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_dispatch; authoritative live count is 1"
         );
     }
 
