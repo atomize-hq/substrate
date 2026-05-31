@@ -284,6 +284,14 @@ Packet 10A note:
 - if replay or live sentinel work is already landed in the branch, this packet can still run as an
   analyzer-only follow-up and then regenerate bounded replay/live fixtures against the improved
   analyzer summary output
+- `2026-05-30`: `AC1-AC7` landed without widening `checkpoints.jsonl` or the compactor bundle
+  contract. The bounded smoke session `019e767c-e64b-7b93-a540-7a33a90f780f` now reports
+  `Turns observed: 1`, `User prompts observed: 0`, `Checkpoints emitted: 16`,
+  `Checkpoints per turn: 16.00`, `Checkpoints per user prompt: unavailable`,
+  `Avg rows between checkpoints: 17.40`, `Avg seconds between checkpoints: 45.40`,
+  `Flagged checkpoints: 8`, `Longest flagged streak: 7`, plus per-session diagnostics of
+  `Distinct task frames: 15`, `Truth artifacts referenced: 4`, and
+  `Verification commands observed: 0`.
 
 ### Packet 11: Sentinel replay core
 

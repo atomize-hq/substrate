@@ -120,11 +120,25 @@ fn normalize_event_message(
                 text,
             )
         }),
-        "user_message" => extract_message_text(&message.payload.extra).map(|text| {
-            let user_message_role = Some(
-                user_message_state.classify(UserMessageSource::EventMessage, turn_id.as_deref()),
+        "user_message" => extract_message_text(&message.payload.extra).and_then(|text| {
+            if user_message_state.suppress_mirrored_user_message(
+                UserMessageSource::EventMessage,
+                record.event_index,
+                turn_id.as_deref(),
+                message.timestamp.as_deref(),
+                &text,
+            ) {
+                return None;
+            }
+            let user_message_role = Some(user_message_state.classify(turn_id.as_deref(), &text));
+            user_message_state.observe_emitted_user_message(
+                UserMessageSource::EventMessage,
+                record.event_index,
+                turn_id.as_deref(),
+                message.timestamp.as_deref(),
+                &text,
             );
-            build_row(
+            Some(build_row(
                 rollout,
                 record,
                 0,
@@ -134,8 +148,26 @@ fn normalize_event_message(
                 message.timestamp.as_deref(),
                 None,
                 text,
-            )
+            ))
         }),
+        "task_complete" => {
+            if let Some(turn_id) = turn_id.as_deref() {
+                user_message_state.observe_task_complete(turn_id);
+            } else {
+                user_message_state.observe_task_complete_without_turn();
+            }
+            Some(build_row(
+                rollout,
+                record,
+                0,
+                CompactionKind::Status,
+                None,
+                turn_id,
+                message.timestamp.as_deref(),
+                None,
+                serialize_kind_and_extra(kind, &message.payload.extra),
+            ))
+        }
         "patch_apply_end" => Some(build_row(
             rollout,
             record,
@@ -147,17 +179,26 @@ fn normalize_event_message(
             None,
             serialize_kind_and_extra(kind, &message.payload.extra),
         )),
-        "task_started" | "web_search_end" => Some(build_row(
-            rollout,
-            record,
-            0,
-            CompactionKind::Status,
-            None,
-            turn_id,
-            message.timestamp.as_deref(),
-            None,
-            serialize_kind_and_extra(kind, &message.payload.extra),
-        )),
+        "task_started" | "web_search_end" => {
+            if kind == "task_started" {
+                if let Some(turn_id) = turn_id.as_deref() {
+                    user_message_state.observe_task_started(turn_id);
+                } else {
+                    user_message_state.observe_task_started_without_turn();
+                }
+            }
+            Some(build_row(
+                rollout,
+                record,
+                0,
+                CompactionKind::Status,
+                None,
+                turn_id,
+                message.timestamp.as_deref(),
+                None,
+                serialize_kind_and_extra(kind, &message.payload.extra),
+            ))
+        }
         "token_count" => None,
         _ => Some(build_row(
             rollout,
@@ -190,9 +231,28 @@ fn normalize_response_item(
                 )
             })?;
             let message_kind = message_role_kind(item.payload.role.as_deref());
-            let user_message_role = (message_kind == CompactionKind::UserMessage).then(|| {
-                user_message_state.classify(UserMessageSource::ResponseItem, turn_id.as_deref())
-            });
+            if message_kind == CompactionKind::UserMessage
+                && user_message_state.suppress_mirrored_user_message(
+                    UserMessageSource::ResponseItem,
+                    record.event_index,
+                    turn_id.as_deref(),
+                    item.timestamp.as_deref(),
+                    &text,
+                )
+            {
+                return None;
+            }
+            let user_message_role = (message_kind == CompactionKind::UserMessage)
+                .then(|| user_message_state.classify(turn_id.as_deref(), &text));
+            if message_kind == CompactionKind::UserMessage {
+                user_message_state.observe_emitted_user_message(
+                    UserMessageSource::ResponseItem,
+                    record.event_index,
+                    turn_id.as_deref(),
+                    item.timestamp.as_deref(),
+                    &text,
+                );
+            }
             Some(build_row(
                 rollout,
                 record,
@@ -467,7 +527,9 @@ fn message_role_kind(role: Option<&str>) -> CompactionKind {
 struct UserMessageState {
     current_turn_id: Option<String>,
     boundary_seen: bool,
-    prompt_emitted: bool,
+    task_active: bool,
+    task_prompt_emitted: bool,
+    last_emitted_user_message: Option<EmittedUserMessage>,
 }
 
 impl UserMessageState {
@@ -475,7 +537,7 @@ impl UserMessageState {
         if self.current_turn_id.as_deref() != Some(turn_id) {
             self.current_turn_id = Some(turn_id.to_string());
             self.boundary_seen = false;
-            self.prompt_emitted = false;
+            self.last_emitted_user_message = None;
         }
     }
 
@@ -484,7 +546,29 @@ impl UserMessageState {
         self.boundary_seen = true;
     }
 
-    fn classify(&mut self, source: UserMessageSource, turn_id: Option<&str>) -> UserMessageRole {
+    fn observe_task_started(&mut self, turn_id: &str) {
+        self.observe_turn_id(turn_id);
+        self.task_active = true;
+        self.task_prompt_emitted = false;
+    }
+
+    fn observe_task_started_without_turn(&mut self) {
+        self.task_active = true;
+        self.task_prompt_emitted = false;
+    }
+
+    fn observe_task_complete(&mut self, turn_id: &str) {
+        self.observe_turn_id(turn_id);
+        self.task_active = false;
+        self.task_prompt_emitted = false;
+    }
+
+    fn observe_task_complete_without_turn(&mut self) {
+        self.task_active = false;
+        self.task_prompt_emitted = false;
+    }
+
+    fn classify(&mut self, turn_id: Option<&str>, text: &str) -> UserMessageRole {
         let Some(turn_id) = turn_id else {
             return UserMessageRole::Unknown;
         };
@@ -492,21 +576,83 @@ impl UserMessageState {
         if !self.boundary_seen {
             return UserMessageRole::Unknown;
         }
-        if !self.prompt_emitted {
-            self.prompt_emitted = true;
+        if is_synthetic_user_message(text) {
+            return UserMessageRole::Unknown;
+        }
+        if !self.task_active {
+            self.task_active = true;
+            self.task_prompt_emitted = true;
             return UserMessageRole::Prompt;
         }
-        match source {
-            UserMessageSource::EventMessage => UserMessageRole::Steer,
-            UserMessageSource::ResponseItem => UserMessageRole::Unknown,
+        if !self.task_prompt_emitted {
+            self.task_prompt_emitted = true;
+            return UserMessageRole::Prompt;
         }
+        UserMessageRole::Steer
+    }
+
+    fn observe_emitted_user_message(
+        &mut self,
+        source: UserMessageSource,
+        event_index: usize,
+        turn_id: Option<&str>,
+        timestamp: Option<&str>,
+        text: &str,
+    ) {
+        self.last_emitted_user_message = Some(EmittedUserMessage {
+            source,
+            event_index,
+            turn_id: turn_id.map(ToOwned::to_owned),
+            timestamp: timestamp.map(ToOwned::to_owned),
+            text: text.to_string(),
+        });
+    }
+
+    fn suppress_mirrored_user_message(
+        &self,
+        source: UserMessageSource,
+        event_index: usize,
+        turn_id: Option<&str>,
+        timestamp: Option<&str>,
+        text: &str,
+    ) -> bool {
+        let Some(last) = &self.last_emitted_user_message else {
+            return false;
+        };
+        last.source != source
+            && last.event_index.abs_diff(event_index) <= 1
+            && last.turn_id.as_deref() == turn_id
+            && timestamps_close(last.timestamp.as_deref(), timestamp)
+            && last.text == text
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UserMessageSource {
     EventMessage,
     ResponseItem,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EmittedUserMessage {
+    source: UserMessageSource,
+    event_index: usize,
+    turn_id: Option<String>,
+    timestamp: Option<String>,
+    text: String,
+}
+
+fn is_synthetic_user_message(text: &str) -> bool {
+    text.contains("AGENTS.md instructions")
+        || text.contains("<skill>")
+        || text.contains("Available skills")
+}
+
+fn timestamps_close(left: Option<&str>, right: Option<&str>) -> bool {
+    match (parse_timestamp(left), parse_timestamp(right)) {
+        (Some(left), Some(right)) => (left - right).whole_milliseconds().abs() <= 1_000,
+        _ => left == right,
+    }
 }
 
 fn encrypted_placeholder(label: &str, encrypted_content: Option<&str>) -> Option<String> {

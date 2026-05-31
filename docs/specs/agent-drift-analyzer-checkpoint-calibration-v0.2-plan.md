@@ -53,6 +53,19 @@ Critical rule:
 
 - ratios and intervals must measure gaps between checkpoints, not cumulative checkpoint-window size
 
+Locked semantics for this slice:
+
+- `turns observed` means distinct non-null `turn_id` values across session archival rows
+- `user prompts observed` means compacted `user_message` rows classified as `prompt`
+- ratio metrics render `unavailable` when their denominator is zero
+- row-spacing averages use adjacent `boundary.end` row positions only
+- second-spacing averages use adjacent `boundary.end` timestamps only and skip pairs lacking either
+  timestamp
+- top-level spacing metrics are weighted by real adjacent-gap sample counts, not by averaging
+  already-averaged session values
+- top-level `longest flagged streak` is the max per-session streak rather than a cross-session
+  stitched sequence
+
 ### 2. Session Metric Assembly
 
 Deliver second:
@@ -239,6 +252,29 @@ following are true:
 - the team can name which remaining questions are about checkpoint cadence versus missing event
   normalization
 - any requested schema or normalization widening is grounded in a concrete blocked metric
+
+## Deferred Metrics Ledger
+
+The following follow-up metrics remain intentionally blocked after `AC1-AC7`:
+
+- phase transition counts
+  - blocked by the absence of a first-class phase taxonomy beyond the current message/tool row
+    kinds and checkpoint boundaries
+- phase duration
+  - blocked by the same missing phase taxonomy; current timestamps can measure checkpoint spacing,
+    not semantically labeled phase duration
+- first grounding before first write
+  - blocked by the lack of analyzer-visible normalized `file_read` and `file_edit` event kinds;
+    current tool-call text cannot reliably separate reads from writes
+- first verification lag
+  - blocked by the lack of a first-class verification command classifier and outcome surface beyond
+    raw command strings
+- work-area shift count
+  - blocked by the lack of a normalized work-area or artifact-transition model; path hints alone
+    are too noisy
+- stronger repetition diagnostics
+  - blocked by the lack of a richer attempt/outcome chain that links repeated tool calls, edits,
+    and failures beyond exact dedupe and drift-score evidence
 
 ## Exit Criteria
 

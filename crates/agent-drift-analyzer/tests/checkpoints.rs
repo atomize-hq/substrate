@@ -18,5 +18,7 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     assert_eq!(checkpoints[0].session_id, "session-alpha");
     assert_eq!(checkpoints[0].ordinal, 1);
     assert_eq!(checkpoints[1].ordinal, 2);
+    assert_eq!(checkpoints[0].boundary.end.event_index, 8);
+    assert_eq!(checkpoints[1].boundary.end.event_index, 12);
     assert!(checkpoints[0].boundary.end.event_index < checkpoints[1].boundary.end.event_index);
 }

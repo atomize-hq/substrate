@@ -232,8 +232,18 @@ Expected success signatures:
 Known-good bounded example for `019e767c-e64b-7b93-a540-7a33a90f780f`:
 
 - analyzer summary reports `Sessions analyzed: 1`
+- analyzer summary reports `Turns observed: 1`
+- analyzer summary reports `User prompts observed: 0`
 - analyzer summary reports `Checkpoints emitted: 16`
+- analyzer summary reports `Checkpoints per turn: 16.00`
+- analyzer summary reports `Checkpoints per user prompt: unavailable`
+- analyzer summary reports `Avg rows between checkpoints: 17.40`
+- analyzer summary reports `Avg seconds between checkpoints: 45.40`
 - analyzer summary reports `Flagged checkpoints: 8`
+- analyzer summary reports `Longest flagged streak: 7`
+- the session block reports `Distinct task frames: 15`
+- the session block reports `Truth artifacts referenced: 4`
+- the session block reports `Verification commands observed: 0`
 - `checkpoints.jsonl` contains progressive checkpoint ids from
   `019e767c-e64b-7b93-a540-7a33a90f780f:0001` through
   `019e767c-e64b-7b93-a540-7a33a90f780f:0016`

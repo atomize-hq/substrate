@@ -87,9 +87,9 @@ fn normalization_maps_rollout_events_into_provenance_preserving_rows() {
 }
 
 #[test]
-fn normalization_classifies_user_rows_from_turn_order_and_boundary_records() {
+fn normalization_collapses_mirrored_transport_rows_for_one_user_prompt() {
     let temp_dir = TempDir::new().expect("temp dir");
-    let rollout_path = temp_dir.path().join("rollout-user-roles.jsonl");
+    let rollout_path = temp_dir.path().join("rollout-user-message-mirror.jsonl");
     fs::write(
         &rollout_path,
         concat!(
@@ -98,11 +98,101 @@ fn normalization_classifies_user_rows_from_turn_order_and_boundary_records() {
             "{\"timestamp\":\"2026-05-29T12:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"output_text\",\"text\":\"# AGENTS.md instructions\"}]}}\n",
             "{\"timestamp\":\"2026-05-29T12:00:02Z\",\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-abc\",\"user_instructions\":\"Repo-local rules\"}}\n",
             "{\"timestamp\":\"2026-05-29T12:00:03Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"output_text\",\"text\":\"/goal Ship the packet\"}]}}\n",
-            "{\"timestamp\":\"2026-05-29T12:00:04Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"turn_id\":\"turn-abc\",\"message\":\"/goal Ship the packet\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:03Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"turn_id\":\"turn-abc\",\"message\":\"/goal Ship the packet\"}}\n",
             "{\"timestamp\":\"2026-05-29T12:00:05Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"output_text\",\"text\":\"<skill>rust</skill>\"}]}}\n"
         ),
     )
     .expect("write role classification fixture");
+
+    let ingested = ingest_rollout_file(
+        Utf8Path::from_path(&rollout_path).expect("rollout path should be valid UTF-8"),
+    )
+    .expect("ingest rollout");
+    let rows = normalize_rollout_file(&ingested);
+    let user_rows = rows
+        .iter()
+        .filter(|row| row.kind == CompactionKind::UserMessage)
+        .collect::<Vec<_>>();
+
+    assert_eq!(user_rows.len(), 3);
+    assert_eq!(user_rows[0].text, "# AGENTS.md instructions");
+    assert_eq!(
+        user_rows[0].user_message_role,
+        Some(UserMessageRole::Unknown)
+    );
+    assert_eq!(user_rows[1].text, "/goal Ship the packet");
+    assert_eq!(
+        user_rows[1].user_message_role,
+        Some(UserMessageRole::Prompt)
+    );
+    assert_eq!(user_rows[2].text, "<skill>rust</skill>");
+    assert_eq!(
+        user_rows[2].user_message_role,
+        Some(UserMessageRole::Unknown)
+    );
+}
+
+#[test]
+fn normalization_keeps_distinct_follow_up_user_message_as_steer() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let rollout_path = temp_dir.path().join("rollout-user-message-steer.jsonl");
+    fs::write(
+        &rollout_path,
+        concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-steer\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-abc\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:01Z\",\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-abc\",\"user_instructions\":\"Repo-local rules\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"output_text\",\"text\":\"/goal Ship the packet\"}]}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:03Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"turn_id\":\"turn-abc\",\"message\":\"also keep the CLI thin\"}}\n"
+        ),
+    )
+    .expect("write steer classification fixture");
+
+    let ingested = ingest_rollout_file(
+        Utf8Path::from_path(&rollout_path).expect("rollout path should be valid UTF-8"),
+    )
+    .expect("ingest rollout");
+    let rows = normalize_rollout_file(&ingested);
+    let user_rows = rows
+        .iter()
+        .filter(|row| row.kind == CompactionKind::UserMessage)
+        .collect::<Vec<_>>();
+
+    assert_eq!(user_rows.len(), 2);
+    assert_eq!(user_rows[0].text, "/goal Ship the packet");
+    assert_eq!(
+        user_rows[0].user_message_role,
+        Some(UserMessageRole::Prompt)
+    );
+    assert_eq!(user_rows[1].text, "also keep the CLI thin");
+    assert_eq!(user_rows[1].user_message_role, Some(UserMessageRole::Steer));
+}
+
+#[test]
+fn normalization_classifies_interrupting_follow_up_as_steer_until_task_completes() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let rollout_path = temp_dir
+        .path()
+        .join("rollout-user-message-multi-turn.jsonl");
+    fs::write(
+        &rollout_path,
+        concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-multi-turn\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"# AGENTS.md instructions\"}]}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:02Z\",\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-1\",\"user_instructions\":\"Repo-local rules\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:03.000Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"/goal Ship the packet\"}]}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:03.001Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"turn_id\":\"turn-1\",\"message\":\"/goal Ship the packet\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:04.000Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-1\",\"last_agent_message\":\"Done\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:05.000Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-2\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:05Z\",\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-2\",\"user_instructions\":\"Same thread follow-up\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:06.000Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"also keep the CLI thin\"}]}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:06.001Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"turn_id\":\"turn-2\",\"message\":\"also keep the CLI thin\"}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:07.000Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"ok, great! good job\"}]}}\n",
+            "{\"timestamp\":\"2026-05-29T12:00:07.001Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"turn_id\":\"turn-2\",\"message\":\"ok, great! good job\"}}\n"
+        ),
+    )
+    .expect("write multi-turn classification fixture");
 
     let ingested = ingest_rollout_file(
         Utf8Path::from_path(&rollout_path).expect("rollout path should be valid UTF-8"),
@@ -125,11 +215,11 @@ fn normalization_classifies_user_rows_from_turn_order_and_boundary_records() {
         user_rows[1].user_message_role,
         Some(UserMessageRole::Prompt)
     );
-    assert_eq!(user_rows[2].text, "/goal Ship the packet");
-    assert_eq!(user_rows[2].user_message_role, Some(UserMessageRole::Steer));
-    assert_eq!(user_rows[3].text, "<skill>rust</skill>");
+    assert_eq!(user_rows[2].text, "also keep the CLI thin");
     assert_eq!(
-        user_rows[3].user_message_role,
-        Some(UserMessageRole::Unknown)
+        user_rows[2].user_message_role,
+        Some(UserMessageRole::Prompt)
     );
+    assert_eq!(user_rows[3].text, "ok, great! good job");
+    assert_eq!(user_rows[3].user_message_role, Some(UserMessageRole::Steer));
 }

@@ -147,6 +147,51 @@ Conventions:
 - treat `user prompts observed` as role-aware `prompt` rows, not all `UserMessage` rows
 - keep the summary concise enough for operators to scan during replay review
 
+## Locked Metric Definitions
+
+- `turns observed`
+  - per session: count distinct non-null `turn_id` values across `archival_rows`
+  - top level: sum per-session `turns observed`
+- `user prompts observed`
+  - per session: count `compact_rows` where `kind = user_message` and `user_message_role = prompt`
+  - top level: sum per-session `user prompts observed`
+- `checkpoints emitted`
+  - per session: count emitted analyzer checkpoints for that session
+  - top level: sum per-session `checkpoints emitted`
+- `checkpoints per turn`
+  - `checkpoints emitted / turns observed`
+  - unavailable when `turns observed = 0`
+- `checkpoints per user prompt`
+  - `checkpoints emitted / user prompts observed`
+  - unavailable when `user prompts observed = 0`
+- `avg rows between checkpoints`
+  - compute adjacent gaps only from successive checkpoint `boundary.end` row positions within a
+    session
+  - use session archival ordering as the source of truth; fall back to compact-row ordering only
+    when a boundary row is absent from archival rows
+  - top level: weighted average over all session-local adjacent checkpoint gaps
+- `avg seconds between checkpoints`
+  - compute adjacent gaps only from successive checkpoint `boundary.end` timestamps within a
+    session
+  - include only adjacent pairs where both boundary rows carry timestamps
+  - unavailable when no adjacent timestamped pair exists
+  - top level: weighted average over all session-local adjacent timestamped checkpoint gaps
+- `flagged checkpoints`
+  - count checkpoints where `flagged = true`
+- `longest flagged streak`
+  - per session: max contiguous run of flagged checkpoints in ordinal order
+  - top level: max per-session `longest flagged streak`
+- `distinct task frames`
+  - count distinct inferred task-frame identities across a session's checkpoints
+  - identity uses `objective`, `truth_artifacts`, `working_set_paths`, `tools`,
+    `command_families`, and `verification_commands`
+  - identity intentionally excludes confidence and evidence vectors so incidental support growth
+    does not create a new frame by itself
+- `truth artifacts referenced`
+  - count distinct `task_frame.truth_artifacts` across a session's checkpoints
+- `verification commands observed`
+  - count distinct `task_frame.verification_commands` across a session's checkpoints
+
 ## Testing Strategy
 
 Frameworks:
@@ -211,10 +256,12 @@ The spec is satisfied when:
 2. Each session block reports:
    - `Turns observed`
    - `User prompts observed`
-   - `Checkpoints`
+   - `Checkpoints emitted`
    - `Checkpoints per turn`
+   - `Checkpoints per user prompt`
    - `Avg rows between checkpoints`
    - `Avg seconds between checkpoints`
+   - `Flagged checkpoints`
    - `Distinct task frames`
    - `Truth artifacts referenced`
    - `Verification commands observed`
@@ -227,8 +274,8 @@ The spec is satisfied when:
 ## Open Questions
 
 1. Should the first slice include only averages, or also median/min/max for checkpoint spacing?
-2. Is `distinct task frames` better measured from objective text, full task-frame identity, or a
-   narrower normalized task-frame label?
+2. Should a follow-up slice collapse `distinct task frames` onto a narrower normalized frame label
+   once operators have more calibration feedback?
 3. Should a follow-up slice add a separate machine-readable calibration artifact once the operator
    summary shape stabilizes?
 4. Which next-level metrics are worth a compactor-contract widening versus a pure analyzer follow-up?
