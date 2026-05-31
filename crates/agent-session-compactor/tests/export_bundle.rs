@@ -6,7 +6,9 @@ use std::sync::Mutex;
 use agent_session_compactor::canonicalize::canonicalize_row_text;
 use agent_session_compactor::dedupe::{dedupe_rows_exact, DedupeGroup};
 use agent_session_compactor::export::{export_bundle, ExportBundleRequest};
-use agent_session_compactor::normalize::{CompactionKind, CompactionRow, SourceKind};
+use agent_session_compactor::normalize::{
+    CompactionKind, CompactionRow, SourceKind, UserMessageRole,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap as _;
 use codex as _;
@@ -49,6 +51,9 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
         assert!(compact_rows
             .lines()
             .all(|line| !line.contains("\"canonical_text\"")));
+        assert!(compact_rows
+            .lines()
+            .any(|line| line.contains("\"user_message_role\":\"prompt\"")));
 
         let archival_rows =
             fs::read_to_string(output_dir.join("rows.archival.jsonl")).expect("archival");
@@ -168,6 +173,8 @@ fn row(
         row_ordinal: 0,
         timestamp: Some(datetime!(2026-05-29 12:00:00 UTC)),
         kind,
+        user_message_role: matches!(kind, CompactionKind::UserMessage)
+            .then_some(UserMessageRole::Prompt),
         dedupe_identity: None,
         text: text.to_string(),
         canonical_text,

@@ -4,7 +4,7 @@ use std::fs;
 
 use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, Checkpoint, DriftClass, InputBundle};
 use agent_session_compactor::{
-    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind,
+    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
@@ -246,6 +246,8 @@ fn row(
         row_ordinal,
         timestamp: None,
         kind,
+        user_message_role: matches!(kind, CompactionKind::UserMessage)
+            .then_some(UserMessageRole::Prompt),
         dedupe_identity: dedupe_identity.map(ToOwned::to_owned),
         text: text.to_string(),
         canonical_text: text.to_string(),

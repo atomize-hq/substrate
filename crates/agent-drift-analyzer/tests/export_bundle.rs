@@ -22,5 +22,9 @@ fn export_bundle_writes_checkpoints_and_summary() {
     assert!(summary.contains("session-alpha"));
     assert!(summary.contains("Turns observed: `1`"));
     assert!(summary.contains("Checkpoints emitted: `2`"));
+    assert!(summary.contains("Prompt user messages: `1`"));
+    assert!(summary.contains("Steer user messages: `0`"));
+    assert!(summary.contains("Unknown user messages: `0`"));
     assert!(summary.contains("- Turns observed: `1`"));
+    assert!(summary.contains("- Prompt user messages: `1`"));
 }

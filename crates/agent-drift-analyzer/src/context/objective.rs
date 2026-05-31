@@ -1,4 +1,4 @@
-use agent_session_compactor::{CompactionKind, CompactionRow};
+use agent_session_compactor::{CompactionKind, CompactionRow, UserMessageRole};
 use serde::{Deserialize, Serialize};
 
 use crate::checkpoint::EvidenceRef;
@@ -44,6 +44,11 @@ fn objective_score(row: &CompactionRow) -> (i32, usize, usize) {
         CompactionKind::UserMessage => 100,
         CompactionKind::DeveloperMessage => 75,
         _ => 0,
+    };
+    score += match row.user_message_role.unwrap_or(UserMessageRole::Unknown) {
+        UserMessageRole::Prompt => 600,
+        UserMessageRole::Unknown => 200,
+        UserMessageRole::Steer => 0,
     };
     if text.contains("/goal") {
         score += 1_000;

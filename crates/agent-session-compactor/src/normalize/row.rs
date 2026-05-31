@@ -25,6 +25,14 @@ pub enum CompactionKind {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum UserMessageRole {
+    Prompt,
+    Steer,
+    Unknown,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CompactionRow {
     pub source_file: Utf8PathBuf,
@@ -37,6 +45,8 @@ pub struct CompactionRow {
     #[serde(with = "time::serde::rfc3339::option")]
     pub timestamp: Option<OffsetDateTime>,
     pub kind: CompactionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_message_role: Option<UserMessageRole>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dedupe_identity: Option<String>,
     pub text: String,

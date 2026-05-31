@@ -10,11 +10,12 @@ use time::OffsetDateTime;
 use crate::canonicalize::canonicalize_row_text;
 use crate::ingest::{IngestedRolloutFile, IngestedRolloutRecord, RolloutParseFailure};
 
-pub use row::{CompactionKind, CompactionRow, SourceKind};
+pub use row::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 
 pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRow> {
     let mut rows = Vec::new();
     let mut current_turn_id = None;
+    let mut user_message_state = UserMessageState::default();
     let mut entries = normalization_entries(rollout);
 
     entries.sort_by(
@@ -41,6 +42,7 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
                             0,
                             CompactionKind::SystemMessage,
                             None,
+                            None,
                             meta.timestamp.as_deref(),
                             None,
                             text.to_string(),
@@ -49,30 +51,41 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
                 }
                 RolloutEvent::EventMsg(message) => {
                     if let Some(turn_id) = extract_turn_id_from_value_map(&message.payload.extra) {
-                        current_turn_id = Some(turn_id);
+                        current_turn_id = Some(turn_id.clone());
+                        user_message_state.observe_turn_id(&turn_id);
                     }
-                    if let Some(row) =
-                        normalize_event_message(rollout, record, message, current_turn_id.clone())
-                    {
+                    if let Some(row) = normalize_event_message(
+                        rollout,
+                        record,
+                        message,
+                        current_turn_id.clone(),
+                        &mut user_message_state,
+                    ) {
                         rows.push(row);
                     }
                 }
                 RolloutEvent::ResponseItem(item) => {
-                    if let Some(row) =
-                        normalize_response_item(rollout, record, item, current_turn_id.clone())
-                    {
+                    if let Some(row) = normalize_response_item(
+                        rollout,
+                        record,
+                        item,
+                        current_turn_id.clone(),
+                        &mut user_message_state,
+                    ) {
                         rows.push(row);
                     }
                 }
                 RolloutEvent::Unknown(unknown) => {
                     if let Some(turn_id) = extract_turn_id_from_value(&unknown.payload) {
-                        current_turn_id = Some(turn_id);
+                        current_turn_id = Some(turn_id.clone());
+                        user_message_state.observe_turn_id(&turn_id);
                     }
                     rows.extend(normalize_unknown_record(
                         rollout,
                         record,
                         unknown,
                         current_turn_id.clone(),
+                        &mut user_message_state,
                     ));
                 }
             },
@@ -90,6 +103,7 @@ fn normalize_event_message(
     record: &IngestedRolloutRecord,
     message: &RolloutEventMsg,
     turn_id: Option<String>,
+    user_message_state: &mut UserMessageState,
 ) -> Option<CompactionRow> {
     let kind = message.payload.kind.as_deref()?;
     match kind {
@@ -99,6 +113,7 @@ fn normalize_event_message(
                 record,
                 0,
                 CompactionKind::AssistantMessage,
+                None,
                 turn_id,
                 message.timestamp.as_deref(),
                 None,
@@ -106,11 +121,15 @@ fn normalize_event_message(
             )
         }),
         "user_message" => extract_message_text(&message.payload.extra).map(|text| {
+            let user_message_role = Some(
+                user_message_state.classify(UserMessageSource::EventMessage, turn_id.as_deref()),
+            );
             build_row(
                 rollout,
                 record,
                 0,
                 CompactionKind::UserMessage,
+                user_message_role,
                 turn_id,
                 message.timestamp.as_deref(),
                 None,
@@ -122,6 +141,7 @@ fn normalize_event_message(
             record,
             0,
             CompactionKind::ToolOutput,
+            None,
             turn_id,
             message.timestamp.as_deref(),
             None,
@@ -132,6 +152,7 @@ fn normalize_event_message(
             record,
             0,
             CompactionKind::Status,
+            None,
             turn_id,
             message.timestamp.as_deref(),
             None,
@@ -143,6 +164,7 @@ fn normalize_event_message(
             record,
             0,
             CompactionKind::Unknown,
+            None,
             turn_id,
             message.timestamp.as_deref(),
             None,
@@ -156,6 +178,7 @@ fn normalize_response_item(
     record: &IngestedRolloutRecord,
     item: &RolloutResponseItem,
     turn_id: Option<String>,
+    user_message_state: &mut UserMessageState,
 ) -> Option<CompactionRow> {
     let kind = item.payload.kind.as_deref()?;
     match kind {
@@ -166,11 +189,16 @@ fn normalize_response_item(
                     item.payload.encrypted_content.as_deref(),
                 )
             })?;
+            let message_kind = message_role_kind(item.payload.role.as_deref());
+            let user_message_role = (message_kind == CompactionKind::UserMessage).then(|| {
+                user_message_state.classify(UserMessageSource::ResponseItem, turn_id.as_deref())
+            });
             Some(build_row(
                 rollout,
                 record,
                 0,
-                message_role_kind(item.payload.role.as_deref()),
+                message_kind,
+                user_message_role,
                 turn_id,
                 item.timestamp.as_deref(),
                 None,
@@ -191,6 +219,7 @@ fn normalize_response_item(
                 record,
                 0,
                 CompactionKind::Reasoning,
+                None,
                 turn_id,
                 item.timestamp.as_deref(),
                 None,
@@ -202,6 +231,7 @@ fn normalize_response_item(
             record,
             0,
             CompactionKind::ToolCall,
+            None,
             turn_id,
             item.timestamp.as_deref(),
             Some(tool_dedupe_identity(
@@ -228,6 +258,7 @@ fn normalize_response_item(
             record,
             0,
             CompactionKind::ToolOutput,
+            None,
             turn_id,
             item.timestamp.as_deref(),
             Some(tool_dedupe_identity(
@@ -254,6 +285,7 @@ fn normalize_response_item(
             record,
             0,
             CompactionKind::Unknown,
+            None,
             turn_id,
             item.timestamp.as_deref(),
             None,
@@ -273,10 +305,14 @@ fn normalize_unknown_record(
     record: &IngestedRolloutRecord,
     unknown: &RolloutUnknown,
     turn_id: Option<String>,
+    user_message_state: &mut UserMessageState,
 ) -> Vec<CompactionRow> {
     let mut rows = Vec::new();
 
     if unknown.record_type == "turn_context" {
+        if let Some(turn_id) = turn_id.as_deref() {
+            user_message_state.observe_turn_context(turn_id);
+        }
         if let Some(text) = unknown
             .payload
             .get("user_instructions")
@@ -288,6 +324,7 @@ fn normalize_unknown_record(
                 record,
                 0,
                 CompactionKind::SystemMessage,
+                None,
                 turn_id.clone(),
                 unknown.timestamp.as_deref(),
                 None,
@@ -301,6 +338,7 @@ fn normalize_unknown_record(
         record,
         rows.len(),
         CompactionKind::Unknown,
+        None,
         turn_id,
         unknown.timestamp.as_deref(),
         Some(format!("unknown:{}", unknown.record_type)),
@@ -326,6 +364,7 @@ fn build_failure_row(
         row_ordinal: 0,
         timestamp: None,
         kind: CompactionKind::Error,
+        user_message_role: None,
         dedupe_identity: None,
         text: failure.error.clone(),
         canonical_text,
@@ -338,6 +377,7 @@ fn build_row(
     record: &IngestedRolloutRecord,
     row_ordinal: usize,
     kind: CompactionKind,
+    user_message_role: Option<UserMessageRole>,
     turn_id: Option<String>,
     timestamp: Option<&str>,
     dedupe_identity: Option<String>,
@@ -354,6 +394,7 @@ fn build_row(
         row_ordinal,
         timestamp: parse_timestamp(timestamp),
         kind,
+        user_message_role,
         dedupe_identity,
         text,
         canonical_text,
@@ -420,6 +461,52 @@ fn message_role_kind(role: Option<&str>) -> CompactionKind {
         Some("system") => CompactionKind::SystemMessage,
         _ => CompactionKind::AssistantMessage,
     }
+}
+
+#[derive(Debug, Clone, Default)]
+struct UserMessageState {
+    current_turn_id: Option<String>,
+    boundary_seen: bool,
+    prompt_emitted: bool,
+}
+
+impl UserMessageState {
+    fn observe_turn_id(&mut self, turn_id: &str) {
+        if self.current_turn_id.as_deref() != Some(turn_id) {
+            self.current_turn_id = Some(turn_id.to_string());
+            self.boundary_seen = false;
+            self.prompt_emitted = false;
+        }
+    }
+
+    fn observe_turn_context(&mut self, turn_id: &str) {
+        self.observe_turn_id(turn_id);
+        self.boundary_seen = true;
+    }
+
+    fn classify(&mut self, source: UserMessageSource, turn_id: Option<&str>) -> UserMessageRole {
+        let Some(turn_id) = turn_id else {
+            return UserMessageRole::Unknown;
+        };
+        self.observe_turn_id(turn_id);
+        if !self.boundary_seen {
+            return UserMessageRole::Unknown;
+        }
+        if !self.prompt_emitted {
+            self.prompt_emitted = true;
+            return UserMessageRole::Prompt;
+        }
+        match source {
+            UserMessageSource::EventMessage => UserMessageRole::Steer,
+            UserMessageSource::ResponseItem => UserMessageRole::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum UserMessageSource {
+    EventMessage,
+    ResponseItem,
 }
 
 fn encrypted_placeholder(label: &str, encrypted_content: Option<&str>) -> Option<String> {

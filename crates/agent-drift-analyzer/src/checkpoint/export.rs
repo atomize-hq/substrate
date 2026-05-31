@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 
+use agent_session_compactor::{CompactionKind, CompactionRow, UserMessageRole};
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::checkpoint::Checkpoint;
@@ -94,6 +95,10 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
         .collect::<std::collections::BTreeSet<_>>()
         .len();
     let turns = sessions.iter().map(session_turn_count).sum::<usize>();
+    let overall_user_message_roles = sessions
+        .iter()
+        .map(|session| user_message_role_counts(&session.compact_rows))
+        .fold(UserMessageRoleCounts::default(), |left, right| left + right);
     let mut by_session = BTreeMap::<&str, Vec<&Checkpoint>>::new();
     for checkpoint in checkpoints {
         by_session
@@ -112,10 +117,27 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
         format!("Turns observed: `{turns}`"),
         format!("Checkpoints emitted: `{}`", checkpoints.len()),
         format!("Flagged checkpoints: `{flagged}`"),
+        format!(
+            "Prompt user messages: `{}`",
+            overall_user_message_roles.prompt
+        ),
+        format!(
+            "Steer user messages: `{}`",
+            overall_user_message_roles.steer
+        ),
+        format!(
+            "Unknown user messages: `{}`",
+            overall_user_message_roles.unknown
+        ),
         String::new(),
     ];
 
     for (session_id, session_checkpoints) in by_session {
+        let session = sessions
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .expect("summary session should exist");
+        let user_message_roles = user_message_role_counts(&session.compact_rows);
         lines.push(format!("## {session_id}"));
         lines.push(format!(
             "- Turns observed: `{}`",
@@ -128,6 +150,18 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
                 .iter()
                 .filter(|checkpoint| checkpoint.flagged)
                 .count()
+        ));
+        lines.push(format!(
+            "- Prompt user messages: `{}`",
+            user_message_roles.prompt
+        ));
+        lines.push(format!(
+            "- Steer user messages: `{}`",
+            user_message_roles.steer
+        ));
+        lines.push(format!(
+            "- Unknown user messages: `{}`",
+            user_message_roles.unknown
         ));
         for checkpoint in session_checkpoints {
             let flagged_scores = checkpoint
@@ -161,4 +195,38 @@ fn session_turn_count(session: &BundleSession) -> usize {
         .filter_map(|row| row.turn_id.as_deref())
         .collect::<std::collections::BTreeSet<_>>()
         .len()
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct UserMessageRoleCounts {
+    prompt: usize,
+    steer: usize,
+    unknown: usize,
+}
+
+impl std::ops::Add for UserMessageRoleCounts {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            prompt: self.prompt + rhs.prompt,
+            steer: self.steer + rhs.steer,
+            unknown: self.unknown + rhs.unknown,
+        }
+    }
+}
+
+fn user_message_role_counts(rows: &[CompactionRow]) -> UserMessageRoleCounts {
+    let mut counts = UserMessageRoleCounts::default();
+    for row in rows
+        .iter()
+        .filter(|row| row.kind == CompactionKind::UserMessage)
+    {
+        match row.user_message_role.unwrap_or(UserMessageRole::Unknown) {
+            UserMessageRole::Prompt => counts.prompt += 1,
+            UserMessageRole::Steer => counts.steer += 1,
+            UserMessageRole::Unknown => counts.unknown += 1,
+        }
+    }
+    counts
 }

@@ -6,7 +6,7 @@ use serde::Serialize;
 use time::OffsetDateTime;
 
 use crate::export::{BundleManifest, ExportBundleRequest, ExportError};
-use crate::normalize::{CompactionKind, CompactionRow, SourceKind};
+use crate::normalize::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 
 const SCHEMA_VERSION: &str = "v0.1";
 const STAGING_DIR_LABEL: &str = "staging";
@@ -238,6 +238,8 @@ struct CompactExportRow<'a> {
     timestamp: Option<OffsetDateTime>,
     kind: CompactionKind,
     #[serde(skip_serializing_if = "Option::is_none")]
+    user_message_role: Option<UserMessageRole>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     dedupe_identity: Option<&'a str>,
     text: &'a str,
     text_hash_hex: &'a str,
@@ -255,6 +257,7 @@ impl<'a> From<&'a CompactionRow> for CompactExportRow<'a> {
             row_ordinal: row.row_ordinal,
             timestamp: row.timestamp,
             kind: row.kind,
+            user_message_role: row.user_message_role,
             dedupe_identity: row.dedupe_identity.as_deref(),
             text: &row.text,
             text_hash_hex: &row.text_hash_hex,

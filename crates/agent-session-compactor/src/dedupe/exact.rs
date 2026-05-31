@@ -7,8 +7,15 @@ use crate::normalize::CompactionRow;
 pub fn dedupe_rows_exact(rows: &[CompactionRow]) -> DedupeResult {
     let archival_rows = rows.to_vec();
     let mut compact_rows = Vec::new();
-    let mut first_seen: HashMap<(crate::normalize::CompactionKind, String, Option<String>), usize> =
-        HashMap::new();
+    let mut first_seen: HashMap<
+        (
+            crate::normalize::CompactionKind,
+            String,
+            Option<String>,
+            Option<crate::normalize::UserMessageRole>,
+        ),
+        usize,
+    > = HashMap::new();
     let mut duplicates_by_representative: HashMap<usize, Vec<CompactionRow>> = HashMap::new();
 
     for row in rows {
@@ -16,6 +23,7 @@ pub fn dedupe_rows_exact(rows: &[CompactionRow]) -> DedupeResult {
             row.kind,
             row.text_hash_hex.clone(),
             row.dedupe_identity.clone(),
+            row.user_message_role,
         );
         if let Some(&representative_index) = first_seen.get(&key) {
             duplicates_by_representative

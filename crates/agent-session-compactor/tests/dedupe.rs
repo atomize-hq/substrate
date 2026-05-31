@@ -6,7 +6,9 @@ use blake3 as _;
 use agent_session_compactor::canonicalize::canonicalize_row_text;
 use agent_session_compactor::dedupe::dedupe_rows_exact;
 use agent_session_compactor::ingest::ingest_rollout_file;
-use agent_session_compactor::normalize::{CompactionKind, CompactionRow, SourceKind};
+use agent_session_compactor::normalize::{
+    CompactionKind, CompactionRow, SourceKind, UserMessageRole,
+};
 use camino::Utf8PathBuf;
 use clap as _;
 use codex as _;
@@ -96,6 +98,41 @@ fn dedupe_preserves_distinct_tool_events_with_matching_visible_text() {
     assert!(result.dedupe_groups.is_empty());
 }
 
+#[test]
+fn dedupe_keeps_user_rows_with_matching_text_when_roles_differ() {
+    let mut prompt = row(
+        "/tmp/rollout-a.jsonl",
+        1,
+        0,
+        CompactionKind::UserMessage,
+        "/goal Ship the packet",
+    );
+    prompt.user_message_role = Some(UserMessageRole::Prompt);
+
+    let mut steer = row(
+        "/tmp/rollout-b.jsonl",
+        2,
+        1,
+        CompactionKind::UserMessage,
+        "/goal Ship the packet",
+    );
+    steer.user_message_role = Some(UserMessageRole::Steer);
+
+    let result = dedupe_rows_exact(&[prompt.clone(), steer.clone()]);
+
+    assert_eq!(result.archival_rows.len(), 2);
+    assert_eq!(result.compact_rows.len(), 2);
+    assert!(result.dedupe_groups.is_empty());
+    assert_eq!(
+        result.compact_rows[0].user_message_role,
+        prompt.user_message_role
+    );
+    assert_eq!(
+        result.compact_rows[1].user_message_role,
+        steer.user_message_role
+    );
+}
+
 fn row(
     path: &str,
     line_number: usize,
@@ -114,6 +151,7 @@ fn row(
         row_ordinal: 0,
         timestamp: Some(datetime!(2026-05-29 12:00:00 UTC)),
         kind,
+        user_message_role: None,
         dedupe_identity: None,
         text: text.to_string(),
         canonical_text,

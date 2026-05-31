@@ -30,7 +30,9 @@ pub use ingest::{
     ingest_rollout_artifacts, ingest_rollout_file, IngestError, IngestedRolloutFile,
     IngestedRolloutRecord, IngestedRolloutUnknown, RolloutParseFailure,
 };
-pub use normalize::{normalize_rollout_file, CompactionKind, CompactionRow, SourceKind};
+pub use normalize::{
+    normalize_rollout_file, CompactionKind, CompactionRow, SourceKind, UserMessageRole,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunConfig {
@@ -127,6 +129,7 @@ mod core_types_tests {
             row_ordinal: 0,
             timestamp: Some(datetime!(2026-05-29 12:00:00 UTC)),
             kind: CompactionKind::AssistantMessage,
+            user_message_role: None,
             dedupe_identity: None,
             text: "raw".to_string(),
             canonical_text: "raw".to_string(),
