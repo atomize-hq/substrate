@@ -25,7 +25,10 @@ pub use discovery::{
     discover_session_artifacts, resolve_codex_home, DiscoverOptions, DiscoveredSessionArtifact,
     DiscoveryError,
 };
-pub use export::{export_bundle, BundleManifest, ExportBundleRequest, ExportError};
+pub use export::{
+    export_bundle, BundleFileV0_2, BundleManifest, DedupeGroupV0_2, ExportBundleRequest,
+    ExportError, ExportRowV0_2, RowRefV0_2,
+};
 pub use ingest::{
     ingest_rollout_artifacts, ingest_rollout_file, IngestError, IngestedRolloutFile,
     IngestedRolloutRecord, IngestedRolloutUnknown, RolloutParseFailure,
@@ -115,7 +118,10 @@ mod core_types_tests {
     use camino::Utf8PathBuf;
     use time::macros::datetime;
 
-    use crate::{BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind};
+    use crate::{
+        BundleFileV0_2, BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef,
+        SourceKind,
+    };
 
     #[test]
     fn core_types_preserve_manifest_and_row_contracts() {
@@ -148,7 +154,7 @@ mod core_types_tests {
             }],
         };
         let manifest = BundleManifest {
-            schema_version: "v0.1".to_string(),
+            schema_version: "v0.2".to_string(),
             generated_at: datetime!(2026-05-29 12:00:00 UTC),
             codex_home: Utf8PathBuf::from("/tmp/.codex"),
             output_dir: Utf8PathBuf::from("/tmp/output"),
@@ -157,14 +163,20 @@ mod core_types_tests {
             compact_row_count: 8,
             dedupe_group_count: 1,
             session_ids: vec!["session-123".to_string()],
-            source_files: vec![
-                Utf8PathBuf::from("/tmp/session/rollout.jsonl"),
-                Utf8PathBuf::from("/tmp/session/rollout-2.jsonl"),
+            files: vec![
+                BundleFileV0_2 {
+                    id: 0,
+                    path: Utf8PathBuf::from("/tmp/session/rollout-2.jsonl"),
+                },
+                BundleFileV0_2 {
+                    id: 1,
+                    path: Utf8PathBuf::from("/tmp/session/rollout.jsonl"),
+                },
             ],
         };
 
         assert_eq!(row_ref.line_number, row.line_number);
         assert_eq!(dedupe_group.duplicates.len(), 1);
-        assert_eq!(manifest.schema_version, "v0.1");
+        assert_eq!(manifest.schema_version, "v0.2");
     }
 }

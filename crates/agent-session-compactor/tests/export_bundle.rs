@@ -5,7 +5,9 @@ use std::sync::Mutex;
 
 use agent_session_compactor::canonicalize::canonicalize_row_text;
 use agent_session_compactor::dedupe::{dedupe_rows_exact, DedupeGroup};
-use agent_session_compactor::export::{export_bundle, ExportBundleRequest};
+use agent_session_compactor::export::{
+    export_bundle, BundleManifest, DedupeGroupV0_2, ExportBundleRequest, ExportRowV0_2,
+};
 use agent_session_compactor::normalize::{
     CompactionKind, CompactionRow, SourceKind, UserMessageRole,
 };
@@ -42,27 +44,57 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
         assert!(output_dir.join("dedupe-audit.jsonl").exists());
         assert!(output_dir.join("summary.md").exists());
 
-        let manifest_json = fs::read_to_string(output_dir.join("manifest.json")).expect("manifest");
-        assert!(manifest_json.contains("\"schema_version\": \"v0.1\""));
+        let manifest: BundleManifest = serde_json::from_str(
+            &fs::read_to_string(output_dir.join("manifest.json")).expect("manifest"),
+        )
+        .expect("manifest json");
+        assert_eq!(manifest.schema_version, "v0.2");
+        assert_eq!(manifest.files.len(), 3);
+        assert_eq!(
+            manifest
+                .files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "/tmp/rollout-a.jsonl",
+                "/tmp/rollout-b.jsonl",
+                "/tmp/rollout-c.jsonl",
+            ]
+        );
+        assert_eq!(
+            manifest
+                .files
+                .iter()
+                .map(|file| file.id)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
 
-        let compact_rows =
-            fs::read_to_string(output_dir.join("rows.compact.jsonl")).expect("compact");
-        assert_eq!(compact_rows.lines().count(), 2);
+        let compact_rows = read_jsonl::<ExportRowV0_2>(output_dir.join("rows.compact.jsonl"));
+        assert_eq!(compact_rows.len(), 2);
         assert!(compact_rows
-            .lines()
-            .all(|line| !line.contains("\"canonical_text\"")));
+            .iter()
+            .all(|row| row.session_id.as_deref() == Some("session-123")));
+        assert!(compact_rows.iter().any(|row| row.source_file_id == 0));
         assert!(compact_rows
-            .lines()
-            .any(|line| line.contains("\"user_message_role\":\"prompt\"")));
+            .iter()
+            .all(|row| row.user_message_role.is_some() || row.kind != CompactionKind::UserMessage));
 
-        let archival_rows =
-            fs::read_to_string(output_dir.join("rows.archival.jsonl")).expect("archival");
-        assert!(archival_rows
-            .lines()
-            .all(|line| !line.contains("\"canonical_text\"")));
+        let archival_rows = read_jsonl::<ExportRowV0_2>(output_dir.join("rows.archival.jsonl"));
+        assert_eq!(archival_rows.len(), 3);
+        assert_eq!(
+            archival_rows
+                .iter()
+                .map(|row| row.source_file_id)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
 
-        let audit_rows = fs::read_to_string(output_dir.join("dedupe-audit.jsonl")).expect("audit");
-        assert_eq!(audit_rows.lines().count(), 1);
+        let audit_rows = read_jsonl::<DedupeGroupV0_2>(output_dir.join("dedupe-audit.jsonl"));
+        assert_eq!(audit_rows.len(), 1);
+        assert_eq!(audit_rows[0].representative.source_file_id, 1);
+        assert_eq!(audit_rows[0].duplicates[0].source_file_id, 2);
 
         let summary = fs::read_to_string(output_dir.join("summary.md")).expect("summary");
         assert!(summary.contains("Archival rows: `3`"));
@@ -85,6 +117,14 @@ fn export_bundle_writes_manifest_rows_audit_and_summary() {
         )
         .is_empty());
     });
+}
+
+fn read_jsonl<T: serde::de::DeserializeOwned>(path: Utf8PathBuf) -> Vec<T> {
+    fs::read_to_string(path)
+        .expect("jsonl")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("json line"))
+        .collect()
 }
 
 #[test]

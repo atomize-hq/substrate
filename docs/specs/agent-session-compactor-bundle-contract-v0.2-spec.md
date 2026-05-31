@@ -258,3 +258,8 @@ The following contract choices are locked for the `v0.2` plan/task slice:
   `019e79dc-456c-7e92-bcbc-3b677d9e8b3f`, repeated `source_file` strings still account for roughly
   `35 KB` in archival rows and `27 KB` in compact rows. The size win is smaller than the
   `canonical_text` fix but still meaningful, and the bigger benefit is cleaner contract design.
+- `BC7` smoke on `2026-05-31`: session `019e79dc-456c-7e92-bcbc-3b677d9e8b3f` emitted a `v0.2`
+  bundle with `252` archival rows, `197` compact rows, `26` dedupe groups, and `17` analyzer
+  checkpoints. The published five-file bundle totaled `1,294,344` bytes versus an estimated
+  `1,356,876` bytes for the equivalent inline-path `v0.1` contract, for a measured reduction of
+  `62,532` bytes without analyzer breakage.

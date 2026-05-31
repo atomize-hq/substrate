@@ -5,9 +5,15 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::dedupe::DedupeGroup;
-use crate::normalize::CompactionRow;
+use crate::normalize::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 
 pub use files::export_bundle;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BundleFileV0_2 {
+    pub id: u32,
+    pub path: Utf8PathBuf,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BundleManifest {
@@ -21,7 +27,43 @@ pub struct BundleManifest {
     pub compact_row_count: usize,
     pub dedupe_group_count: usize,
     pub session_ids: Vec<String>,
-    pub source_files: Vec<Utf8PathBuf>,
+    pub files: Vec<BundleFileV0_2>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExportRowV0_2 {
+    pub source_file_id: u32,
+    pub source_kind: SourceKind,
+    pub session_id: Option<String>,
+    pub turn_id: Option<String>,
+    pub event_index: usize,
+    pub line_number: usize,
+    pub row_ordinal: usize,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub timestamp: Option<OffsetDateTime>,
+    pub kind: CompactionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_message_role: Option<UserMessageRole>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dedupe_identity: Option<String>,
+    pub text: String,
+    pub text_hash_hex: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RowRefV0_2 {
+    pub source_file_id: u32,
+    pub line_number: usize,
+    pub event_index: usize,
+    pub row_ordinal: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DedupeGroupV0_2 {
+    pub kind: CompactionKind,
+    pub canonical_text_hash_hex: String,
+    pub representative: RowRefV0_2,
+    pub duplicates: Vec<RowRefV0_2>,
 }
 
 /// Bundle publication contract for the five-file analyzer-facing export:
@@ -74,6 +116,10 @@ pub enum ExportError {
         #[source]
         source: std::io::Error,
     },
+    #[error("file registry overflowed the v0.2 u32 source_file_id space")]
+    SourceFileIdOverflow,
+    #[error("row provenance path was not registered in the manifest file table: {path}")]
+    UnregisteredSourceFile { path: Utf8PathBuf },
     #[error("export interrupted at {point}")]
     InjectedFailure { point: String },
 }

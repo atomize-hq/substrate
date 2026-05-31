@@ -1,10 +1,12 @@
 #![allow(dead_code, unreachable_pub)]
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
 use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, Checkpoint, DriftClass, InputBundle};
 use agent_session_compactor::{
-    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
+    BundleFileV0_2, BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DedupeGroupV0_2,
+    ExportRowV0_2, RowRef, RowRefV0_2, SourceKind, UserMessageRole,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
@@ -34,9 +36,10 @@ impl BundleFixture {
         let input_dir = root.join("input");
         let output_dir = root.join("output");
         fs::create_dir_all(&input_dir).expect("create input dir");
+        let file_registry = build_file_registry(&archival_rows, &compact_rows, &dedupe_groups);
 
         let manifest = BundleManifest {
-            schema_version: "v0.1".to_string(),
+            schema_version: "v0.2".to_string(),
             generated_at: time::OffsetDateTime::from_unix_timestamp(1_717_000_000)
                 .expect("timestamp"),
             codex_home: Utf8PathBuf::from("/tmp/.codex"),
@@ -46,7 +49,7 @@ impl BundleFixture {
             compact_row_count: compact_rows.len(),
             dedupe_group_count: dedupe_groups.len(),
             session_ids: vec!["session-alpha".to_string()],
-            source_files: vec![Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl")],
+            files: file_registry.files.clone(),
         };
 
         fs::write(
@@ -54,9 +57,18 @@ impl BundleFixture {
             serde_json::to_string_pretty(&manifest).expect("manifest json"),
         )
         .expect("write manifest");
-        write_jsonl(input_dir.join("rows.archival.jsonl"), &archival_rows);
-        write_jsonl(input_dir.join("rows.compact.jsonl"), &compact_rows);
-        write_jsonl(input_dir.join("dedupe-audit.jsonl"), &dedupe_groups);
+        write_jsonl(
+            input_dir.join("rows.archival.jsonl"),
+            &export_rows(&archival_rows, &file_registry),
+        );
+        write_jsonl(
+            input_dir.join("rows.compact.jsonl"),
+            &export_rows(&compact_rows, &file_registry),
+        );
+        write_jsonl(
+            input_dir.join("dedupe-audit.jsonl"),
+            &export_dedupe_groups(&dedupe_groups, &file_registry),
+        );
 
         Self {
             _temp_dir: temp_dir,
@@ -105,6 +117,96 @@ fn write_jsonl<T: serde::Serialize>(path: Utf8PathBuf, items: &[T]) {
         .collect::<Vec<_>>()
         .join("\n");
     fs::write(path, format!("{body}\n")).expect("write jsonl");
+}
+
+struct TestFileRegistry {
+    files: Vec<BundleFileV0_2>,
+    ids_by_path: BTreeMap<Utf8PathBuf, u32>,
+}
+
+fn build_file_registry(
+    archival_rows: &[CompactionRow],
+    compact_rows: &[CompactionRow],
+    dedupe_groups: &[DedupeGroup],
+) -> TestFileRegistry {
+    let mut paths = archival_rows
+        .iter()
+        .map(|row| row.source_file.clone())
+        .chain(compact_rows.iter().map(|row| row.source_file.clone()))
+        .collect::<BTreeSet<_>>();
+    for group in dedupe_groups {
+        paths.insert(group.representative.source_file.clone());
+        for duplicate in &group.duplicates {
+            paths.insert(duplicate.source_file.clone());
+        }
+    }
+
+    let mut files = Vec::with_capacity(paths.len());
+    let mut ids_by_path = BTreeMap::new();
+    for (index, path) in paths.into_iter().enumerate() {
+        let id = u32::try_from(index).expect("test file id");
+        files.push(BundleFileV0_2 {
+            id,
+            path: path.clone(),
+        });
+        ids_by_path.insert(path, id);
+    }
+
+    TestFileRegistry { files, ids_by_path }
+}
+
+fn export_rows(rows: &[CompactionRow], registry: &TestFileRegistry) -> Vec<ExportRowV0_2> {
+    rows.iter()
+        .map(|row| ExportRowV0_2 {
+            source_file_id: *registry
+                .ids_by_path
+                .get(&row.source_file)
+                .expect("registered path"),
+            source_kind: row.source_kind,
+            session_id: row.session_id.clone(),
+            turn_id: row.turn_id.clone(),
+            event_index: row.event_index,
+            line_number: row.line_number,
+            row_ordinal: row.row_ordinal,
+            timestamp: row.timestamp,
+            kind: row.kind,
+            user_message_role: row.user_message_role,
+            dedupe_identity: row.dedupe_identity.clone(),
+            text: row.text.clone(),
+            text_hash_hex: row.text_hash_hex.clone(),
+        })
+        .collect()
+}
+
+fn export_dedupe_groups(
+    groups: &[DedupeGroup],
+    registry: &TestFileRegistry,
+) -> Vec<DedupeGroupV0_2> {
+    groups
+        .iter()
+        .map(|group| DedupeGroupV0_2 {
+            kind: group.kind,
+            canonical_text_hash_hex: group.canonical_text_hash_hex.clone(),
+            representative: export_row_ref(&group.representative, registry),
+            duplicates: group
+                .duplicates
+                .iter()
+                .map(|row_ref| export_row_ref(row_ref, registry))
+                .collect(),
+        })
+        .collect()
+}
+
+fn export_row_ref(row_ref: &RowRef, registry: &TestFileRegistry) -> RowRefV0_2 {
+    RowRefV0_2 {
+        source_file_id: *registry
+            .ids_by_path
+            .get(&row_ref.source_file)
+            .expect("registered ref path"),
+        line_number: row_ref.line_number,
+        event_index: row_ref.event_index,
+        row_ordinal: row_ref.row_ordinal,
+    }
 }
 
 fn sample_archival_rows() -> Vec<CompactionRow> {

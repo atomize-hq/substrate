@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 
-use agent_session_compactor::{BundleManifest, CompactionKind, CompactionRow, DedupeGroup, RowRef};
+use agent_session_compactor::{
+    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DedupeGroupV0_2, ExportRowV0_2,
+    RowRef, RowRefV0_2,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -59,6 +62,17 @@ pub enum InputError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("unsupported compactor bundle schema in {path}: expected v0.2, found {found}")]
+    UnsupportedSchemaVersion { path: Utf8PathBuf, found: String },
+    #[error("manifest file registry reuses source_file_id {id}")]
+    DuplicateSourceFileId { id: u32 },
+    #[error("manifest file registry repeats path {path}")]
+    DuplicateSourceFilePath { path: Utf8PathBuf },
+    #[error("artifact {path} references unknown source_file_id {source_file_id}")]
+    UnknownSourceFileId {
+        path: Utf8PathBuf,
+        source_file_id: u32,
+    },
     #[error("bundle {input_dir} does not contain any session-scoped rows")]
     NoSessions { input_dir: Utf8PathBuf },
     #[error("bundle contract is not sufficient for analyzer working-set inference: {reason}")]
@@ -75,10 +89,24 @@ pub fn load_bundle(input_dir: &Utf8Path) -> Result<InputBundle, InputError> {
     let compact_path = input_dir.join("rows.compact.jsonl");
     let audit_path = input_dir.join("dedupe-audit.jsonl");
 
-    let manifest = read_json_file(&manifest_path)?;
-    let archival_rows: Vec<CompactionRow> = read_jsonl_file(&archival_path)?;
-    let compact_rows: Vec<CompactionRow> = read_jsonl_file(&compact_path)?;
-    let dedupe_groups: Vec<DedupeGroup> = read_jsonl_file(&audit_path)?;
+    let manifest: BundleManifest = read_json_file(&manifest_path)?;
+    validate_manifest_schema(&manifest, &manifest_path)?;
+    let file_registry = build_file_registry(&manifest)?;
+    let archival_rows = resolve_rows(
+        &archival_path,
+        &file_registry,
+        &read_jsonl_file::<ExportRowV0_2>(&archival_path)?,
+    )?;
+    let compact_rows = resolve_rows(
+        &compact_path,
+        &file_registry,
+        &read_jsonl_file::<ExportRowV0_2>(&compact_path)?,
+    )?;
+    let dedupe_groups = resolve_dedupe_groups(
+        &audit_path,
+        &file_registry,
+        &read_jsonl_file::<DedupeGroupV0_2>(&audit_path)?,
+    )?;
 
     validate_dedupe_refs(&archival_rows, &dedupe_groups)?;
 
@@ -105,6 +133,116 @@ pub fn load_bundle(input_dir: &Utf8Path) -> Result<InputBundle, InputError> {
         unscoped_compact_rows,
         surface,
     })
+}
+
+fn validate_manifest_schema(manifest: &BundleManifest, path: &Utf8Path) -> Result<(), InputError> {
+    if manifest.schema_version != "v0.2" {
+        return Err(InputError::UnsupportedSchemaVersion {
+            path: path.to_owned(),
+            found: manifest.schema_version.clone(),
+        });
+    }
+    Ok(())
+}
+
+fn build_file_registry(
+    manifest: &BundleManifest,
+) -> Result<BTreeMap<u32, Utf8PathBuf>, InputError> {
+    let mut files_by_id = BTreeMap::new();
+    let mut seen_paths = BTreeSet::new();
+    for file in &manifest.files {
+        if files_by_id.insert(file.id, file.path.clone()).is_some() {
+            return Err(InputError::DuplicateSourceFileId { id: file.id });
+        }
+        if !seen_paths.insert(file.path.clone()) {
+            return Err(InputError::DuplicateSourceFilePath {
+                path: file.path.clone(),
+            });
+        }
+    }
+    Ok(files_by_id)
+}
+
+fn resolve_rows(
+    artifact_path: &Utf8Path,
+    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    rows: &[ExportRowV0_2],
+) -> Result<Vec<CompactionRow>, InputError> {
+    rows.iter()
+        .map(|row| {
+            let source_file =
+                resolve_source_file(artifact_path, file_registry, row.source_file_id)?;
+            Ok(CompactionRow {
+                source_file,
+                source_kind: row.source_kind,
+                session_id: row.session_id.clone(),
+                turn_id: row.turn_id.clone(),
+                event_index: row.event_index,
+                line_number: row.line_number,
+                row_ordinal: row.row_ordinal,
+                timestamp: row.timestamp,
+                kind: row.kind,
+                user_message_role: row.user_message_role,
+                dedupe_identity: row.dedupe_identity.clone(),
+                text: row.text.clone(),
+                canonical_text: String::new(),
+                text_hash_hex: row.text_hash_hex.clone(),
+            })
+        })
+        .collect()
+}
+
+fn resolve_dedupe_groups(
+    artifact_path: &Utf8Path,
+    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    groups: &[DedupeGroupV0_2],
+) -> Result<Vec<DedupeGroup>, InputError> {
+    groups
+        .iter()
+        .map(|group| {
+            Ok(DedupeGroup {
+                kind: group.kind,
+                canonical_text_hash_hex: group.canonical_text_hash_hex.clone(),
+                representative: resolve_row_ref(
+                    artifact_path,
+                    file_registry,
+                    &group.representative,
+                )?,
+                duplicates: group
+                    .duplicates
+                    .iter()
+                    .map(|row_ref| resolve_row_ref(artifact_path, file_registry, row_ref))
+                    .collect::<Result<Vec<_>, _>>()?,
+            })
+        })
+        .collect()
+}
+
+fn resolve_row_ref(
+    artifact_path: &Utf8Path,
+    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    row_ref: &RowRefV0_2,
+) -> Result<RowRef, InputError> {
+    Ok(RowRef {
+        source_file: resolve_source_file(artifact_path, file_registry, row_ref.source_file_id)?,
+        line_number: row_ref.line_number,
+        event_index: row_ref.event_index,
+        row_ordinal: row_ref.row_ordinal,
+    })
+}
+
+fn resolve_source_file(
+    artifact_path: &Utf8Path,
+    file_registry: &BTreeMap<u32, Utf8PathBuf>,
+    source_file_id: u32,
+) -> Result<Utf8PathBuf, InputError> {
+    file_registry
+        .get(&source_file_id)
+        .cloned()
+        .ok_or_else(|| InputError::UnknownSourceFileId {
+            path: artifact_path.to_owned(),
+            source_file_id,
+        })
 }
 
 fn read_json_file<T>(path: &Utf8Path) -> Result<T, InputError>

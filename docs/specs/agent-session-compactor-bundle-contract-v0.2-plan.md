@@ -244,6 +244,14 @@ Evidence:
 - the documented compactor/analyzer `cargo run` smoke commands from the spec
 - recorded row-count and output-size comparison notes in repo docs
 
+BC7 smoke note:
+
+- `2026-05-31`: session `019e79dc-456c-7e92-bcbc-3b677d9e8b3f` produced a `v0.2` bundle with
+  `252` archival rows, `197` compact rows, `26` dedupe groups, and a single manifest file-table
+  entry. `agent-drift-analyzer` consumed the bundle successfully and emitted `17` checkpoints. The
+  five compactor files totaled `1,294,344` bytes versus an estimated `1,356,876` bytes for the
+  equivalent inline-path `v0.1` shape, a measured reduction of `62,532` bytes.
+
 ## Handoff To Later Slices
 
 This plan is complete enough for later sentinel or analyzer follow-up work only when all of the

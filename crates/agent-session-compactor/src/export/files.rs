@@ -1,14 +1,18 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use serde::Serialize;
 use time::OffsetDateTime;
 
-use crate::export::{BundleManifest, ExportBundleRequest, ExportError};
-use crate::normalize::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
+use crate::dedupe::{DedupeGroup, RowRef};
+use crate::export::{
+    BundleFileV0_2, BundleManifest, DedupeGroupV0_2, ExportBundleRequest, ExportError,
+    ExportRowV0_2, RowRefV0_2,
+};
+use crate::normalize::CompactionRow;
 
-const SCHEMA_VERSION: &str = "v0.1";
+const SCHEMA_VERSION: &str = "v0.2";
 const STAGING_DIR_LABEL: &str = "staging";
 const BACKUP_DIR_LABEL: &str = "backup";
 const INJECT_FAILURE_ENV: &str = "AGENT_SESSION_COMPACTOR_EXPORT_FAIL_AT";
@@ -26,6 +30,11 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         }
     })?;
 
+    let file_registry = FileRegistry::build(
+        request.archival_rows,
+        request.compact_rows,
+        request.dedupe_groups,
+    )?;
     let manifest = BundleManifest {
         schema_version: SCHEMA_VERSION.to_string(),
         generated_at: request.generated_at,
@@ -36,22 +45,22 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         compact_row_count: request.compact_rows.len(),
         dedupe_group_count: request.dedupe_groups.len(),
         session_ids: request.session_ids.clone(),
-        source_files: request.source_files.to_vec(),
+        files: file_registry.files.clone(),
     };
+    let archival_rows = export_rows(request.archival_rows, &file_registry)?;
+    let compact_rows = export_rows(request.compact_rows, &file_registry)?;
+    let dedupe_groups = export_dedupe_groups(request.dedupe_groups, &file_registry)?;
 
-    write_compact_rows_file(
+    write_jsonl_file(
         &paths.staging_dir.join("rows.archival.jsonl"),
-        request.archival_rows,
+        &archival_rows,
     )?;
     maybe_inject_failure("after_rows_archival")?;
-    write_compact_rows_file(
-        &paths.staging_dir.join("rows.compact.jsonl"),
-        request.compact_rows,
-    )?;
+    write_jsonl_file(&paths.staging_dir.join("rows.compact.jsonl"), &compact_rows)?;
     maybe_inject_failure("after_rows_compact")?;
     write_jsonl_file(
         &paths.staging_dir.join("dedupe-audit.jsonl"),
-        request.dedupe_groups,
+        &dedupe_groups,
     )?;
     maybe_inject_failure("after_dedupe_audit")?;
     write_summary(&paths.staging_dir.join("summary.md"), &manifest)?;
@@ -198,70 +207,109 @@ fn write_jsonl_file<T: serde::Serialize>(path: &Utf8Path, rows: &[T]) -> Result<
     })
 }
 
-fn write_compact_rows_file(path: &Utf8Path, rows: &[CompactionRow]) -> Result<(), ExportError> {
-    let file = File::create(path).map_err(|source| ExportError::WriteFile {
-        path: path.to_owned(),
-        source,
-    })?;
-    let mut writer = BufWriter::new(file);
-    for row in rows {
-        let export_row = CompactExportRow::from(row);
-        serde_json::to_writer(&mut writer, &export_row).map_err(|source| {
-            ExportError::Serialize {
-                path: path.to_owned(),
-                source,
-            }
-        })?;
-        writer
-            .write_all(b"\n")
-            .map_err(|source| ExportError::WriteFile {
-                path: path.to_owned(),
-                source,
-            })?;
-    }
-    writer.flush().map_err(|source| ExportError::WriteFile {
-        path: path.to_owned(),
-        source,
+fn export_rows(
+    rows: &[CompactionRow],
+    file_registry: &FileRegistry,
+) -> Result<Vec<ExportRowV0_2>, ExportError> {
+    rows.iter()
+        .map(|row| {
+            Ok(ExportRowV0_2 {
+                source_file_id: file_registry.source_file_id(&row.source_file)?,
+                source_kind: row.source_kind,
+                session_id: row.session_id.clone(),
+                turn_id: row.turn_id.clone(),
+                event_index: row.event_index,
+                line_number: row.line_number,
+                row_ordinal: row.row_ordinal,
+                timestamp: row.timestamp,
+                kind: row.kind,
+                user_message_role: row.user_message_role,
+                dedupe_identity: row.dedupe_identity.clone(),
+                text: row.text.clone(),
+                text_hash_hex: row.text_hash_hex.clone(),
+            })
+        })
+        .collect()
+}
+
+fn export_dedupe_groups(
+    groups: &[DedupeGroup],
+    file_registry: &FileRegistry,
+) -> Result<Vec<DedupeGroupV0_2>, ExportError> {
+    groups
+        .iter()
+        .map(|group| {
+            Ok(DedupeGroupV0_2 {
+                kind: group.kind,
+                canonical_text_hash_hex: group.canonical_text_hash_hex.clone(),
+                representative: export_row_ref(&group.representative, file_registry)?,
+                duplicates: group
+                    .duplicates
+                    .iter()
+                    .map(|row_ref| export_row_ref(row_ref, file_registry))
+                    .collect::<Result<Vec<_>, _>>()?,
+            })
+        })
+        .collect()
+}
+
+fn export_row_ref(
+    row_ref: &RowRef,
+    file_registry: &FileRegistry,
+) -> Result<RowRefV0_2, ExportError> {
+    Ok(RowRefV0_2 {
+        source_file_id: file_registry.source_file_id(&row_ref.source_file)?,
+        line_number: row_ref.line_number,
+        event_index: row_ref.event_index,
+        row_ordinal: row_ref.row_ordinal,
     })
 }
 
-#[derive(Debug, Serialize)]
-struct CompactExportRow<'a> {
-    source_file: &'a Utf8PathBuf,
-    source_kind: SourceKind,
-    session_id: Option<&'a str>,
-    turn_id: Option<&'a str>,
-    event_index: usize,
-    line_number: usize,
-    row_ordinal: usize,
-    #[serde(with = "time::serde::rfc3339::option")]
-    timestamp: Option<OffsetDateTime>,
-    kind: CompactionKind,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    user_message_role: Option<UserMessageRole>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    dedupe_identity: Option<&'a str>,
-    text: &'a str,
-    text_hash_hex: &'a str,
+#[derive(Debug, Clone)]
+struct FileRegistry {
+    files: Vec<BundleFileV0_2>,
+    ids_by_path: BTreeMap<Utf8PathBuf, u32>,
 }
 
-impl<'a> From<&'a CompactionRow> for CompactExportRow<'a> {
-    fn from(row: &'a CompactionRow) -> Self {
-        Self {
-            source_file: &row.source_file,
-            source_kind: row.source_kind,
-            session_id: row.session_id.as_deref(),
-            turn_id: row.turn_id.as_deref(),
-            event_index: row.event_index,
-            line_number: row.line_number,
-            row_ordinal: row.row_ordinal,
-            timestamp: row.timestamp,
-            kind: row.kind,
-            user_message_role: row.user_message_role,
-            dedupe_identity: row.dedupe_identity.as_deref(),
-            text: &row.text,
-            text_hash_hex: &row.text_hash_hex,
+impl FileRegistry {
+    fn build(
+        archival_rows: &[CompactionRow],
+        compact_rows: &[CompactionRow],
+        dedupe_groups: &[DedupeGroup],
+    ) -> Result<Self, ExportError> {
+        let mut paths = archival_rows
+            .iter()
+            .map(|row| row.source_file.clone())
+            .chain(compact_rows.iter().map(|row| row.source_file.clone()))
+            .collect::<BTreeSet<_>>();
+        for group in dedupe_groups {
+            paths.insert(group.representative.source_file.clone());
+            for duplicate in &group.duplicates {
+                paths.insert(duplicate.source_file.clone());
+            }
         }
+
+        let mut files = Vec::with_capacity(paths.len());
+        let mut ids_by_path = BTreeMap::new();
+        for (index, path) in paths.into_iter().enumerate() {
+            let id = u32::try_from(index).map_err(|_| ExportError::SourceFileIdOverflow)?;
+            files.push(BundleFileV0_2 {
+                id,
+                path: path.clone(),
+            });
+            ids_by_path.insert(path, id);
+        }
+
+        Ok(Self { files, ids_by_path })
+    }
+
+    fn source_file_id(&self, path: &Utf8Path) -> Result<u32, ExportError> {
+        self.ids_by_path
+            .get(path)
+            .copied()
+            .ok_or_else(|| ExportError::UnregisteredSourceFile {
+                path: path.to_owned(),
+            })
     }
 }
 

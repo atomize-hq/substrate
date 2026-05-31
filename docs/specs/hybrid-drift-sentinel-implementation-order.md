@@ -330,6 +330,12 @@ Packet 10B note:
   fixtures only after `BC7` passes against a current `v0.2` compactor bundle
 - do not treat temporary mixed `v0.1`/`v0.2` loader logic as an acceptable resting state for this
   packet
+- `2026-05-31`: `BC2-BC7` landed on session `019e79dc-456c-7e92-bcbc-3b677d9e8b3f`. The
+  compactor emitted a `v0.2` bundle with `252` archival rows, `197` compact rows, `26` dedupe
+  groups, and a single manifest file-table entry; the analyzer consumed it and emitted `17`
+  checkpoints. The five-file bundle measured `1,294,344` bytes versus an estimated `1,356,876`
+  bytes for the equivalent inline-path `v0.1` export shape, reducing the bundle by `62,532`
+  bytes.
 
 ### Packet 11: Sentinel replay core
 
