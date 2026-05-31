@@ -7,6 +7,7 @@ Primary sources:
 - [agent-session-compactor-v0.1-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-session-compactor-v0.1-tasks.md:1)
 - [agent-session-compactor-artifact-finalization-followup-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-session-compactor-artifact-finalization-followup-tasks.md:1)
 - [agent-drift-analyzer-v0.1-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-v0.1-tasks.md:1)
+- [agent-drift-analyzer-checkpoint-calibration-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-checkpoint-calibration-v0.2-tasks.md:1)
 - [agent-drift-sentinel-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-v0.2-tasks.md:1)
 - [agent-drift-sentinel-live-integration-v0.3-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-tasks.md:1)
 
@@ -40,6 +41,16 @@ Primary sources:
 - `A10` implement summary and output bundle export
 - `A11` wire the thin CLI
 - `A12` gate end-to-end validation and freeze the checkpoint contract
+
+### Analyzer Calibration Follow-up
+
+- `AC1` lock the checkpoint-calibration metric contract
+- `AC2` add deterministic session summary metric helpers
+- `AC3` compute checkpoint interval metrics from adjacent boundaries
+- `AC4` add per-session diagnostic metrics from existing analyzer context
+- `AC5` render the operator summary in the agreed compact format
+- `AC6` validate the checkpoint-calibration summary on the bounded real-session smoke
+- `AC7` document next-level blocked metrics and contract gaps
 
 ### Compactor Follow-up
 
@@ -89,7 +100,8 @@ flowchart TD
     A7 --> A9
     A8 --> A9
     A9 --> A10 --> A11 --> A12
-    A12 --> S1
+    A12 --> AC1 --> AC2 --> AC3 --> AC4 --> AC5 --> AC6 --> AC7
+    AC7 --> S1
     S1 --> S2 --> S3
     S2 --> S4
     S3 --> S5
@@ -100,7 +112,7 @@ flowchart TD
 
 ## Recommended Packeting
 
-Recommended total: `17 packets`
+Recommended total: `18 packets`
 
 This is the best balance between forward progress and safe checkpoints. It keeps each packet
 focused, gives you clean stop points at the high-risk gates, and preserves the module dependency
@@ -247,6 +259,31 @@ Packet 10 gate note:
   per analyzed session, stable start/end `RowRef` boundaries, task-frame evidence, three explicit
   drift scores, and an `expected_next_step` field exported through `checkpoints.jsonl` and
   `summary.md`.
+
+### Packet 10A: Analyzer checkpoint calibration
+
+- `AC1`
+- `AC2`
+- `AC3`
+- `AC4`
+- `AC5`
+- `AC6`
+- `AC7`
+
+Why:
+
+- calibrates whether the frozen analyzer checkpoint stream is meaningful before treating replay or
+  live warning behavior as fully trustworthy
+- keeps the first calibration slice inside analyzer summary/reporting rather than forcing a
+  checkpoint-schema or compactor redesign
+- produces durable repo-local documentation for which next-level metrics are blocked on richer
+  normalization
+
+Packet 10A note:
+
+- if replay or live sentinel work is already landed in the branch, this packet can still run as an
+  analyzer-only follow-up and then regenerate bounded replay/live fixtures against the improved
+  analyzer summary output
 
 ### Packet 11: Sentinel replay core
 
