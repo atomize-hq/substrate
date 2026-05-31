@@ -435,6 +435,7 @@ pub(crate) enum ContinueWorldWorkerEventClassV1 {
     Blocked,
 }
 
+#[cfg(any(target_os = "linux", test))]
 impl ContinueWorldWorkerEventClassV1 {
     pub(crate) fn from_wire_label(label: &str) -> Option<Self> {
         match label.trim() {
