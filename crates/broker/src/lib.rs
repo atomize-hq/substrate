@@ -25,9 +25,10 @@ pub use effective_policy::{EffectivePolicySources, PolicyExplainV1};
 pub use handle::BrokerHandle;
 pub use mode::PolicyMode;
 pub use policy::{
-    validate_backend_id, validate_dotted_id, validate_snake_case_id, Decision, Policy, Restriction,
-    RestrictionType, WorldFsDenyEnforcement, WorldFsDimensionPolicy, WorldFsEnforcement,
-    WorldFsIsolation, WorldFsPolicy,
+    validate_backend_id, validate_dotted_id, validate_snake_case_id,
+    validate_world_dispatch_action_id, validate_world_dispatch_mode_id, Decision, Policy,
+    Restriction, RestrictionType, WorldDispatchPolicy, WorldFsDenyEnforcement,
+    WorldFsDimensionPolicy, WorldFsEnforcement, WorldFsIsolation, WorldFsPolicy,
 };
 pub use profile::ProfileDetector;
 #[cfg(any(test, feature = "policy-watcher"))]

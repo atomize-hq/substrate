@@ -1,5 +1,6 @@
 use crate::policy::{
-    validate_backend_id, validate_dotted_id, validate_snake_case_id, Policy,
+    validate_backend_id, validate_dotted_id, validate_snake_case_id,
+    validate_world_dispatch_action_id, validate_world_dispatch_mode_id, Policy,
     WorldFsDenyEnforcement, WorldFsDimensionPolicy, WorldFsEnforcement, WorldFsIsolation,
 };
 use anyhow::{anyhow, Context, Result};
@@ -151,6 +152,8 @@ pub struct AgentsPatch {
     pub fail_closed: AgentsFailClosedPatch,
     #[serde(skip_serializing_if = "AgentsHostCredentialsPatch::is_empty")]
     pub host_credentials: AgentsHostCredentialsPatch,
+    #[serde(skip_serializing_if = "AgentsWorldDispatchPatch::is_empty")]
+    pub world_dispatch: AgentsWorldDispatchPatch,
 }
 
 impl AgentsPatch {
@@ -158,6 +161,7 @@ impl AgentsPatch {
         self.allowed_backends.is_none()
             && self.fail_closed.is_empty()
             && self.host_credentials.is_empty()
+            && self.world_dispatch.is_empty()
     }
 }
 
@@ -197,6 +201,43 @@ pub struct AgentsHostCredentialsReadPatch {
 impl AgentsHostCredentialsReadPatch {
     fn is_empty(&self) -> bool {
         self.allowed_backends.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentsWorldDispatchPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_backends: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_actions: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_modes: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub same_session_only: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub same_world_binding_only: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_capability_narrowing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_live_retained_workers: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_ephemeral: Option<u32>,
+}
+
+impl AgentsWorldDispatchPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.allowed_backends.is_none()
+            && self.allowed_actions.is_none()
+            && self.allowed_modes.is_none()
+            && self.same_session_only.is_none()
+            && self.same_world_binding_only.is_none()
+            && self.allow_capability_narrowing.is_none()
+            && self.max_live_retained_workers.is_none()
+            && self.max_concurrent_ephemeral.is_none()
     }
 }
 
@@ -469,6 +510,18 @@ fn validate_policy_patch(patch: &PolicyPatch) -> std::result::Result<(), String>
         &patch.agents.host_credentials.read.allowed_backends,
         "agents.host_credentials.read.allowed_backends",
     )?;
+    validate_backend_id_list_opt(
+        &patch.agents.world_dispatch.allowed_backends,
+        "agents.world_dispatch.allowed_backends",
+    )?;
+    validate_world_dispatch_action_list_opt(
+        &patch.agents.world_dispatch.allowed_actions,
+        "agents.world_dispatch.allowed_actions",
+    )?;
+    validate_world_dispatch_mode_list_opt(
+        &patch.agents.world_dispatch.allowed_modes,
+        "agents.world_dispatch.allowed_modes",
+    )?;
     Ok(())
 }
 
@@ -521,6 +574,44 @@ fn validate_dotted_id_list_opt(
         validate_dotted_id(value).map_err(|_| {
             format!(
                 "invalid {} entry '{}'; expected lowercase dotted id",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_action_list_opt(
+    values: &Option<Vec<String>>,
+    key: &str,
+) -> std::result::Result<(), String> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_world_dispatch_action_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_mode_list_opt(
+    values: &Option<Vec<String>>,
+    key: &str,
+) -> std::result::Result<(), String> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_world_dispatch_mode_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected one of ephemeral, retained",
                 key,
                 value.trim()
             )
@@ -1160,6 +1251,218 @@ pub fn resolve_effective_policy_with_explain(
         );
     }
 
+    let (agents_world_dispatch_enabled, agents_world_dispatch_enabled_src) = resolve_replace(
+        effective.agents_world_dispatch_enabled,
+        global_patch.agents.world_dispatch.enabled,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.enabled),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_enabled = agents_world_dispatch_enabled;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.enabled".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_enabled_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (agents_world_dispatch_allowed_backends, agents_world_dispatch_allowed_backends_src) =
+        resolve_replace(
+            effective.agents_world_dispatch_allowed_backends.clone(),
+            global_patch.agents.world_dispatch.allowed_backends.clone(),
+            workspace_patch.and_then(|p| p.agents.world_dispatch.allowed_backends.clone()),
+            workspace_enabled,
+        );
+    effective.agents_world_dispatch_allowed_backends = agents_world_dispatch_allowed_backends;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.allowed_backends".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_allowed_backends_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (agents_world_dispatch_allowed_actions, agents_world_dispatch_allowed_actions_src) =
+        resolve_replace(
+            effective.agents_world_dispatch_allowed_actions.clone(),
+            global_patch.agents.world_dispatch.allowed_actions.clone(),
+            workspace_patch.and_then(|p| p.agents.world_dispatch.allowed_actions.clone()),
+            workspace_enabled,
+        );
+    effective.agents_world_dispatch_allowed_actions = agents_world_dispatch_allowed_actions;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.allowed_actions".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_allowed_actions_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (agents_world_dispatch_allowed_modes, agents_world_dispatch_allowed_modes_src) =
+        resolve_replace(
+            effective.agents_world_dispatch_allowed_modes.clone(),
+            global_patch.agents.world_dispatch.allowed_modes.clone(),
+            workspace_patch.and_then(|p| p.agents.world_dispatch.allowed_modes.clone()),
+            workspace_enabled,
+        );
+    effective.agents_world_dispatch_allowed_modes = agents_world_dispatch_allowed_modes;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.allowed_modes".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_allowed_modes_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (agents_world_dispatch_same_session_only, agents_world_dispatch_same_session_only_src) =
+        resolve_replace(
+            effective.agents_world_dispatch_same_session_only,
+            global_patch.agents.world_dispatch.same_session_only,
+            workspace_patch.and_then(|p| p.agents.world_dispatch.same_session_only),
+            workspace_enabled,
+        );
+    effective.agents_world_dispatch_same_session_only = agents_world_dispatch_same_session_only;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.same_session_only".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_same_session_only_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
+        agents_world_dispatch_same_world_binding_only,
+        agents_world_dispatch_same_world_binding_only_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_same_world_binding_only,
+        global_patch.agents.world_dispatch.same_world_binding_only,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.same_world_binding_only),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_same_world_binding_only =
+        agents_world_dispatch_same_world_binding_only;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.same_world_binding_only".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_same_world_binding_only_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
+        agents_world_dispatch_allow_capability_narrowing,
+        agents_world_dispatch_allow_capability_narrowing_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_allow_capability_narrowing,
+        global_patch
+            .agents
+            .world_dispatch
+            .allow_capability_narrowing,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.allow_capability_narrowing),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_allow_capability_narrowing =
+        agents_world_dispatch_allow_capability_narrowing;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.allow_capability_narrowing".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_allow_capability_narrowing_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
+        agents_world_dispatch_max_live_retained_workers,
+        agents_world_dispatch_max_live_retained_workers_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_max_live_retained_workers,
+        global_patch.agents.world_dispatch.max_live_retained_workers,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.max_live_retained_workers),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_max_live_retained_workers =
+        agents_world_dispatch_max_live_retained_workers;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.max_live_retained_workers".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_max_live_retained_workers_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
+        agents_world_dispatch_max_concurrent_ephemeral,
+        agents_world_dispatch_max_concurrent_ephemeral_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_max_concurrent_ephemeral,
+        global_patch.agents.world_dispatch.max_concurrent_ephemeral,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.max_concurrent_ephemeral),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_max_concurrent_ephemeral =
+        agents_world_dispatch_max_concurrent_ephemeral;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.max_concurrent_ephemeral".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_max_concurrent_ephemeral_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     let (workflow_router_enabled, workflow_router_enabled_src) = resolve_replace(
         effective.workflow_router_enabled,
         global_patch.workflow.router.enabled,
@@ -1573,6 +1876,33 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = &patch.agents.host_credentials.read.allowed_backends {
         target.agents_host_credentials_read_allowed_backends = v.clone();
     }
+    if let Some(v) = patch.agents.world_dispatch.enabled {
+        target.agents_world_dispatch_enabled = v;
+    }
+    if let Some(v) = &patch.agents.world_dispatch.allowed_backends {
+        target.agents_world_dispatch_allowed_backends = v.clone();
+    }
+    if let Some(v) = &patch.agents.world_dispatch.allowed_actions {
+        target.agents_world_dispatch_allowed_actions = v.clone();
+    }
+    if let Some(v) = &patch.agents.world_dispatch.allowed_modes {
+        target.agents_world_dispatch_allowed_modes = v.clone();
+    }
+    if let Some(v) = patch.agents.world_dispatch.same_session_only {
+        target.agents_world_dispatch_same_session_only = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.same_world_binding_only {
+        target.agents_world_dispatch_same_world_binding_only = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.allow_capability_narrowing {
+        target.agents_world_dispatch_allow_capability_narrowing = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.max_live_retained_workers {
+        target.agents_world_dispatch_max_live_retained_workers = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.max_concurrent_ephemeral {
+        target.agents_world_dispatch_max_concurrent_ephemeral = v;
+    }
     if let Some(v) = patch.workflow.router.enabled {
         target.workflow_router_enabled = v;
     }
@@ -1828,6 +2158,18 @@ fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
         &policy.agents_host_credentials_read_allowed_backends,
         "agents.host_credentials.read.allowed_backends",
     )?;
+    validate_backend_id_list(
+        &policy.agents_world_dispatch_allowed_backends,
+        "agents.world_dispatch.allowed_backends",
+    )?;
+    validate_world_dispatch_action_list(
+        &policy.agents_world_dispatch_allowed_actions,
+        "agents.world_dispatch.allowed_actions",
+    )?;
+    validate_world_dispatch_mode_list(
+        &policy.agents_world_dispatch_allowed_modes,
+        "agents.world_dispatch.allowed_modes",
+    )?;
 
     Ok(())
 }
@@ -1863,6 +2205,32 @@ fn validate_dotted_id_list(values: &[String], key: &str) -> Result<()> {
         validate_dotted_id(value).map_err(|_| {
             anyhow!(
                 "invalid {} entry '{}'; expected lowercase dotted id",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_action_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_world_dispatch_action_id(value).map_err(|_| {
+            anyhow!(
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_mode_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_world_dispatch_mode_id(value).map_err(|_| {
+            anyhow!(
+                "invalid {} entry '{}'; expected one of ephemeral, retained",
                 key,
                 value.trim()
             )

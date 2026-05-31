@@ -35,7 +35,7 @@ use crate::execution::agent_runtime::{
 use crate::execution::agent_runtime::{
     AgentRuntimeParticipantRecord, AgentRuntimeStateStore, OrchestrationSessionRecord,
     ValidatedWorldDispatchRequestV1, WorldDispatchActionV1, WorldDispatchOutcomeV1,
-    WorldDispatchRequestV1,
+    WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::{
@@ -450,6 +450,14 @@ fn validate_authoritative_world_binding(
     }
 
     Ok(())
+}
+
+#[allow(dead_code)]
+fn steering_policy_denial(
+    bucket: WorldDispatchSteeringDenialV1,
+    detail: impl AsRef<str>,
+) -> anyhow::Error {
+    anyhow::anyhow!("{}", bucket.format_message(detail))
 }
 
 #[cfg(target_os = "linux")]
@@ -2825,6 +2833,19 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "missing_world_binding: orchestration session sess_dispatch has no authoritative world binding"
+        );
+    }
+
+    #[test]
+    fn steering_policy_denial_helper_formats_packet34_bucket_and_detail() {
+        let err = steering_policy_denial(
+            WorldDispatchSteeringDenialV1::CrossSessionSteeringDenied,
+            "request tried to steer outside the authoritative orchestration session",
+        );
+
+        assert_eq!(
+            err.to_string(),
+            "cross_session_steering_denied: request tried to steer outside the authoritative orchestration session"
         );
     }
 

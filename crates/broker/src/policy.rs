@@ -93,6 +93,28 @@ pub fn validate_dotted_id(value: &str) -> Result<(), String> {
     }
 }
 
+pub fn validate_world_dispatch_action_id(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    match trimmed {
+        "run_world_task" | "spawn_world_worker" | "continue_world_worker" => Ok(()),
+        _ => Err(format!(
+            "invalid world dispatch action '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+            trimmed
+        )),
+    }
+}
+
+pub fn validate_world_dispatch_mode_id(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    match trimmed {
+        "ephemeral" | "retained" => Ok(()),
+        _ => Err(format!(
+            "invalid world dispatch mode '{}'; expected one of ephemeral, retained",
+            trimmed
+        )),
+    }
+}
+
 fn validate_backend_ids(values: &[String], key: &str) -> Result<(), String> {
     for value in values {
         validate_backend_id(value).map_err(|_| {
@@ -124,6 +146,32 @@ fn validate_dotted_ids(values: &[String], key: &str) -> Result<(), String> {
         validate_dotted_id(value).map_err(|_| {
             format!(
                 "invalid {} entry '{}'; expected lowercase dotted id",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_action_ids(values: &[String], key: &str) -> Result<(), String> {
+    for value in values {
+        validate_world_dispatch_action_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_mode_ids(values: &[String], key: &str) -> Result<(), String> {
+    for value in values {
+        validate_world_dispatch_mode_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected one of ephemeral, retained",
                 key,
                 value.trim()
             )
@@ -261,6 +309,19 @@ pub struct WorldFsPolicy {
     pub write_allowlist: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldDispatchPolicy {
+    pub enabled: bool,
+    pub allowed_backends: Vec<String>,
+    pub allowed_actions: Vec<String>,
+    pub allowed_modes: Vec<String>,
+    pub same_session_only: bool,
+    pub same_world_binding_only: bool,
+    pub allow_capability_narrowing: bool,
+    pub max_live_retained_workers: u32,
+    pub max_concurrent_ephemeral: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LlmPolicyFileV1 {
@@ -298,6 +359,7 @@ struct AgentsPolicyFileV1 {
     allowed_backends: Vec<String>,
     fail_closed: AgentsFailClosedPolicyFileV1,
     host_credentials: AgentsHostCredentialsPolicyFileV1,
+    world_dispatch: AgentsWorldDispatchPolicyFileV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,6 +378,20 @@ struct AgentsHostCredentialsPolicyFileV1 {
 #[serde(deny_unknown_fields)]
 struct AgentsHostCredentialsReadPolicyFileV1 {
     allowed_backends: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsWorldDispatchPolicyFileV1 {
+    enabled: bool,
+    allowed_backends: Vec<String>,
+    allowed_actions: Vec<String>,
+    allowed_modes: Vec<String>,
+    same_session_only: bool,
+    same_world_binding_only: bool,
+    allow_capability_narrowing: bool,
+    max_live_retained_workers: u32,
+    max_concurrent_ephemeral: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -377,6 +453,7 @@ struct RawAgentsPolicyV1 {
     allowed_backends: Vec<String>,
     fail_closed: RawAgentsFailClosedPolicyV1,
     host_credentials: RawAgentsHostCredentialsPolicyV1,
+    world_dispatch: RawAgentsWorldDispatchPolicyV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -401,6 +478,36 @@ struct RawAgentsHostCredentialsPolicyV1 {
 #[serde(default, deny_unknown_fields)]
 struct RawAgentsHostCredentialsReadPolicyV1 {
     allowed_backends: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsWorldDispatchPolicyV1 {
+    enabled: bool,
+    allowed_backends: Vec<String>,
+    allowed_actions: Vec<String>,
+    allowed_modes: Vec<String>,
+    same_session_only: bool,
+    same_world_binding_only: bool,
+    allow_capability_narrowing: bool,
+    max_live_retained_workers: u32,
+    max_concurrent_ephemeral: u32,
+}
+
+impl Default for RawAgentsWorldDispatchPolicyV1 {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allowed_backends: Vec::new(),
+            allowed_actions: Vec::new(),
+            allowed_modes: Vec::new(),
+            same_session_only: true,
+            same_world_binding_only: true,
+            allow_capability_narrowing: false,
+            max_live_retained_workers: 0,
+            max_concurrent_ephemeral: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -454,6 +561,15 @@ pub struct Policy {
     pub agents_allowed_backends: Vec<String>, // agents.allowed_backends
     pub agents_fail_closed_routing: bool,     // agents.fail_closed.routing
     pub agents_host_credentials_read_allowed_backends: Vec<String>, // agents.host_credentials.read.allowed_backends
+    pub agents_world_dispatch_enabled: bool,                        // agents.world_dispatch.enabled
+    pub agents_world_dispatch_allowed_backends: Vec<String>, // agents.world_dispatch.allowed_backends
+    pub agents_world_dispatch_allowed_actions: Vec<String>, // agents.world_dispatch.allowed_actions
+    pub agents_world_dispatch_allowed_modes: Vec<String>,   // agents.world_dispatch.allowed_modes
+    pub agents_world_dispatch_same_session_only: bool, // agents.world_dispatch.same_session_only
+    pub agents_world_dispatch_same_world_binding_only: bool, // agents.world_dispatch.same_world_binding_only
+    pub agents_world_dispatch_allow_capability_narrowing: bool, // agents.world_dispatch.allow_capability_narrowing
+    pub agents_world_dispatch_max_live_retained_workers: u32, // agents.world_dispatch.max_live_retained_workers
+    pub agents_world_dispatch_max_concurrent_ephemeral: u32, // agents.world_dispatch.max_concurrent_ephemeral
 
     // Workflow router
     pub workflow_router_enabled: bool, // workflow.router.enabled
@@ -511,6 +627,15 @@ impl Default for Policy {
             agents_allowed_backends: Vec::new(),
             agents_fail_closed_routing: true,
             agents_host_credentials_read_allowed_backends: Vec::new(),
+            agents_world_dispatch_enabled: false,
+            agents_world_dispatch_allowed_backends: Vec::new(),
+            agents_world_dispatch_allowed_actions: Vec::new(),
+            agents_world_dispatch_allowed_modes: Vec::new(),
+            agents_world_dispatch_same_session_only: true,
+            agents_world_dispatch_same_world_binding_only: true,
+            agents_world_dispatch_allow_capability_narrowing: false,
+            agents_world_dispatch_max_live_retained_workers: 0,
+            agents_world_dispatch_max_concurrent_ephemeral: 0,
             workflow_router_enabled: false,
             workflow_router_allow_cross_workspace: false,
             workflow_router_allowed_rule_ids: Vec::new(),
@@ -696,6 +821,20 @@ impl Policy {
         }
     }
 
+    pub fn world_dispatch_policy(&self) -> WorldDispatchPolicy {
+        WorldDispatchPolicy {
+            enabled: self.agents_world_dispatch_enabled,
+            allowed_backends: self.agents_world_dispatch_allowed_backends.clone(),
+            allowed_actions: self.agents_world_dispatch_allowed_actions.clone(),
+            allowed_modes: self.agents_world_dispatch_allowed_modes.clone(),
+            same_session_only: self.agents_world_dispatch_same_session_only,
+            same_world_binding_only: self.agents_world_dispatch_same_world_binding_only,
+            allow_capability_narrowing: self.agents_world_dispatch_allow_capability_narrowing,
+            max_live_retained_workers: self.agents_world_dispatch_max_live_retained_workers,
+            max_concurrent_ephemeral: self.agents_world_dispatch_max_concurrent_ephemeral,
+        }
+    }
+
     pub fn requires_world(&self) -> bool {
         self.world_fs_require_world
     }
@@ -805,6 +944,34 @@ impl Policy {
             &self.agents_host_credentials_read_allowed_backends,
             &other.agents_host_credentials_read_allowed_backends,
         );
+        self.agents_world_dispatch_enabled =
+            self.agents_world_dispatch_enabled && other.agents_world_dispatch_enabled;
+        self.agents_world_dispatch_allowed_backends = intersect_ordered(
+            &self.agents_world_dispatch_allowed_backends,
+            &other.agents_world_dispatch_allowed_backends,
+        );
+        self.agents_world_dispatch_allowed_actions = intersect_ordered(
+            &self.agents_world_dispatch_allowed_actions,
+            &other.agents_world_dispatch_allowed_actions,
+        );
+        self.agents_world_dispatch_allowed_modes = intersect_ordered(
+            &self.agents_world_dispatch_allowed_modes,
+            &other.agents_world_dispatch_allowed_modes,
+        );
+        self.agents_world_dispatch_same_session_only = self.agents_world_dispatch_same_session_only
+            || other.agents_world_dispatch_same_session_only;
+        self.agents_world_dispatch_same_world_binding_only = self
+            .agents_world_dispatch_same_world_binding_only
+            || other.agents_world_dispatch_same_world_binding_only;
+        self.agents_world_dispatch_allow_capability_narrowing = self
+            .agents_world_dispatch_allow_capability_narrowing
+            && other.agents_world_dispatch_allow_capability_narrowing;
+        self.agents_world_dispatch_max_live_retained_workers = self
+            .agents_world_dispatch_max_live_retained_workers
+            .min(other.agents_world_dispatch_max_live_retained_workers);
+        self.agents_world_dispatch_max_concurrent_ephemeral = self
+            .agents_world_dispatch_max_concurrent_ephemeral
+            .min(other.agents_world_dispatch_max_concurrent_ephemeral);
         self.workflow_router_enabled =
             self.workflow_router_enabled && other.workflow_router_enabled;
         self.workflow_router_allow_cross_workspace = self.workflow_router_allow_cross_workspace
@@ -955,6 +1122,27 @@ impl<'de> Deserialize<'de> for Policy {
                 .host_credentials
                 .read
                 .allowed_backends,
+            agents_world_dispatch_enabled: raw.agents.world_dispatch.enabled,
+            agents_world_dispatch_allowed_backends: raw.agents.world_dispatch.allowed_backends,
+            agents_world_dispatch_allowed_actions: raw.agents.world_dispatch.allowed_actions,
+            agents_world_dispatch_allowed_modes: raw.agents.world_dispatch.allowed_modes,
+            agents_world_dispatch_same_session_only: raw.agents.world_dispatch.same_session_only,
+            agents_world_dispatch_same_world_binding_only: raw
+                .agents
+                .world_dispatch
+                .same_world_binding_only,
+            agents_world_dispatch_allow_capability_narrowing: raw
+                .agents
+                .world_dispatch
+                .allow_capability_narrowing,
+            agents_world_dispatch_max_live_retained_workers: raw
+                .agents
+                .world_dispatch
+                .max_live_retained_workers,
+            agents_world_dispatch_max_concurrent_ephemeral: raw
+                .agents
+                .world_dispatch
+                .max_concurrent_ephemeral,
             workflow_router_enabled: raw.workflow.router.enabled,
             workflow_router_allow_cross_workspace: raw.workflow.router.allow_cross_workspace,
             workflow_router_allowed_rule_ids: raw.workflow.router.allowed_rule_ids,
@@ -996,6 +1184,21 @@ impl<'de> Deserialize<'de> for Policy {
         validate_backend_ids(
             &policy.agents_host_credentials_read_allowed_backends,
             "agents.host_credentials.read.allowed_backends",
+        )
+        .map_err(serde::de::Error::custom)?;
+        validate_backend_ids(
+            &policy.agents_world_dispatch_allowed_backends,
+            "agents.world_dispatch.allowed_backends",
+        )
+        .map_err(serde::de::Error::custom)?;
+        validate_world_dispatch_action_ids(
+            &policy.agents_world_dispatch_allowed_actions,
+            "agents.world_dispatch.allowed_actions",
+        )
+        .map_err(serde::de::Error::custom)?;
+        validate_world_dispatch_mode_ids(
+            &policy.agents_world_dispatch_allowed_modes,
+            "agents.world_dispatch.allowed_modes",
         )
         .map_err(serde::de::Error::custom)?;
         Ok(policy)
@@ -1065,6 +1268,18 @@ impl Serialize for Policy {
                             .agents_host_credentials_read_allowed_backends
                             .clone(),
                     },
+                },
+                world_dispatch: AgentsWorldDispatchPolicyFileV1 {
+                    enabled: self.agents_world_dispatch_enabled,
+                    allowed_backends: self.agents_world_dispatch_allowed_backends.clone(),
+                    allowed_actions: self.agents_world_dispatch_allowed_actions.clone(),
+                    allowed_modes: self.agents_world_dispatch_allowed_modes.clone(),
+                    same_session_only: self.agents_world_dispatch_same_session_only,
+                    same_world_binding_only: self.agents_world_dispatch_same_world_binding_only,
+                    allow_capability_narrowing: self
+                        .agents_world_dispatch_allow_capability_narrowing,
+                    max_live_retained_workers: self.agents_world_dispatch_max_live_retained_workers,
+                    max_concurrent_ephemeral: self.agents_world_dispatch_max_concurrent_ephemeral,
                 },
             },
             workflow: WorkflowPolicyFileV1 {

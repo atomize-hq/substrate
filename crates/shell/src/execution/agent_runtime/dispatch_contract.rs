@@ -159,6 +159,45 @@ impl WorldDispatchModeV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WorldDispatchSteeringDenialV1 {
+    WorldDispatchDisabled,
+    BackendNotAllowed,
+    ModeNotAllowed,
+    ActionNotAllowed,
+    CrossSessionSteeringDenied,
+    CrossWorldBindingSteeringDenied,
+    CapabilityNarrowingNotAllowed,
+    WorkerConcurrencyCapExceeded,
+    InvalidatedWorkerNotRoutable,
+}
+
+impl WorldDispatchSteeringDenialV1 {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::WorldDispatchDisabled => "world_dispatch_disabled",
+            Self::BackendNotAllowed => "backend_not_allowed",
+            Self::ModeNotAllowed => "mode_not_allowed",
+            Self::ActionNotAllowed => "action_not_allowed",
+            Self::CrossSessionSteeringDenied => "cross_session_steering_denied",
+            Self::CrossWorldBindingSteeringDenied => "cross_world_binding_steering_denied",
+            Self::CapabilityNarrowingNotAllowed => "capability_narrowing_not_allowed",
+            Self::WorkerConcurrencyCapExceeded => "worker_concurrency_cap_exceeded",
+            Self::InvalidatedWorkerNotRoutable => "invalidated_worker_not_routable",
+        }
+    }
+
+    pub(crate) fn format_message(self, detail: impl AsRef<str>) -> String {
+        let detail = detail.as_ref().trim();
+        if detail.is_empty() {
+            self.as_str().to_string()
+        } else {
+            format!("{}: {}", self.as_str(), detail)
+        }
+    }
+}
+
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct TaskPayloadV1 {
     pub prompt: String,
@@ -1339,6 +1378,7 @@ mod tests {
         DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
         HostExecutionClientStart, TaskPayloadV1, WorkerContinuePayloadV1, WorkerSpawnPayloadV1,
         WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2375,5 +2415,51 @@ mod tests {
         assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "reply"
         ));
+    }
+
+    #[test]
+    fn world_dispatch_contract_packet34_steering_denial_buckets_stay_stable() {
+        let labels = [
+            WorldDispatchSteeringDenialV1::WorldDispatchDisabled,
+            WorldDispatchSteeringDenialV1::BackendNotAllowed,
+            WorldDispatchSteeringDenialV1::ModeNotAllowed,
+            WorldDispatchSteeringDenialV1::ActionNotAllowed,
+            WorldDispatchSteeringDenialV1::CrossSessionSteeringDenied,
+            WorldDispatchSteeringDenialV1::CrossWorldBindingSteeringDenied,
+            WorldDispatchSteeringDenialV1::CapabilityNarrowingNotAllowed,
+            WorldDispatchSteeringDenialV1::WorkerConcurrencyCapExceeded,
+            WorldDispatchSteeringDenialV1::InvalidatedWorkerNotRoutable,
+        ]
+        .into_iter()
+        .map(WorldDispatchSteeringDenialV1::as_str)
+        .collect::<Vec<_>>();
+
+        assert_eq!(
+            labels,
+            vec![
+                "world_dispatch_disabled",
+                "backend_not_allowed",
+                "mode_not_allowed",
+                "action_not_allowed",
+                "cross_session_steering_denied",
+                "cross_world_binding_steering_denied",
+                "capability_narrowing_not_allowed",
+                "worker_concurrency_cap_exceeded",
+                "invalidated_worker_not_routable",
+            ]
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_packet34_steering_denial_formats_detail_stably() {
+        assert_eq!(
+            WorldDispatchSteeringDenialV1::ModeNotAllowed
+                .format_message("effective policy allows only retained"),
+            "mode_not_allowed: effective policy allows only retained"
+        );
+        assert_eq!(
+            WorldDispatchSteeringDenialV1::WorldDispatchDisabled.format_message(""),
+            "world_dispatch_disabled"
+        );
     }
 }

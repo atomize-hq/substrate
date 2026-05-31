@@ -132,6 +132,17 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
                     "allowed_backends": &policy.agents_host_credentials_read_allowed_backends,
                 },
             },
+            "world_dispatch": {
+                "enabled": policy.agents_world_dispatch_enabled,
+                "allowed_backends": &policy.agents_world_dispatch_allowed_backends,
+                "allowed_actions": &policy.agents_world_dispatch_allowed_actions,
+                "allowed_modes": &policy.agents_world_dispatch_allowed_modes,
+                "same_session_only": policy.agents_world_dispatch_same_session_only,
+                "same_world_binding_only": policy.agents_world_dispatch_same_world_binding_only,
+                "allow_capability_narrowing": policy.agents_world_dispatch_allow_capability_narrowing,
+                "max_live_retained_workers": policy.agents_world_dispatch_max_live_retained_workers,
+                "max_concurrent_ephemeral": policy.agents_world_dispatch_max_concurrent_ephemeral,
+            },
         },
         "workflow": {
             "router": {
@@ -1606,6 +1617,10 @@ workflow:
             "missing agents in policy JSON: {json}"
         );
         assert!(
+            json.pointer("/agents/world_dispatch").is_some(),
+            "missing agents.world_dispatch in policy JSON: {json}"
+        );
+        assert!(
             json.pointer("/workflow/router").is_some(),
             "missing workflow.router in policy JSON: {json}"
         );
@@ -1636,6 +1651,16 @@ workflow:
         assert!(
             agents.is_some(),
             "missing agents mapping in policy YAML: {yaml:?}"
+        );
+        assert!(
+            agents
+                .and_then(|agents| {
+                    agents
+                        .get(serde_yaml::Value::String("world_dispatch".to_string()))
+                        .and_then(|value| value.as_mapping())
+                })
+                .is_some(),
+            "missing agents.world_dispatch mapping in policy YAML: {yaml:?}"
         );
         assert!(
             workflow_router.is_some(),

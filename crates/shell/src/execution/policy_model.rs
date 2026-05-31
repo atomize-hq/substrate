@@ -8,7 +8,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use substrate_broker::{
-    validate_backend_id, validate_dotted_id, validate_snake_case_id, Policy, PolicyExplainV1,
+    validate_backend_id, validate_dotted_id, validate_snake_case_id,
+    validate_world_dispatch_action_id, validate_world_dispatch_mode_id, Policy, PolicyExplainV1,
     WorldFsDenyEnforcement, WorldFsDimensionPolicy,
 };
 
@@ -146,6 +147,8 @@ pub(crate) struct AgentsPatch {
     pub fail_closed: AgentsFailClosedPatch,
     #[serde(skip_serializing_if = "AgentsHostCredentialsPatch::is_empty")]
     pub host_credentials: AgentsHostCredentialsPatch,
+    #[serde(skip_serializing_if = "AgentsWorldDispatchPatch::is_empty")]
+    pub world_dispatch: AgentsWorldDispatchPatch,
 }
 
 impl AgentsPatch {
@@ -153,6 +156,7 @@ impl AgentsPatch {
         self.allowed_backends.is_none()
             && self.fail_closed.is_empty()
             && self.host_credentials.is_empty()
+            && self.world_dispatch.is_empty()
     }
 }
 
@@ -192,6 +196,43 @@ pub(crate) struct AgentsHostCredentialsReadPatch {
 impl AgentsHostCredentialsReadPatch {
     fn is_empty(&self) -> bool {
         self.allowed_backends.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsWorldDispatchPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_backends: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_actions: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_modes: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub same_session_only: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub same_world_binding_only: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_capability_narrowing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_live_retained_workers: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_ephemeral: Option<u32>,
+}
+
+impl AgentsWorldDispatchPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.allowed_backends.is_none()
+            && self.allowed_actions.is_none()
+            && self.allowed_modes.is_none()
+            && self.same_session_only.is_none()
+            && self.same_world_binding_only.is_none()
+            && self.allow_capability_narrowing.is_none()
+            && self.max_live_retained_workers.is_none()
+            && self.max_concurrent_ephemeral.is_none()
     }
 }
 
@@ -394,6 +435,18 @@ fn validate_policy_patch(patch: &PolicyPatch) -> Result<()> {
         &patch.agents.host_credentials.read.allowed_backends,
         "agents.host_credentials.read.allowed_backends",
     )?;
+    validate_backend_id_list_opt(
+        &patch.agents.world_dispatch.allowed_backends,
+        "agents.world_dispatch.allowed_backends",
+    )?;
+    validate_world_dispatch_action_list_opt(
+        &patch.agents.world_dispatch.allowed_actions,
+        "agents.world_dispatch.allowed_actions",
+    )?;
+    validate_world_dispatch_mode_list_opt(
+        &patch.agents.world_dispatch.allowed_modes,
+        "agents.world_dispatch.allowed_modes",
+    )?;
     Ok(())
 }
 
@@ -437,6 +490,38 @@ fn validate_dotted_id_list_opt(values: &Option<Vec<String>>, key: &str) -> Resul
         validate_dotted_id(value).map_err(|_| {
             config_model::user_error(format!(
                 "invalid {} entry '{}'; expected lowercase dotted id",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_action_list_opt(values: &Option<Vec<String>>, key: &str) -> Result<()> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_world_dispatch_action_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_mode_list_opt(values: &Option<Vec<String>>, key: &str) -> Result<()> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_world_dispatch_mode_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected one of ephemeral, retained",
                 key,
                 value.trim()
             ))
@@ -1020,6 +1105,18 @@ fn validate_policy(policy: &Policy) -> Result<()> {
         &policy.agents_host_credentials_read_allowed_backends,
         "agents.host_credentials.read.allowed_backends",
     )?;
+    validate_backend_id_list(
+        &policy.agents_world_dispatch_allowed_backends,
+        "agents.world_dispatch.allowed_backends",
+    )?;
+    validate_world_dispatch_action_list(
+        &policy.agents_world_dispatch_allowed_actions,
+        "agents.world_dispatch.allowed_actions",
+    )?;
+    validate_world_dispatch_mode_list(
+        &policy.agents_world_dispatch_allowed_modes,
+        "agents.world_dispatch.allowed_modes",
+    )?;
     Ok(())
 }
 
@@ -1054,6 +1151,32 @@ fn validate_dotted_id_list(values: &[String], key: &str) -> Result<()> {
         validate_dotted_id(value).map_err(|_| {
             config_model::user_error(format!(
                 "invalid {} entry '{}'; expected lowercase dotted id",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_action_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_world_dispatch_action_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_world_dispatch_mode_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_world_dispatch_mode_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected one of ephemeral, retained",
                 key,
                 value.trim()
             ))
@@ -1174,6 +1297,33 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = &patch.agents.host_credentials.read.allowed_backends {
         target.agents_host_credentials_read_allowed_backends = v.clone();
     }
+    if let Some(v) = patch.agents.world_dispatch.enabled {
+        target.agents_world_dispatch_enabled = v;
+    }
+    if let Some(v) = &patch.agents.world_dispatch.allowed_backends {
+        target.agents_world_dispatch_allowed_backends = v.clone();
+    }
+    if let Some(v) = &patch.agents.world_dispatch.allowed_actions {
+        target.agents_world_dispatch_allowed_actions = v.clone();
+    }
+    if let Some(v) = &patch.agents.world_dispatch.allowed_modes {
+        target.agents_world_dispatch_allowed_modes = v.clone();
+    }
+    if let Some(v) = patch.agents.world_dispatch.same_session_only {
+        target.agents_world_dispatch_same_session_only = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.same_world_binding_only {
+        target.agents_world_dispatch_same_world_binding_only = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.allow_capability_narrowing {
+        target.agents_world_dispatch_allow_capability_narrowing = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.max_live_retained_workers {
+        target.agents_world_dispatch_max_live_retained_workers = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.max_concurrent_ephemeral {
+        target.agents_world_dispatch_max_concurrent_ephemeral = v;
+    }
     if let Some(v) = patch.workflow.router.enabled {
         target.workflow_router_enabled = v;
     }
@@ -1275,6 +1425,49 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
             .host_credentials
             .read
             .allowed_backends
+            .take()
+            .is_some()),
+        "agents.world_dispatch.enabled" => Ok(patch.agents.world_dispatch.enabled.take().is_some()),
+        "agents.world_dispatch.allowed_backends" => Ok(patch
+            .agents
+            .world_dispatch
+            .allowed_backends
+            .take()
+            .is_some()),
+        "agents.world_dispatch.allowed_actions" => {
+            Ok(patch.agents.world_dispatch.allowed_actions.take().is_some())
+        }
+        "agents.world_dispatch.allowed_modes" => {
+            Ok(patch.agents.world_dispatch.allowed_modes.take().is_some())
+        }
+        "agents.world_dispatch.same_session_only" => Ok(patch
+            .agents
+            .world_dispatch
+            .same_session_only
+            .take()
+            .is_some()),
+        "agents.world_dispatch.same_world_binding_only" => Ok(patch
+            .agents
+            .world_dispatch
+            .same_world_binding_only
+            .take()
+            .is_some()),
+        "agents.world_dispatch.allow_capability_narrowing" => Ok(patch
+            .agents
+            .world_dispatch
+            .allow_capability_narrowing
+            .take()
+            .is_some()),
+        "agents.world_dispatch.max_live_retained_workers" => Ok(patch
+            .agents
+            .world_dispatch
+            .max_live_retained_workers
+            .take()
+            .is_some()),
+        "agents.world_dispatch.max_concurrent_ephemeral" => Ok(patch
+            .agents
+            .world_dispatch
+            .max_concurrent_ephemeral
             .take()
             .is_some()),
 
@@ -1398,6 +1591,45 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
         "agents.host_credentials.read.allowed_backends" => apply_backend_id_list_opt(
             &mut patch.agents.host_credentials.read.allowed_backends,
             update,
+        ),
+        "agents.world_dispatch.enabled" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.enabled,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.allowed_backends" => {
+            apply_backend_id_list_opt(&mut patch.agents.world_dispatch.allowed_backends, update)
+        }
+        "agents.world_dispatch.allowed_actions" => {
+            apply_string_list_opt(&mut patch.agents.world_dispatch.allowed_actions, update)
+        }
+        "agents.world_dispatch.allowed_modes" => {
+            apply_string_list_opt(&mut patch.agents.world_dispatch.allowed_modes, update)
+        }
+        "agents.world_dispatch.same_session_only" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.same_session_only,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.same_world_binding_only" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.same_world_binding_only,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.allow_capability_narrowing" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.allow_capability_narrowing,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.max_live_retained_workers" => apply_u32_opt(
+            &mut patch.agents.world_dispatch.max_live_retained_workers,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.max_concurrent_ephemeral" => apply_u32_opt(
+            &mut patch.agents.world_dispatch.max_concurrent_ephemeral,
+            &update.op,
+            &update.value,
         ),
 
         "workflow.router.enabled" => apply_bool_opt(
@@ -1746,6 +1978,154 @@ mod tests {
         assert!(err
             .to_string()
             .contains("unknown policy key 'world_fs.read_allowlist'"));
+    }
+
+    #[test]
+    fn policy_patch_accepts_agents_world_dispatch_keys() {
+        let mut patch = PolicyPatch::default();
+        let updates = vec![
+            ConfigUpdate {
+                key: "agents.world_dispatch.enabled".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.allowed_backends".to_string(),
+                op: UpdateOp::Append,
+                value: "cli:codex_world".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.allowed_actions".to_string(),
+                op: UpdateOp::Append,
+                value: "run_world_task".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.allowed_modes".to_string(),
+                op: UpdateOp::Append,
+                value: "ephemeral".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.same_session_only".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.same_world_binding_only".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.allow_capability_narrowing".to_string(),
+                op: UpdateOp::Set,
+                value: "false".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.max_live_retained_workers".to_string(),
+                op: UpdateOp::Set,
+                value: "2".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.max_concurrent_ephemeral".to_string(),
+                op: UpdateOp::Set,
+                value: "1".to_string(),
+            },
+        ];
+
+        let changed = apply_updates_to_policy_patch(&mut patch, &updates).unwrap();
+        assert!(changed);
+        assert_eq!(patch.agents.world_dispatch.enabled, Some(true));
+        assert_eq!(
+            patch.agents.world_dispatch.allowed_backends.as_deref(),
+            Some(&["cli:codex_world".to_string()][..])
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.allowed_actions.as_deref(),
+            Some(&["run_world_task".to_string()][..])
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.allowed_modes.as_deref(),
+            Some(&["ephemeral".to_string()][..])
+        );
+        assert_eq!(patch.agents.world_dispatch.same_session_only, Some(true));
+        assert_eq!(
+            patch.agents.world_dispatch.same_world_binding_only,
+            Some(true)
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.allow_capability_narrowing,
+            Some(false)
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.max_live_retained_workers,
+            Some(2)
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.max_concurrent_ephemeral,
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn policy_patch_parses_agents_world_dispatch_yaml_with_deny_by_default_shape() {
+        let path = Path::new("policy.yaml");
+        let patch = parse_policy_patch_yaml(
+            path,
+            r#"
+agents:
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - "cli:codex_world"
+    allowed_actions:
+      - "run_world_task"
+      - "spawn_world_worker"
+      - "continue_world_worker"
+    allowed_modes:
+      - "ephemeral"
+      - "retained"
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 2
+    max_concurrent_ephemeral: 1
+"#,
+        )
+        .expect("world dispatch keys should parse under agents");
+
+        assert_eq!(patch.agents.world_dispatch.enabled, Some(true));
+        assert_eq!(
+            patch.agents.world_dispatch.allowed_actions.as_deref(),
+            Some(
+                &[
+                    "run_world_task".to_string(),
+                    "spawn_world_worker".to_string(),
+                    "continue_world_worker".to_string()
+                ][..]
+            )
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.allowed_modes.as_deref(),
+            Some(&["ephemeral".to_string(), "retained".to_string()][..])
+        );
+    }
+
+    #[test]
+    fn policy_patch_rejects_invalid_agents_world_dispatch_action() {
+        let path = Path::new("policy.yaml");
+        let err = parse_policy_patch_yaml(
+            path,
+            r#"
+agents:
+  world_dispatch:
+    allowed_actions:
+      - "inspect_world_worker"
+"#,
+        )
+        .expect_err("later verbs must stay out of scope for packet 1");
+
+        assert!(err
+            .to_string()
+            .contains("agents.world_dispatch.allowed_actions"));
     }
 
     #[test]

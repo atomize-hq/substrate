@@ -26,7 +26,8 @@ pub(crate) use dispatch_contract::{
     HostExecutionClientStart, ResolvedLaunchContract, RunWorldTaskOutcomeV1,
     SpawnWorldWorkerOutcomeV1, TaskPayloadV1, ValidatedWorldDispatchRequestV1,
     WorkerSpawnPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
-    WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldTaskTerminalStateV1,
+    WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
+    WorldTaskTerminalStateV1,
 };
 pub(crate) use mapping::{
     MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,

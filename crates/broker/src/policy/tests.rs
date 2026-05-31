@@ -69,6 +69,22 @@ agents:
     read:
       allowed_backends:
         - "{host_credentials_backend}"
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - "{agents_backend}"
+    allowed_actions:
+      - "run_world_task"
+      - "spawn_world_worker"
+      - "continue_world_worker"
+    allowed_modes:
+      - "ephemeral"
+      - "retained"
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 2
+    max_concurrent_ephemeral: 1
 
 workflow:
   router:
@@ -210,6 +226,28 @@ fn pcm1_policy_yaml_accepts_llm_agents_and_workflow_router_families() {
         policy.agents_host_credentials_read_allowed_backends,
         vec!["cli:codex".to_string()]
     );
+    assert!(policy.agents_world_dispatch_enabled);
+    assert_eq!(
+        policy.agents_world_dispatch_allowed_backends,
+        vec!["cli:codex".to_string()]
+    );
+    assert_eq!(
+        policy.agents_world_dispatch_allowed_actions,
+        vec![
+            "run_world_task".to_string(),
+            "spawn_world_worker".to_string(),
+            "continue_world_worker".to_string()
+        ]
+    );
+    assert_eq!(
+        policy.agents_world_dispatch_allowed_modes,
+        vec!["ephemeral".to_string(), "retained".to_string()]
+    );
+    assert!(policy.agents_world_dispatch_same_session_only);
+    assert!(policy.agents_world_dispatch_same_world_binding_only);
+    assert!(!policy.agents_world_dispatch_allow_capability_narrowing);
+    assert_eq!(policy.agents_world_dispatch_max_live_retained_workers, 2);
+    assert_eq!(policy.agents_world_dispatch_max_concurrent_ephemeral, 1);
     assert!(policy.workflow_router_enabled);
     assert!(policy.workflow_router_allow_cross_workspace);
     assert_eq!(
@@ -259,6 +297,34 @@ fn pcm1_policy_yaml_rejects_malformed_agents_host_credentials_backend_ids() {
     assert!(
         msg.contains("agents.host_credentials.read.allowed_backends"),
         "expected host credentials backend diagnostic, got: {msg}"
+    );
+}
+
+#[test]
+fn pcm1_policy_yaml_rejects_malformed_world_dispatch_backend_ids() {
+    let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex").replace(
+        "  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex\"",
+        "  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"bad backend\"",
+    );
+    let err = serde_yaml::from_str::<Policy>(&raw)
+        .expect_err("invalid agents.world_dispatch.allowed_backends entry should fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("agents.world_dispatch.allowed_backends"),
+        "expected world dispatch backend diagnostic, got: {msg}"
+    );
+}
+
+#[test]
+fn pcm1_policy_yaml_rejects_unknown_world_dispatch_actions() {
+    let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex")
+        .replace("- \"continue_world_worker\"", "- \"inspect_world_worker\"");
+    let err = serde_yaml::from_str::<Policy>(&raw)
+        .expect_err("unknown agents.world_dispatch.allowed_actions entry should fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("agents.world_dispatch.allowed_actions"),
+        "expected world dispatch action diagnostic, got: {msg}"
     );
 }
 
