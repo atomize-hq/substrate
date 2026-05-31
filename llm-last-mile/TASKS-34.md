@@ -5,7 +5,7 @@ Source plan: [PLAN-34.md](./PLAN-34.md)
 Source validation note: [NOTE-34-family-1-policy-hardening-after-continue-bootstrap.md](./NOTE-34-family-1-policy-hardening-after-continue-bootstrap.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: draft for review on `2026-05-31`
+Status: completed on `2026-05-31`
 
 ## Execution Packets
 
@@ -28,7 +28,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the narrow world-dispatch steering policy surface to the effective policy model
+- [x] Task 1.1: Add the narrow world-dispatch steering policy surface to the effective policy model
   - Acceptance: the effective policy/config model can represent steering enablement, allowed backends, allowed actions, allowed modes, same-session and same-world-binding defaults, explicit capability-narrowing permission, and the first in-scope concurrency caps for the landed three-verb surface.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -37,7 +37,7 @@ Session goal:
     - [`crates/shell/src/execution/policy_model.rs`](../crates/shell/src/execution/policy_model.rs)
     - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md) only if the packet lands user-visible config keys immediately
 
-- [ ] Task 1.2: Add stable steering denial vocabulary and contract helpers
+- [x] Task 1.2: Add stable steering denial vocabulary and contract helpers
   - Acceptance: the current slice has stable, explanation-ready denial buckets for disabled steering, backend/action/mode denial, cross-session/world-binding denial, capability-narrowing denial, concurrency-cap denial, and invalidated-worker denial; later packets can reuse those buckets without inventing new ad hoc strings.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -65,7 +65,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Gate `run_world_task` and `spawn_world_worker` by steering enablement, action, mode, backend, and exact boundary truth
+- [x] Task 2.1: Gate `run_world_task` and `spawn_world_worker` by steering enablement, action, mode, backend, and exact boundary truth
   - Acceptance: one-shot and retained bootstrap requests fail closed when steering is disabled, the action or mode is not allowed, the backend is not allowed, or same-session/same-world-binding truth is not satisfied; allowed requests still flow through the already-landed dispatch/runtime path.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -74,7 +74,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - targeted shell integration tests
 
-- [ ] Task 2.2: Gate `continue_world_worker` by steering policy and retained-worker exact routability
+- [x] Task 2.2: Gate `continue_world_worker` by steering policy and retained-worker exact routability
   - Acceptance: `continue_world_worker` is denied unless steering is enabled, the action/mode/backend are allowed, the exact retained target remains in the same authoritative session/world binding, and the worker remains routable under the current lifecycle truth.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -104,7 +104,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add invalidated/non-routable worker denials and in-scope concurrency cap enforcement
+- [x] Task 3.1: Add invalidated/non-routable worker denials and in-scope concurrency cap enforcement
   - Acceptance: invalidated or otherwise non-routable retained workers fail with stable denials instead of generic stale-linkage errors; the current policy surface can cap live retained workers and concurrent ephemeral dispatch for the landed three-verb slice.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -114,7 +114,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - targeted shell integration tests
 
-- [ ] Task 3.2: Keep current continue-event policy hooks narrow and defer approval/fork/control expansion
+- [x] Task 3.2: Keep current continue-event policy hooks narrow and defer approval/fork/control expansion
   - Acceptance: the already-landed event classes remain limited to `reply`, `progress_update`, `follow_up_question`, `blocked`, `result`, and `failure`; `follow_up_question` and `blocked` keep explicit attention semantics; approval/fork/control-directive classes remain deferred and do not pull family-2 producer behavior into this slice.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -144,7 +144,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align config/trace/planning truth without widening the slice
+- [x] Task 4.1: Align config/trace/planning truth without widening the slice
   - Acceptance: the repo-local docs describe the steering-policy layer as internal, deny-by-default, and limited to the current landed three-verb surface; no wording implies later verbs, router-owned attach execution, or broader approval/fork policy have already landed.
   - Verify:
     - manual diff review
@@ -156,7 +156,7 @@ Session goal:
     - [`llm-last-mile/PLAN-34.md`](./PLAN-34.md)
     - [`llm-last-mile/TASKS-34.md`](./TASKS-34.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted policy/shell/world-service suites, and the full workspace tests are green; no public CLI regression or unintended family-2 coupling appears.
   - Verify:
     - `cargo fmt --all -- --check`

@@ -3,7 +3,7 @@
 Source spec: [SPEC-34-host-to-world-steering-policy-hardening-for-landed-dispatch-surface.md](./SPEC-34-host-to-world-steering-policy-hardening-for-landed-dispatch-surface.md)  
 Source validation note: [NOTE-34-family-1-policy-hardening-after-continue-bootstrap.md](./NOTE-34-family-1-policy-hardening-after-continue-bootstrap.md)  
 Plan type: third implementation-bearing family-1 control-plane slice  
-Status: draft for review on `2026-05-31`
+Status: implemented and validated on `2026-05-31`
 
 ## Objective
 

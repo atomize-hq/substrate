@@ -1,4 +1,4 @@
-# Note: Family-1 Policy Hardening After Continue Bootstrap
+# Note: Family-1 Ordering After Steering Policy Hardening
 
 Date: `2026-05-31`
 
@@ -21,7 +21,7 @@ Validated against live code in:
 
 ## Purpose
 
-Record the current repo truth for the next family-1 slice after Slice `33`, and make explicit why the next implementation-bearing work is steering-policy hardening for the already-landed control-plane surface rather than further verb expansion or family-2 router/attach work.
+Record the current repo truth after Slice `34`, and make explicit why the next implementation-bearing family-1 work is later verb expansion on top of the landed steering-policy floor rather than more policy repair or family-2 router/attach work.
 
 ## Current Repo Truth
 
@@ -41,7 +41,7 @@ Repo-truth implication:
 2. family 1 is no longer blocked on first retained-worker continue/messaging bootstrap,
 3. the next missing seam is no longer "make the verbs real."
 
-### 2. Exact identity and world-binding checks exist, but the separate steering-policy layer does not
+### 2. Exact identity, world-binding, and steering-policy checks now exist together
 
 The current tree already enforces:
 
@@ -51,7 +51,7 @@ The current tree already enforces:
 4. exact authoritative world-binding checks,
 5. fail-closed stale-linkage rejection.
 
-What is still missing is the distinct deny-by-default steering-policy layer described in the design stack:
+The current tree now also has the distinct deny-by-default steering-policy layer described in the design stack:
 
 1. global steering enablement,
 2. action allowlisting,
@@ -60,6 +60,12 @@ What is still missing is the distinct deny-by-default steering-policy layer desc
 5. explicit capability-narrowing permission,
 6. explicit worker/session concurrency caps,
 7. explanation-ready denial buckets tied to those policy dimensions.
+
+Repo-truth implication:
+
+1. the first implementation-bearing steering-policy surface is no longer missing,
+2. later family-1 verbs now have a real deny-by-default floor to build on,
+3. the next remaining gap is no longer "add policy hardening for current verbs."
 
 ### 3. The lifecycle model now has a concrete control-plane surface to harden
 
@@ -96,24 +102,24 @@ Repo-truth implication:
 
 The next narrow family-1 slice should be:
 
-1. host-to-world steering-policy hardening for the already-landed `run_world_task`, `spawn_world_worker`, and `continue_world_worker` surface first,
-2. later verb expansion such as `inspect_world_worker`, `cancel_world_work`, `stop_world_worker`, and `fork_world_worker` second,
-3. later approval/fork autonomy and broader family-2 producer coupling after that.
+1. later verb expansion such as `inspect_world_worker`, `cancel_world_work`, `stop_world_worker`, and `fork_world_worker` on top of the landed steering-policy floor,
+2. later approval/fork autonomy after those verb contracts require it,
+3. broader family-2 producer coupling and router/attach execution after that.
 
-## Why Policy Now
+## Why Verb Expansion Next
 
 1. the dispatch contract is already landed and concrete,
-2. the lifecycle model now has real verbs and real invalidation/routability cases to harden,
-3. the steering-policy design specifically exists to separate control-plane authorization from runtime capability truth,
-4. the router/attach designs explicitly do not own worker continuation or policy authorization,
-5. later verbs should not be added on top of an ad hoc or implicit authorization model.
+2. the lifecycle model now has real verbs, real invalidation/routability checks, and a real deny-by-default steering layer,
+3. later verbs can now widen the family-1 control plane without inheriting an ad hoc authorization model,
+4. the router/attach designs still do not own worker continuation or policy authorization,
+5. family 2 remains downstream of the now-landed family-1 policy floor.
 
 ## Blocking Rule
 
 Reopen this ordering note only if one of these becomes true:
 
 1. current `run_world_task`, `spawn_world_worker`, or `continue_world_worker` runtime truth regresses,
-2. the policy slice proves it cannot be implemented without first landing one of the deferred later verbs,
-3. family-2 obligation or attach work turns out to require policy/schema decisions that must precede any control-plane policy hardening.
+2. a later family-1 verb proves the landed steering-policy surface is still missing a prerequisite contract,
+3. family-2 obligation or attach work turns out to require policy/schema decisions that must precede later family-1 verb expansion.
 
-If none of those conditions is true, the next slice should remain policy hardening first.
+If none of those conditions is true, the next slice should remain later family-1 verb expansion first.

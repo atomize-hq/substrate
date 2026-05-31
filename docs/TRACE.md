@@ -238,6 +238,8 @@ Current shipped posture:
 - The live slice-32 caller path is bootstrap-only.
 - `spawn_world_worker` is observable today through the streamed `registered` `agent_event` it requires for receipt validation, the authoritative retained-worker receipt the shell returns, the persisted session-root participant state under `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/`, and the live-runtime view consumed by `substrate agent status`.
 - `run_world_task` does not currently publish a first-class internal world-dispatch trace family or republish its consumed stream events into canonical trace. In [`orchestrator_world_dispatch.rs`](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/orchestrator_world_dispatch.rs:449), the shell currently reduces the stream to terminal exit status plus `saw_registered_event`, which only affects the returned terminal summary.
+- `continue_world_worker` also does not publish a first-class internal world-dispatch trace family. Its current shipped trace-visible surface is limited to the canonical `agent_event` classes `reply`, `progress_update`, `follow_up_question`, `blocked`, `result`, and `failure`; approval, fork, and control-directive classes remain deferred.
+- The Packet 34 steering-policy hardening layer stays internal and does not add dedicated `world_dispatch_*` or steering-denial audit rows to `trace.jsonl`.
 - There is no shipped `component: "agent-toolbox"` record family yet, and no shipped `toolbox_tool_call_start` or `toolbox_tool_call_complete` rows to query in `trace.jsonl`.
 
 Reserved vocabulary:

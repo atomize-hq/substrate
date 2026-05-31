@@ -47,6 +47,7 @@ Config keys:
 Policy keys:
 - `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
 - Existing `agents.allowed_backends` entries stay valid across the successor `substrate agent ...` command surface because the policy token is still the derived `backend_id`, not `client`, `router`, `protocol`, `provider`, or `auth_authority`.
+- `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, and currently governs only the landed internal verbs `run_world_task`, `spawn_world_worker`, and `continue_world_worker`.
 
 Minimal example:
 
@@ -295,6 +296,33 @@ Minimal patch example (workspace or global):
 ```yaml
 world_fs:
   require_world: true
+```
+
+Internal host-to-world steering example:
+
+- This surface is internal-only and deny-by-default. The built-in defaults keep `agents.world_dispatch.enabled=false`, keep the allowlists empty, require exact same-session and same-world-binding truth, disallow capability narrowing, and set both current concurrency caps to `0`.
+- Current action ids are limited to `run_world_task`, `spawn_world_worker`, and `continue_world_worker`.
+- Current mode ids are limited to `ephemeral` and `retained`.
+- This patch surface does not imply later verbs (`inspect_world_worker`, `cancel_world_work`, `stop_world_worker`, `fork_world_worker`), router-owned attach execution, or broader approval/fork autonomy policy.
+
+```yaml
+agents:
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - cli:codex_world
+    allowed_actions:
+      - run_world_task
+      - spawn_world_worker
+      - continue_world_worker
+    allowed_modes:
+      - ephemeral
+      - retained
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 4
+    max_concurrent_ephemeral: 2
 ```
 
 Policy patch management (CLI):
