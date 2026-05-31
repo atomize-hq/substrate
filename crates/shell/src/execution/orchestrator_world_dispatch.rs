@@ -99,15 +99,12 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
         }
     };
 
-    let prepared = PreparedOrchestratorWorldDispatch {
+    Ok(PreparedOrchestratorWorldDispatch {
         request,
         session,
         caller_participant,
         target_participant,
-    };
-    validate_authoritative_session_boundary(&prepared)?;
-
-    Ok(prepared)
+    })
 }
 
 #[allow(dead_code)]
@@ -546,8 +543,12 @@ fn enforce_world_dispatch_steering_policy(
         ));
     }
 
-    validate_authoritative_session_boundary(prepared)?;
-    validate_authoritative_world_binding_for_steering(prepared)?;
+    if steering_policy.same_session_only {
+        validate_authoritative_session_boundary(prepared)?;
+    }
+    if steering_policy.same_world_binding_only {
+        validate_authoritative_world_binding_for_steering(prepared)?;
+    }
 
     Ok(())
 }
@@ -3144,6 +3145,26 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn steering_policy_allows_cross_session_boundary_when_policy_relaxed() {
+        let mut caller = sample_orchestrator_participant();
+        caller.handle.orchestration_session_id = "sess_other".to_string();
+        let mut policy = sample_world_dispatch_policy();
+        policy.agents_world_dispatch_same_session_only = false;
+
+        enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request: sample_request(),
+                session: sample_session(),
+                caller_participant: caller,
+                target_participant: None,
+            },
+            &policy,
+        )
+        .expect("relaxed same-session policy should not reject cross-session prepared truth");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn steering_policy_rejects_cross_world_binding_boundary() {
         let mut request = sample_continue_request();
         request.world_generation = 3;
@@ -3163,6 +3184,26 @@ mod tests {
             err.to_string(),
             "cross_world_binding_steering_denied: world_binding_mismatch: orchestration session sess_dispatch authoritative world_generation is 2 not 3"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steering_policy_allows_cross_world_binding_when_policy_relaxed() {
+        let mut request = sample_continue_request();
+        request.world_generation = 3;
+        let mut policy = sample_world_dispatch_policy();
+        policy.agents_world_dispatch_same_world_binding_only = false;
+
+        enforce_world_dispatch_steering_policy(
+            &PreparedOrchestratorWorldDispatch {
+                request,
+                session: sample_session(),
+                caller_participant: sample_orchestrator_participant(),
+                target_participant: Some(sample_member_participant()),
+            },
+            &policy,
+        )
+        .expect("relaxed world-binding policy should not reject drifted prepared truth");
     }
 
     #[test]
