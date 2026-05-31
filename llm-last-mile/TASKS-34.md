@@ -31,6 +31,7 @@ Session goal:
 - [x] Task 1.1: Add the narrow world-dispatch steering policy surface to the effective policy model
   - Acceptance: the effective policy/config model can represent steering enablement, allowed backends, allowed actions, allowed modes, same-session and same-world-binding defaults, explicit capability-narrowing permission, and the first in-scope concurrency caps for the landed three-verb surface.
   - Verify:
+    - `cargo test -p broker pcm1_policy_ -- --nocapture`
     - `cargo test -p shell policy_model -- --nocapture`
   - Expected files touched:
     - [`crates/broker/src/policy.rs`](../crates/broker/src/policy.rs)
@@ -41,6 +42,7 @@ Session goal:
   - Acceptance: the current slice has stable, explanation-ready denial buckets for disabled steering, backend/action/mode denial, cross-session/world-binding denial, capability-narrowing denial, concurrency-cap denial, and invalidated-worker denial; later packets can reuse those buckets without inventing new ad hoc strings.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
+    - `cargo test -p shell steering_policy_ -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)

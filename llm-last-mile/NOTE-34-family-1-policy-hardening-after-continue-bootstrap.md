@@ -23,6 +23,19 @@ Validated against live code in:
 
 Record the current repo truth after Slice `34`, and make explicit why the next implementation-bearing family-1 work is later verb expansion on top of the landed steering-policy floor rather than more policy repair or family-2 router/attach work.
 
+## Packet 1 Verification Truth
+
+Packet `1` is green on the landed tree, but its verification story is slightly broader than the original two-command summary implied.
+
+The Packet `1` contract is currently exercised by:
+
+1. `cargo test -p broker pcm1_policy_ -- --nocapture` for broker-side steering policy schema and deny-by-default parsing coverage,
+2. `cargo test -p shell policy_model -- --nocapture` for shell-side policy patch parsing and effective-policy validation,
+3. `cargo test -p shell dispatch_contract -- --nocapture` for stable denial vocabulary and dispatch-contract coverage,
+4. `cargo test -p shell steering_policy_ -- --nocapture` for the orchestrator-side steering gate and denial-helper coverage.
+
+The `steering_policy_*` tests in `orchestrator_world_dispatch.rs` are also named so the `dispatch_contract` filter now catches them during targeted shell runs, but the explicit steering command remains part of the honest Packet `1` proof.
+
 ## Current Repo Truth
 
 ### 1. The first three family-1 verbs are now real runtime truth

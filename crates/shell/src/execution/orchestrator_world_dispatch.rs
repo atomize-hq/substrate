@@ -3182,7 +3182,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_disabled_world_dispatch() {
+    fn dispatch_contract_steering_policy_rejects_disabled_world_dispatch() {
         let err = enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
                 request: sample_request(),
@@ -3203,7 +3203,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_action_not_allowed() {
+    fn dispatch_contract_steering_policy_rejects_action_not_allowed() {
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_allowed_actions = vec!["spawn_world_worker".to_string()];
 
@@ -3227,7 +3227,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_mode_not_allowed() {
+    fn dispatch_contract_steering_policy_rejects_mode_not_allowed() {
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_allowed_modes = vec!["retained".to_string()];
 
@@ -3251,7 +3251,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_backend_not_allowed() {
+    fn dispatch_contract_steering_policy_rejects_backend_not_allowed() {
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_allowed_backends = vec!["cli:other_world".to_string()];
 
@@ -3275,7 +3275,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_cross_session_boundary() {
+    fn dispatch_contract_steering_policy_rejects_cross_session_boundary() {
         let mut caller = sample_orchestrator_participant();
         caller.handle.orchestration_session_id = "sess_other".to_string();
 
@@ -3299,7 +3299,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_allows_cross_session_boundary_when_policy_relaxed() {
+    fn dispatch_contract_steering_policy_allows_cross_session_boundary_when_policy_relaxed() {
         let mut caller = sample_orchestrator_participant();
         caller.handle.orchestration_session_id = "sess_other".to_string();
         let mut policy = sample_world_dispatch_policy();
@@ -3320,7 +3320,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_cross_world_binding_boundary() {
+    fn dispatch_contract_steering_policy_rejects_cross_world_binding_boundary() {
         let mut request = sample_continue_request();
         request.world_generation = 3;
 
@@ -3344,7 +3344,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_allows_cross_world_binding_when_policy_relaxed() {
+    fn dispatch_contract_steering_policy_allows_cross_world_binding_when_policy_relaxed() {
         let mut request = sample_continue_request();
         request.world_generation = 3;
         let mut policy = sample_world_dispatch_policy();
@@ -3364,7 +3364,7 @@ mod tests {
     }
 
     #[test]
-    fn steering_policy_denial_helper_formats_packet34_bucket_and_detail() {
+    fn dispatch_contract_steering_policy_denial_helper_formats_packet34_bucket_and_detail() {
         let err = steering_policy_denial(
             WorldDispatchSteeringDenialV1::CrossSessionSteeringDenied,
             "request tried to steer outside the authoritative orchestration session",
@@ -3378,7 +3378,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_maps_stale_retained_worker_to_invalidated_worker_denial() {
+    fn dispatch_contract_steering_policy_maps_stale_retained_worker_to_invalidated_worker_denial() {
         let err = map_continue_world_dispatch_resolution_error(anyhow::anyhow!(
             "stale_linkage: orchestration session sess_dispatch retained worker ash_member is no longer authoritative-live"
         ));
@@ -3391,7 +3391,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_ephemeral_concurrency_cap_exceeded() {
+    fn dispatch_contract_steering_policy_rejects_ephemeral_concurrency_cap_exceeded() {
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_max_concurrent_ephemeral = 1;
 
@@ -3416,7 +3416,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn steering_policy_rejects_live_retained_worker_cap_exceeded() {
+    fn dispatch_contract_steering_policy_rejects_live_retained_worker_cap_exceeded() {
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_max_live_retained_workers = 1;
 
