@@ -8,6 +8,7 @@ Primary sources:
 - [agent-session-compactor-artifact-finalization-followup-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-session-compactor-artifact-finalization-followup-tasks.md:1)
 - [agent-drift-analyzer-v0.1-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-v0.1-tasks.md:1)
 - [agent-drift-analyzer-checkpoint-calibration-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-checkpoint-calibration-v0.2-tasks.md:1)
+- [agent-session-compactor-bundle-contract-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-session-compactor-bundle-contract-v0.2-tasks.md:1)
 - [agent-drift-sentinel-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-v0.2-tasks.md:1)
 - [agent-drift-sentinel-live-integration-v0.3-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-tasks.md:1)
 
@@ -51,6 +52,16 @@ Primary sources:
 - `AC5` render the operator summary in the agreed compact format
 - `AC6` validate the checkpoint-calibration summary on the bounded real-session smoke
 - `AC7` document next-level blocked metrics and contract gaps
+
+### Compactor Bundle Contract v0.2
+
+- `BC1` lock the `v0.2` contract shape and implementation order in repo docs
+- `BC2` add `v0.2` export-facing manifest, file, row, and row-ref DTOs
+- `BC3` emit archival and compact row JSONL with `source_file_id`
+- `BC4` migrate dedupe audit export to id-backed row refs and validate registry sync
+- `BC5` cut analyzer input over to `v0.2` and resolve ids at the load boundary
+- `BC6` preserve analyzer semantic behavior under the new bundle contract
+- `BC7` gate the cutover on a bounded compactor-to-analyzer smoke run
 
 ### Compactor Follow-up
 
@@ -101,7 +112,8 @@ flowchart TD
     A8 --> A9
     A9 --> A10 --> A11 --> A12
     A12 --> AC1 --> AC2 --> AC3 --> AC4 --> AC5 --> AC6 --> AC7
-    AC7 --> S1
+    AC7 --> BC1 --> BC2 --> BC3 --> BC4 --> BC5 --> BC6 --> BC7
+    BC7 --> S1
     S1 --> S2 --> S3
     S2 --> S4
     S3 --> S5
@@ -112,7 +124,7 @@ flowchart TD
 
 ## Recommended Packeting
 
-Recommended total: `18 packets`
+Recommended total: `19 packets`
 
 This is the best balance between forward progress and safe checkpoints. It keeps each packet
 focused, gives you clean stop points at the high-risk gates, and preserves the module dependency
@@ -293,6 +305,32 @@ Packet 10A note:
   `Distinct task frames: 15`, `Truth artifacts referenced: 4`, and
   `Verification commands observed: 0`.
 
+### Packet 10B: Compactor bundle contract v0.2
+
+- `BC1`
+- `BC2`
+- `BC3`
+- `BC4`
+- `BC5`
+- `BC6`
+- `BC7`
+
+Why:
+
+- makes the compactor/analyzer seam explicit before more downstream sentinel work relies on the
+  current path-heavy export shape
+- keeps internal compactor and analyzer behavior largely stable by moving the contract change to
+  export and input boundaries
+- forces the compactor cutover, analyzer cutover, and bounded smoke evidence to land as one owned
+  packet instead of drifting into partial compatibility work
+
+Packet 10B note:
+
+- if replay or live sentinel work already exists in the branch, regenerate any analyzer-backed
+  fixtures only after `BC7` passes against a current `v0.2` compactor bundle
+- do not treat temporary mixed `v0.1`/`v0.2` loader logic as an acceptable resting state for this
+  packet
+
 ### Packet 11: Sentinel replay core
 
 - `S1`
@@ -386,7 +424,7 @@ Why:
 
 ## If You Want Fewer Packets
 
-Minimum safe compression: `14 packets`
+Minimum safe compression: `15 packets`
 
 Safe merges:
 
@@ -394,6 +432,9 @@ Safe merges:
 - merge Packet 5 and Packet 5A only if the finalization hardening stays tightly bounded to export
   code and test coverage
 - merge Packet 8 and Packet 9 if analyzer scoring is landing quickly
+- merge Packet 10A and Packet 10B only if the analyzer summary work and bundle-contract cutover
+  are still isolated to the compactor/analyzer seam and sentinel fixture regeneration remains
+  strictly downstream
 - merge Packet 12 and Packet 13 only if replay-mode usefulness is already obvious
 - no additional live-slice merges are recommended because `L3`, `L7`, and `L8` are the point of
   keeping the post-`S10` work bounded
@@ -405,6 +446,8 @@ Do not compress across these gates:
 - `CF6`
 - `A3`
 - `A12`
+- `BC5`
+- `BC7`
 - `S9`
 - `S10`
 - `L3`

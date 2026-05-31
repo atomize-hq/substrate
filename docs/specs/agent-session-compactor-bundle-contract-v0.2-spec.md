@@ -236,16 +236,18 @@ The spec is satisfied when:
 7. A bounded real-session smoke run confirms bundle size reduction and analyzer compatibility.
 8. The source Codex home and source rollout files remain unchanged.
 
-## Open Questions
+## Planning Resolutions
 
-1. Should the bundle-level file table live in `manifest.json`, or in a separate `files.json` so row
-   contract evolution is less coupled to manifest metadata?
-2. Should `agent-session-compactor` keep `source_file` in its internal `CompactionRow`, or is this
-   the right slice to split internal row types from export row types completely?
-3. Should analyzer checkpoint outputs continue to serialize resolved file paths for operator
-   readability, or should they also migrate to id-backed refs plus late resolution?
-4. Is `u32` the right file-id width, or should the contract simply use `usize`-like semantics via
-   `u64` for portability and future-proofing?
+The following contract choices are locked for the `v0.2` plan/task slice:
+
+1. The bundle-level file table lives in `manifest.json`; `v0.2` does not add a separate
+   `files.json`.
+2. `agent-session-compactor` keeps path-bearing internal row types for now; the explicit contract
+   boundary is the export DTO layer rather than a full internal row-type split.
+3. Analyzer checkpoint and evidence outputs continue to serialize resolved file paths for operator
+   readability in this slice; the id-backed contract change stops at the compactor/analyzer input
+   boundary.
+4. File ids use `u32`.
 
 ## Gate Notes
 
