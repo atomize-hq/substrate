@@ -90,7 +90,7 @@ pub fn analyze_loaded_bundle(
         });
     }
 
-    let export_result = export_checkpoints(output_dir, &exported_checkpoints)?;
+    let export_result = export_checkpoints(output_dir, &bundle.sessions, &exported_checkpoints)?;
     Ok(AnalyzeResult {
         sessions: analyses,
         checkpoints_path: export_result.checkpoints_path,

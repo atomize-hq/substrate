@@ -1,10 +1,12 @@
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
+use serde::Serialize;
 use time::OffsetDateTime;
 
 use crate::export::{BundleManifest, ExportBundleRequest, ExportError};
+use crate::normalize::{CompactionKind, CompactionRow, SourceKind};
 
 const SCHEMA_VERSION: &str = "v0.1";
 const STAGING_DIR_LABEL: &str = "staging";
@@ -42,7 +44,7 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         request.archival_rows,
     )?;
     maybe_inject_failure("after_rows_archival")?;
-    write_jsonl_file(
+    write_compact_rows_file(
         &paths.staging_dir.join("rows.compact.jsonl"),
         request.compact_rows,
     )?;
@@ -194,6 +196,70 @@ fn write_jsonl_file<T: serde::Serialize>(path: &Utf8Path, rows: &[T]) -> Result<
         path: path.to_owned(),
         source,
     })
+}
+
+fn write_compact_rows_file(path: &Utf8Path, rows: &[CompactionRow]) -> Result<(), ExportError> {
+    let file = File::create(path).map_err(|source| ExportError::WriteFile {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut writer = BufWriter::new(file);
+    for row in rows {
+        let export_row = CompactExportRow::from(row);
+        serde_json::to_writer(&mut writer, &export_row).map_err(|source| {
+            ExportError::Serialize {
+                path: path.to_owned(),
+                source,
+            }
+        })?;
+        writer
+            .write_all(b"\n")
+            .map_err(|source| ExportError::WriteFile {
+                path: path.to_owned(),
+                source,
+            })?;
+    }
+    writer.flush().map_err(|source| ExportError::WriteFile {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct CompactExportRow<'a> {
+    source_file: &'a Utf8PathBuf,
+    source_kind: SourceKind,
+    session_id: Option<&'a str>,
+    turn_id: Option<&'a str>,
+    event_index: usize,
+    line_number: usize,
+    row_ordinal: usize,
+    #[serde(with = "time::serde::rfc3339::option")]
+    timestamp: Option<OffsetDateTime>,
+    kind: CompactionKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dedupe_identity: Option<&'a str>,
+    text: &'a str,
+    text_hash_hex: &'a str,
+}
+
+impl<'a> From<&'a CompactionRow> for CompactExportRow<'a> {
+    fn from(row: &'a CompactionRow) -> Self {
+        Self {
+            source_file: &row.source_file,
+            source_kind: row.source_kind,
+            session_id: row.session_id.as_deref(),
+            turn_id: row.turn_id.as_deref(),
+            event_index: row.event_index,
+            line_number: row.line_number,
+            row_ordinal: row.row_ordinal,
+            timestamp: row.timestamp,
+            kind: row.kind,
+            dedupe_identity: row.dedupe_identity.as_deref(),
+            text: &row.text,
+            text_hash_hex: &row.text_hash_hex,
+        }
+    }
 }
 
 fn write_summary(path: &Utf8Path, manifest: &BundleManifest) -> Result<(), ExportError> {

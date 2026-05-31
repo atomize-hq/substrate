@@ -20,5 +20,7 @@ fn export_bundle_writes_checkpoints_and_summary() {
     assert_eq!(checkpoints.len(), 2);
     assert!(summary.contains("Agent Drift Analyzer Summary"));
     assert!(summary.contains("session-alpha"));
+    assert!(summary.contains("Turns observed: `1`"));
     assert!(summary.contains("Checkpoints emitted: `2`"));
+    assert!(summary.contains("- Turns observed: `1`"));
 }

@@ -5,6 +5,7 @@ use std::io::Write;
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::checkpoint::Checkpoint;
+use crate::input::BundleSession;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportResult {
@@ -36,6 +37,7 @@ pub enum ExportError {
 
 pub fn export_checkpoints(
     output_dir: &Utf8Path,
+    sessions: &[BundleSession],
     checkpoints: &[Checkpoint],
 ) -> Result<ExportResult, ExportError> {
     fs::create_dir_all(output_dir).map_err(|source| ExportError::CreateOutputDirectory {
@@ -69,7 +71,7 @@ pub fn export_checkpoints(
         })?;
     }
 
-    let summary = render_summary(&sorted);
+    let summary = render_summary(sessions, &sorted);
     fs::write(&summary_path, summary).map_err(|source| ExportError::WriteArtifact {
         path: summary_path.clone(),
         source,
@@ -81,16 +83,17 @@ pub fn export_checkpoints(
     })
 }
 
-fn render_summary(checkpoints: &[Checkpoint]) -> String {
+fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> String {
     let flagged = checkpoints
         .iter()
         .filter(|checkpoint| checkpoint.flagged)
         .count();
-    let sessions = checkpoints
+    let session_count = checkpoints
         .iter()
         .map(|checkpoint| checkpoint.session_id.as_str())
         .collect::<std::collections::BTreeSet<_>>()
         .len();
+    let turns = sessions.iter().map(session_turn_count).sum::<usize>();
     let mut by_session = BTreeMap::<&str, Vec<&Checkpoint>>::new();
     for checkpoint in checkpoints {
         by_session
@@ -98,10 +101,15 @@ fn render_summary(checkpoints: &[Checkpoint]) -> String {
             .or_default()
             .push(checkpoint);
     }
+    let turns_by_session = sessions
+        .iter()
+        .map(|session| (session.session_id.as_str(), session_turn_count(session)))
+        .collect::<BTreeMap<_, _>>();
     let mut lines = vec![
         "# Agent Drift Analyzer Summary".to_string(),
         String::new(),
-        format!("Sessions analyzed: `{sessions}`"),
+        format!("Sessions analyzed: `{session_count}`"),
+        format!("Turns observed: `{turns}`"),
         format!("Checkpoints emitted: `{}`", checkpoints.len()),
         format!("Flagged checkpoints: `{flagged}`"),
         String::new(),
@@ -109,6 +117,10 @@ fn render_summary(checkpoints: &[Checkpoint]) -> String {
 
     for (session_id, session_checkpoints) in by_session {
         lines.push(format!("## {session_id}"));
+        lines.push(format!(
+            "- Turns observed: `{}`",
+            turns_by_session.get(session_id).copied().unwrap_or(0)
+        ));
         lines.push(format!("- Checkpoints: `{}`", session_checkpoints.len()));
         lines.push(format!(
             "- Flagged checkpoints: `{}`",
@@ -140,4 +152,13 @@ fn render_summary(checkpoints: &[Checkpoint]) -> String {
     }
 
     lines.join("\n")
+}
+
+fn session_turn_count(session: &BundleSession) -> usize {
+    session
+        .archival_rows
+        .iter()
+        .filter_map(|row| row.turn_id.as_deref())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
 }

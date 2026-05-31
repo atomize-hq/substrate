@@ -40,6 +40,7 @@ pub struct CompactionRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dedupe_identity: Option<String>,
     pub text: String,
+    #[serde(default)]
     pub canonical_text: String,
     pub text_hash_hex: String,
 }
