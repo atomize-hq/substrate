@@ -20,6 +20,7 @@ use super::{
         SessionAutoAttachSettleResult,
     },
     control::PublicSessionPosture,
+    dispatch_contract::RetainedWorkerInspectSnapshotV1,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
         OrchestrationObligationAttachState, OrchestrationObligationKind,
@@ -314,6 +315,43 @@ impl ResolvedInternalContinueWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
         &self.session.orchestration_session_id
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedInternalInspectWorldDispatchTarget {
+    pub session: OrchestrationSessionRecord,
+    #[allow(dead_code)]
+    pub caller_participant: AgentRuntimeParticipantRecord,
+    #[allow(dead_code)]
+    pub target_participant: AgentRuntimeParticipantRecord,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ResolvedInternalInspectWorldDispatchTarget {
+    #[allow(dead_code)]
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn project_snapshot(&self) -> RetainedWorkerInspectSnapshotV1 {
+        RetainedWorkerInspectSnapshotV1 {
+            participant_state: self.target_participant.handle.state.clone(),
+            session_state: self.session.state.clone(),
+            session_posture: self.session.posture,
+            authoritative_live: self.target_participant.is_authoritative_live()
+                && owner_process_is_alive(&self.target_participant),
+            attention_required: self.session.posture == OrchestrationSessionPosture::AwaitingAttention
+                || self.session.pending_inbox_count > 0,
+            parent_participant_id: self.target_participant.handle.parent_participant_id.clone(),
+            resumed_from_participant_id: self
+                .target_participant
+                .handle
+                .resumed_from_participant_id
+                .clone(),
+        }
     }
 }
 
@@ -1094,6 +1132,104 @@ impl AgentRuntimeStateStore {
         }
 
         Ok(ResolvedInternalContinueWorldDispatchTarget {
+            session: authoritative.session,
+            caller_participant: authoritative.participant,
+            target_participant,
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    pub(crate) fn resolve_internal_inspect_world_dispatch_target(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+    ) -> Result<ResolvedInternalInspectWorldDispatchTarget> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            anyhow::bail!(
+                "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
+                orchestration_session_id
+            );
+        };
+
+        let authoritative =
+            resolve_authoritative_session_control(&record, orchestration_session_id)?;
+        if authoritative.participant.participant_id() != caller_participant_id {
+            anyhow::bail!(
+                "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
+                orchestration_session_id,
+                authoritative.participant.participant_id(),
+                caller_participant_id
+            );
+        }
+
+        let mut matching_participants = record
+            .participants
+            .iter()
+            .filter(|participant| participant.participant_id() == target_participant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if matching_participants.is_empty() {
+            anyhow::bail!(
+                "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if matching_participants.len() > 1 {
+            anyhow::bail!(
+                "ambiguous_target_participant: orchestration session {} has multiple retained worker records for {}",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+
+        let target_participant = matching_participants
+            .pop()
+            .expect("target participant count checked above");
+        if target_participant.handle.backend_id != target_backend_id {
+            anyhow::bail!(
+                "backend_mismatch: orchestration session {} retained worker {} backend is {} not {}",
+                orchestration_session_id,
+                target_participant_id,
+                target_participant.handle.backend_id,
+                target_backend_id
+            );
+        }
+        if target_participant.handle.role != MEMBER_ROLE
+            || target_participant.handle.execution.scope != AgentExecutionScope::World
+        {
+            anyhow::bail!(
+                "invalid_target_participant: orchestration session {} participant {} is not a retained world worker",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if target_participant
+            .handle
+            .orchestrator_participant_id
+            .as_deref()
+            != Some(authoritative.participant.participant_id())
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
+                orchestration_session_id,
+                target_participant_id,
+                authoritative.participant.participant_id()
+            );
+        }
+        if !target_participant.matches_authoritative_parent_world_binding(&authoritative.session) {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+
+        Ok(ResolvedInternalInspectWorldDispatchTarget {
             session: authoritative.session,
             caller_participant: authoritative.participant,
             target_participant,
@@ -5975,6 +6111,416 @@ mod tests {
                 err.to_string(),
                 "stale_linkage: orchestration session sess_continue retained worker ash_continue is no longer authoritative-live"
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_inspect_world_dispatch_target_returns_exact_live_retained_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect("resolve exact retained inspect target");
+
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_inspect");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_inspect");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_inspect_world_dispatch_target_accepts_non_live_retained_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+            member.mark_terminal_state("worker exited");
+            member.transition_state(AgentRuntimeSessionState::Invalidated);
+            member.internal.shell_owner_pid = 999_999_999;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect("inspect must accept exact retained workers even when not continue-routable");
+
+            assert_eq!(
+                resolved.target_participant.handle.state,
+                AgentRuntimeSessionState::Invalidated
+            );
+            assert!(!resolved.target_participant.is_authoritative_live());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_inspect_world_dispatch_target_rejects_non_authoritative_caller() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "ash_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect_err("member caller must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "caller_not_authoritative: orchestration session sess_inspect authoritative orchestrator participant is orch_inspect not ash_inspect"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_inspect_world_dispatch_target_rejects_cross_session_target() {
+        with_store(|store| {
+            let orchestrator_a = live_orchestrator("codex", "sess_inspect_a", "orch_inspect_a");
+            let mut parent_a = active_parent(&orchestrator_a);
+            parent_a.set_world_binding("world-17", 2);
+
+            let orchestrator_b = live_orchestrator("codex", "sess_inspect_b", "orch_inspect_b");
+            let mut parent_b = active_parent(&orchestrator_b);
+            parent_b.set_world_binding("world-17", 2);
+
+            let member_b = live_member(
+                "codex_world",
+                "sess_inspect_b",
+                "ash_inspect_b",
+                "orch_inspect_b",
+            );
+
+            store
+                .persist_orchestration_session(&parent_a)
+                .expect("persist session a");
+            store
+                .persist_participant(&orchestrator_a)
+                .expect("persist orchestrator a");
+            store
+                .persist_orchestration_session(&parent_b)
+                .expect("persist session b");
+            store
+                .persist_participant(&orchestrator_b)
+                .expect("persist orchestrator b");
+            store
+                .persist_participant(&member_b)
+                .expect("persist member b");
+
+            let err = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect_a",
+                    "orch_inspect_a",
+                    "ash_inspect_b",
+                    "cli:codex_world",
+                )
+                .expect_err("cross-session target must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_in_session: orchestration session sess_inspect_a has no exact retained worker ash_inspect_b"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_inspect_world_dispatch_target_rejects_world_binding_drift() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+            member.handle.world_generation = Some(3);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect_err("world binding drift must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "world_binding_mismatch: orchestration session sess_inspect retained worker ash_inspect no longer matches the authoritative world binding"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolved_internal_inspect_world_dispatch_target_projects_live_snapshot() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect("resolve inspect target");
+            let snapshot = resolved.project_snapshot();
+
+            assert_eq!(snapshot.participant_state, AgentRuntimeSessionState::Ready);
+            assert_eq!(snapshot.session_state, OrchestrationSessionState::Active);
+            assert_eq!(
+                snapshot.session_posture,
+                OrchestrationSessionPosture::ActiveAttached
+            );
+            assert!(snapshot.authoritative_live);
+            assert!(!snapshot.attention_required);
+            assert_eq!(snapshot.parent_participant_id, None);
+            assert_eq!(snapshot.resumed_from_participant_id, None);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolved_internal_inspect_world_dispatch_target_projects_attention_snapshot() {
+        with_store(|store| {
+            let orchestrator = detached_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.set_pending_inbox_count(2);
+
+            let mut member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+            member.handle.parent_participant_id = Some("ash_parent".to_string());
+            member.handle.resumed_from_participant_id = Some("ash_prev".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect("resolve inspect target");
+            let snapshot = resolved.project_snapshot();
+
+            assert_eq!(snapshot.participant_state, AgentRuntimeSessionState::Ready);
+            assert_eq!(snapshot.session_state, OrchestrationSessionState::Active);
+            assert_eq!(
+                snapshot.session_posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+            assert!(snapshot.authoritative_live);
+            assert!(snapshot.attention_required);
+            assert_eq!(snapshot.parent_participant_id.as_deref(), Some("ash_parent"));
+            assert_eq!(
+                snapshot.resumed_from_participant_id.as_deref(),
+                Some("ash_prev")
+            );
+
+            let stored = store
+                .load_session("sess_inspect")
+                .expect("load session")
+                .expect("session must remain persisted");
+            assert_eq!(stored.session.posture, OrchestrationSessionPosture::AwaitingAttention);
+            assert_eq!(stored.session.pending_inbox_count, 2);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolved_internal_inspect_world_dispatch_target_projects_invalidated_snapshot() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+            member.mark_terminal_state("worker invalidated");
+            member.transition_state(AgentRuntimeSessionState::Invalidated);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect("resolve inspect target");
+            let snapshot = resolved.project_snapshot();
+
+            assert_eq!(
+                snapshot.participant_state,
+                AgentRuntimeSessionState::Invalidated
+            );
+            assert_eq!(snapshot.session_state, OrchestrationSessionState::Active);
+            assert_eq!(
+                snapshot.session_posture,
+                OrchestrationSessionPosture::ActiveAttached
+            );
+            assert!(!snapshot.authoritative_live);
+            assert!(!snapshot.attention_required);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolved_internal_inspect_world_dispatch_target_projects_terminal_snapshot() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_inspect", "orch_inspect");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect",
+            );
+            member.mark_terminal_state("worker stopped");
+            member.transition_state(AgentRuntimeSessionState::Stopped);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect("resolve inspect target");
+            let snapshot = resolved.project_snapshot();
+
+            assert_eq!(snapshot.participant_state, AgentRuntimeSessionState::Stopped);
+            assert_eq!(snapshot.session_state, OrchestrationSessionState::Active);
+            assert_eq!(
+                snapshot.session_posture,
+                OrchestrationSessionPosture::ActiveAttached
+            );
+            assert!(!snapshot.authoritative_live);
+            assert!(!snapshot.attention_required);
         });
     }
 
