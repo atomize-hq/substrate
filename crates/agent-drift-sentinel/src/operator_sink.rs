@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use crate::input::CheckpointCursor;
 use crate::live_runtime::LiveObservation;
-use crate::operator_surface::{CheckpointPresentation, WarningDisposition};
+use crate::operator_surface::{
+    CheckpointDiagnosticsSummary, CheckpointPresentation, WarningDisposition,
+};
 use crate::scheduler::{DecisionReason, TriggerClass};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +20,7 @@ pub struct VisibleWarningEvent {
     pub cursor: CheckpointCursor,
     pub source_label: Option<String>,
     pub presentation: CheckpointPresentation,
+    pub diagnostics_summary: CheckpointDiagnosticsSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +30,7 @@ pub struct SilentCheckpointEvent {
     pub checkpoint_id: String,
     pub trigger: TriggerClass,
     pub reason: String,
+    pub diagnostics_summary: CheckpointDiagnosticsSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +39,7 @@ pub struct HeartbeatEvent {
     pub source_label: Option<String>,
     pub evaluated: bool,
     pub message: String,
+    pub diagnostics_summary: CheckpointDiagnosticsSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +48,7 @@ pub struct StatusEvent {
     pub source_label: Option<String>,
     pub trigger: TriggerClass,
     pub message: String,
+    pub diagnostics_summary: CheckpointDiagnosticsSummary,
 }
 
 pub trait OperatorSink {
@@ -75,6 +81,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
     let mut events = Vec::new();
     let cursor = observation.event.cursor.clone();
     let source_label = observation.event.source_label.clone();
+    let diagnostics_summary = observation.presentation.diagnostics_summary.clone();
 
     match &observation.presentation.disposition {
         WarningDisposition::Visible => {
@@ -82,6 +89,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
                 cursor: cursor.clone(),
                 source_label: source_label.clone(),
                 presentation: observation.presentation.clone(),
+                diagnostics_summary: diagnostics_summary.clone(),
             }));
         }
         WarningDisposition::Silent { reason }
@@ -93,6 +101,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
                 checkpoint_id: observation.presentation.checkpoint.checkpoint_id.clone(),
                 trigger: observation.event.trigger,
                 reason: reason.clone(),
+                diagnostics_summary: diagnostics_summary.clone(),
             }));
         }
         WarningDisposition::Silent { .. } => {}
@@ -105,6 +114,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
                 source_label,
                 evaluated: observation.decision.evaluate,
                 message: heartbeat_message(observation),
+                diagnostics_summary: diagnostics_summary.clone(),
             }));
         }
         TriggerClass::ManualReview | TriggerClass::RepeatedFailure => {
@@ -113,6 +123,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
                 source_label,
                 trigger: observation.event.trigger,
                 message: status_message(observation),
+                diagnostics_summary,
             }));
         }
         TriggerClass::CheckpointReady => {}

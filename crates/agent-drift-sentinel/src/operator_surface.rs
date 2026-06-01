@@ -32,6 +32,45 @@ pub enum WarningDisposition {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckpointDiagnosticsSummary {
+    pub task_frame_transitioned: bool,
+    pub working_set_changed: bool,
+    pub interval_command_count: usize,
+    pub interval_verification_command_count: usize,
+    pub verification_density_basis_points: Option<u32>,
+    pub evidence_item_count: usize,
+}
+
+impl CheckpointDiagnosticsSummary {
+    pub fn from_checkpoint(checkpoint: &Checkpoint) -> Self {
+        let diagnostics = &checkpoint.diagnostics;
+        Self {
+            task_frame_transitioned: diagnostics.task_frame_transitioned,
+            working_set_changed: diagnostics.working_set_changed,
+            interval_command_count: diagnostics.interval_command_count,
+            interval_verification_command_count: diagnostics.interval_verification_command_count,
+            verification_density_basis_points: verification_density_basis_points(
+                diagnostics.interval_verification_command_count,
+                diagnostics.interval_command_count,
+            ),
+            evidence_item_count: diagnostics.evidence_item_count,
+        }
+    }
+
+    pub fn render_console_summary(&self) -> String {
+        format!(
+            "task_frame_transitioned={}, working_set_changed={}, verification={}/{} ({}), evidence_items={}",
+            self.task_frame_transitioned,
+            self.working_set_changed,
+            self.interval_verification_command_count,
+            self.interval_command_count,
+            format_density(self.verification_density_basis_points),
+            self.evidence_item_count
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckpointPresentation {
     pub checkpoint: Checkpoint,
     pub trigger: TriggerClass,
@@ -40,6 +79,7 @@ pub struct CheckpointPresentation {
     pub headline: String,
     pub objective: String,
     pub drift_summary: String,
+    pub diagnostics_summary: CheckpointDiagnosticsSummary,
     pub expected_next_step: String,
     pub evidence_lines: Vec<String>,
 }
@@ -54,6 +94,10 @@ impl CheckpointPresentation {
         lines.push(format!("[{label}] {} ({})", self.headline, self.severity));
         lines.push(format!("- Objective: {}", self.objective));
         lines.push(format!("- Drift: {}", self.drift_summary));
+        lines.push(format!(
+            "- Diagnostics: {}",
+            self.diagnostics_summary.render_console_summary()
+        ));
         lines.push(format!("- Expected next step: {}", self.expected_next_step));
         for evidence in &self.evidence_lines {
             lines.push(format!("- Evidence: {evidence}"));
@@ -223,6 +267,7 @@ pub fn present_checkpoint(
                 .collect::<Vec<_>>()
                 .join(", ")
         },
+        diagnostics_summary: CheckpointDiagnosticsSummary::from_checkpoint(checkpoint),
         expected_next_step: checkpoint.expected_next_step.clone(),
         evidence_lines,
     }
@@ -347,5 +392,25 @@ fn truncate(text: &str, max_chars: usize) -> String {
         format!("{truncated}...")
     } else {
         truncated
+    }
+}
+
+fn verification_density_basis_points(
+    verification_command_count: usize,
+    command_count: usize,
+) -> Option<u32> {
+    if command_count == 0 {
+        return None;
+    }
+
+    Some((((verification_command_count * 10_000) + (command_count / 2)) / command_count) as u32)
+}
+
+fn format_density(density_basis_points: Option<u32>) -> String {
+    match density_basis_points {
+        Some(basis_points) => {
+            format!("{}.{:02}%", basis_points / 100, basis_points % 100)
+        }
+        None => "unavailable".to_string(),
     }
 }

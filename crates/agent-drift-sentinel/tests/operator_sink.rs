@@ -24,6 +24,12 @@ fn operator_sink_emits_visible_and_silent_checkpoint_events() {
         visible_events.as_slice(),
         [OperatorEvent::VisibleWarning(event)]
             if event.presentation.headline.contains("session-alpha:0001")
+                && event.diagnostics_summary.task_frame_transitioned
+                && !event.diagnostics_summary.working_set_changed
+                && event.diagnostics_summary.interval_verification_command_count == 1
+                && event.diagnostics_summary.interval_command_count == 1
+                && event.diagnostics_summary.verification_density_basis_points == Some(10_000)
+                && event.diagnostics_summary.evidence_item_count == 2
     ));
 
     let silent = runtime
@@ -39,6 +45,8 @@ fn operator_sink_emits_visible_and_silent_checkpoint_events() {
         [OperatorEvent::SilentCheckpoint(event)]
             if event.reason.contains("scheduler cooldown deferred replay evaluation")
                 && event.trigger == TriggerClass::CheckpointReady
+                && !event.diagnostics_summary.task_frame_transitioned
+                && event.diagnostics_summary.verification_density_basis_points == Some(10_000)
     ));
 }
 
@@ -76,7 +84,10 @@ fn operator_sink_emits_heartbeat_and_manual_review_status_events() {
     assert!(matches!(
         heartbeat_events.as_slice(),
         [OperatorEvent::Heartbeat(event)]
-            if event.evaluated && event.message.contains("heartbeat evaluated")
+            if event.evaluated
+                && event.message.contains("heartbeat evaluated")
+                && !event.diagnostics_summary.task_frame_transitioned
+                && event.diagnostics_summary.interval_command_count == 1
     ));
 
     let manual_review = runtime
@@ -93,6 +104,8 @@ fn operator_sink_emits_heartbeat_and_manual_review_status_events() {
         [OperatorEvent::Status(event)]
             if event.trigger == TriggerClass::ManualReview
                 && event.message.contains("without a visible warning")
+                && !event.diagnostics_summary.task_frame_transitioned
+                && event.diagnostics_summary.evidence_item_count == 2
     ));
 
     assert_eq!(sink.events().len(), 3);

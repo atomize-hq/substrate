@@ -31,7 +31,8 @@ pub use operator_sink::{
     RecordingOperatorSink, SilentCheckpointEvent, StatusEvent, VisibleWarningEvent,
 };
 pub use operator_surface::{
-    CheckpointPresentation, ReplayReport, WarningDisposition, WarningPolicy,
+    CheckpointDiagnosticsSummary, CheckpointPresentation, ReplayReport, WarningDisposition,
+    WarningPolicy,
 };
 pub use scheduler::{
     DecisionReason, EvaluationDecision, SchedulerPolicy, SchedulerState, TriggerClass,
