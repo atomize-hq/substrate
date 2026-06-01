@@ -46,6 +46,7 @@ use crate::execution::agent_runtime::control::{
     PublicPromptAction, PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
     SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
+use crate::execution::agent_runtime::dispatch_contract::StopWorldWorkerOutcomeV1;
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
@@ -4898,14 +4899,19 @@ async fn handle_internal_toolbox_world_dispatch_request(
     match request.action {
         WorldDispatchActionV1::RunWorldTask
         | WorldDispatchActionV1::ContinueWorldWorker
-        | WorldDispatchActionV1::InspectWorldWorker => {
-            dispatch_orchestrator_world_request(&startup_context.store, request).await
-        }
-        WorldDispatchActionV1::StopWorldWorker => {
-            request.validate()?;
-            anyhow::bail!(
-                "unsupported_dispatch_action: internal toolbox world dispatch does not route stop_world_worker until packet 3"
-            )
+        | WorldDispatchActionV1::InspectWorldWorker
+        | WorldDispatchActionV1::StopWorldWorker => {
+            let outcome = dispatch_orchestrator_world_request(&startup_context.store, request).await?;
+            if let WorldDispatchOutcomeV1::StopWorldWorker(stop) = &outcome {
+                reap_stopped_internal_dispatch_member_runtime(
+                    stop,
+                    member_runtimes,
+                    agent_printer,
+                    telemetry,
+                )
+                .await;
+            }
+            Ok(outcome)
         }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         WorldDispatchActionV1::SpawnWorldWorker => {
@@ -4994,6 +5000,29 @@ async fn handle_internal_toolbox_world_dispatch_request(
         WorldDispatchActionV1::SpawnWorldWorker => anyhow::bail!(
             "unsupported_platform_or_posture: spawn_world_worker world dispatch bootstrap is supported only on linux in v1"
         ),
+    }
+}
+
+async fn reap_stopped_internal_dispatch_member_runtime(
+    outcome: &StopWorldWorkerOutcomeV1,
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) {
+    let should_remove = member_runtimes
+        .get(outcome.target_backend_id.as_str())
+        .is_some_and(|runtime| {
+            let manifest = runtime_manifest_snapshot(runtime);
+            manifest.handle.role == MEMBER_ROLE
+                && manifest.handle.orchestration_session_id == outcome.orchestration_session_id
+                && manifest.handle.participant_id == outcome.target_participant_id
+        });
+    if !should_remove {
+        return;
+    }
+
+    if let Some(runtime) = member_runtimes.remove(outcome.target_backend_id.as_str()) {
+        shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
 }
 
@@ -10700,7 +10729,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_rejects_stop_before_packet_three_routing() {
+    fn orchestrator_world_dispatch_surface_routes_stop_into_durable_closeout_and_runtime_cleanup() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
@@ -10709,6 +10738,7 @@ mod tests {
         fs::create_dir_all(&substrate_home).expect("substrate home");
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -10728,6 +10758,11 @@ mod tests {
             runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
+        fs::write(
+            agents_dir.join("codex_world.yaml"),
+            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+        )
+        .expect("write codex_world agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -10756,6 +10791,27 @@ mod tests {
             .await
             .expect("host runtime start should succeed")
             .expect("host runtime");
+            let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+                .expect("member selection should succeed")
+                .expect("one world-scoped member should be selected");
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor,
+                &world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_member_runtime_with_prepared(
+                Some(member_prepared),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+            let member_snapshot_before = runtime_manifest_snapshot(&member_runtime);
+            let member_backend_id = runtime_backend_id(&member_runtime);
+            let member_participant_id = member_snapshot_before.handle.participant_id.clone();
 
             let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
             ensure_internal_toolbox_transport_registered(
@@ -10775,8 +10831,8 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::StopWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
-                target_participant_id: Some("ash-worker-stop".to_string()),
+                target_backend_id: Some(member_backend_id.clone()),
+                target_participant_id: Some(member_participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
                 payload: WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
@@ -10784,6 +10840,8 @@ mod tests {
             let transport_path =
                 internal_toolbox_transport_path(&startup_context.orchestration_session_id());
             let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            member_runtimes.insert(member_backend_id.clone(), member_runtime);
+            assert_eq!(member_runtimes.len(), 1, "fixture should keep one retained runtime");
             let request_task = tokio::spawn({
                 let transport_path = transport_path.clone();
                 let request = request.clone();
@@ -10803,21 +10861,52 @@ mod tests {
                 &mut telemetry,
             )
             .await;
-            let err = tokio::time::timeout(Duration::from_secs(15), request_task)
+            let outcome = tokio::time::timeout(Duration::from_secs(15), request_task)
                 .await
                 .expect("timed out waiting for internal toolbox response")
                 .expect("internal toolbox task should join")
-                .expect_err("stop must fail closed until packet three routing exists");
+                .expect("stop should succeed once packet three routing is present");
+
+            let stop = match outcome {
+                WorldDispatchOutcomeV1::StopWorldWorker(outcome) => outcome,
+                other => panic!("expected stop_world_worker outcome, got {other:?}"),
+            };
+            assert_eq!(stop.request_id, "req_toolbox_stop");
+            assert_eq!(
+                stop.orchestration_session_id,
+                startup_context.orchestration_session_id()
+            );
+            assert_eq!(stop.action, WorldDispatchActionV1::StopWorldWorker);
+            assert_eq!(
+                stop.mode,
+                crate::execution::agent_runtime::WorldDispatchModeV1::Retained
+            );
+            assert_eq!(stop.target_backend_id, member_backend_id);
+            assert_eq!(stop.target_participant_id, member_participant_id);
+            assert_eq!(
+                stop.closeout.participant_state,
+                AgentRuntimeSessionState::Stopped
+            );
+            assert_eq!(stop.closeout.session_state, OrchestrationSessionState::Active);
+            assert!(
+                stop.summary.contains("existing private owner stop surface"),
+                "stop summary should stay explicit about the reused private stop seam: {}",
+                stop.summary
+            );
 
             assert!(
-                err.to_string().contains(
-                    "unsupported_dispatch_action: internal toolbox world dispatch does not route stop_world_worker until packet 3"
-                ),
-                "unexpected stop routing error: {err}"
+                member_runtimes.is_empty(),
+                "stop must evict the retained runtime handle so it cannot be routed again"
             );
-            assert!(
-                !err.to_string().contains("world_dispatch_disabled"),
-                "allowlisted stop should not be denied as disabled before ingress rejection: {err}"
+            let participant_after = startup_context
+                .store
+                .load_participant(&stop.target_participant_id)
+                .expect("load retained participant after stop")
+                .expect("retained participant after stop");
+            assert_eq!(participant_after.handle.state, AgentRuntimeSessionState::Stopped);
+            assert_eq!(
+                participant_after.internal.termination_reason.as_deref(),
+                Some("stopped")
             );
 
             shutdown_host_orchestrator_runtime(

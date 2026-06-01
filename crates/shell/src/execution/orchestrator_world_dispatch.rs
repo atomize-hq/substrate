@@ -2,6 +2,8 @@
 use std::collections::BTreeMap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use std::time::{Duration, Instant};
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 use std::sync::{LazyLock, Mutex};
 
@@ -18,9 +20,14 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 #[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::control::{
+    private_stop_transport_path, request_private_stop, PrivateStopOutcome,
+};
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
     ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1,
-    InspectWorldWorkerOutcomeV1, WorkerContinuePayloadV1,
+    InspectWorldWorkerOutcomeV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
+    WorkerContinuePayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -41,7 +48,8 @@ use crate::execution::agent_runtime::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::{
-    RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1,
+    AgentRuntimeSessionState, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
+    WorkerSpawnPayloadV1,
     WorldDispatchModeV1, WorldDispatchPayloadV1,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -164,11 +172,7 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
         WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
         WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
-        WorldDispatchActionV1::StopWorldWorker => {
-            anyhow::bail!(
-                "unsupported_dispatch_action: stop_world_worker routing lands in packet 3"
-            )
-        }
+        WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
     }
 }
 
@@ -208,6 +212,15 @@ async fn inspect_world_worker(
     );
 }
 
+#[cfg(not(target_os = "linux"))]
+async fn stop_world_worker(
+    _prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    anyhow::bail!(
+        "unsupported_platform_or_posture: stop_world_worker retained closeout routing is supported only on linux in v1"
+    );
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 struct InternalDispatchContext {
     effective_config: SubstrateConfig,
@@ -227,6 +240,11 @@ struct ContinueWorldWorkerStreamResult {
     surfaced_thread_id: Option<String>,
     surfaced_worker_event: Option<ContinueWorldWorkerEventV1>,
 }
+
+#[cfg(target_os = "linux")]
+const STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(target_os = "linux")]
+const STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
@@ -436,6 +454,101 @@ async fn inspect_world_worker(
             world_id,
             world_generation,
             snapshot,
+            summary,
+        },
+    ))
+}
+
+#[cfg(target_os = "linux")]
+async fn stop_world_worker(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
+
+    let resolved = prepared
+        .store
+        .resolve_internal_stop_world_dispatch_target(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            prepared
+                .request
+                .target_participant_id
+                .as_deref()
+                .expect("validated stop request must include target_participant_id"),
+            &prepared.request.target_backend_id,
+        )
+        .map_err(map_world_dispatch_resolution_error)?;
+
+    let transport_path = private_stop_transport_path(
+        &prepared.store,
+        &resolved.session.orchestration_session_id,
+        resolved.target_participant.participant_id(),
+    );
+    let transport_result = request_private_stop(&transport_path).await;
+    let closeout = wait_for_stop_world_worker_closeout(
+        &prepared.store,
+        &resolved.session.orchestration_session_id,
+        resolved.target_participant.participant_id(),
+    )
+    .await;
+    let closeout = match (transport_result, closeout) {
+        (Ok(PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal), Ok(closeout)) => {
+            closeout
+        }
+        (Ok(PrivateStopOutcome::OwnerUnreachable), Ok(closeout))
+        | (Ok(PrivateStopOutcome::ProtocolError), Ok(closeout))
+        | (Err(_), Ok(closeout)) => closeout,
+        (Ok(PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal), Err(err)) => {
+            return Err(err);
+        }
+        (Ok(PrivateStopOutcome::OwnerUnreachable), Err(err)) => {
+            return Err(anyhow::anyhow!(
+                "owner_unreachable: private stop transport for retained worker {} did not stay reachable until durable stop closeout completed: {err}",
+                resolved.target_participant.participant_id()
+            ));
+        }
+        (Ok(PrivateStopOutcome::ProtocolError), Err(err)) => {
+            return Err(anyhow::anyhow!(
+                "owner_unreachable: private stop transport for retained worker {} returned a protocol error before durable stop closeout completed: {err}",
+                resolved.target_participant.participant_id()
+            ));
+        }
+        (Err(connect_err), Err(closeout_err)) => {
+            return Err(anyhow::anyhow!(
+                "owner_unreachable: failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({connect_err:#}; {closeout_err})",
+                resolved.target_participant.participant_id()
+            ));
+        }
+    };
+    let summary = summarize_stop_world_worker_result(
+        resolved.target_participant.participant_id(),
+        &resolved.target_participant.handle.backend_id,
+    );
+
+    Ok(WorldDispatchOutcomeV1::StopWorldWorker(
+        StopWorldWorkerOutcomeV1 {
+            request_id: prepared.request.request_id,
+            orchestration_session_id: resolved.session.orchestration_session_id.clone(),
+            action: WorldDispatchActionV1::StopWorldWorker,
+            mode: prepared.request.mode,
+            orchestrator_participant_id: resolved.caller_participant.participant_id().to_string(),
+            target_participant_id: resolved.target_participant.participant_id().to_string(),
+            target_backend_id: resolved.target_participant.handle.backend_id.clone(),
+            world_id: resolved.session.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_world_binding: orchestration session {} has no authoritative world binding",
+                    resolved.session.orchestration_session_id
+                )
+            })?,
+            world_generation: resolved.session.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_world_binding: orchestration session {} has no authoritative world binding",
+                    resolved.session.orchestration_session_id
+                )
+            })?,
+            closeout,
             summary,
         },
     ))
@@ -1746,6 +1859,72 @@ fn summarize_inspect_world_worker_result(participant_id: &str, backend_id: &str)
     )
 }
 
+#[cfg(target_os = "linux")]
+async fn wait_for_stop_world_worker_closeout(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<RetainedWorkerStopCloseoutV1> {
+    let started_at = Instant::now();
+    loop {
+        let participant = store.load_participant(participant_id)?.ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing_target_participant: retained worker {} disappeared before durable stop closeout was observed",
+                participant_id
+            )
+        })?;
+        if participant.handle.state == AgentRuntimeSessionState::Stopped {
+            let session = store
+                .load_orchestration_session(orchestration_session_id)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "missing_orchestration_session: orchestration session {} disappeared before durable stop closeout was observed",
+                        orchestration_session_id
+                    )
+                })?;
+            return Ok(RetainedWorkerStopCloseoutV1 {
+                participant_state: participant.handle.state,
+                session_state: session.state,
+            });
+        }
+        if !participant.handle.state.is_live() {
+            anyhow::bail!(
+                "stop_closeout_failed: retained worker {} reached terminal state {} instead of stopped",
+                participant_id,
+                agent_runtime_session_state_label(&participant.handle.state)
+            );
+        }
+        if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
+            anyhow::bail!(
+                "owner_unreachable: timed out waiting for retained worker {} to reach durable stopped closeout",
+                participant_id
+            );
+        }
+        tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn summarize_stop_world_worker_result(participant_id: &str, backend_id: &str) -> String {
+    format!(
+        "stop_world_worker drove durable stopped closeout for retained worker {participant_id} on backend {backend_id} via the existing private owner stop surface"
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn agent_runtime_session_state_label(state: &AgentRuntimeSessionState) -> &'static str {
+    match state {
+        AgentRuntimeSessionState::Allocating => "allocating",
+        AgentRuntimeSessionState::Ready => "ready",
+        AgentRuntimeSessionState::Running => "running",
+        AgentRuntimeSessionState::Restarting => "restarting",
+        AgentRuntimeSessionState::Stopping => "stopping",
+        AgentRuntimeSessionState::Stopped => "stopped",
+        AgentRuntimeSessionState::Failed => "failed",
+        AgentRuntimeSessionState::Invalidated => "invalidated",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1893,6 +2072,7 @@ mod tests {
                 "spawn_world_worker".to_string(),
                 "continue_world_worker".to_string(),
                 "inspect_world_worker".to_string(),
+                "stop_world_worker".to_string(),
             ],
             agents_world_dispatch_allowed_modes: vec![
                 "ephemeral".to_string(),
@@ -1998,6 +2178,25 @@ mod tests {
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
             payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_stop_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_stop".to_string()),
+            idempotency_key: Some("idem_stop".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::StopWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerStop(
+                crate::execution::agent_runtime::dispatch_contract::WorkerStopPayloadV1::default(),
+            ),
         }
     }
 
@@ -3117,6 +3316,93 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
+    async fn dispatch_contract_stop_world_worker_policy_denials_precede_target_resolution() {
+        struct DenialCase<'a> {
+            enabled: bool,
+            allowed_backends: &'a [&'a str],
+            allowed_actions: &'a [&'a str],
+            allowed_modes: &'a [&'a str],
+            expected_denial: &'a str,
+        }
+
+        let cases = [
+            DenialCase {
+                enabled: false,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["stop_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "world_dispatch_disabled:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["inspect_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "action_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["stop_world_worker"],
+                allowed_modes: &["ephemeral"],
+                expected_denial: "mode_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:other_world"],
+                allowed_actions: &["stop_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "backend_not_allowed:",
+            },
+        ];
+
+        for case in cases {
+            let substrate_home = tempdir().expect("substrate home tempdir");
+            let _substrate_home_guard =
+                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            write_world_dispatch_policy(
+                substrate_home.path(),
+                case.enabled,
+                case.allowed_backends,
+                case.allowed_actions,
+                case.allowed_modes,
+            );
+
+            let workspace_root = tempdir().expect("workspace root tempdir");
+            let store = AgentRuntimeStateStore::new().expect("state store");
+            persist_authoritative_continue_dispatch_state(
+                &store,
+                workspace_root.path(),
+                "world-17",
+                2,
+            );
+
+            let mut request = sample_stop_world_dispatch_request();
+            request.target_participant_id = Some("ash_missing".to_string());
+            let err = dispatch_orchestrator_world_request(&store, request)
+                .await
+                .expect_err("steering denial must fail closed before stop target resolution");
+            let message = err.to_string();
+
+            assert!(
+                message.contains(case.expected_denial),
+                "expected {} in {message}",
+                case.expected_denial
+            );
+            assert!(
+                !message.contains("target_not_in_session:"),
+                "steering denial must not leak stop target resolution truth first: {message}"
+            );
+            assert!(
+                !message.contains("target_already_terminal:"),
+                "steering denial must not leak stop terminal state truth first: {message}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
     async fn dispatch_contract_inspect_world_worker_returns_authoritative_snapshot_without_mutation(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
@@ -3188,6 +3474,108 @@ mod tests {
         assert_eq!(session_after.session, session_before.session);
         assert_eq!(session_after.participants, session_before.participants);
         assert_eq!(participant_after, participant_before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_returns_typed_closeout_after_authoritative_stop()
+    {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let (stop_tx, mut stop_rx) =
+            crate::execution::agent_runtime::control::private_stop_request_channel();
+        let mut stop_transport = crate::execution::agent_runtime::control::register_private_stop_transport(
+            &store,
+            "sess_dispatch",
+            "ash_member",
+            stop_tx,
+        )
+        .await
+        .expect("register private stop transport");
+        let store_for_task = store.clone();
+        let stop_owner = tokio::spawn(async move {
+            let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
+                .await
+                .expect("timed out waiting for private stop request")
+                .expect("private stop request");
+            let mut session = store_for_task
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for stop closeout")
+                .expect("authoritative orchestration session for stop closeout");
+            let mut participant = store_for_task
+                .load_participant("ash_member")
+                .expect("load retained participant for stop closeout")
+                .expect("authoritative retained participant for stop closeout");
+            participant.transition_state(AgentRuntimeSessionState::Stopped);
+            participant.mark_terminal_state("worker stopped");
+            participant.touch_heartbeat();
+            session.touch_active();
+            crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                &store_for_task,
+                &session,
+                &participant,
+            )
+            .expect("persist retained stop closeout");
+            let _ = request
+                .response_tx
+                .send(crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted);
+        });
+
+        let prepared = prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+            .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch prepared stop request");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.request_id, "req_stop");
+        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+        assert_eq!(outcome.action, WorldDispatchActionV1::StopWorldWorker);
+        assert_eq!(outcome.mode, WorldDispatchModeV1::Retained);
+        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+        assert_eq!(
+            outcome.closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(outcome.closeout.session_state, OrchestrationSessionState::Active);
+        assert!(
+            outcome
+                .summary
+                .contains("existing private owner stop surface"),
+            "summary should stay explicit about stop reusing the private owner seam: {}",
+            outcome.summary
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after stop")
+            .expect("retained participant after stop");
+        assert_eq!(participant_after.handle.state, AgentRuntimeSessionState::Stopped);
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("worker stopped")
+        );
+
+        stop_owner.await.expect("stop owner task should join");
+        stop_transport.close().await;
     }
 
     #[cfg(target_os = "linux")]
