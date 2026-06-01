@@ -47,7 +47,7 @@ Config keys:
 Policy keys:
 - `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
 - Existing `agents.allowed_backends` entries stay valid across the successor `substrate agent ...` command surface because the policy token is still the derived `backend_id`, not `client`, `router`, `protocol`, `provider`, or `auth_authority`.
-- `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, and currently governs only the landed internal verbs `run_world_task`, `spawn_world_worker`, and `continue_world_worker`.
+- `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, governs the live internal verbs `run_world_task`, `spawn_world_worker`, `continue_world_worker`, and `inspect_world_worker`, and also accepts the Packet 1 contract-reserved allowlist action `stop_world_worker`, which remains fail-closed on the live toolbox path until later stop routing lands.
 
 Minimal example:
 
@@ -301,10 +301,11 @@ world_fs:
 Internal host-to-world steering example:
 
 - This surface is internal-only and deny-by-default. The built-in defaults keep `agents.world_dispatch.enabled=false`, keep the allowlists empty, require exact same-session and same-world-binding truth, disallow capability narrowing, and set both current concurrency caps to `0`.
-- Current action ids are limited to `run_world_task`, `spawn_world_worker`, `continue_world_worker`, and `inspect_world_worker`.
+- Current action ids accepted by `agents.world_dispatch.allowed_actions` are `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker`.
 - `inspect_world_worker` remains internal, retained-worker-only in v1, and returns an authoritative store-backed snapshot instead of invoking world-side execution transport. Routed snapshot delivery is currently supported only on Linux in v1; non-Linux builds fail closed with `unsupported_platform_or_posture`.
+- `stop_world_worker` is a Packet 1 policy/config action only in the current build. The live internal toolbox ingress rejects it with `unsupported_dispatch_action` until the later retained-worker stop-routing packets land, so allowlisting it does not enable active stop execution yet.
 - Current mode ids are limited to `ephemeral` and `retained`.
-- This patch surface does not imply active-ephemeral inspect, later mutating verbs (`cancel_world_work`, `stop_world_worker`, `fork_world_worker`), router-owned attach execution, or broader approval/fork autonomy policy.
+- This patch surface does not imply active-ephemeral inspect, live stop execution/closeout, later mutating verbs (`cancel_world_work`, `fork_world_worker`), router-owned attach execution, or broader approval/fork autonomy policy.
 
 ```yaml
 agents:
