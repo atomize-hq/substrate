@@ -32,6 +32,63 @@ pub struct CheckpointDiagnosticStats {
     pub working_set_change_count: usize,
     pub adjacent_checkpoint_pair_count: usize,
     pub total_evidence_item_count: usize,
+    pub total_interval_command_count: usize,
+    pub total_interval_verification_command_count: usize,
+}
+
+impl Default for CheckpointDiagnosticStats {
+    fn default() -> Self {
+        Self {
+            checkpoint_count: 0,
+            flagged_checkpoint_count: 0,
+            drift_class_flagged_counts: drift_class_flagged_counts(),
+            task_frame_transition_count: 0,
+            confidence_distribution: ConfidenceDistribution::default(),
+            working_set_change_count: 0,
+            adjacent_checkpoint_pair_count: 0,
+            total_evidence_item_count: 0,
+            total_interval_command_count: 0,
+            total_interval_verification_command_count: 0,
+        }
+    }
+}
+
+impl std::ops::Add for CheckpointDiagnosticStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut drift_class_flagged_counts = self.drift_class_flagged_counts;
+        for class in drift_classes() {
+            *drift_class_flagged_counts.entry(class).or_default() += rhs
+                .drift_class_flagged_counts
+                .get(&class)
+                .copied()
+                .unwrap_or(0);
+        }
+
+        Self {
+            checkpoint_count: self.checkpoint_count + rhs.checkpoint_count,
+            flagged_checkpoint_count: self.flagged_checkpoint_count + rhs.flagged_checkpoint_count,
+            drift_class_flagged_counts,
+            task_frame_transition_count: self.task_frame_transition_count
+                + rhs.task_frame_transition_count,
+            confidence_distribution: ConfidenceDistribution {
+                low: self.confidence_distribution.low + rhs.confidence_distribution.low,
+                medium: self.confidence_distribution.medium + rhs.confidence_distribution.medium,
+                high: self.confidence_distribution.high + rhs.confidence_distribution.high,
+            },
+            working_set_change_count: self.working_set_change_count + rhs.working_set_change_count,
+            adjacent_checkpoint_pair_count: self.adjacent_checkpoint_pair_count
+                + rhs.adjacent_checkpoint_pair_count,
+            total_evidence_item_count: self.total_evidence_item_count
+                + rhs.total_evidence_item_count,
+            total_interval_command_count: self.total_interval_command_count
+                + rhs.total_interval_command_count,
+            total_interval_verification_command_count: self
+                .total_interval_verification_command_count
+                + rhs.total_interval_verification_command_count,
+        }
+    }
 }
 
 impl CheckpointDiagnosticStats {
@@ -57,6 +114,13 @@ impl CheckpointDiagnosticStats {
 
     pub fn average_evidence_items_per_checkpoint(&self) -> Option<f64> {
         average(self.total_evidence_item_count, self.checkpoint_count)
+    }
+
+    pub fn verification_density(&self) -> Option<f64> {
+        ratio(
+            self.total_interval_verification_command_count,
+            self.total_interval_command_count,
+        )
     }
 }
 
@@ -131,46 +195,38 @@ pub fn export_checkpoints(
 }
 
 pub fn summarize_checkpoint_diagnostics(checkpoints: &[Checkpoint]) -> CheckpointDiagnosticStats {
-    let mut drift_class_flagged_counts = BTreeMap::from([
-        (DriftClass::WrongPlanBranch, 0usize),
-        (DriftClass::IgnoringRepoTruth, 0usize),
-        (DriftClass::DeadEndThrash, 0usize),
-    ]);
-    let mut confidence_distribution = ConfidenceDistribution::default();
-
-    for checkpoint in checkpoints {
-        for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
-            *drift_class_flagged_counts.entry(score.class).or_default() += 1;
-        }
-        match checkpoint.task_frame.confidence {
-            Confidence::Low => confidence_distribution.low += 1,
-            Confidence::Medium => confidence_distribution.medium += 1,
-            Confidence::High => confidence_distribution.high += 1,
-        }
-    }
-
-    CheckpointDiagnosticStats {
+    let mut stats = CheckpointDiagnosticStats {
         checkpoint_count: checkpoints.len(),
         flagged_checkpoint_count: checkpoints
             .iter()
             .filter(|checkpoint| checkpoint.flagged)
             .count(),
-        drift_class_flagged_counts,
-        task_frame_transition_count: checkpoints
-            .iter()
-            .filter(|checkpoint| checkpoint.diagnostics.task_frame_transitioned)
-            .count(),
-        confidence_distribution,
-        working_set_change_count: checkpoints
-            .iter()
-            .filter(|checkpoint| checkpoint.diagnostics.working_set_changed)
-            .count(),
         adjacent_checkpoint_pair_count: checkpoints.len().saturating_sub(1),
-        total_evidence_item_count: checkpoints
-            .iter()
-            .map(|checkpoint| checkpoint.diagnostics.evidence_item_count)
-            .sum(),
+        ..CheckpointDiagnosticStats::default()
+    };
+
+    for checkpoint in checkpoints {
+        for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
+            *stats
+                .drift_class_flagged_counts
+                .entry(score.class)
+                .or_default() += 1;
+        }
+        match checkpoint.task_frame.confidence {
+            Confidence::Low => stats.confidence_distribution.low += 1,
+            Confidence::Medium => stats.confidence_distribution.medium += 1,
+            Confidence::High => stats.confidence_distribution.high += 1,
+        }
+        stats.task_frame_transition_count +=
+            usize::from(checkpoint.diagnostics.task_frame_transitioned);
+        stats.working_set_change_count += usize::from(checkpoint.diagnostics.working_set_changed);
+        stats.total_evidence_item_count += checkpoint.diagnostics.evidence_item_count;
+        stats.total_interval_command_count += checkpoint.diagnostics.interval_command_count;
+        stats.total_interval_verification_command_count +=
+            checkpoint.diagnostics.interval_verification_command_count;
     }
+
+    stats
 }
 
 fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> String {
@@ -233,6 +289,38 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
             "Unknown user messages: `{}`",
             overall.user_message_roles.unknown
         ),
+        format!(
+            "Flagged checkpoint rate: `{}`",
+            format_optional_metric(overall.checkpoint_stats.flagged_checkpoint_rate())
+        ),
+        format!(
+            "Drift-class flagged frequency: `{}`",
+            format_drift_class_frequencies(&overall.checkpoint_stats)
+        ),
+        format!(
+            "Task-frame transition count: `{}`",
+            overall.checkpoint_stats.task_frame_transition_count
+        ),
+        format!(
+            "Task-frame confidence distribution: `{}`",
+            format_confidence_distribution(&overall.checkpoint_stats)
+        ),
+        format!(
+            "Working-set churn: `{}`",
+            format_optional_metric(overall.checkpoint_stats.working_set_churn())
+        ),
+        format!(
+            "Verification density: `{}`",
+            format_optional_metric(overall.checkpoint_stats.verification_density())
+        ),
+        format!(
+            "Average evidence items per checkpoint: `{}`",
+            format_optional_metric(
+                overall
+                    .checkpoint_stats
+                    .average_evidence_items_per_checkpoint()
+            )
+        ),
         String::new(),
     ];
 
@@ -273,6 +361,38 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
         lines.push(format!(
             "- Longest flagged streak: `{}`",
             session_summary.metrics.longest_flagged_streak
+        ));
+        lines.push(format!(
+            "- Flagged checkpoint rate: `{}`",
+            format_optional_metric(session_summary.checkpoint_stats.flagged_checkpoint_rate())
+        ));
+        lines.push(format!(
+            "- Drift-class flagged frequency: `{}`",
+            format_drift_class_frequencies(&session_summary.checkpoint_stats)
+        ));
+        lines.push(format!(
+            "- Task-frame transition count: `{}`",
+            session_summary.checkpoint_stats.task_frame_transition_count
+        ));
+        lines.push(format!(
+            "- Task-frame confidence distribution: `{}`",
+            format_confidence_distribution(&session_summary.checkpoint_stats)
+        ));
+        lines.push(format!(
+            "- Working-set churn: `{}`",
+            format_optional_metric(session_summary.checkpoint_stats.working_set_churn())
+        ));
+        lines.push(format!(
+            "- Verification density: `{}`",
+            format_optional_metric(session_summary.checkpoint_stats.verification_density())
+        ));
+        lines.push(format!(
+            "- Average evidence items per checkpoint: `{}`",
+            format_optional_metric(
+                session_summary
+                    .checkpoint_stats
+                    .average_evidence_items_per_checkpoint()
+            )
         ));
         lines.push(format!(
             "- Distinct task frames: `{}`",
@@ -336,6 +456,7 @@ fn session_turn_count(session: &BundleSession) -> usize {
 struct SessionSummary {
     session_id: String,
     metrics: SessionSummaryMetrics,
+    checkpoint_stats: CheckpointDiagnosticStats,
     diagnostics: SessionDiagnostics,
     spacing: SpacingAccumulator,
     checkpoints: Vec<Checkpoint>,
@@ -405,6 +526,7 @@ struct OverallSummaryMetrics {
     flagged_checkpoints: usize,
     longest_flagged_streak: usize,
     user_message_roles: UserMessageRoleCounts,
+    checkpoint_stats: CheckpointDiagnosticStats,
 }
 
 fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> SessionSummary {
@@ -416,6 +538,7 @@ fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> Se
 
     let user_message_roles = user_message_role_counts(&session.compact_rows);
     let spacing = checkpoint_spacing(session, &sorted_checkpoints);
+    let checkpoint_stats = summarize_checkpoint_diagnostics(&sorted_checkpoints);
     let metrics = SessionSummaryMetrics {
         turns_observed: session_turn_count(session),
         user_prompts_observed: user_message_roles.prompt,
@@ -440,6 +563,7 @@ fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> Se
     SessionSummary {
         session_id: session.session_id.clone(),
         metrics,
+        checkpoint_stats,
         diagnostics,
         spacing,
         checkpoints: sorted_checkpoints,
@@ -473,6 +597,11 @@ fn aggregate_summary_metrics(sessions: &[SessionSummary]) -> OverallSummaryMetri
         .map(|session| session.metrics.longest_flagged_streak)
         .max()
         .unwrap_or(0);
+    let checkpoint_stats = sessions
+        .iter()
+        .fold(CheckpointDiagnosticStats::default(), |acc, session| {
+            acc + session.checkpoint_stats.clone()
+        });
     let spacing = sessions
         .iter()
         .fold(SpacingAccumulator::default(), |acc, session| {
@@ -490,6 +619,7 @@ fn aggregate_summary_metrics(sessions: &[SessionSummary]) -> OverallSummaryMetri
         flagged_checkpoints,
         longest_flagged_streak,
         user_message_roles,
+        checkpoint_stats,
     }
 }
 
@@ -637,6 +767,56 @@ fn format_optional_metric(metric: Option<f64>) -> String {
     metric
         .map(|value| format!("{value:.2}"))
         .unwrap_or_else(|| "unavailable".to_string())
+}
+
+fn format_drift_class_frequencies(stats: &CheckpointDiagnosticStats) -> String {
+    drift_classes()
+        .into_iter()
+        .map(|class| {
+            format!(
+                "{}={}",
+                drift_class_label(class),
+                format_optional_metric(stats.drift_class_flagged_rate(class))
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn format_confidence_distribution(stats: &CheckpointDiagnosticStats) -> String {
+    (stats.checkpoint_count > 0)
+        .then(|| {
+            format!(
+                "low={}, medium={}, high={}",
+                stats.confidence_distribution.low,
+                stats.confidence_distribution.medium,
+                stats.confidence_distribution.high
+            )
+        })
+        .unwrap_or_else(|| "unavailable".to_string())
+}
+
+fn drift_class_flagged_counts() -> BTreeMap<DriftClass, usize> {
+    drift_classes()
+        .into_iter()
+        .map(|class| (class, 0usize))
+        .collect()
+}
+
+fn drift_classes() -> [DriftClass; 3] {
+    [
+        DriftClass::WrongPlanBranch,
+        DriftClass::IgnoringRepoTruth,
+        DriftClass::DeadEndThrash,
+    ]
+}
+
+fn drift_class_label(class: DriftClass) -> &'static str {
+    match class {
+        DriftClass::WrongPlanBranch => "wrong_plan_branch",
+        DriftClass::IgnoringRepoTruth => "ignoring_repo_truth",
+        DriftClass::DeadEndThrash => "dead_end_thrash",
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

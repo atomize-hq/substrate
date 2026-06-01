@@ -29,6 +29,6 @@ fn end_to_end_analysis_is_stable_across_reruns() {
     );
 
     let checkpoints = read_checkpoints(&second.checkpoints_path);
-    assert_eq!(checkpoints[0].schema_version, "v0.1");
+    assert_eq!(checkpoints[0].schema_version, "v0.2");
     assert!(!checkpoints[0].expected_next_step.is_empty());
 }

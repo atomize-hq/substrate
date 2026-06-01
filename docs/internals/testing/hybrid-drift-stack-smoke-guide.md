@@ -225,6 +225,7 @@ Expected success signatures:
   - `schema_version`
   - `checkpoint_id`
   - `boundary.start` and `boundary.end`
+  - `diagnostics`
   - `task_frame`
   - `drift_scores`
   - `expected_next_step`
@@ -233,17 +234,25 @@ Known-good bounded example for `019e767c-e64b-7b93-a540-7a33a90f780f`:
 
 - analyzer summary reports `Sessions analyzed: 1`
 - analyzer summary reports `Turns observed: 1`
-- analyzer summary reports `User prompts observed: 0`
+- analyzer summary reports `User prompts observed: 1`
 - analyzer summary reports `Checkpoints emitted: 16`
 - analyzer summary reports `Checkpoints per turn: 16.00`
-- analyzer summary reports `Checkpoints per user prompt: unavailable`
-- analyzer summary reports `Avg rows between checkpoints: 17.40`
+- analyzer summary reports `Checkpoints per user prompt: 16.00`
+- analyzer summary reports `Avg rows between checkpoints: 17.33`
 - analyzer summary reports `Avg seconds between checkpoints: 45.40`
 - analyzer summary reports `Flagged checkpoints: 8`
 - analyzer summary reports `Longest flagged streak: 7`
+- analyzer summary reports `Flagged checkpoint rate: 0.50`
+- analyzer summary reports `Drift-class flagged frequency: wrong_plan_branch=0.44, ignoring_repo_truth=0.06, dead_end_thrash=0.00`
+- analyzer summary reports `Task-frame transition count: 14`
+- analyzer summary reports `Task-frame confidence distribution: low=1, medium=15, high=0`
+- analyzer summary reports `Working-set churn: 0.93`
+- analyzer summary reports `Verification density: 0.02`
+- analyzer summary reports `Average evidence items per checkpoint: 174.31`
 - the session block reports `Distinct task frames: 15`
 - the session block reports `Truth artifacts referenced: 4`
 - the session block reports `Verification commands observed: 0`
+- the emitted checkpoints use `schema_version: "v0.2"` and include a compact `diagnostics` object
 - `checkpoints.jsonl` contains progressive checkpoint ids from
   `019e767c-e64b-7b93-a540-7a33a90f780f:0001` through
   `019e767c-e64b-7b93-a540-7a33a90f780f:0016`

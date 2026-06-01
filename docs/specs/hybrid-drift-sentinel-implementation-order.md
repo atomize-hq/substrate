@@ -296,13 +296,18 @@ Packet 10A note:
 - if replay or live sentinel work is already landed in the branch, this packet can still run as an
   analyzer-only follow-up and then regenerate bounded replay/live fixtures against the improved
   analyzer summary output
-- `2026-05-30`: `AC1-AC7` landed without widening `checkpoints.jsonl` or the compactor bundle
-  contract. The bounded smoke session `019e767c-e64b-7b93-a540-7a33a90f780f` now reports
-  `Turns observed: 1`, `User prompts observed: 0`, `Checkpoints emitted: 16`,
-  `Checkpoints per turn: 16.00`, `Checkpoints per user prompt: unavailable`,
-  `Avg rows between checkpoints: 17.40`, `Avg seconds between checkpoints: 45.40`,
-  `Flagged checkpoints: 8`, `Longest flagged streak: 7`, plus per-session diagnostics of
-  `Distinct task frames: 15`, `Truth artifacts referenced: 4`, and
+- `2026-05-31`: Packet `v0.3B` kept the compactor bundle contract unchanged while widening the
+  analyzer-local `checkpoints.jsonl` export to `schema_version = "v0.2"` with compact
+  `diagnostics`. The bounded smoke session `019e767c-e64b-7b93-a540-7a33a90f780f` now reports
+  `Turns observed: 1`, `User prompts observed: 1`, `Checkpoints emitted: 16`,
+  `Checkpoints per turn: 16.00`, `Checkpoints per user prompt: 16.00`,
+  `Avg rows between checkpoints: 17.33`, `Avg seconds between checkpoints: 45.40`,
+  `Flagged checkpoints: 8`, `Longest flagged streak: 7`, `Flagged checkpoint rate: 0.50`,
+  `Drift-class flagged frequency: wrong_plan_branch=0.44, ignoring_repo_truth=0.06,
+  dead_end_thrash=0.00`, `Task-frame transition count: 14`,
+  `Task-frame confidence distribution: low=1, medium=15, high=0`, `Working-set churn: 0.93`,
+  `Verification density: 0.02`, and `Average evidence items per checkpoint: 174.31`, while the
+  session block still reports `Distinct task frames: 15`, `Truth artifacts referenced: 4`, and
   `Verification commands observed: 0`.
 
 ### Packet 10B: Compactor bundle contract v0.2
