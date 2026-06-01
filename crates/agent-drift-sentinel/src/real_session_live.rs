@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{BufRead, BufReader};
 
 use agent_drift_analyzer::{
     analyze_bundle, AnalyzeRequest, AnalyzerError, Checkpoint, InputError as AnalyzerInputError,
@@ -8,6 +9,7 @@ use agent_session_compactor::{
     DiscoveryError, RunConfig,
 };
 use camino::{Utf8Path, Utf8PathBuf};
+use serde_json::Value;
 
 use crate::input::{load_replay_bundle, CheckpointCursor, InputError};
 use crate::live_input::LiveCheckpointEvent;
@@ -107,6 +109,14 @@ pub struct LiveSessionCoordinator {
     next_emission_ordinal: usize,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct RolloutStartupReadiness {
+    has_session_activity: bool,
+    has_literal_directive_text: bool,
+    has_path_hint: bool,
+    has_parseable_tool_call_arguments: bool,
+}
+
 impl LiveSessionCoordinator {
     pub fn new(
         request: LiveSessionRequest,
@@ -158,7 +168,8 @@ impl LiveSessionCoordinator {
         let checkpoints = match self.run_pipeline() {
             Ok(checkpoints) => checkpoints,
             Err(error)
-                if self.last_delivered_cursor.is_none() && sparse_startup_error(&error) =>
+                if self.last_delivered_cursor.is_none()
+                    && sparse_startup_retry_allowed(&self.rollout_path, &error) =>
             {
                 self.last_observed_size_bytes = Some(observed_size_bytes);
                 return Ok(LiveSessionPollResult {
@@ -299,13 +310,260 @@ fn checkpoint_after_cursor(checkpoint: &Checkpoint, cursor: &CheckpointCursor) -
         || (checkpoint.session_id == cursor.session_id && checkpoint.ordinal > cursor.ordinal)
 }
 
-fn sparse_startup_error(error: &LiveSessionError) -> bool {
-    matches!(
-        error,
-        LiveSessionError::Analyzer(AnalyzerError::Input(AnalyzerInputError::NoSessions { .. }))
-            | LiveSessionError::Analyzer(AnalyzerError::Input(
-                AnalyzerInputError::InsufficientContract { .. }
-            ))
-            | LiveSessionError::Input(InputError::EmptyBundle { .. })
-    )
+fn sparse_startup_retry_allowed(rollout_path: &Utf8Path, error: &LiveSessionError) -> bool {
+    let Ok(readiness) = inspect_rollout_startup_readiness(rollout_path) else {
+        return false;
+    };
+
+    match error {
+        LiveSessionError::Analyzer(AnalyzerError::Input(AnalyzerInputError::NoSessions {
+            ..
+        })) => !readiness.has_session_activity,
+        LiveSessionError::Analyzer(AnalyzerError::Input(
+            AnalyzerInputError::InsufficientContract { reason },
+        )) => sparse_startup_contract_gap(&readiness, reason),
+        _ => false,
+    }
+}
+
+fn sparse_startup_contract_gap(readiness: &RolloutStartupReadiness, reason: &str) -> bool {
+    match reason {
+        "no literal user/developer/system rows survived normalization" => {
+            !readiness.has_literal_directive_text
+        }
+        "no path-like hints survived in directive text" => !readiness.has_path_hint,
+        "tool-call argument payloads are not parseable enough to infer command families and working-set paths" => {
+            !readiness.has_parseable_tool_call_arguments
+        }
+        _ => false,
+    }
+}
+
+fn inspect_rollout_startup_readiness(
+    rollout_path: &Utf8Path,
+) -> Result<RolloutStartupReadiness, LiveSessionError> {
+    let file = fs::File::open(rollout_path).map_err(|source| LiveSessionError::InspectRollout {
+        path: rollout_path.to_owned(),
+        source,
+    })?;
+    let reader = BufReader::new(file);
+    let mut readiness = RolloutStartupReadiness::default();
+
+    for line in reader.lines() {
+        let line = line.map_err(|source| LiveSessionError::InspectRollout {
+            path: rollout_path.to_owned(),
+            source,
+        })?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        update_rollout_startup_readiness(&mut readiness, &value);
+    }
+
+    Ok(readiness)
+}
+
+fn update_rollout_startup_readiness(readiness: &mut RolloutStartupReadiness, value: &Value) {
+    let event_type = value.get("type").and_then(Value::as_str);
+    if event_type.is_some_and(|event_type| event_type != "session_meta") {
+        readiness.has_session_activity = true;
+    }
+
+    for text in rollout_text_fragments(value) {
+        if !text.trim().is_empty() {
+            readiness.has_literal_directive_text = true;
+            if rollout_text_has_path_hint(text) {
+                readiness.has_path_hint = true;
+            }
+        }
+    }
+
+    if let Some(arguments) = rollout_tool_call_arguments(value) {
+        if parse_tool_arguments(arguments).is_some() {
+            readiness.has_parseable_tool_call_arguments = true;
+        }
+    }
+}
+
+fn rollout_text_fragments(value: &Value) -> Vec<&str> {
+    let mut texts = Vec::new();
+    let Some(payload) = value.get("payload") else {
+        return texts;
+    };
+
+    if let Some(message) = payload.get("message").and_then(Value::as_str) {
+        texts.push(message);
+    }
+    if let Some(user_instructions) = payload.get("user_instructions").and_then(Value::as_str) {
+        texts.push(user_instructions);
+    }
+    if let Some(base_instruction_text) = payload
+        .get("base_instructions")
+        .and_then(|base| base.get("text"))
+        .and_then(Value::as_str)
+    {
+        texts.push(base_instruction_text);
+    }
+    if payload.get("type").and_then(Value::as_str) == Some("message")
+        && matches!(
+            payload.get("role").and_then(Value::as_str),
+            Some("user" | "developer" | "system")
+        )
+    {
+        if let Some(content) = payload.get("content").and_then(Value::as_array) {
+            for item in content {
+                if let Some(text) = item.get("text").and_then(Value::as_str) {
+                    texts.push(text);
+                }
+            }
+        }
+    }
+
+    texts
+}
+
+fn rollout_tool_call_arguments(value: &Value) -> Option<&str> {
+    let payload = value.get("payload")?;
+    (payload.get("type").and_then(Value::as_str) == Some("function_call"))
+        .then(|| payload.get("arguments").and_then(Value::as_str))
+        .flatten()
+}
+
+fn parse_tool_arguments(text: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(text)
+        .ok()
+        .filter(Value::is_object)
+}
+
+fn rollout_text_has_path_hint(text: &str) -> bool {
+    text.split_whitespace().any(|raw_token| {
+        let token = raw_token
+            .trim_matches(|ch: char| {
+                matches!(
+                    ch,
+                    ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
+                )
+            })
+            .trim_end_matches('.');
+        if token.is_empty() || token.starts_with("http://") || token.starts_with("https://") {
+            return false;
+        }
+        let has_separator = token.contains('/') || token.starts_with('.');
+        let has_extension = [
+            ".md", ".rs", ".toml", ".json", ".jsonl", ".yaml", ".yml", ".sh", ".txt",
+        ]
+        .iter()
+        .any(|suffix| token.ends_with(suffix));
+        has_separator || has_extension
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        inspect_rollout_startup_readiness, sparse_startup_retry_allowed, LiveSessionError,
+        RolloutStartupReadiness,
+    };
+    use agent_drift_analyzer::{AnalyzerError, InputError as AnalyzerInputError};
+    use camino::Utf8Path;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn sparse_startup_retry_allows_no_sessions_only_before_session_activity() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let rollout_path = Utf8Path::from_path(temp_dir.path())
+            .expect("utf8 temp dir")
+            .join("rollout.jsonl");
+        fs::write(
+            &rollout_path,
+            "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\"}}\n",
+        )
+        .expect("write sparse rollout");
+
+        let error =
+            LiveSessionError::Analyzer(AnalyzerError::Input(AnalyzerInputError::NoSessions {
+                input_dir: rollout_path.parent().expect("parent").join("bundle"),
+            }));
+        assert!(sparse_startup_retry_allowed(&rollout_path, &error));
+
+        fs::write(
+            &rollout_path,
+            concat!(
+                "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\"}}\n",
+                "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}\n"
+            ),
+        )
+        .expect("write active rollout");
+        assert!(!sparse_startup_retry_allowed(&rollout_path, &error));
+    }
+
+    #[test]
+    fn sparse_startup_retry_rejects_non_sparse_contract_breakage() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let rollout_path = Utf8Path::from_path(temp_dir.path())
+            .expect("utf8 temp dir")
+            .join("rollout.jsonl");
+        fs::write(
+            &rollout_path,
+            concat!(
+                "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\",\"base_instructions\":{\"text\":\"Base instructions\"}}}\n",
+                "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\",\"message\":\"docs/specs/agent-drift-sentinel-real-session-live-v0.5-spec.md\"}}\n",
+                "{\"timestamp\":\"2026-06-01T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"inspect crates/agent-drift-sentinel/src/real_session_live.rs\"}]}}\n",
+                "{\"timestamp\":\"2026-06-01T12:00:03Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"functions.shell_command\",\"arguments\":\"{\\\"command\\\":\\\"cargo test -p agent-drift-sentinel\\\",\\\"workdir\\\":\\\"/repo\\\"}\"}}\n"
+            ),
+        )
+        .expect("write rollout");
+
+        let stable_rows_error = LiveSessionError::Analyzer(AnalyzerError::Input(
+            AnalyzerInputError::InsufficientContract {
+                reason: "row references are not unique and stable".to_string(),
+            },
+        ));
+        assert!(!sparse_startup_retry_allowed(
+            &rollout_path,
+            &stable_rows_error
+        ));
+
+        let missing_tool_error = LiveSessionError::Analyzer(AnalyzerError::Input(
+            AnalyzerInputError::InsufficientContract {
+                reason: "tool-call argument payloads are not parseable enough to infer command families and working-set paths".to_string(),
+            },
+        ));
+        assert!(!sparse_startup_retry_allowed(
+            &rollout_path,
+            &missing_tool_error
+        ));
+    }
+
+    #[test]
+    fn inspect_rollout_startup_readiness_tracks_sparse_requirements() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let rollout_path = Utf8Path::from_path(temp_dir.path())
+            .expect("utf8 temp dir")
+            .join("rollout.jsonl");
+        fs::write(
+            &rollout_path,
+            concat!(
+                "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\",\"base_instructions\":{\"text\":\"Base instructions\"}}}\n",
+                "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-1\",\"user_instructions\":\"keep crates/agent-drift-sentinel/src/real_session_live.rs in scope\"}}\n",
+                "{\"timestamp\":\"2026-06-01T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"functions.shell_command\",\"arguments\":\"{\\\"command\\\":\\\"cargo test -p agent-drift-sentinel\\\",\\\"workdir\\\":\\\"/repo\\\"}\"}}\n"
+            ),
+        )
+        .expect("write rollout");
+
+        let readiness = inspect_rollout_startup_readiness(&rollout_path).expect("readiness");
+        assert_eq!(
+            readiness,
+            RolloutStartupReadiness {
+                has_session_activity: true,
+                has_literal_directive_text: true,
+                has_path_hint: true,
+                has_parseable_tool_call_arguments: true,
+            }
+        );
+    }
 }

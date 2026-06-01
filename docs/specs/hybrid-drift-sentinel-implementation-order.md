@@ -507,11 +507,18 @@ Packet 18 note:
 - `RT6` must be proven against a session that is actively growing while the sentinel is running;
   archived/static session files are insufficient evidence for this packet
 - `2026-06-01`: bounded live proof passed against active session
-  `019e8476-8672-7833-bcb1-da8c39345048` with
-  `timeout 8 cargo run -p agent-drift-sentinel -- --mode live --codex-home "$HOME/.codex" --session-id "$SESSION_ID" --checkpoint-dir "target/hybrid-drift-live/$SESSION_ID"`.
-  The monitored rollout grew from `1025763` bytes to `1034379` bytes while the sentinel was
-  active, the first live poll emitted six checkpoints (`...:0001` through `...:0006`), and the
-  next observed growth reran the pipeline without replaying already delivered checkpoints.
+  `019e8491-d694-75c1-8bb6-dc4ebd1082cb`.
+  Exact command:
+  `timeout 8 cargo run -p agent-drift-sentinel -- --mode live --codex-home "/Users/spensermcconnell/.codex" --session-id "019e8491-d694-75c1-8bb6-dc4ebd1082cb" --checkpoint-dir "target/hybrid-drift-live/019e8491-d694-75c1-8bb6-dc4ebd1082cb"`.
+  Expected exit context: `timeout` stops the intentional infinite live poll loop, so exit status
+  `124` is the expected bounded-proof result, not a sentinel failure.
+  Observed progression: the rollout file
+  `/Users/spensermcconnell/.codex/sessions/2026/06/01/rollout-2026-06-01T15-03-30-019e8491-d694-75c1-8bb6-dc4ebd1082cb.jsonl`
+  was `628620` bytes before the proof, the first live poll observed `632575` bytes and emitted
+  three checkpoints (`019e8491-d694-75c1-8bb6-dc4ebd1082cb:0001` silent low, `...:0002` silent
+  low with scheduler cooldown deferral, `...:0003` visible medium warning with
+  `dead_end_thrash=70`), and the next two observed growth polls (`633117` bytes then `633659`
+  bytes) reran the pipeline while emitting `0` new checkpoints.
 
 ## If You Want Fewer Packets
 
