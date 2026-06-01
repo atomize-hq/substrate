@@ -14,13 +14,14 @@ use substrate_common::paths as substrate_paths;
 
 use crate::execution::config_model::AgentExecutionScope;
 
+#[cfg(any(target_os = "linux", test))]
+use super::dispatch_contract::RetainedWorkerInspectSnapshotV1;
 use super::{
     auto_attach::{
         claimed_obligation_id, select_attach_candidate, SessionAutoAttachClaim,
         SessionAutoAttachSettleResult,
     },
     control::PublicSessionPosture,
-    dispatch_contract::RetainedWorkerInspectSnapshotV1,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
         OrchestrationObligationAttachState, OrchestrationObligationKind,

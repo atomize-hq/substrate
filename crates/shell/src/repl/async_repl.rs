@@ -8530,7 +8530,7 @@ mod tests {
         private_prompt_transport_path, HiddenOwnerHelperParticipantPlan,
         HiddenOwnerHelperSessionPlan,
     };
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::dispatch_contract::WorkerInspectPayloadV1;
     #[cfg(unix)]
     use crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs;

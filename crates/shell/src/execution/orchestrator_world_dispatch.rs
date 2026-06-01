@@ -1757,9 +1757,11 @@ mod tests {
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
     #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::AgentRuntimeSessionState;
+    #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
     use crate::execution::agent_runtime::{
-        AgentRuntimeSessionState, TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+        TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::config_model::AgentCliMode;
