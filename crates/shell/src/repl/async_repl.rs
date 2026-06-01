@@ -78,8 +78,8 @@ use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
 use crate::execution::orchestrator_world_dispatch::{
-    dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
-    prepare_spawn_world_worker_bootstrap,
+    dispatch_orchestrator_world_request, dispatch_prepared_orchestrator_world_request,
+    prepare_orchestrator_world_dispatch, prepare_spawn_world_worker_bootstrap,
 };
 use crate::execution::prompt_fulfillment::{
     PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
@@ -4899,9 +4899,10 @@ async fn handle_internal_toolbox_world_dispatch_request(
         WorldDispatchActionV1::RunWorldTask | WorldDispatchActionV1::ContinueWorldWorker => {
             dispatch_orchestrator_world_request(&startup_context.store, request).await
         }
-        WorldDispatchActionV1::InspectWorldWorker => anyhow::bail!(
-            "unsupported_dispatch_action: inspect_world_worker routing is deferred until packet 3"
-        ),
+        WorldDispatchActionV1::InspectWorldWorker => {
+            let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;
+            dispatch_prepared_orchestrator_world_request(prepared).await
+        }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         WorldDispatchActionV1::SpawnWorldWorker => {
             let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;
@@ -10680,6 +10681,142 @@ mod tests {
             .await;
             shutdown_all_member_runtimes(
                 &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn orchestrator_world_dispatch_surface_validates_inspect_requests_before_packet_three_deferral()
+    {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator = write_fake_codex_script(&temp, true);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+        )
+        .expect("write codex agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let world_binding = PersistedWorldBinding {
+                world_id: "wld_toolbox_dispatch".to_string(),
+                world_generation: 9,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let mut host_runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+                Some(prepared),
+                Some(&world_binding),
+                Some(InitialExecPromptPlan::Replace(
+                    "internal toolbox bootstrap".to_string(),
+                )),
+                false,
+                false,
+                false,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("host runtime start should succeed")
+            .expect("host runtime");
+
+            let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
+            ensure_internal_toolbox_transport_registered(
+                Some(&mut host_runtime),
+                Some(&startup_context),
+                &toolbox_tx,
+            )
+            .await
+            .expect("register toolbox transport");
+
+            let request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_inspect".to_string()),
+                idempotency_key: Some("idem_toolbox_inspect".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(
+                    runtime_manifest_snapshot(&host_runtime).handle.participant_id,
+                ),
+                action: WorldDispatchActionV1::InspectWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex_world".to_string()),
+                target_participant_id: Some("ash-worker-ignored".to_string()),
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "inspect should validate typed payloads before deferral".to_string(),
+                }),
+            };
+            let transport_path =
+                internal_toolbox_transport_path(&startup_context.orchestration_session_id());
+            let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            let request_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                let request = request.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(&transport_path, &request).await
+                }
+            });
+            let request = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for internal toolbox request")
+                .expect("toolbox request");
+            handle_internal_toolbox_dispatch_request(
+                request,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let err = tokio::time::timeout(Duration::from_secs(15), request_task)
+                .await
+                .expect("timed out waiting for internal toolbox response")
+                .expect("internal toolbox task should join")
+                .expect_err("malformed inspect request must fail before packet three deferral");
+
+            assert!(
+                err.to_string().contains(
+                    "invalid_dispatch_payload: action inspect_world_worker requires matching typed payload"
+                ),
+                "unexpected inspect validation error: {err}"
+            );
+            assert!(
+                !err.to_string().contains("unsupported_dispatch_action"),
+                "inspect ingress must validate before deferred-action rejection: {err}"
+            );
+
+            shutdown_host_orchestrator_runtime(
+                host_runtime,
                 &ReplPrinter::Stdout,
                 &mut telemetry,
             )

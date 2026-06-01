@@ -512,6 +512,26 @@ world_fs:
     }
 
     #[test]
+    fn rejects_unknown_world_dispatch_actions_with_packet_one_allowlist() {
+        let err = expect_err(
+            r#"
+agents:
+  world_dispatch:
+    allowed_actions:
+      - stop_world_worker
+"#,
+        );
+        assert!(
+            err.contains("agents.world_dispatch.allowed_actions"),
+            "expected world dispatch action diagnostic, got: {err}"
+        );
+        assert!(
+            err.contains("inspect_world_worker"),
+            "expected Packet 1 inspect action in diagnostic, got: {err}"
+        );
+    }
+
+    #[test]
     fn rejects_legacy_isolation_project_value() {
         // R-001: breaking schema; legacy values must hard error (only workspace|full allowed).
         expect_err_contains(
