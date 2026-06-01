@@ -301,6 +301,7 @@ impl ResolvedInternalWorldDispatchCaller {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalContinueWorldDispatchTarget {
     pub session: OrchestrationSessionRecord,
@@ -308,6 +309,7 @@ pub(crate) struct ResolvedInternalContinueWorldDispatchTarget {
     pub target_participant: AgentRuntimeParticipantRecord,
 }
 
+#[cfg(any(target_os = "linux", test))]
 impl ResolvedInternalContinueWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
@@ -992,6 +994,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
+    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn resolve_internal_continue_world_dispatch_target(
         &self,
         orchestration_session_id: &str,

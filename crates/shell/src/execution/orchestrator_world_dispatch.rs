@@ -537,6 +537,7 @@ fn map_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error {
     err
 }
 
+#[cfg(target_os = "linux")]
 fn map_continue_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error {
     let message = err.to_string();
     if message.starts_with("stale_linkage:") {
