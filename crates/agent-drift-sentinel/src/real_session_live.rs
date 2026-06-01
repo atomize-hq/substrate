@@ -1,6 +1,8 @@
 use std::fs;
 
-use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, AnalyzerError, Checkpoint};
+use agent_drift_analyzer::{
+    analyze_bundle, AnalyzeRequest, AnalyzerError, Checkpoint, InputError as AnalyzerInputError,
+};
 use agent_session_compactor::{
     compact_codex_sessions, discover_session_artifacts, CompactorError, DiscoverOptions,
     DiscoveryError, RunConfig,
@@ -153,7 +155,23 @@ impl LiveSessionCoordinator {
             }
         }
 
-        let checkpoints = self.run_pipeline()?;
+        let checkpoints = match self.run_pipeline() {
+            Ok(checkpoints) => checkpoints,
+            Err(error)
+                if self.last_delivered_cursor.is_none() && sparse_startup_error(&error) =>
+            {
+                self.last_observed_size_bytes = Some(observed_size_bytes);
+                return Ok(LiveSessionPollResult {
+                    rollout_path: self.rollout_path.clone(),
+                    observed_size_bytes,
+                    reran_pipeline: true,
+                    emitted_checkpoints: 0,
+                    latest_cursor: None,
+                    observations: Vec::new(),
+                });
+            }
+            Err(error) => return Err(error),
+        };
         let fresh_checkpoints = checkpoints
             .into_iter()
             .filter(|checkpoint| {
@@ -279,4 +297,15 @@ fn file_size_bytes(path: &Utf8Path) -> Result<u64, LiveSessionError> {
 fn checkpoint_after_cursor(checkpoint: &Checkpoint, cursor: &CheckpointCursor) -> bool {
     checkpoint.session_id > cursor.session_id
         || (checkpoint.session_id == cursor.session_id && checkpoint.ordinal > cursor.ordinal)
+}
+
+fn sparse_startup_error(error: &LiveSessionError) -> bool {
+    matches!(
+        error,
+        LiveSessionError::Analyzer(AnalyzerError::Input(AnalyzerInputError::NoSessions { .. }))
+            | LiveSessionError::Analyzer(AnalyzerError::Input(
+                AnalyzerInputError::InsufficientContract { .. }
+            ))
+            | LiveSessionError::Input(InputError::EmptyBundle { .. })
+    )
 }
