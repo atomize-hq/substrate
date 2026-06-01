@@ -358,10 +358,9 @@ fn validate_world_dispatch_payload(
             validate_world_dispatch_prompt(action, &worker.prompt)?;
             validate_optional_world_dispatch_string(action, "thread_id", &worker.thread_id)
         }
-        (
-            WorldDispatchActionV1::InspectWorldWorker,
-            WorldDispatchPayloadV1::WorkerInspect(_),
-        ) => Ok(()),
+        (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchPayloadV1::WorkerInspect(_)) => {
+            Ok(())
+        }
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action {} requires matching typed payload",
             action.as_str(),
@@ -1424,10 +1423,9 @@ mod tests {
         ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
         DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
         DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
-        RetainedWorkerInspectSnapshotV1, TaskPayloadV1, WorkerContinuePayloadV1,
-        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorldDispatchActionV1,
-        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerInspectSnapshotV1,
+        TaskPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
         WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
@@ -2458,7 +2456,9 @@ mod tests {
         .expect_err("unknown inspect payload fields must fail closed");
 
         assert!(
-            error.to_string().contains("unknown field `future_runtime_selector`"),
+            error
+                .to_string()
+                .contains("unknown field `future_runtime_selector`"),
             "unexpected inspect payload serde error: {error}"
         );
     }
@@ -2525,7 +2525,10 @@ mod tests {
         });
 
         let json = serde_json::to_value(&outcome).expect("serialize inspect outcome");
-        assert_eq!(json.get("outcome_kind").and_then(|value| value.as_str()), Some("inspect_world_worker"));
+        assert_eq!(
+            json.get("outcome_kind").and_then(|value| value.as_str()),
+            Some("inspect_world_worker")
+        );
         let snapshot = json.get("snapshot").expect("snapshot should serialize");
         assert_eq!(
             snapshot

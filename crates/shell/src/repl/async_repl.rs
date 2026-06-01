@@ -10832,8 +10832,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_defers_well_formed_inspect_without_runtime_resolution()
-    {
+    fn orchestrator_world_dispatch_surface_defers_well_formed_inspect_without_runtime_resolution() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
