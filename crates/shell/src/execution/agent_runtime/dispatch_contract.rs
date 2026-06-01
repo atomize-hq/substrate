@@ -1457,12 +1457,11 @@ mod tests {
         ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
         DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
         DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
-        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerContinuePayloadV1,
-        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
-        WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
+        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
+        WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,

@@ -165,7 +165,9 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
         WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
         WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
         WorldDispatchActionV1::StopWorldWorker => {
-            anyhow::bail!("unsupported_dispatch_action: stop_world_worker routing lands in packet 3")
+            anyhow::bail!(
+                "unsupported_dispatch_action: stop_world_worker routing lands in packet 3"
+            )
         }
     }
 }
