@@ -57,6 +57,12 @@ The repo now lands:
 
 as typed internal dispatch actions with exact routing and exact identity validation.
 
+Current landed posture note:
+
+1. the action vocabulary, steering-policy allowlisting, and ingress validation are repo truth across the workspace,
+2. retained-worker inspect snapshot routing itself is Linux-only in v1,
+3. non-Linux builds fail closed instead of exposing partial inspect routing.
+
 Repo-truth implication:
 
 1. Family 1 is no longer missing dispatch/bootstrap,
@@ -163,7 +169,7 @@ Among the later verbs that remained after Slice `34`, `inspect_world_worker` was
 
 ## Recommended Next Slice
 
-With retained-only inspect now landed, the next honest Family-1 slice should come from the remaining execution-affecting verbs:
+With retained-only inspect now landed on Linux in v1, the next honest Family-1 slice should come from the remaining execution-affecting verbs:
 
 1. **the next later-verb slice: `cancel_world_work` or `stop_world_worker`, whichever proves narrower against the live lifecycle model**
 

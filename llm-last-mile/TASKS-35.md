@@ -5,7 +5,8 @@ Source plan: [PLAN-35.md](./PLAN-35.md)
 Source validation note: [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: completed on `2026-06-01`
+Status: completed on `2026-06-01`  
+Landed posture note: the inspect action, policy allowlisting, and ingress validation are landed repo-wide, but retained-worker inspect snapshot routing is supported only on Linux in v1 and fails closed elsewhere.
 
 ## Execution Packets
 
@@ -39,8 +40,12 @@ Session goal:
   - Acceptance: the effective policy/config model accepts `inspect_world_worker` as an allowed world-dispatch action while keeping deny-by-default defaults unchanged when the action is absent.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
+    - `cargo test -p substrate-broker inspect_world_worker -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/policy_model.rs`](../crates/shell/src/execution/policy_model.rs)
+    - [`crates/broker/src/policy.rs`](../crates/broker/src/policy.rs)
+    - [`crates/broker/src/effective_policy.rs`](../crates/broker/src/effective_policy.rs) if diagnostics or validation lists need to stay aligned with the new action id
+    - [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs) if internal toolbox ingress must recognize the new action during validation
     - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md) only if Packet 1 lands user-visible policy truth immediately
 
 ### Packet 1 Checkpoint
@@ -106,6 +111,7 @@ Session goal:
   - Expected files touched:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
+    - [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs)
 
 - [x] Task 3.2: Add regression tests for inspect denial and non-mutating behavior
   - Acceptance: tests prove that disallowed inspect requests fail closed, allowed inspect requests return authoritative snapshots, and inspect does not continue, cancel, stop, or fork workers.
@@ -137,7 +143,7 @@ Session goal:
 ### Tasks
 
 - [x] Task 4.1: Align planning/config truth without widening the slice
-  - Acceptance: the repo-local docs describe inspect as internal, retained-worker-only in v1, and store-backed; no wording implies active-ephemeral inspect, cancel, stop, fork, approval autonomy, or Family-2 execution have landed.
+  - Acceptance: the repo-local docs describe inspect as internal, retained-worker-only in v1, Linux-only for routed snapshot delivery, and store-backed; no wording implies active-ephemeral inspect, cancel, stop, fork, approval autonomy, or Family-2 execution have landed.
   - Verify:
     - manual diff review
   - Expected files touched:
@@ -155,6 +161,7 @@ Session goal:
     - `cargo test -p shell dispatch_contract -- --nocapture`
     - `cargo test -p shell state_store -- --nocapture`
     - `cargo test -p shell policy_model -- --nocapture`
+    - `cargo test -p substrate-broker inspect_world_worker -- --nocapture`
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
     - `cargo test --workspace -- --nocapture`

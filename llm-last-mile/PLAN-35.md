@@ -3,7 +3,8 @@
 Source spec: [SPEC-35-internal-retained-world-worker-inspect-snapshot.md](./SPEC-35-internal-retained-world-worker-inspect-snapshot.md)  
 Source validation note: [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)  
 Plan type: fourth implementation-bearing Family-1 control-plane slice  
-Status: implemented and validated on `2026-06-01`
+Status: implemented and validated on `2026-06-01`  
+Landed posture note: the inspect contract, policy allowlisting, and ingress validation are landed repo-wide, but retained-worker inspect snapshot routing is Linux-only in v1 and fails closed on non-Linux builds.
 
 ## Objective
 
@@ -14,7 +15,7 @@ This slice is complete only when all of the following are true:
 1. `inspect_world_worker` exists as a typed internal dispatch action,
 2. the action is retained-worker-only in v1 and requires exact `target_participant_id`,
 3. steering policy can explicitly allow or deny the action,
-4. allowed requests return a typed authoritative retained-worker snapshot,
+4. allowed Linux requests return a typed authoritative retained-worker snapshot,
 5. the snapshot is non-mutating and store-backed,
 6. active-ephemeral inspect, cancel, stop, fork, approval/fork autonomy, and Family-2 router/attach work remain deferred.
 
@@ -28,6 +29,12 @@ The repo already has the prerequisites that make inspect the smallest honest nex
 4. authoritative stored runtime/session snapshots that already drive status-facing logic elsewhere in the shell.
 
 What the repo still lacks is a typed internal inspect action that exposes that authoritative retained-worker truth directly to the host orchestrator.
+
+Current landed runtime note:
+
+1. contract and policy admission are not Linux-specific,
+2. the routed retained-worker snapshot outcome is Linux-only in v1,
+3. non-Linux builds reject retained inspect routing rather than approximating it.
 
 The narrowest honest implementation order is therefore:
 
@@ -74,7 +81,10 @@ Primary touch surface:
 
 1. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
 2. `crates/shell/src/execution/policy_model.rs`
-3. targeted contract and policy tests
+3. `crates/broker/src/policy.rs`
+4. `crates/broker/src/effective_policy.rs`
+5. `crates/shell/src/repl/async_repl.rs`
+6. targeted contract and policy tests
 
 Why first:
 
@@ -126,7 +136,8 @@ Primary touch surface:
 
 1. `crates/shell/src/execution/orchestrator_world_dispatch.rs`
 2. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
-3. targeted shell integration tests
+3. `crates/shell/src/repl/async_repl.rs`
+4. targeted shell integration tests
 
 Why third:
 
@@ -159,7 +170,7 @@ Primary touch surface:
 
 What this packet must enforce:
 
-1. docs describe inspect as internal and retained-worker-only in v1,
+1. docs describe inspect as internal, retained-worker-only in v1, and Linux-only for routed snapshot delivery,
 2. docs keep snapshot inspection separate from execution-affecting verbs,
 3. no wording implies cancel, stop, fork, approval autonomy, or Family-2 work have landed.
 
@@ -205,6 +216,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p shell dispatch_contract -- --nocapture
 cargo test -p shell state_store -- --nocapture
 cargo test -p shell policy_model -- --nocapture
+cargo test -p substrate-broker inspect_world_worker -- --nocapture
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 cargo test --workspace -- --nocapture

@@ -11,7 +11,8 @@ Related design stack:
 - [PLAN-34.md](./PLAN-34.md)
 - [TASKS-34.md](./TASKS-34.md)  
 Phase: `SPECIFY`  
-Status: implemented on `2026-06-01`
+Status: implemented on `2026-06-01`  
+Landed posture note: the typed inspect contract, steering-policy allowlisting, and ingress validation are landed in the repo, but retained-worker inspect snapshot routing is supported only on Linux in v1; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 
 ## Assumptions
 
@@ -37,6 +38,12 @@ Primary runtime story:
 4. Substrate returns a typed inspect outcome built from authoritative persisted runtime truth,
 5. the outcome is snapshot-only and does not continue, cancel, stop, or fork the worker,
 6. active-ephemeral inspect, cancellation, stopping, forking, approval/fork autonomy, and Family-2 routing work remain deferred.
+
+Current landed runtime note:
+
+1. exact inspect request validation and policy parsing are repo-wide,
+2. authoritative retained-worker snapshot routing returns a real inspect outcome on Linux in v1,
+3. non-Linux builds reject retained inspect routing rather than widening into a second transport or partial runtime behavior.
 
 ## Frozen Direction
 
@@ -106,6 +113,7 @@ Existing targeted validation floor:
 cargo test -p shell dispatch_contract -- --nocapture
 cargo test -p shell state_store -- --nocapture
 cargo test -p shell policy_model -- --nocapture
+cargo test -p substrate-broker inspect_world_worker -- --nocapture
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 ```
@@ -124,12 +132,20 @@ This slice is expected to touch these areas:
   - add `inspect_world_worker` action, typed inspect payload, typed inspect outcome, and stable request validation
 - `crates/shell/src/execution/policy_model.rs`
   - widen allowed action parsing/validation so the steering-policy layer can explicitly admit `inspect_world_worker`
+- `crates/broker/src/policy.rs`
+  - admit `inspect_world_worker` in broker policy parsing so YAML policy truth matches shell-local policy validation
+- `crates/broker/src/effective_policy.rs`
+  - keep effective-policy diagnostics and validation lists aligned with the landed inspect action vocabulary
 - `crates/shell/src/execution/agent_runtime/state_store.rs`
   - authoritative retained-worker inspect target resolution and snapshot projection
 - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
   - pre-routing steering enforcement and inspect dispatch handling
+- `crates/shell/src/repl/async_repl.rs`
+  - route internal inspect ingress through the same dispatch validation path and keep deferred ingress fail-closed
 - `crates/shell/tests/`
   - inspect request validation, identity checks, snapshot projection, and regression coverage
+- `crates/broker/src/tests.rs`
+  - pin broker-side allowlisting and diagnostics for the landed inspect action
 - `docs/CONFIGURATION.md`
   - document that `inspect_world_worker` is now a valid allowlisted action where relevant
 - `llm-last-mile/`
@@ -166,6 +182,7 @@ Frameworks:
 
 - Rust unit tests
 - Rust integration tests
+- broker policy/unit tests
 - existing shell regression suites
 
 Test levels for this slice:
@@ -198,7 +215,8 @@ Coverage expectations:
 1. every accepted inspect path has exact-identity tests,
 2. steering-policy denial and allowlisting remain pinned explicitly,
 3. invalidated or terminal workers return truthful snapshots rather than accidental continuation behavior,
-4. public `agent start|turn|reattach|fork|stop` behavior remains green.
+4. Linux inspect routing returns authoritative snapshots while non-Linux builds fail closed with `unsupported_platform_or_posture`,
+5. public `agent start|turn|reattach|fork|stop` behavior remains green.
 
 ## Boundaries
 
@@ -226,8 +244,8 @@ This slice is complete only when all of the following are true:
 1. `inspect_world_worker` exists as an internal typed world-dispatch action,
 2. the action requires exact retained-worker targeting and retained mode,
 3. steering policy can explicitly allow or deny `inspect_world_worker`,
-4. allowed inspect requests return an authoritative typed retained-worker snapshot from stored runtime truth,
-5. inspect covers live, detached/attention, invalidated, and terminal retained-worker states without mutating them,
+4. allowed Linux inspect requests return an authoritative typed retained-worker snapshot from stored runtime truth,
+5. inspect covers live, detached/attention, invalidated, and terminal retained-worker states without mutating them, while non-Linux builds fail closed instead of returning partial inspect behavior,
 6. active-ephemeral inspect, cancel, stop, fork, approval/fork autonomy, and Family-2 routing work remain deferred.
 
 ## Open Questions
