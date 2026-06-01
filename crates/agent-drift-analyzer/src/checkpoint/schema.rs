@@ -42,6 +42,15 @@ pub struct CheckpointBoundary {
     pub end: RowRef,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckpointDiagnostics {
+    pub task_frame_transitioned: bool,
+    pub working_set_changed: bool,
+    pub interval_command_count: usize,
+    pub interval_verification_command_count: usize,
+    pub evidence_item_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DriftScore {
     pub class: DriftClass,
@@ -58,6 +67,7 @@ pub struct Checkpoint {
     pub checkpoint_id: String,
     pub ordinal: usize,
     pub boundary: CheckpointBoundary,
+    pub diagnostics: CheckpointDiagnostics,
     pub task_frame: TaskFrame,
     pub drift_scores: Vec<DriftScore>,
     pub expected_next_step: String,

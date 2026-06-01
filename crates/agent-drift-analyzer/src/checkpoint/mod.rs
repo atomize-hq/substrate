@@ -1,13 +1,22 @@
 mod export;
 mod schema;
 
+use std::collections::BTreeSet;
+
 use crate::input::BundleSession;
+use crate::{
+    context::assemble_context, context::collect_command_observations, inference::infer_task_frame,
+};
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef};
 use camino::Utf8PathBuf;
 
-pub use export::{export_checkpoints, ExportError, ExportResult};
+pub use export::{
+    export_checkpoints, summarize_checkpoint_diagnostics, CheckpointDiagnosticStats,
+    ConfidenceDistribution, ExportError, ExportResult,
+};
 pub use schema::{
-    Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, EvidenceRef, TaskFrame,
+    Checkpoint, CheckpointBoundary, CheckpointDiagnostics, Confidence, DriftClass, DriftScore,
+    EvidenceRef, TaskFrame,
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
@@ -19,17 +28,53 @@ pub fn build_session_checkpoint(
     drift_scores: Vec<DriftScore>,
 ) -> Checkpoint {
     let boundary = checkpoint_boundary(session);
+    let diagnostics = checkpoint_diagnostics(session, ordinal, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
     Checkpoint {
-        schema_version: "v0.1".to_string(),
+        schema_version: "v0.2".to_string(),
         session_id: session.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", session.session_id),
         ordinal,
         boundary,
+        diagnostics,
         task_frame: task_frame.clone(),
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
+    }
+}
+
+fn checkpoint_diagnostics(
+    session: &BundleSession,
+    ordinal: usize,
+    task_frame: &TaskFrame,
+    drift_scores: &[DriftScore],
+) -> CheckpointDiagnostics {
+    let prior_window = previous_checkpoint_window(session, ordinal);
+    let (task_frame_transitioned, working_set_changed, interval_rows) =
+        if let Some(previous_window) = prior_window.as_ref() {
+            let previous_context = assemble_context(previous_window);
+            let previous_task_frame = infer_task_frame(&previous_context);
+            let interval_start = previous_window.compact_rows.len();
+            (
+                task_frame_identity(task_frame) != task_frame_identity(&previous_task_frame),
+                working_set_identity(task_frame) != working_set_identity(&previous_task_frame),
+                &session.compact_rows[interval_start..],
+            )
+        } else {
+            (false, false, session.compact_rows.as_slice())
+        };
+    let interval_commands = collect_command_observations(interval_rows);
+
+    CheckpointDiagnostics {
+        task_frame_transitioned,
+        working_set_changed,
+        interval_command_count: interval_commands.len(),
+        interval_verification_command_count: interval_commands
+            .iter()
+            .filter(|command| command.verification_like)
+            .count(),
+        evidence_item_count: evidence_item_count(task_frame, drift_scores),
     }
 }
 
@@ -92,6 +137,52 @@ fn expected_next_step(task_frame: &TaskFrame) -> String {
         .first()
         .cloned()
         .unwrap_or_else(|| "continue on the current task frame".to_string())
+}
+
+fn previous_checkpoint_window(session: &BundleSession, ordinal: usize) -> Option<BundleSession> {
+    (ordinal > 1).then(|| {
+        checkpoint_windows(session)
+            .into_iter()
+            .nth(ordinal.saturating_sub(2))
+    })?
+}
+
+fn task_frame_identity(task_frame: &TaskFrame) -> String {
+    serde_json::to_string(&(
+        &task_frame.objective,
+        &task_frame.truth_artifacts,
+        &task_frame.working_set_paths,
+        &task_frame.tools,
+        &task_frame.command_families,
+        &task_frame.verification_commands,
+    ))
+    .expect("task frame identity should serialize")
+}
+
+fn working_set_identity(task_frame: &TaskFrame) -> BTreeSet<&str> {
+    task_frame
+        .working_set_paths
+        .iter()
+        .map(String::as_str)
+        .collect()
+}
+
+fn evidence_item_count(task_frame: &TaskFrame, drift_scores: &[DriftScore]) -> usize {
+    let mut seen = BTreeSet::new();
+    for evidence in task_frame
+        .supporting_evidence
+        .iter()
+        .chain(task_frame.counter_evidence.iter())
+        .chain(drift_scores.iter().flat_map(|score| score.evidence.iter()))
+    {
+        seen.insert((
+            evidence.row.source_file.clone(),
+            evidence.row.event_index,
+            evidence.row.row_ordinal,
+            evidence.reason.clone(),
+        ));
+    }
+    seen.len()
 }
 
 fn checkpoint_end_indices(rows: &[CompactionRow]) -> Vec<usize> {

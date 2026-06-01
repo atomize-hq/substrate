@@ -6,13 +6,58 @@ use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessage
 use camino::{Utf8Path, Utf8PathBuf};
 use time::OffsetDateTime;
 
-use crate::checkpoint::{Checkpoint, TaskFrame};
+use crate::checkpoint::{Checkpoint, Confidence, DriftClass, TaskFrame};
 use crate::input::BundleSession;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportResult {
     pub checkpoints_path: Utf8PathBuf,
     pub summary_path: Utf8PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ConfidenceDistribution {
+    pub low: usize,
+    pub medium: usize,
+    pub high: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckpointDiagnosticStats {
+    pub checkpoint_count: usize,
+    pub flagged_checkpoint_count: usize,
+    pub drift_class_flagged_counts: BTreeMap<DriftClass, usize>,
+    pub task_frame_transition_count: usize,
+    pub confidence_distribution: ConfidenceDistribution,
+    pub working_set_change_count: usize,
+    pub adjacent_checkpoint_pair_count: usize,
+    pub total_evidence_item_count: usize,
+}
+
+impl CheckpointDiagnosticStats {
+    pub fn flagged_checkpoint_rate(&self) -> Option<f64> {
+        ratio(self.flagged_checkpoint_count, self.checkpoint_count)
+    }
+
+    pub fn drift_class_flagged_rate(&self, class: DriftClass) -> Option<f64> {
+        let count = self
+            .drift_class_flagged_counts
+            .get(&class)
+            .copied()
+            .unwrap_or(0);
+        ratio(count, self.checkpoint_count)
+    }
+
+    pub fn working_set_churn(&self) -> Option<f64> {
+        ratio(
+            self.working_set_change_count,
+            self.adjacent_checkpoint_pair_count,
+        )
+    }
+
+    pub fn average_evidence_items_per_checkpoint(&self) -> Option<f64> {
+        average(self.total_evidence_item_count, self.checkpoint_count)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -83,6 +128,49 @@ pub fn export_checkpoints(
         checkpoints_path,
         summary_path,
     })
+}
+
+pub fn summarize_checkpoint_diagnostics(checkpoints: &[Checkpoint]) -> CheckpointDiagnosticStats {
+    let mut drift_class_flagged_counts = BTreeMap::from([
+        (DriftClass::WrongPlanBranch, 0usize),
+        (DriftClass::IgnoringRepoTruth, 0usize),
+        (DriftClass::DeadEndThrash, 0usize),
+    ]);
+    let mut confidence_distribution = ConfidenceDistribution::default();
+
+    for checkpoint in checkpoints {
+        for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
+            *drift_class_flagged_counts.entry(score.class).or_default() += 1;
+        }
+        match checkpoint.task_frame.confidence {
+            Confidence::Low => confidence_distribution.low += 1,
+            Confidence::Medium => confidence_distribution.medium += 1,
+            Confidence::High => confidence_distribution.high += 1,
+        }
+    }
+
+    CheckpointDiagnosticStats {
+        checkpoint_count: checkpoints.len(),
+        flagged_checkpoint_count: checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.flagged)
+            .count(),
+        drift_class_flagged_counts,
+        task_frame_transition_count: checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.diagnostics.task_frame_transitioned)
+            .count(),
+        confidence_distribution,
+        working_set_change_count: checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.diagnostics.working_set_changed)
+            .count(),
+        adjacent_checkpoint_pair_count: checkpoints.len().saturating_sub(1),
+        total_evidence_item_count: checkpoints
+            .iter()
+            .map(|checkpoint| checkpoint.diagnostics.evidence_item_count)
+            .sum(),
+    }
 }
 
 fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> String {

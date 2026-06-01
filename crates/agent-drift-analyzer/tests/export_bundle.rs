@@ -5,6 +5,8 @@ mod support;
 use std::collections::BTreeSet;
 use std::fs;
 
+use agent_drift_analyzer::checkpoint::summarize_checkpoint_diagnostics;
+use agent_drift_analyzer::{Confidence, DriftClass};
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
 use support::{load_sample_bundle, read_checkpoints, BundleFixture};
@@ -173,4 +175,139 @@ fn export_bundle_ignores_synthetic_setup_rows_in_user_message_diagnostics() {
     assert!(summary.contains("Prompt user messages: `1`"));
     assert!(summary.contains("Steer user messages: `0`"));
     assert!(summary.contains("Unknown user messages: `0`"));
+}
+
+#[test]
+fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
+    let fixture = BundleFixture::sample();
+    let result = agent_drift_analyzer::analyze_bundle(&agent_drift_analyzer::AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze sample bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert_eq!(checkpoints.len(), 2);
+    assert!(checkpoints
+        .iter()
+        .all(|checkpoint| checkpoint.schema_version == "v0.2"));
+
+    let first = &checkpoints[0];
+    let second = &checkpoints[1];
+
+    assert!(!first.diagnostics.task_frame_transitioned);
+    assert!(!first.diagnostics.working_set_changed);
+    assert_eq!(first.diagnostics.interval_command_count, 4);
+    assert_eq!(first.diagnostics.interval_verification_command_count, 2);
+    assert!(first.diagnostics.evidence_item_count > 0);
+
+    assert!(second.diagnostics.task_frame_transitioned);
+    assert!(second.diagnostics.working_set_changed);
+    assert_eq!(second.diagnostics.interval_command_count, 3);
+    assert_eq!(second.diagnostics.interval_verification_command_count, 1);
+    assert!(second.diagnostics.evidence_item_count > 0);
+}
+
+#[test]
+fn export_bundle_summarizes_checkpoint_local_diagnostics() {
+    let fixture = BundleFixture::sample();
+    let result = agent_drift_analyzer::analyze_bundle(&agent_drift_analyzer::AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze sample bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let stats = summarize_checkpoint_diagnostics(&checkpoints);
+
+    assert_eq!(stats.checkpoint_count, checkpoints.len());
+    assert_eq!(
+        stats.flagged_checkpoint_count,
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.flagged)
+            .count()
+    );
+    assert_eq!(
+        stats.task_frame_transition_count,
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.diagnostics.task_frame_transitioned)
+            .count()
+    );
+    assert_eq!(stats.adjacent_checkpoint_pair_count, 1);
+    assert_eq!(
+        stats.working_set_change_count,
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.diagnostics.working_set_changed)
+            .count()
+    );
+    assert_eq!(
+        stats.total_evidence_item_count,
+        checkpoints
+            .iter()
+            .map(|checkpoint| checkpoint.diagnostics.evidence_item_count)
+            .sum::<usize>()
+    );
+    assert_eq!(
+        stats.confidence_distribution.low,
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.task_frame.confidence == Confidence::Low)
+            .count()
+    );
+    assert_eq!(
+        stats.confidence_distribution.medium,
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.task_frame.confidence == Confidence::Medium)
+            .count()
+    );
+    assert_eq!(
+        stats.confidence_distribution.high,
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.task_frame.confidence == Confidence::High)
+            .count()
+    );
+    for class in [
+        DriftClass::WrongPlanBranch,
+        DriftClass::IgnoringRepoTruth,
+        DriftClass::DeadEndThrash,
+    ] {
+        let expected = checkpoints
+            .iter()
+            .filter(|checkpoint| {
+                checkpoint
+                    .drift_scores
+                    .iter()
+                    .any(|score| score.class == class && score.flagged)
+            })
+            .count();
+        assert_eq!(
+            stats.drift_class_flagged_counts.get(&class).copied(),
+            Some(expected)
+        );
+        assert_optional_metric_eq(
+            stats.drift_class_flagged_rate(class),
+            expected as f64 / checkpoints.len() as f64,
+        );
+    }
+    assert_optional_metric_eq(
+        stats.flagged_checkpoint_rate(),
+        stats.flagged_checkpoint_count as f64 / checkpoints.len() as f64,
+    );
+    assert_optional_metric_eq(stats.working_set_churn(), 1.0);
+    assert_optional_metric_eq(
+        stats.average_evidence_items_per_checkpoint(),
+        stats.total_evidence_item_count as f64 / checkpoints.len() as f64,
+    );
+}
+
+fn assert_optional_metric_eq(actual: Option<f64>, expected: f64) {
+    let actual = actual.expect("metric should be available");
+    assert!(
+        (actual - expected).abs() < f64::EPSILON,
+        "expected {expected}, got {actual}"
+    );
 }
