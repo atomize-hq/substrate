@@ -4898,6 +4898,7 @@ async fn handle_internal_toolbox_world_dispatch_request(
     match request.action {
         WorldDispatchActionV1::RunWorldTask
         | WorldDispatchActionV1::ContinueWorldWorker
+        | WorldDispatchActionV1::StopWorldWorker
         | WorldDispatchActionV1::InspectWorldWorker => {
             dispatch_orchestrator_world_request(&startup_context.store, request).await
         }

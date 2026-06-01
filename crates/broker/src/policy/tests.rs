@@ -77,6 +77,7 @@ agents:
       - "run_world_task"
       - "spawn_world_worker"
       - "continue_world_worker"
+      - "stop_world_worker"
     allowed_modes:
       - "ephemeral"
       - "retained"
@@ -236,7 +237,8 @@ fn pcm1_policy_yaml_accepts_llm_agents_and_workflow_router_families() {
         vec![
             "run_world_task".to_string(),
             "spawn_world_worker".to_string(),
-            "continue_world_worker".to_string()
+            "continue_world_worker".to_string(),
+            "stop_world_worker".to_string()
         ]
     );
     assert_eq!(
@@ -316,19 +318,19 @@ fn pcm1_policy_yaml_rejects_malformed_world_dispatch_backend_ids() {
 }
 
 #[test]
-fn pcm1_policy_yaml_rejects_unknown_world_dispatch_actions() {
+fn pcm1_policy_yaml_accepts_explicit_stop_world_worker_action() {
     let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex")
-        .replace("- \"continue_world_worker\"", "- \"stop_world_worker\"");
-    let err = serde_yaml::from_str::<Policy>(&raw)
-        .expect_err("unknown agents.world_dispatch.allowed_actions entry should fail");
-    let msg = err.to_string();
-    assert!(
-        msg.contains("agents.world_dispatch.allowed_actions"),
-        "expected world dispatch action diagnostic, got: {msg}"
-    );
-    assert!(
-        msg.contains("inspect_world_worker"),
-        "expected inspect_world_worker in action diagnostic, got: {msg}"
+        .replace("- \"continue_world_worker\"", "- \"continue_world_worker\"\n      - \"stop_world_worker\"");
+    let policy =
+        serde_yaml::from_str::<Policy>(&raw).expect("stop_world_worker should be accepted");
+    assert_eq!(
+        policy.agents_world_dispatch_allowed_actions,
+        vec![
+            "run_world_task".to_string(),
+            "spawn_world_worker".to_string(),
+            "continue_world_worker".to_string(),
+            "stop_world_worker".to_string()
+        ]
     );
 }
 
@@ -336,7 +338,7 @@ fn pcm1_policy_yaml_rejects_unknown_world_dispatch_actions() {
 fn pcm1_policy_yaml_accepts_explicit_inspect_world_worker_action() {
     let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex").replace(
         "- \"continue_world_worker\"",
-        "- \"continue_world_worker\"\n      - \"inspect_world_worker\"",
+        "- \"continue_world_worker\"\n      - \"inspect_world_worker\"\n      - \"stop_world_worker\"",
     );
     let policy =
         serde_yaml::from_str::<Policy>(&raw).expect("inspect_world_worker should be accepted");
@@ -346,7 +348,8 @@ fn pcm1_policy_yaml_accepts_explicit_inspect_world_worker_action() {
             "run_world_task".to_string(),
             "spawn_world_worker".to_string(),
             "continue_world_worker".to_string(),
-            "inspect_world_worker".to_string()
+            "inspect_world_worker".to_string(),
+            "stop_world_worker".to_string()
         ]
     );
 }

@@ -512,22 +512,20 @@ world_fs:
     }
 
     #[test]
-    fn rejects_unknown_world_dispatch_actions_with_packet_one_allowlist() {
-        let err = expect_err(
+    fn accepts_stop_world_dispatch_action_with_packet_one_allowlist() {
+        let policy = load_policy_from_yaml(
             r#"
 agents:
   world_dispatch:
     allowed_actions:
       - stop_world_worker
 "#,
-        );
+        )
+        .expect("stop_world_worker should be accepted in Packet 1");
         assert!(
-            err.contains("agents.world_dispatch.allowed_actions"),
-            "expected world dispatch action diagnostic, got: {err}"
-        );
-        assert!(
-            err.contains("inspect_world_worker"),
-            "expected Packet 1 inspect action in diagnostic, got: {err}"
+            policy.agents_world_dispatch_allowed_actions == vec!["stop_world_worker".to_string()],
+            "expected Packet 1 stop action to be accepted, got: {:?}",
+            policy.agents_world_dispatch_allowed_actions
         );
     }
 

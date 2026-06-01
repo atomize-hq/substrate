@@ -132,6 +132,7 @@ pub(crate) enum WorldDispatchActionV1 {
     SpawnWorldWorker,
     ContinueWorldWorker,
     InspectWorldWorker,
+    StopWorldWorker,
 }
 
 impl WorldDispatchActionV1 {
@@ -141,6 +142,7 @@ impl WorldDispatchActionV1 {
             Self::SpawnWorldWorker => "spawn_world_worker",
             Self::ContinueWorldWorker => "continue_world_worker",
             Self::InspectWorldWorker => "inspect_world_worker",
+            Self::StopWorldWorker => "stop_world_worker",
         }
     }
 }
@@ -227,6 +229,11 @@ pub(crate) struct WorkerContinuePayloadV1 {
 pub(crate) struct WorkerInspectPayloadV1 {}
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkerStopPayloadV1 {}
+
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "payload_kind", rename_all = "snake_case")]
 pub(crate) enum WorldDispatchPayloadV1 {
@@ -234,6 +241,7 @@ pub(crate) enum WorldDispatchPayloadV1 {
     WorkerSpawn(WorkerSpawnPayloadV1),
     WorkerContinue(WorkerContinuePayloadV1),
     WorkerInspect(WorkerInspectPayloadV1),
+    WorkerStop(WorkerStopPayloadV1),
 }
 
 #[allow(dead_code)]
@@ -331,7 +339,8 @@ fn validate_world_dispatch_action_mode(
         (WorldDispatchActionV1::RunWorldTask, WorldDispatchModeV1::Ephemeral)
         | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained)
-        | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
+        | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::StopWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_action_mode: action {} is incompatible with mode {}",
             action.as_str(),
@@ -361,6 +370,7 @@ fn validate_world_dispatch_payload(
         (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchPayloadV1::WorkerInspect(_)) => {
             Ok(())
         }
+        (WorldDispatchActionV1::StopWorldWorker, WorldDispatchPayloadV1::WorkerStop(_)) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action {} requires matching typed payload",
             action.as_str(),
@@ -373,12 +383,12 @@ fn validate_world_dispatch_target(
     value: Option<String>,
 ) -> anyhow::Result<Option<String>> {
     match action {
-        WorldDispatchActionV1::ContinueWorldWorker | WorldDispatchActionV1::InspectWorldWorker => {
-            Ok(Some(required_world_dispatch_string(
-                "target_participant_id",
-                value,
-            )?))
-        }
+        WorldDispatchActionV1::ContinueWorldWorker
+        | WorldDispatchActionV1::InspectWorldWorker
+        | WorldDispatchActionV1::StopWorldWorker => Ok(Some(required_world_dispatch_string(
+            "target_participant_id",
+            value,
+        )?)),
         _ => {
             if value.is_some() {
                 anyhow::bail!(
@@ -509,6 +519,29 @@ pub(crate) struct InspectWorldWorkerOutcomeV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RetainedWorkerStopCloseoutV1 {
+    pub participant_state: AgentRuntimeSessionState,
+    pub session_state: OrchestrationSessionState,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct StopWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    pub target_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub closeout: RetainedWorkerStopCloseoutV1,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ContinueWorldWorkerEventClassV1 {
@@ -576,6 +609,7 @@ pub(crate) enum WorldDispatchOutcomeV1 {
     SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
     ContinueWorldWorker(ContinueWorldWorkerOutcomeV1),
     InspectWorldWorker(InspectWorldWorkerOutcomeV1),
+    StopWorldWorker(StopWorldWorkerOutcomeV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1423,10 +1457,12 @@ mod tests {
         ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
         DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
         DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerInspectSnapshotV1,
-        TaskPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
+        HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
+        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerContinuePayloadV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
+        WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2305,6 +2341,23 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_accepts_stop_world_worker_retained_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::StopWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-36")
+        .validate()
+        .expect("stop request should validate");
+
+        assert_eq!(
+            validated.target_participant_id.as_deref(),
+            Some("ash-worker-36")
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_invalid_action_mode_combination() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::RunWorldTask,
@@ -2436,6 +2489,39 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_rejects_stop_world_worker_without_exact_target() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::StopWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
+        )
+        .validate()
+        .expect_err("stop target must be mandatory");
+
+        assert_eq!(
+            error.to_string(),
+            "missing_dispatch_field: world dispatch request requires target_participant_id"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_stop_world_worker_ephemeral_mode() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::StopWorldWorker,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-36")
+        .validate()
+        .expect_err("stop must stay retained-only in packet 1");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_action_mode: action stop_world_worker is incompatible with mode ephemeral"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_unknown_inspect_payload_fields_during_deserialization() {
         let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
             "request_id": "req-32",
@@ -2460,6 +2546,34 @@ mod tests {
                 .to_string()
                 .contains("unknown field `future_runtime_selector`"),
             "unexpected inspect payload serde error: {error}"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_unknown_stop_payload_fields_during_deserialization() {
+        let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
+            "request_id": "req-36",
+            "idempotency_key": "idem-36",
+            "orchestration_session_id": "sess-36",
+            "caller_participant_id": "orch-36",
+            "action": "stop_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex_world",
+            "target_participant_id": "ash-worker-36",
+            "world_id": "world-36",
+            "world_generation": 6,
+            "payload": {
+                "payload_kind": "worker_stop",
+                "future_cancel_target": "packet-2"
+            }
+        }))
+        .expect_err("unknown stop payload fields must fail closed");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unknown field `future_cancel_target`"),
+            "unexpected stop payload serde error: {error}"
         );
     }
 
@@ -2542,6 +2656,47 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("running")
         );
+    }
+
+    #[test]
+    fn world_dispatch_contract_round_trips_typed_stop_outcome_shape() {
+        let outcome = WorldDispatchOutcomeV1::StopWorldWorker(StopWorldWorkerOutcomeV1 {
+            request_id: "req-36".to_string(),
+            orchestration_session_id: "sess-36".to_string(),
+            action: WorldDispatchActionV1::StopWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch-36".to_string(),
+            target_participant_id: "ash-worker-36".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-36".to_string(),
+            world_generation: 6,
+            closeout: RetainedWorkerStopCloseoutV1 {
+                participant_state: AgentRuntimeSessionState::Stopped,
+                session_state: OrchestrationSessionState::Stopped,
+            },
+            summary: "stop closeout is authoritative".to_string(),
+        });
+
+        let json = serde_json::to_value(&outcome).expect("serialize stop outcome");
+        assert_eq!(
+            json.get("outcome_kind").and_then(|value| value.as_str()),
+            Some("stop_world_worker")
+        );
+        let closeout = json.get("closeout").expect("closeout should serialize");
+        assert_eq!(
+            closeout
+                .get("participant_state")
+                .and_then(|value| value.as_str()),
+            Some("stopped")
+        );
+        assert_eq!(
+            closeout
+                .get("session_state")
+                .and_then(|value| value.as_str()),
+            Some("stopped")
+        );
+        assert!(json.get("snapshot").is_none());
+        assert!(json.get("worker_event").is_none());
     }
 
     #[test]
