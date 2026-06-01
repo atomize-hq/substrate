@@ -1,10 +1,13 @@
 # Remaining Family-1 Scope After Slice 34
 
-Date: `2026-05-31`  
+Date: `2026-06-01`  
+Historical filename retained from the post-Slice `34` checkpoint; current tree now also includes Slice `35`.  
 Validated against:
 - [NOTE-34-family-1-policy-hardening-after-continue-bootstrap.md](./NOTE-34-family-1-policy-hardening-after-continue-bootstrap.md)
 - [PLAN-34.md](./PLAN-34.md)
 - [TASKS-34.md](./TASKS-34.md)
+- [PLAN-35.md](./PLAN-35.md)
+- [TASKS-35.md](./TASKS-35.md)
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [DESIGN-host-to-world-steering-policy-matrix.md](./DESIGN-host-to-world-steering-policy-matrix.md)
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
@@ -17,10 +20,10 @@ Validated against:
 
 ## Objective
 
-Record the repo-truth answer to two questions after Slice `34` is treated as landed:
+Record the repo-truth answer to two questions now that Slice `35` is landed on top of the post-Slice `34` checkpoint:
 
 1. what still remains in Family 1,
-2. what is the narrowest honest Slice `35` to specify before code work begins?
+2. what is the next honest execution-bearing slice after retained-worker inspect became runtime truth?
 
 This note supersedes the old “after Slice 32” framing in [REMAINING-family-1-scope-2026-05-30.md](./REMAINING-family-1-scope-2026-05-30.md).
 
@@ -43,13 +46,14 @@ This note does not reopen Family 2 except for dependency boundaries:
 
 The current tree now has the Family-1 foundation that earlier notes were still waiting on.
 
-### 1. The first three internal control verbs are runtime truth
+### 1. The first four internal control verbs are runtime truth
 
 The repo now lands:
 
 1. `run_world_task`,
 2. `spawn_world_worker`,
-3. `continue_world_worker`
+3. `continue_world_worker`,
+4. `inspect_world_worker`
 
 as typed internal dispatch actions with exact routing and exact identity validation.
 
@@ -57,11 +61,12 @@ Repo-truth implication:
 
 1. Family 1 is no longer missing dispatch/bootstrap,
 2. Family 1 is no longer missing first retained-worker continue/bootstrap,
-3. the next missing seam is not “make the initial verbs real.”
+3. Family 1 is no longer missing its first retained-worker inspect surface,
+4. the next missing seam is not “make the initial verbs real.”
 
 ### 2. The first steering-policy hardening layer is also runtime truth
 
-The repo now also lands the first deny-by-default steering-policy layer for the current three-verb surface:
+The repo now also lands the first deny-by-default steering-policy layer for the current four-verb surface:
 
 1. steering enablement,
 2. action allowlisting,
@@ -70,7 +75,8 @@ The repo now also lands the first deny-by-default steering-policy layer for the 
 5. same-session boundary enforcement,
 6. same-world-binding boundary enforcement,
 7. explicit capability-narrowing permission,
-8. stable denial buckets for invalidated-worker and concurrency-cap cases in the current scope.
+8. stable denial buckets for invalidated-worker and concurrency-cap cases in the current scope,
+9. explicit allowlisting support for retained-only `inspect_world_worker`.
 
 Repo-truth implication:
 
@@ -100,10 +106,9 @@ Family 1 is no longer missing core control-plane foundation work, but it is stil
 
 The remaining later verbs are:
 
-1. `inspect_world_worker`
-2. `cancel_world_work`
-3. `stop_world_worker`
-4. `fork_world_worker`
+1. `cancel_world_work`
+2. `stop_world_worker`
+3. `fork_world_worker`
 
 These are still absent from the live internal dispatch action set and from the effective steering-policy allowlist.
 
@@ -128,9 +133,9 @@ The following are no longer the missing Family-1 foundation:
 
 Any answer that still treats those as the next missing Family-1 slice is sequencing-stale.
 
-## Why `inspect_world_worker` Is The Smallest Honest Slice 35
+## Why `inspect_world_worker` Was The Smallest Honest Slice 35
 
-Among the remaining later verbs, `inspect_world_worker` is the narrowest next step.
+Among the later verbs that remained after Slice `34`, `inspect_world_worker` was the narrowest honest next step, and the current tree now lands that scope as an internal retained-worker snapshot surface.
 
 ### Why `inspect_world_worker` comes before `cancel_world_work`
 
@@ -158,22 +163,20 @@ Among the remaining later verbs, `inspect_world_worker` is the narrowest next st
 
 ## Recommended Next Slice
 
-The narrowest honest next slice is:
+With retained-only inspect now landed, the next honest Family-1 slice should come from the remaining execution-affecting verbs:
 
-1. **Slice `35`: internal retained-world-worker inspect snapshot**
+1. **the next later-verb slice: `cancel_world_work` or `stop_world_worker`, whichever proves narrower against the live lifecycle model**
 
-This slice should:
+That follow-on slice should:
 
 1. stay internal-only and orchestrator-only,
-2. introduce only `inspect_world_worker` as the next Family-1 verb,
-3. require exact retained `target_participant_id`,
-4. reuse authoritative state-store truth instead of inventing a live world-side RPC,
-5. return a typed retained-worker snapshot with exact identity, lifecycle/posture truth, and recent status metadata,
-6. defer active-ephemeral inspect, cancel, stop, fork, approval policy, and Family-2 routing work.
+2. keep active-ephemeral inspect deferred,
+3. sequence `fork_world_worker` after the narrower cancel-or-stop slice,
+4. continue deferring broader approval policy and Family-2 routing work.
 
 ## Boundary Against Family 2
 
-This slice should still come before Family 2 execution work because:
+The landed inspect slice still came before Family 2 execution work because:
 
 1. Family 2 depends on the control-plane vocabulary being frozen,
 2. inspect widens the host-orchestrator control plane without requiring router ownership,
@@ -189,9 +192,9 @@ What stays out of scope here:
 
 ## Bottom Line
 
-After Slice `34`, Family 1 is no longer missing its core control-plane foundation:
+After Slice `35`, Family 1 is no longer missing its core control-plane foundation or its first inspect surface:
 
-1. the first three verbs are landed,
+1. the first four verbs are landed,
 2. first steering-policy hardening is landed,
-3. what remains is second-wave verb expansion and then broader approval/fork-autonomy work,
-4. the smallest honest Slice `35` is retained-worker `inspect_world_worker` first.
+3. what remains is `cancel_world_work`, `stop_world_worker`, and `fork_world_worker`, then broader approval/fork-autonomy work,
+4. active-ephemeral inspect and Family-2 routing work remain deferred.

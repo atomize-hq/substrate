@@ -5,7 +5,7 @@ Source plan: [PLAN-35.md](./PLAN-35.md)
 Source validation note: [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: proposed on `2026-05-31`
+Status: completed on `2026-06-01`
 
 ## Execution Packets
 
@@ -28,14 +28,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the inspect action, retained-only validation, and typed inspect payload/outcome scaffolding
+- [x] Task 1.1: Add the inspect action, retained-only validation, and typed inspect payload/outcome scaffolding
   - Acceptance: `inspect_world_worker` is a valid internal dispatch action; request validation requires retained mode and exact `target_participant_id`; the contract exposes a typed inspect payload and inspect outcome suitable for authoritative snapshot projection.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Widen steering-policy parsing so `inspect_world_worker` can be explicitly allowlisted
+- [x] Task 1.2: Widen steering-policy parsing so `inspect_world_worker` can be explicitly allowlisted
   - Acceptance: the effective policy/config model accepts `inspect_world_worker` as an allowed world-dispatch action while keeping deny-by-default defaults unchanged when the action is absent.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -63,14 +63,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Add exact retained-worker inspect target resolution in the state store
+- [x] Task 2.1: Add exact retained-worker inspect target resolution in the state store
   - Acceptance: inspect target resolution is same-session-only, same-world-binding-only, and authoritative-caller-only; it accepts exact retained workers without requiring them to remain continue-routable.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Project a typed retained-worker inspect snapshot from authoritative stored truth
+- [x] Task 2.2: Project a typed retained-worker inspect snapshot from authoritative stored truth
   - Acceptance: the inspect projection returns exact identity plus lifecycle/posture/status metadata for live, detached/attention, invalidated, and terminal retained workers without mutating any lifecycle state.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -98,7 +98,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add `inspect_world_worker` handling to the internal dispatch path
+- [x] Task 3.1: Add `inspect_world_worker` handling to the internal dispatch path
   - Acceptance: the orchestrator dispatch layer evaluates steering policy, resolves the inspect target, and returns a typed inspect outcome without invoking a world-side execution transport.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -107,7 +107,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 3.2: Add regression tests for inspect denial and non-mutating behavior
+- [x] Task 3.2: Add regression tests for inspect denial and non-mutating behavior
   - Acceptance: tests prove that disallowed inspect requests fail closed, allowed inspect requests return authoritative snapshots, and inspect does not continue, cancel, stop, or fork workers.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -136,7 +136,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
+- [x] Task 4.1: Align planning/config truth without widening the slice
   - Acceptance: the repo-local docs describe inspect as internal, retained-worker-only in v1, and store-backed; no wording implies active-ephemeral inspect, cancel, stop, fork, approval autonomy, or Family-2 execution have landed.
   - Verify:
     - manual diff review
@@ -147,7 +147,7 @@ Session goal:
     - [`llm-last-mile/PLAN-35.md`](./PLAN-35.md)
     - [`llm-last-mile/TASKS-35.md`](./TASKS-35.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, and the full workspace tests are green; no public CLI regression or unintended Family-2 coupling appears.
   - Verify:
     - `cargo fmt --all -- --check`

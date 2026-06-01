@@ -11,7 +11,7 @@ Related design stack:
 - [PLAN-34.md](./PLAN-34.md)
 - [TASKS-34.md](./TASKS-34.md)  
 Phase: `SPECIFY`  
-Status: proposed on `2026-05-31`
+Status: implemented on `2026-06-01`
 
 ## Assumptions
 

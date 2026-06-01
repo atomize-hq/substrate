@@ -3,7 +3,7 @@
 Source spec: [SPEC-35-internal-retained-world-worker-inspect-snapshot.md](./SPEC-35-internal-retained-world-worker-inspect-snapshot.md)  
 Source validation note: [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)  
 Plan type: fourth implementation-bearing Family-1 control-plane slice  
-Status: proposed on `2026-05-31`
+Status: implemented and validated on `2026-06-01`
 
 ## Objective
 

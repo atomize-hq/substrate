@@ -301,9 +301,10 @@ world_fs:
 Internal host-to-world steering example:
 
 - This surface is internal-only and deny-by-default. The built-in defaults keep `agents.world_dispatch.enabled=false`, keep the allowlists empty, require exact same-session and same-world-binding truth, disallow capability narrowing, and set both current concurrency caps to `0`.
-- Current action ids are limited to `run_world_task`, `spawn_world_worker`, and `continue_world_worker`.
+- Current action ids are limited to `run_world_task`, `spawn_world_worker`, `continue_world_worker`, and `inspect_world_worker`.
+- `inspect_world_worker` remains internal, retained-worker-only in v1, and returns an authoritative store-backed snapshot instead of invoking world-side execution transport.
 - Current mode ids are limited to `ephemeral` and `retained`.
-- This patch surface does not imply later verbs (`inspect_world_worker`, `cancel_world_work`, `stop_world_worker`, `fork_world_worker`), router-owned attach execution, or broader approval/fork autonomy policy.
+- This patch surface does not imply active-ephemeral inspect, later mutating verbs (`cancel_world_work`, `stop_world_worker`, `fork_world_worker`), router-owned attach execution, or broader approval/fork autonomy policy.
 
 ```yaml
 agents:
@@ -315,6 +316,7 @@ agents:
       - run_world_task
       - spawn_world_worker
       - continue_world_worker
+      - inspect_world_worker
     allowed_modes:
       - ephemeral
       - retained
