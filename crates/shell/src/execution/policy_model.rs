@@ -9,8 +9,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use substrate_broker::{
     validate_backend_id, validate_dotted_id, validate_snake_case_id,
-    validate_world_dispatch_action_id, validate_world_dispatch_mode_id, Policy, PolicyExplainV1,
-    WorldFsDenyEnforcement, WorldFsDimensionPolicy,
+    validate_world_dispatch_action_id, validate_world_dispatch_mode_id, Policy,
+    PolicyExplainV1, WorldFsDenyEnforcement, WorldFsDimensionPolicy,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -505,7 +505,7 @@ fn validate_world_dispatch_action_list_opt(values: &Option<Vec<String>>, key: &s
     for value in values {
         validate_world_dispatch_action_id(value).map_err(|_| {
             config_model::user_error(format!(
-                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker",
                 key,
                 value.trim()
             ))
@@ -1163,7 +1163,7 @@ fn validate_world_dispatch_action_list(values: &[String], key: &str) -> Result<(
     for value in values {
         validate_world_dispatch_action_id(value).map_err(|_| {
             config_model::user_error(format!(
-                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker",
                 key,
                 value.trim()
             ))
@@ -1997,7 +1997,7 @@ mod tests {
             ConfigUpdate {
                 key: "agents.world_dispatch.allowed_actions".to_string(),
                 op: UpdateOp::Append,
-                value: "run_world_task".to_string(),
+                value: "inspect_world_worker".to_string(),
             },
             ConfigUpdate {
                 key: "agents.world_dispatch.allowed_modes".to_string(),
@@ -2040,7 +2040,7 @@ mod tests {
         );
         assert_eq!(
             patch.agents.world_dispatch.allowed_actions.as_deref(),
-            Some(&["run_world_task".to_string()][..])
+            Some(&["inspect_world_worker".to_string()][..])
         );
         assert_eq!(
             patch.agents.world_dispatch.allowed_modes.as_deref(),
@@ -2080,6 +2080,7 @@ agents:
       - "run_world_task"
       - "spawn_world_worker"
       - "continue_world_worker"
+      - "inspect_world_worker"
     allowed_modes:
       - "ephemeral"
       - "retained"
@@ -2099,7 +2100,8 @@ agents:
                 &[
                     "run_world_task".to_string(),
                     "spawn_world_worker".to_string(),
-                    "continue_world_worker".to_string()
+                    "continue_world_worker".to_string(),
+                    "inspect_world_worker".to_string()
                 ][..]
             )
         );
@@ -2110,9 +2112,9 @@ agents:
     }
 
     #[test]
-    fn policy_patch_rejects_invalid_agents_world_dispatch_action() {
+    fn policy_patch_accepts_inspect_agents_world_dispatch_action() {
         let path = Path::new("policy.yaml");
-        let err = parse_policy_patch_yaml(
+        let patch = parse_policy_patch_yaml(
             path,
             r#"
 agents:
@@ -2121,11 +2123,12 @@ agents:
       - "inspect_world_worker"
 "#,
         )
-        .expect_err("later verbs must stay out of scope for packet 1");
+        .expect("inspect_world_worker should be allowlistable in packet 1");
 
-        assert!(err
-            .to_string()
-            .contains("agents.world_dispatch.allowed_actions"));
+        assert_eq!(
+            patch.agents.world_dispatch.allowed_actions.as_deref(),
+            Some(&["inspect_world_worker".to_string()][..])
+        );
     }
 
     #[test]

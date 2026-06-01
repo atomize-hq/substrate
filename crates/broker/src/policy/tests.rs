@@ -318,13 +318,33 @@ fn pcm1_policy_yaml_rejects_malformed_world_dispatch_backend_ids() {
 #[test]
 fn pcm1_policy_yaml_rejects_unknown_world_dispatch_actions() {
     let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex")
-        .replace("- \"continue_world_worker\"", "- \"inspect_world_worker\"");
+        .replace("- \"continue_world_worker\"", "- \"stop_world_worker\"");
     let err = serde_yaml::from_str::<Policy>(&raw)
         .expect_err("unknown agents.world_dispatch.allowed_actions entry should fail");
     let msg = err.to_string();
     assert!(
         msg.contains("agents.world_dispatch.allowed_actions"),
         "expected world dispatch action diagnostic, got: {msg}"
+    );
+}
+
+#[test]
+fn pcm1_policy_yaml_accepts_explicit_inspect_world_worker_action() {
+    let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex")
+        .replace(
+            "- \"continue_world_worker\"",
+            "- \"continue_world_worker\"\n      - \"inspect_world_worker\"",
+        );
+    let policy =
+        serde_yaml::from_str::<Policy>(&raw).expect("inspect_world_worker should be accepted");
+    assert_eq!(
+        policy.agents_world_dispatch_allowed_actions,
+        vec![
+            "run_world_task".to_string(),
+            "spawn_world_worker".to_string(),
+            "continue_world_worker".to_string(),
+            "inspect_world_worker".to_string()
+        ]
     );
 }
 

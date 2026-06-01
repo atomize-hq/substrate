@@ -96,9 +96,12 @@ pub fn validate_dotted_id(value: &str) -> Result<(), String> {
 pub fn validate_world_dispatch_action_id(value: &str) -> Result<(), String> {
     let trimmed = value.trim();
     match trimmed {
-        "run_world_task" | "spawn_world_worker" | "continue_world_worker" => Ok(()),
+        "run_world_task"
+        | "spawn_world_worker"
+        | "continue_world_worker"
+        | "inspect_world_worker" => Ok(()),
         _ => Err(format!(
-            "invalid world dispatch action '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker",
+            "invalid world dispatch action '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker",
             trimmed
         )),
     }

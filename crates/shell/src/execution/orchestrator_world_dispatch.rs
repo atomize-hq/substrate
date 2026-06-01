@@ -163,6 +163,9 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
         WorldDispatchActionV1::RunWorldTask => run_world_task(prepared).await,
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
         WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
+        WorldDispatchActionV1::InspectWorldWorker => anyhow::bail!(
+            "unsupported_dispatch_action: inspect_world_worker routing is deferred until packet 3"
+        ),
     }
 }
 
@@ -645,7 +648,9 @@ fn acquire_world_dispatch_concurrency_guard(
                 kind: WorldDispatchConcurrencyKind::RetainedBootstrap,
             }))
         }
-        WorldDispatchActionV1::ContinueWorldWorker => Ok(None),
+        WorldDispatchActionV1::ContinueWorldWorker | WorldDispatchActionV1::InspectWorldWorker => {
+            Ok(None)
+        }
     }
 }
 

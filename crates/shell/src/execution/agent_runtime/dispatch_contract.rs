@@ -10,6 +10,7 @@ use crate::execution::agent_inventory::{
 };
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, HostAttachExecutionClientStart, HostAttachModePreference,
+    OrchestrationSessionPosture, OrchestrationSessionState,
 };
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 use crate::execution::policy_model::{apply_policy_patch, PolicyPatch};
@@ -18,6 +19,7 @@ use super::mapping::{
     protocol_validation_error, resolve_shell_owned_runtime_family, AgentRuntimeBackendKind,
     PURE_AGENT_PROTOCOL,
 };
+use super::session::AgentRuntimeSessionState;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -129,6 +131,7 @@ pub(crate) enum WorldDispatchActionV1 {
     RunWorldTask,
     SpawnWorldWorker,
     ContinueWorldWorker,
+    InspectWorldWorker,
 }
 
 impl WorldDispatchActionV1 {
@@ -137,6 +140,7 @@ impl WorldDispatchActionV1 {
             Self::RunWorldTask => "run_world_task",
             Self::SpawnWorldWorker => "spawn_world_worker",
             Self::ContinueWorldWorker => "continue_world_worker",
+            Self::InspectWorldWorker => "inspect_world_worker",
         }
     }
 }
@@ -218,12 +222,17 @@ pub(crate) struct WorkerContinuePayloadV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct WorkerInspectPayloadV1 {}
+
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "payload_kind", rename_all = "snake_case")]
 pub(crate) enum WorldDispatchPayloadV1 {
     Task(TaskPayloadV1),
     WorkerSpawn(WorkerSpawnPayloadV1),
     WorkerContinue(WorkerContinuePayloadV1),
+    WorkerInspect(WorkerInspectPayloadV1),
 }
 
 #[allow(dead_code)]
@@ -320,7 +329,8 @@ fn validate_world_dispatch_action_mode(
     match (action, mode) {
         (WorldDispatchActionV1::RunWorldTask, WorldDispatchModeV1::Ephemeral)
         | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained)
-        | (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
+        | (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_action_mode: action {} is incompatible with mode {}",
             action.as_str(),
@@ -347,6 +357,10 @@ fn validate_world_dispatch_payload(
             validate_world_dispatch_prompt(action, &worker.prompt)?;
             validate_optional_world_dispatch_string(action, "thread_id", &worker.thread_id)
         }
+        (
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchPayloadV1::WorkerInspect(_),
+        ) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action {} requires matching typed payload",
             action.as_str(),
@@ -359,10 +373,12 @@ fn validate_world_dispatch_target(
     value: Option<String>,
 ) -> anyhow::Result<Option<String>> {
     match action {
-        WorldDispatchActionV1::ContinueWorldWorker => Ok(Some(required_world_dispatch_string(
-            "target_participant_id",
-            value,
-        )?)),
+        WorldDispatchActionV1::ContinueWorldWorker | WorldDispatchActionV1::InspectWorldWorker => {
+            Ok(Some(required_world_dispatch_string(
+                "target_participant_id",
+                value,
+            )?))
+        }
         _ => {
             if value.is_some() {
                 anyhow::bail!(
@@ -463,6 +479,36 @@ pub(crate) struct ContinueWorldWorkerOutcomeV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RetainedWorkerInspectSnapshotV1 {
+    pub participant_state: AgentRuntimeSessionState,
+    pub session_state: OrchestrationSessionState,
+    pub session_posture: OrchestrationSessionPosture,
+    pub authoritative_live: bool,
+    pub attention_required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct InspectWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    pub target_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub snapshot: RetainedWorkerInspectSnapshotV1,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ContinueWorldWorkerEventClassV1 {
@@ -529,6 +575,7 @@ pub(crate) enum WorldDispatchOutcomeV1 {
     RunWorldTask(RunWorldTaskOutcomeV1),
     SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
     ContinueWorldWorker(ContinueWorldWorkerOutcomeV1),
+    InspectWorldWorker(InspectWorldWorkerOutcomeV1),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1376,9 +1423,11 @@ mod tests {
         ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
         DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
         DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        HostExecutionClientStart, TaskPayloadV1, WorkerContinuePayloadV1, WorkerSpawnPayloadV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1,
+        HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
+        RetainedWorkerInspectSnapshotV1, TaskPayloadV1, WorkerContinuePayloadV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorldDispatchActionV1,
+        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -1387,7 +1436,10 @@ mod tests {
     use crate::execution::agent_runtime::control::{
         ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
     };
-    use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
+    use crate::execution::agent_runtime::orchestration_session::{
+        HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionState,
+    };
+    use crate::execution::agent_runtime::session::AgentRuntimeSessionState;
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
     use crate::execution::policy_model::PolicyPatch;
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
@@ -2237,6 +2289,23 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_accepts_inspect_world_worker_retained_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-35")
+        .validate()
+        .expect("inspect request should validate");
+
+        assert_eq!(
+            validated.target_participant_id.as_deref(),
+            Some("ash-worker-35")
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_invalid_action_mode_combination() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::RunWorldTask,
@@ -2335,6 +2404,39 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_rejects_inspect_world_worker_without_exact_target() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .validate()
+        .expect_err("inspect target must be mandatory");
+
+        assert_eq!(
+            error.to_string(),
+            "missing_dispatch_field: world dispatch request requires target_participant_id"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_inspect_world_worker_ephemeral_mode() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-35")
+        .validate()
+        .expect_err("inspect must stay retained-only in packet 1");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_action_mode: action inspect_world_worker is incompatible with mode ephemeral"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_target_participant_id_for_non_continue_actions() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::RunWorldTask,
@@ -2368,6 +2470,47 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_round_trips_typed_inspect_outcome_shape() {
+        let outcome = WorldDispatchOutcomeV1::InspectWorldWorker(InspectWorldWorkerOutcomeV1 {
+            request_id: "req-35".to_string(),
+            orchestration_session_id: "sess-35".to_string(),
+            action: WorldDispatchActionV1::InspectWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch-35".to_string(),
+            target_participant_id: "ash-worker-35".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-35".to_string(),
+            world_generation: 5,
+            snapshot: RetainedWorkerInspectSnapshotV1 {
+                participant_state: AgentRuntimeSessionState::Running,
+                session_state: OrchestrationSessionState::Active,
+                session_posture: OrchestrationSessionPosture::AwaitingAttention,
+                authoritative_live: true,
+                attention_required: true,
+                parent_participant_id: Some("ash-parent-35".to_string()),
+                resumed_from_participant_id: None,
+            },
+            summary: "inspect snapshot is authoritative".to_string(),
+        });
+
+        let json = serde_json::to_value(&outcome).expect("serialize inspect outcome");
+        assert_eq!(json.get("outcome_kind").and_then(|value| value.as_str()), Some("inspect_world_worker"));
+        let snapshot = json.get("snapshot").expect("snapshot should serialize");
+        assert_eq!(
+            snapshot
+                .get("session_posture")
+                .and_then(|value| value.as_str()),
+            Some("awaiting_attention")
+        );
+        assert_eq!(
+            snapshot
+                .get("participant_state")
+                .and_then(|value| value.as_str()),
+            Some("running")
         );
     }
 

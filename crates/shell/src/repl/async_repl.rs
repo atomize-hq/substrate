@@ -4899,6 +4899,9 @@ async fn handle_internal_toolbox_world_dispatch_request(
         WorldDispatchActionV1::RunWorldTask | WorldDispatchActionV1::ContinueWorldWorker => {
             dispatch_orchestrator_world_request(&startup_context.store, request).await
         }
+        WorldDispatchActionV1::InspectWorldWorker => anyhow::bail!(
+            "unsupported_dispatch_action: inspect_world_worker routing is deferred until packet 3"
+        ),
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         WorldDispatchActionV1::SpawnWorldWorker => {
             let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;
