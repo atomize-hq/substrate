@@ -10959,6 +10959,298 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
+    fn orchestrator_world_dispatch_surface_round_trips_successful_inspect_without_mutating_retained_runtime_handles(
+    ) {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+        )
+        .expect("write codex agent file");
+        fs::write(
+            agents_dir.join("codex_world.yaml"),
+            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+        )
+        .expect("write codex_world agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let world_binding = PersistedWorldBinding {
+                world_id: "wld_toolbox_dispatch".to_string(),
+                world_generation: 9,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let mut host_runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+                Some(prepared),
+                Some(&world_binding),
+                Some(InitialExecPromptPlan::Replace(
+                    "internal toolbox bootstrap".to_string(),
+                )),
+                false,
+                false,
+                false,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("host runtime start should succeed")
+            .expect("host runtime");
+
+            let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+                .expect("member selection should succeed")
+                .expect("one world-scoped member should be selected");
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor,
+                &world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_member_runtime_with_prepared(
+                Some(member_prepared),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+            let member_snapshot_before = runtime_manifest_snapshot(&member_runtime);
+            let member_backend_id = runtime_backend_id(&member_runtime);
+            let member_launch_span_id_before = runtime_launch_span_id(&member_runtime);
+            let member_participant_id = member_snapshot_before.handle.participant_id.clone();
+
+            let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
+            ensure_internal_toolbox_transport_registered(
+                Some(&mut host_runtime),
+                Some(&startup_context),
+                &toolbox_tx,
+            )
+            .await
+            .expect("register toolbox transport");
+
+            let request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_inspect_success".to_string()),
+                idempotency_key: Some("idem_toolbox_inspect_success".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(
+                    runtime_manifest_snapshot(&host_runtime).handle.participant_id,
+                ),
+                action: WorldDispatchActionV1::InspectWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some(member_backend_id.clone()),
+                target_participant_id: Some(member_participant_id.clone()),
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+            };
+            let transport_path =
+                internal_toolbox_transport_path(&startup_context.orchestration_session_id());
+            let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            member_runtimes.insert(member_backend_id.clone(), member_runtime);
+            assert_eq!(member_runtimes.len(), 1, "fixture should keep one retained runtime");
+
+            let session_before = startup_context
+                .store
+                .load_session(&startup_context.orchestration_session_id())
+                .expect("load orchestration session before inspect")
+                .expect("authoritative session before inspect");
+            let participant_before = startup_context
+                .store
+                .load_participant(&member_participant_id)
+                .expect("load retained participant before inspect")
+                .expect("retained participant before inspect");
+
+            let request_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                let request = request.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(&transport_path, &request).await
+                }
+            });
+            let request = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for internal toolbox request")
+                .expect("toolbox request");
+            handle_internal_toolbox_dispatch_request(
+                request,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let outcome = tokio::time::timeout(Duration::from_secs(15), request_task)
+                .await
+                .expect("timed out waiting for internal toolbox response")
+                .expect("internal toolbox task should join")
+                .expect("inspect should succeed against authoritative retained state");
+
+            let inspect = match outcome {
+                WorldDispatchOutcomeV1::InspectWorldWorker(outcome) => outcome,
+                other => panic!("expected inspect_world_worker outcome, got {other:?}"),
+            };
+
+            assert_eq!(inspect.request_id, "req_toolbox_inspect_success");
+            assert_eq!(
+                inspect.orchestration_session_id,
+                startup_context.orchestration_session_id()
+            );
+            assert_eq!(inspect.action, WorldDispatchActionV1::InspectWorldWorker);
+            assert_eq!(
+                inspect.mode,
+                crate::execution::agent_runtime::WorldDispatchModeV1::Retained
+            );
+            assert_eq!(inspect.target_backend_id, member_backend_id);
+            assert_eq!(inspect.target_participant_id, member_participant_id);
+            assert_eq!(inspect.world_id, world_binding.world_id);
+            assert_eq!(inspect.world_generation, world_binding.world_generation);
+            assert_eq!(
+                inspect.snapshot.participant_state,
+                participant_before.handle.state
+            );
+            assert_eq!(inspect.snapshot.session_state, session_before.session.state);
+            assert_eq!(inspect.snapshot.session_posture, session_before.session.posture);
+            assert_eq!(
+                inspect.snapshot.authoritative_live,
+                participant_before.is_authoritative_live()
+            );
+            assert_eq!(
+                inspect.snapshot.attention_required,
+                session_before.session.posture == OrchestrationSessionPosture::AwaitingAttention
+                    || session_before.session.pending_inbox_count > 0
+            );
+            assert_eq!(
+                inspect.snapshot.parent_participant_id,
+                participant_before.handle.parent_participant_id.clone()
+            );
+            assert_eq!(
+                inspect.snapshot.resumed_from_participant_id,
+                participant_before.handle.resumed_from_participant_id.clone()
+            );
+            assert!(
+                inspect
+                    .summary
+                    .contains("without invoking world-side execution transport"),
+                "inspect summary must stay explicit about snapshot-only routing: {}",
+                inspect.summary
+            );
+
+            let expected_participant_state =
+                serde_json::to_value(&participant_before.handle.state)
+                    .expect("serialize participant state");
+            let outcome_json =
+                serde_json::to_value(WorldDispatchOutcomeV1::InspectWorldWorker(inspect.clone()))
+                    .expect("serialize inspect outcome");
+            assert_eq!(
+                outcome_json
+                    .get("outcome_kind")
+                    .and_then(serde_json::Value::as_str),
+                Some("inspect_world_worker")
+            );
+            assert_eq!(
+                outcome_json
+                    .get("target_participant_id")
+                    .and_then(serde_json::Value::as_str),
+                Some(member_participant_id.as_str())
+            );
+            assert_eq!(
+                outcome_json
+                    .get("snapshot")
+                    .and_then(|value| value.get("participant_state"))
+                    .and_then(serde_json::Value::as_str),
+                expected_participant_state.as_str()
+            );
+            assert!(
+                outcome_json.get("thread_id").is_none(),
+                "inspect outcome must not regress into continue transport fields: {outcome_json}"
+            );
+            assert!(
+                outcome_json.get("worker_event").is_none(),
+                "inspect outcome must not surface transport-bearing worker events: {outcome_json}"
+            );
+
+            assert_eq!(
+                member_runtimes.len(),
+                1,
+                "inspect must not add or remove retained runtime handles"
+            );
+            let retained_runtime = member_runtimes
+                .get(member_backend_id.as_str())
+                .expect("retained runtime handle must stay present after inspect");
+            assert_eq!(
+                runtime_manifest_snapshot(retained_runtime),
+                member_snapshot_before,
+                "inspect must not mutate retained runtime manifests"
+            );
+            assert_eq!(
+                runtime_launch_span_id(retained_runtime),
+                member_launch_span_id_before,
+                "inspect must not rewrite retained runtime launch receipts"
+            );
+
+            let session_after = startup_context
+                .store
+                .load_session(&startup_context.orchestration_session_id())
+                .expect("load orchestration session after inspect")
+                .expect("authoritative session after inspect");
+            let participant_after = startup_context
+                .store
+                .load_participant(&inspect.target_participant_id)
+                .expect("load retained participant after inspect")
+                .expect("retained participant after inspect");
+            assert_eq!(session_after.session, session_before.session);
+            assert_eq!(session_after.participants, session_before.participants);
+            assert_eq!(participant_after, participant_before);
+
+            let member_runtime = member_runtimes
+                .remove(member_backend_id.as_str())
+                .expect("member runtime handle must remain removable for cleanup");
+            shutdown_host_orchestrator_runtime(
+                member_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            shutdown_host_orchestrator_runtime(
+                host_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
     fn prepare_member_replacement_runtime_preserves_resumed_from_lineage() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
