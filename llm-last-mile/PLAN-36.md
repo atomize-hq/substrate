@@ -3,7 +3,9 @@
 Source spec: [SPEC-36-internal-retained-world-worker-stop-closeout.md](./SPEC-36-internal-retained-world-worker-stop-closeout.md)  
 Source validation note: [NOTE-35-family-1-ordering-after-inspect-snapshot.md](./NOTE-35-family-1-ordering-after-inspect-snapshot.md)  
 Plan type: fifth implementation-bearing Family-1 control-plane slice  
-Status: proposed on `2026-06-01`
+Status: implemented on `2026-06-01`
+Landed posture note: the stop contract, steering-policy allowlisting, exact-target retained-worker stop resolution, and durable closeout routing are landed repo-wide, but retained-worker stop routing is Linux-only in v1 and fails closed on non-Linux builds.
+Validation note: Packet 4's validation wall is green, including a rustfmt-only cleanup in `crates/shell/src/execution/agent_runtime/state_store.rs` and `crates/shell/src/execution/orchestrator_world_dispatch.rs` that did not change behavior.
 
 ## Objective
 
@@ -14,7 +16,7 @@ This slice is complete only when all of the following are true:
 1. `stop_world_worker` exists as a typed internal dispatch action,
 2. the action is retained-worker-only in v1 and requires exact `target_participant_id`,
 3. steering policy can explicitly allow or deny the action,
-4. allowed requests drive durable retained-worker closeout using authoritative existing stop/runtime truth,
+4. allowed Linux requests drive durable retained-worker closeout using authoritative existing stop/runtime truth,
 5. already-terminal retained workers fail closed,
 6. `cancel_world_work`, `fork_world_worker`, approval/fork autonomy, and Family-2 router/attach work remain deferred.
 
@@ -29,6 +31,12 @@ The repo already has the prerequisites that make `stop_world_worker` the smalles
 5. existing public stop-closeout helpers and private owner stop transport posture.
 
 What the repo still lacks is a typed internal stop action that exposes those durable stop semantics directly to the host orchestrator for exact retained workers.
+
+Current landed runtime note:
+
+1. stop contract admission, policy parsing, and exact retained-worker target validation are repo-wide,
+2. routed retained-worker stop outcomes drive durable closeout on Linux in v1 through the existing private owner stop surface,
+3. non-Linux builds reject retained stop routing rather than widening into public stop or cancel behavior.
 
 The narrowest honest implementation order is therefore:
 
@@ -163,7 +171,7 @@ Primary touch surface:
 What this packet must enforce:
 
 1. docs describe stop as internal and retained-worker-only in v1,
-2. docs keep durable stop separate from active cancel and fork/autonomy work,
+2. docs keep durable stop separate from active cancel and fork/autonomy work, and keep routed closeout Linux-only in v1,
 3. no wording implies `cancel_world_work`, `fork_world_worker`, approval autonomy, or Family-2 work have landed.
 
 Verification checkpoint:

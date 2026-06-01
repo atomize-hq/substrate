@@ -22,6 +22,12 @@ Validated against live code in:
 
 Record the current repo truth after Slice `35`, and make explicit why the next implementation-bearing Family-1 work should be `stop_world_worker` before `cancel_world_work` or `fork_world_worker`.
 
+Validated outcome after Slice `36`:
+
+1. that ordering has now landed as planned,
+2. `stop_world_worker` is now the internal retained-worker-only v1 stop surface,
+3. routed stop closeout remains Linux-only in v1 and stays distinct from `cancel_world_work`.
+
 ## Current Repo Truth
 
 ### 1. `inspect_world_worker` is now real Family-1 runtime truth
@@ -109,3 +115,11 @@ Reopen this ordering note only if one of these becomes true:
 3. stop semantics force an immediate broader redesign of Family-2 review/attach or fork autonomy policy.
 
 If none of those conditions is true, the next slice should remain `stop_world_worker`.
+
+## Follow-On Truth After Slice 36
+
+With Slice `36` now landed:
+
+1. `cancel_world_work` remains the next broader execution-affecting Family-1 verb,
+2. `fork_world_worker` remains later because lineage and autonomy policy are still deferred,
+3. approval/fork autonomy and Family-2 router/attach execution remain downstream work rather than landed repo truth.

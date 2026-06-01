@@ -5,7 +5,8 @@ Source plan: [PLAN-36.md](./PLAN-36.md)
 Source validation note: [NOTE-35-family-1-ordering-after-inspect-snapshot.md](./NOTE-35-family-1-ordering-after-inspect-snapshot.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: proposed on `2026-06-01`
+Status: Packet 4 complete on `2026-06-01`; docs truth is aligned and the final validation wall is green
+Landed posture note: the stop action, policy allowlisting, exact retained-worker stop routing, and durable closeout behavior are landed repo-wide, but retained-worker stop routing is supported only on Linux in v1 and fails closed elsewhere with `unsupported_platform_or_posture`.
 
 ## Execution Packets
 
@@ -28,14 +29,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the stop action, retained-only validation, and typed stop payload/outcome scaffolding
+- [x] Task 1.1: Add the stop action, retained-only validation, and typed stop payload/outcome scaffolding
   - Acceptance: `stop_world_worker` is a valid internal dispatch action; request validation requires retained mode and exact `target_participant_id`; the contract exposes a typed stop payload and stop outcome suitable for durable closeout routing.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Widen steering-policy parsing so `stop_world_worker` can be explicitly allowlisted
+- [x] Task 1.2: Widen steering-policy parsing so `stop_world_worker` can be explicitly allowlisted
   - Acceptance: the effective policy/config model accepts `stop_world_worker` as an allowed world-dispatch action while keeping deny-by-default defaults unchanged when the action is absent.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -66,14 +67,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Add exact retained-worker stop target resolution in the state store
+- [x] Task 2.1: Add exact retained-worker stop target resolution in the state store
   - Acceptance: stop target resolution is same-session-only, same-world-binding-only, and authoritative-caller-only; it accepts exact retained workers and rejects targets that are already terminal.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Add stable terminal-state rejection for already-stopped or otherwise terminal workers
+- [x] Task 2.2: Add stable terminal-state rejection for already-stopped or otherwise terminal workers
   - Acceptance: repeated stop against terminal retained workers fails closed with a stable, reviewable error path instead of silently succeeding or routing into closeout again.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -100,7 +101,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add `stop_world_worker` handling to the internal dispatch path
+- [x] Task 3.1: Add `stop_world_worker` handling to the internal dispatch path
   - Acceptance: the orchestrator dispatch layer evaluates steering policy, resolves the stop target, and returns a typed stop outcome for exact retained workers.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -110,7 +111,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs)
 
-- [ ] Task 3.2: Reuse existing stop-closeout helpers for durable retained-worker stop
+- [x] Task 3.2: Reuse existing stop-closeout helpers for durable retained-worker stop
   - Acceptance: allowed stop requests drive durable stopped-terminal truth through the existing closeout/runtime mechanisms rather than introducing a second stop model; stop does not widen into cancel, continue, or fork behavior.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -141,8 +142,8 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
-  - Acceptance: the repo-local docs describe stop as internal, retained-worker-only in v1, and a durable closeout action distinct from cancel; no wording implies `cancel_world_work`, `fork_world_worker`, approval autonomy, or Family-2 execution have landed.
+- [x] Task 4.1: Align planning/config truth without widening the slice
+  - Acceptance: the repo-local docs describe stop as internal, retained-worker-only in v1, Linux-only for routed closeout delivery, and a durable closeout action distinct from cancel; no wording implies `cancel_world_work`, `fork_world_worker`, approval autonomy, or Family-2 execution have landed.
   - Verify:
     - manual diff review
   - Expected files touched:
@@ -152,7 +153,7 @@ Session goal:
     - [`llm-last-mile/PLAN-36.md`](./PLAN-36.md)
     - [`llm-last-mile/TASKS-36.md`](./TASKS-36.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, and the full workspace tests are green; no public CLI regression or unintended Family-2 coupling appears.
   - Verify:
     - `cargo fmt --all -- --check`
@@ -164,7 +165,7 @@ Session goal:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
     - `cargo test --workspace -- --nocapture`
   - Expected files touched:
-    - no planned source edits; this is the final gate after the implementation tasks above
+    - no planned source edits beyond rustfmt-only cleanup required to satisfy the final gate after the implementation tasks above
 
 ### Packet 4 Checkpoint
 

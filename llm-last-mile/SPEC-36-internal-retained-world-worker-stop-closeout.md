@@ -10,7 +10,8 @@ Related design stack:
 - [PLAN-35.md](./PLAN-35.md)
 - [TASKS-35.md](./TASKS-35.md)  
 Phase: `SPECIFY`  
-Status: proposed on `2026-06-01`
+Status: implemented on `2026-06-01`
+Landed posture note: the typed stop contract, steering-policy allowlisting, exact-target stop resolution, and durable retained-worker closeout routing are landed in the repo, but retained-worker stop routing is supported only on Linux in v1; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 
 ## Assumptions
 
@@ -40,6 +41,12 @@ Primary runtime story:
 4. Substrate performs durable retained-worker stop using existing closeout/runtime truth rather than inventing a second lifecycle model,
 5. the outcome surfaces a typed stopped closeout result for the exact retained worker,
 6. `cancel_world_work`, `fork_world_worker`, active-ephemeral inspect, approval/fork autonomy, and Family-2 routing work remain deferred.
+
+Current landed runtime note:
+
+1. exact stop request validation, policy parsing, and retained-worker target resolution are repo-wide,
+2. allowed retained-worker stop routing drives durable stopped closeout on Linux in v1 through the existing private owner stop surface,
+3. non-Linux builds reject retained stop routing rather than widening into public stop or `cancel_world_work` semantics.
 
 ## Frozen Direction
 
@@ -244,7 +251,7 @@ This slice is complete only when all of the following are true:
 1. `stop_world_worker` exists as an internal typed world-dispatch action,
 2. the action requires exact retained-worker targeting and retained mode,
 3. steering policy can explicitly allow or deny `stop_world_worker`,
-4. allowed stop requests produce durable retained-worker closeout using authoritative existing runtime truth,
+4. allowed Linux stop requests produce durable retained-worker closeout using authoritative existing runtime truth, while non-Linux builds fail closed instead of approximating stop behavior,
 5. already-terminal retained workers fail closed,
 6. `cancel_world_work`, `fork_world_worker`, approval/fork autonomy, and Family-2 routing work remain deferred.
 

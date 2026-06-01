@@ -6767,7 +6767,9 @@ mod tests {
             store
                 .persist_participant(&orchestrator_b)
                 .expect("persist orchestrator b");
-            store.persist_participant(&member_b).expect("persist member b");
+            store
+                .persist_participant(&member_b)
+                .expect("persist member b");
 
             let err = store
                 .resolve_internal_stop_world_dispatch_target(

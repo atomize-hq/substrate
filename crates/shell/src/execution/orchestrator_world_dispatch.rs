@@ -2,10 +2,10 @@
 use std::collections::BTreeMap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "linux")]
-use std::time::{Duration, Instant};
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 use std::sync::{LazyLock, Mutex};
+#[cfg(target_os = "linux")]
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -49,8 +49,7 @@ use crate::execution::agent_runtime::{
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::{
     AgentRuntimeSessionState, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
-    WorkerSpawnPayloadV1,
-    WorldDispatchModeV1, WorldDispatchPayloadV1,
+    WorkerSpawnPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::config_model::{
@@ -3479,8 +3478,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn dispatch_contract_stop_world_worker_returns_typed_closeout_after_authoritative_stop()
-    {
+    async fn dispatch_contract_stop_world_worker_returns_typed_closeout_after_authoritative_stop() {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -3496,14 +3494,15 @@ mod tests {
 
         let (stop_tx, mut stop_rx) =
             crate::execution::agent_runtime::control::private_stop_request_channel();
-        let mut stop_transport = crate::execution::agent_runtime::control::register_private_stop_transport(
-            &store,
-            "sess_dispatch",
-            "ash_member",
-            stop_tx,
-        )
-        .await
-        .expect("register private stop transport");
+        let mut stop_transport =
+            crate::execution::agent_runtime::control::register_private_stop_transport(
+                &store,
+                "sess_dispatch",
+                "ash_member",
+                stop_tx,
+            )
+            .await
+            .expect("register private stop transport");
         let store_for_task = store.clone();
         let stop_owner = tokio::spawn(async move {
             let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
@@ -3533,8 +3532,9 @@ mod tests {
                 .send(crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted);
         });
 
-        let prepared = prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
-            .expect("prepare stop dispatch request");
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
         let outcome = dispatch_prepared_orchestrator_world_request(prepared)
             .await
             .expect("dispatch prepared stop request");
@@ -3555,7 +3555,10 @@ mod tests {
             outcome.closeout.participant_state,
             AgentRuntimeSessionState::Stopped
         );
-        assert_eq!(outcome.closeout.session_state, OrchestrationSessionState::Active);
+        assert_eq!(
+            outcome.closeout.session_state,
+            OrchestrationSessionState::Active
+        );
         assert!(
             outcome
                 .summary
@@ -3568,7 +3571,10 @@ mod tests {
             .load_participant("ash_member")
             .expect("load retained participant after stop")
             .expect("retained participant after stop");
-        assert_eq!(participant_after.handle.state, AgentRuntimeSessionState::Stopped);
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Stopped
+        );
         assert_eq!(
             participant_after.internal.termination_reason.as_deref(),
             Some("worker stopped")
