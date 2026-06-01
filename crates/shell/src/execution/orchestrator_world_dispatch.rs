@@ -122,35 +122,14 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     request: WorldDispatchRequestV1,
 ) -> Result<PreparedOrchestratorWorldDispatch> {
     let request = request.validate()?;
-    let (session, caller_participant, target_participant) = match request.action {
-        WorldDispatchActionV1::ContinueWorldWorker => {
-            let resolved = store
-                .resolve_internal_continue_world_dispatch_target(
-                    &request.orchestration_session_id,
-                    &request.caller_participant_id,
-                    request
-                        .target_participant_id
-                        .as_deref()
-                        .expect("validated continue request must include target_participant_id"),
-                    &request.target_backend_id,
-                )
-                .map_err(map_continue_world_dispatch_resolution_error)?;
-            (
-                resolved.session,
-                resolved.caller_participant,
-                Some(resolved.target_participant),
-            )
-        }
-        _ => {
-            let authority = store
-                .resolve_internal_world_dispatch_caller(
-                    &request.orchestration_session_id,
-                    &request.caller_participant_id,
-                )
-                .map_err(map_world_dispatch_resolution_error)?;
-            (authority.session, authority.caller_participant, None)
-        }
-    };
+    let authority = store
+        .resolve_internal_world_dispatch_caller(
+            &request.orchestration_session_id,
+            &request.caller_participant_id,
+        )
+        .map_err(map_world_dispatch_resolution_error)?;
+    let session = authority.session;
+    let caller_participant = authority.caller_participant;
     let live_retained_worker_count = store.count_authoritative_live_retained_workers(
         &session.orchestration_session_id,
         caller_participant.participant_id(),
@@ -160,7 +139,7 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
         request,
         session,
         caller_participant,
-        target_participant,
+        target_participant: None,
         live_retained_worker_count,
     })
 }
@@ -365,6 +344,7 @@ async fn continue_world_worker(
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
+    let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
     let stream_result = execute_continue_world_worker_stream(&submit_request).await?;
@@ -565,6 +545,39 @@ fn map_continue_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::E
     }
 
     map_world_dispatch_resolution_error(err)
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_continue_world_dispatch_target_for_routing(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<PreparedOrchestratorWorldDispatch> {
+    if prepared.target_participant.is_some() {
+        return Ok(prepared);
+    }
+
+    let store = AgentRuntimeStateStore::new().context(
+        "failed to load runtime state for continue_world_worker exact-target resolution",
+    )?;
+    let resolved = store
+        .resolve_internal_continue_world_dispatch_target(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            prepared
+                .request
+                .target_participant_id
+                .as_deref()
+                .expect("validated continue request must include target_participant_id"),
+            &prepared.request.target_backend_id,
+        )
+        .map_err(map_continue_world_dispatch_resolution_error)?;
+
+    Ok(PreparedOrchestratorWorldDispatch {
+        request: prepared.request,
+        session: resolved.session,
+        caller_participant: resolved.caller_participant,
+        target_participant: Some(resolved.target_participant),
+        live_retained_worker_count: prepared.live_retained_worker_count,
+    })
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
@@ -1813,6 +1826,29 @@ mod tests {
         allowed_actions: &[&str],
         allowed_modes: &[&str],
     ) {
+        write_world_dispatch_policy(
+            substrate_home,
+            true,
+            &[backend_id],
+            allowed_actions,
+            allowed_modes,
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    fn write_world_dispatch_policy(
+        substrate_home: &Path,
+        enabled: bool,
+        allowed_backends: &[&str],
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        let enabled = if enabled { "true" } else { "false" };
+        let backends = allowed_backends
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
         let actions = allowed_actions
             .iter()
             .map(|value| format!("      - \"{value}\""))
@@ -1824,7 +1860,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let policy = format!(
-            "id: test-global-policy\nname: Test Global Policy\nagents:\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"{backend_id}\"\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n"
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n"
         );
         fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
     }
@@ -2110,6 +2146,44 @@ mod tests {
         store
             .persist_participant(&member)
             .expect("persist retained worker");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn persist_stale_continue_dispatch_state(
+        store: &AgentRuntimeStateStore,
+        workspace_root: &Path,
+        world_id: &str,
+        world_generation: u64,
+    ) {
+        let mut session = sample_session();
+        session.workspace_root = workspace_root.display().to_string();
+        session.shell_owner_pid = std::process::id();
+        session.world_id = Some(world_id.to_string());
+        session.world_generation = Some(world_generation);
+
+        let mut orchestrator = sample_orchestrator_participant();
+        orchestrator.internal.shell_owner_pid = std::process::id();
+        orchestrator.internal.uaa_session_id = Some("uaa_orch_dispatch".to_string());
+        orchestrator.internal.attached_client_present = true;
+        orchestrator.internal.last_attached_at = Some(chrono::Utc::now());
+        orchestrator.internal.resume_eligible = true;
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&orchestrator);
+
+        let mut member = sample_member_participant();
+        member.internal.shell_owner_pid = 999_999_999;
+        member.internal.uaa_session_id = Some("uaa_member_dispatch".to_string());
+        member.handle.world_id = Some(world_id.to_string());
+        member.handle.world_generation = Some(world_generation);
+
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist authoritative session");
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist authoritative orchestrator");
+        store
+            .persist_participant(&member)
+            .expect("persist stale retained worker");
     }
 
     #[cfg(target_os = "linux")]
@@ -2681,6 +2755,117 @@ mod tests {
         }
 
         server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn dispatch_contract_prepare_orchestrator_world_dispatch_defers_continue_target_resolution_until_after_steering(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_continue_world_dispatch_request())
+                .expect("prepare should only resolve authoritative caller truth");
+
+        assert_eq!(
+            prepared.caller_participant.participant_id(),
+            "orch_dispatch"
+        );
+        assert!(
+            prepared.target_participant.is_none(),
+            "prepare must not resolve retained continue targets before steering policy runs"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_policy_denials_precede_stale_target_resolution(
+    ) {
+        struct DenialCase<'a> {
+            enabled: bool,
+            allowed_backends: &'a [&'a str],
+            allowed_actions: &'a [&'a str],
+            allowed_modes: &'a [&'a str],
+            expected_denial: &'a str,
+        }
+
+        let cases = [
+            DenialCase {
+                enabled: false,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["continue_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "world_dispatch_disabled:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["spawn_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "action_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["continue_world_worker"],
+                allowed_modes: &["ephemeral"],
+                expected_denial: "mode_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:other_world"],
+                allowed_actions: &["continue_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "backend_not_allowed:",
+            },
+        ];
+
+        for case in cases {
+            let substrate_home = tempdir().expect("substrate home tempdir");
+            let _substrate_home_guard =
+                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            write_world_dispatch_policy(
+                substrate_home.path(),
+                case.enabled,
+                case.allowed_backends,
+                case.allowed_actions,
+                case.allowed_modes,
+            );
+
+            let workspace_root = tempdir().expect("workspace root tempdir");
+            let store = AgentRuntimeStateStore::new().expect("state store");
+            persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+            let err = dispatch_orchestrator_world_request(
+                &store,
+                sample_continue_world_dispatch_request(),
+            )
+            .await
+            .expect_err("steering denial must fail closed before stale target routing");
+            let message = err.to_string();
+
+            assert!(
+                message.contains(case.expected_denial),
+                "expected {} in {message}",
+                case.expected_denial
+            );
+            assert!(
+                !message.contains("stale_linkage:"),
+                "steering denial must not leak retained-worker lifecycle truth first: {message}"
+            );
+            assert!(
+                !message.contains(
+                    "world_binding_mismatch: orchestration session sess_dispatch retained worker"
+                ),
+                "steering denial must not leak retained-worker topology drift first: {message}"
+            );
+        }
     }
 
     #[cfg(target_os = "linux")]

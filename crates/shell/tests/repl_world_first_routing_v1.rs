@@ -459,13 +459,32 @@ fn write_member_runtime_policy(home_substrate: &Path, require_world: bool) {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn write_member_runtime_policy_with_member_backend(
+fn yaml_quoted_list(items: &[&str], indent: usize) -> String {
+    let padding = " ".repeat(indent);
+    items
+        .iter()
+        .map(|item| format!("{padding}- \"{item}\""))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_member_runtime_policy_with_world_dispatch(
     home_substrate: &Path,
     require_world: bool,
     member_backend_id: &str,
+    enabled: bool,
+    allowed_backends: &[&str],
+    allowed_actions: &[&str],
+    allowed_modes: &[&str],
 ) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let require_world = if require_world { "true" } else { "false" };
+    let enabled = if enabled { "true" } else { "false" };
+    let inventory_backends = yaml_quoted_list(&["cli:claude_code", member_backend_id], 4);
+    let dispatch_backends = yaml_quoted_list(allowed_backends, 6);
+    let dispatch_actions = yaml_quoted_list(allowed_actions, 6);
+    let dispatch_modes = yaml_quoted_list(allowed_modes, 6);
     let policy = format!(
         r#"id: test-global-policy
 name: Test Global Policy
@@ -489,19 +508,15 @@ limits:
 metadata: {{}}
 agents:
   allowed_backends:
-    - cli:claude_code
-    - {member_backend_id}
+{inventory_backends}
   world_dispatch:
-    enabled: true
+    enabled: {enabled}
     allowed_backends:
-      - {member_backend_id}
+{dispatch_backends}
     allowed_actions:
-      - "run_world_task"
-      - "spawn_world_worker"
-      - "continue_world_worker"
+{dispatch_actions}
     allowed_modes:
-      - "ephemeral"
-      - "retained"
+{dispatch_modes}
     same_session_only: true
     same_world_binding_only: true
     allow_capability_narrowing: false
@@ -510,6 +525,27 @@ agents:
 "#
     );
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_member_runtime_policy_with_member_backend(
+    home_substrate: &Path,
+    require_world: bool,
+    member_backend_id: &str,
+) {
+    write_member_runtime_policy_with_world_dispatch(
+        home_substrate,
+        require_world,
+        member_backend_id,
+        true,
+        &[member_backend_id],
+        &[
+            "run_world_task",
+            "spawn_world_worker",
+            "continue_world_worker",
+        ],
+        &["ephemeral", "retained"],
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2245,6 +2281,15 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         &fake_orchestrator,
         &fake_member,
         "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        true,
+        "cli:codex",
+        true,
+        &["cli:codex"],
+        &["spawn_world_worker", "continue_world_worker"],
+        &["retained"],
     );
 
     let sock_temp = short_socket_dir("sub-c3ws-targeted-world-submit-");

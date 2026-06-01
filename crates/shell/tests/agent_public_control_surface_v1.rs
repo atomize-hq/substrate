@@ -54,6 +54,15 @@ struct AgentControlFixture {
     fake_codex: PathBuf,
 }
 
+fn yaml_quoted_list(items: &[&str], indent: usize) -> String {
+    let padding = " ".repeat(indent);
+    items
+        .iter()
+        .map(|item| format!("{padding}- \"{item}\""))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl AgentControlFixture {
     fn new() -> Self {
         Self::new_with_fake_codex(write_fake_codex_script)
@@ -108,12 +117,52 @@ impl AgentControlFixture {
     }
 
     fn write_runtime_inventory_with_member_backend(&self, member_agent_id: Option<&str>) {
+        self.write_runtime_inventory_with_member_backend_and_world_dispatch(
+            member_agent_id,
+            true,
+            &[
+                "run_world_task",
+                "spawn_world_worker",
+                "continue_world_worker",
+            ],
+            &["ephemeral", "retained"],
+            &[],
+        );
+    }
+
+    fn write_runtime_inventory_with_member_backend_and_world_dispatch(
+        &self,
+        member_agent_id: Option<&str>,
+        world_dispatch_enabled: bool,
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+        allowed_backends_override: &[&str],
+    ) {
         fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
-        let mut allowed_backends = vec!["    - cli:codex".to_string()];
+        let mut inventory_backends = vec!["cli:codex".to_string()];
         if let Some(member_agent_id) = member_agent_id {
-            allowed_backends.push(format!("    - cli:{member_agent_id}"));
+            inventory_backends.push(format!("cli:{member_agent_id}"));
         }
-        let allowed_backends = allowed_backends.join("\n");
+        let inventory_backends_refs = inventory_backends
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let inventory_backends_yaml = yaml_quoted_list(&inventory_backends_refs, 4);
+        let dispatch_backends = if allowed_backends_override.is_empty() {
+            inventory_backends.clone()
+        } else {
+            allowed_backends_override
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect()
+        };
+        let dispatch_backends_refs = dispatch_backends
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let dispatch_backends_yaml = yaml_quoted_list(&dispatch_backends_refs, 6);
+        let dispatch_actions_yaml = yaml_quoted_list(allowed_actions, 6);
+        let dispatch_modes_yaml = yaml_quoted_list(allowed_modes, 6);
         fs::write(
             self.substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -122,7 +171,7 @@ impl AgentControlFixture {
         fs::write(
             self.substrate_home.join("policy.yaml"),
             format!(
-                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n{allowed_backends}\n    allowed_actions:\n      - \"run_world_task\"\n      - \"spawn_world_worker\"\n      - \"continue_world_worker\"\n    allowed_modes:\n      - \"ephemeral\"\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{inventory_backends_yaml}\n  world_dispatch:\n    enabled: {world_dispatch_enabled}\n    allowed_backends:\n{dispatch_backends_yaml}\n    allowed_actions:\n{dispatch_actions_yaml}\n    allowed_modes:\n{dispatch_modes_yaml}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
             ),
         )
         .expect("write policy.yaml");
@@ -4187,7 +4236,13 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
 fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
+    fixture.write_runtime_inventory_with_member_backend_and_world_dispatch(
+        Some("codex_world"),
+        true,
+        &["spawn_world_worker", "continue_world_worker"],
+        &["retained"],
+        &["cli:codex_world"],
+    );
 
     let socket_home = tempfile::Builder::new()
         .prefix("sac-world-submit-")
