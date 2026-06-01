@@ -13,6 +13,7 @@ pub mod live_input;
 pub mod live_runtime;
 pub mod operator_sink;
 pub mod operator_surface;
+pub mod real_session_live;
 pub mod scheduler;
 
 pub use adjudication::{
@@ -33,6 +34,9 @@ pub use operator_sink::{
 pub use operator_surface::{
     CheckpointDiagnosticsSummary, CheckpointPresentation, ReplayReport, WarningDisposition,
     WarningPolicy,
+};
+pub use real_session_live::{
+    LiveSessionCoordinator, LiveSessionError, LiveSessionPollResult, LiveSessionRequest,
 };
 pub use scheduler::{
     DecisionReason, EvaluationDecision, SchedulerPolicy, SchedulerState, TriggerClass,

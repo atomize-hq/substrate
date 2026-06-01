@@ -506,6 +506,12 @@ Packet 18 note:
   sentinel coordinates the live loop
 - `RT6` must be proven against a session that is actively growing while the sentinel is running;
   archived/static session files are insufficient evidence for this packet
+- `2026-06-01`: bounded live proof passed against active session
+  `019e8476-8672-7833-bcb1-da8c39345048` with
+  `timeout 8 cargo run -p agent-drift-sentinel -- --mode live --codex-home "$HOME/.codex" --session-id "$SESSION_ID" --checkpoint-dir "target/hybrid-drift-live/$SESSION_ID"`.
+  The monitored rollout grew from `1025763` bytes to `1034379` bytes while the sentinel was
+  active, the first live poll emitted six checkpoints (`...:0001` through `...:0006`), and the
+  next observed growth reran the pipeline without replaying already delivered checkpoints.
 
 ## If You Want Fewer Packets
 

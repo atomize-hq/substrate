@@ -85,6 +85,50 @@ fn rollout_ingest_filters_to_rollout_jsonl_artifacts_and_preserves_file_order() 
     );
 }
 
+#[test]
+fn rollout_ingest_coerces_current_live_session_meta_and_tool_search_shapes() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let rollout_path = temp_dir.path().join("rollout-session-live.jsonl");
+    fs::write(
+        &rollout_path,
+        concat!(
+            "{\"timestamp\":\"2026-06-01T18:33:41.316Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\",\"cwd\":\"/tmp/demo\",\"cli_version\":\"0.135.0-alpha.1\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"parent-1\",\"depth\":1}}},\"base_instructions\":{\"text\":\"Base instructions\"}}}\n",
+            "{\"timestamp\":\"2026-06-01T18:34:01.355Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"tool_search_call\",\"call_id\":\"call-1\",\"status\":\"completed\",\"execution\":\"client\",\"arguments\":{\"query\":\"GitNexus impact context detect changes tools substrate\",\"limit\":10}}}\n"
+        ),
+    )
+    .expect("write live rollout fixture");
+
+    let rollout = ingest_rollout_file(
+        Utf8Path::from_path(&rollout_path).expect("rollout path should be valid UTF-8"),
+    )
+    .expect("ingest rollout");
+
+    assert_eq!(rollout.session_id.as_deref(), Some("session-live"));
+    assert_eq!(rollout.records.len(), 2);
+    assert!(rollout.parse_failures.is_empty());
+
+    match &rollout.records[1].event {
+        RolloutEvent::ResponseItem(item) => {
+            let arguments = item
+                .payload
+                .arguments
+                .as_deref()
+                .expect("tool search arguments");
+            let arguments_json: serde_json::Value =
+                serde_json::from_str(arguments).expect("arguments should stay parseable");
+            assert_eq!(
+                arguments_json.get("query").and_then(|value| value.as_str()),
+                Some("GitNexus impact context detect changes tools substrate")
+            );
+            assert_eq!(
+                arguments_json.get("limit").and_then(|value| value.as_u64()),
+                Some(10)
+            );
+        }
+        other => panic!("expected response item, got {other:?}"),
+    }
+}
+
 fn seeded_artifact_root() -> TempDir {
     let temp_dir = TempDir::new().expect("temp dir");
     let base = temp_dir.path().join("sessions/2026/05/29");
