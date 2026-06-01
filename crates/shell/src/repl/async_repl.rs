@@ -10689,7 +10689,7 @@ mod tests {
         std::env::remove_var("SUBSTRATE_HOME");
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_validates_inspect_requests_before_dispatch_routing()
@@ -10825,7 +10825,7 @@ mod tests {
         std::env::remove_var("SUBSTRATE_HOME");
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_routes_well_formed_inspect_into_runtime_resolution() {
@@ -10956,7 +10956,7 @@ mod tests {
         std::env::remove_var("SUBSTRATE_HOME");
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_round_trips_successful_inspect_without_mutating_retained_runtime_handles(
