@@ -5,7 +5,7 @@ This guide covers manual validation for the Hybrid Drift Sentinel stack:
 - `agent-session-compactor`
 - `agent-drift-analyzer`
 - `agent-drift-sentinel` replay mode
-- `agent-drift-sentinel` bounded live-integration surfaces
+- `agent-drift-sentinel` real-session live mode over one active Codex session
 
 Use it when you want to prove the current stack still works end to end, or when you need to isolate
 which layer regressed.
@@ -15,52 +15,73 @@ which layer regressed.
 What this guide does cover:
 
 - crate-local targeted test suites
-- a bounded real-session pipeline using one known-good rollout session
+- a bounded single-session pipeline through compactor, analyzer, and sentinel replay
+- a bounded real-session live smoke over one actually active rollout file under `CODEX_HOME`
 - artifact inspection commands after each stage
-- expected live-mode gate behavior
+- expected live-session startup, delta-delivery, and bounded-proof behavior
 
 What this guide does not cover:
 
 - full-corpus `~/.codex` runs across every session on this machine
 - shell/world integration for the sentinel live path
-- any autonomous runtime wiring beyond the current post-`L8` boundary
+- multi-session dashboards or fan-in
+- any broader host-runtime wiring beyond the current post-`L8` boundary
 
 ## Prerequisites
 
 - Run from the repo root.
 - Have a working Rust toolchain that can build the workspace.
-- Have a populated local Codex corpus at `~/.codex`.
-- For the bounded real-session example below, confirm this rollout file exists:
-
-```bash
-find ~/.codex/sessions -name '*019e767c-e64b-7b93-a540-7a33a90f780f*'
-```
-
-If you want to use a different session, replace `SESSION_ID` consistently in the commands below.
+- Have a populated local Codex corpus at `~/.codex` or another real `CODEX_HOME`.
+- Have one actually active Codex session whose `rollout-*.jsonl` file is still growing while you
+  run the live smoke.
 
 Recommended setup:
 
 ```bash
-export SESSION_ID=019e767c-e64b-7b93-a540-7a33a90f780f
-export SMOKE_ROOT=target/hybrid-drift-smoke/$SESSION_ID
-export COMPACTOR_OUT=$SMOKE_ROOT/compactor
-export ANALYZER_OUT=$SMOKE_ROOT/analyzer
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+
+find "$CODEX_HOME/sessions" -name 'rollout-*.jsonl' -type f -print0 \
+  | xargs -0 stat -f '%m %N' \
+  | sort -n \
+  | tail -n 10
 ```
+
+Pick the active session you want to monitor, then set:
+
+```bash
+export SESSION_ID="<active-session-id>"
+export ROLLOUT_PATH="$(find "$CODEX_HOME/sessions" -name "rollout-*${SESSION_ID}*.jsonl" | head -n 1)"
+
+export SMOKE_ROOT="target/hybrid-drift-smoke/$SESSION_ID"
+export COMPACTOR_OUT="$SMOKE_ROOT/compactor"
+export ANALYZER_OUT="$SMOKE_ROOT/analyzer"
+export LIVE_STATE_DIR="target/hybrid-drift-live/$SESSION_ID"
+```
+
+Before trusting the live proof, confirm the rollout file is genuinely moving:
+
+```bash
+stat -f '%z %N' "$ROLLOUT_PATH"
+sleep 3
+stat -f '%z %N' "$ROLLOUT_PATH"
+```
+
+If the size does not change, keep the source Codex session active and retry until it does.
 
 Optional cleanup before a fresh chained smoke:
 
 ```bash
-rm -rf "$SMOKE_ROOT"
+rm -rf "$SMOKE_ROOT" "$LIVE_STATE_DIR"
 ```
 
 ## Quick Matrix
 
 | Layer | Primary capability | Fast smoke | Bounded real/manual smoke |
 | --- | --- | --- | --- |
-| Compactor | Discover sessions, normalize rows, exact dedupe, export stable bundle | `cargo test -p agent-session-compactor end_to_end -- --nocapture` | `cargo run -p agent-session-compactor -- --codex-home ~/.codex --session-id "$SESSION_ID" --output-dir "$COMPACTOR_OUT"` |
+| Compactor | Discover sessions, normalize rows, exact dedupe, export stable bundle | `cargo test -p agent-session-compactor end_to_end -- --nocapture` | `cargo run -p agent-session-compactor -- --codex-home "$CODEX_HOME" --session-id "$SESSION_ID" --output-dir "$COMPACTOR_OUT"` |
 | Analyzer | Load compactor bundle, infer task frame, score drift, emit checkpoints | `cargo test -p agent-drift-analyzer end_to_end -- --nocapture` | `cargo run -p agent-drift-analyzer -- --input-dir "$COMPACTOR_OUT" --output-dir "$ANALYZER_OUT"` |
 | Sentinel replay | Render replay warnings over analyzer checkpoints | `cargo test -p agent-drift-sentinel warning_policy -- --nocapture` | `cargo run -p agent-drift-sentinel -- --checkpoint-dir "$ANALYZER_OUT"` |
-| Sentinel live integration | Validate bounded live seam without runtime wiring | `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture` | `cargo run -p agent-drift-sentinel -- --checkpoint-dir "$ANALYZER_OUT" --mode live` should fail with the gate message |
+| Sentinel live | Monitor one active session through compactor/analyzer libraries and emit only new checkpoints | `cargo test -p agent-drift-sentinel real_session_live -- --nocapture` | `sh -c 'cargo run -p agent-drift-sentinel -- --mode live --codex-home "$CODEX_HOME" --session-id "$SESSION_ID" --checkpoint-dir "$LIVE_STATE_DIR" & pid=$!; sleep 8; kill "$pid" 2>/dev/null || true; wait "$pid"'` |
 
 ## 1. Agent Session Compactor
 
@@ -106,7 +127,7 @@ cargo test -p agent-session-compactor -- --nocapture
 
 ```bash
 cargo run -p agent-session-compactor -- \
-  --codex-home ~/.codex \
+  --codex-home "$CODEX_HOME" \
   --session-id "$SESSION_ID" \
   --output-dir "$COMPACTOR_OUT"
 ```
@@ -127,7 +148,7 @@ printf '\n---\n'
 sed -n '1,80p' "$COMPACTOR_OUT/summary.md"
 ```
 
-Count the row/audit files:
+Count the row and audit files:
 
 ```bash
 wc -l \
@@ -136,12 +157,13 @@ wc -l \
   "$COMPACTOR_OUT/dedupe-audit.jsonl"
 ```
 
-Known-good bounded example for `019e767c-e64b-7b93-a540-7a33a90f780f` on this machine:
+Expected success signatures:
 
-- `rows.archival.jsonl`: `267`
-- `rows.compact.jsonl`: `209`
-- `dedupe-audit.jsonl`: `16`
-- `summary.md` reports exactly one source file and one session id
+- `manifest.json` reports exactly one session id for the bounded run
+- `rows.archival.jsonl` and `rows.compact.jsonl` both exist and are non-empty once the source
+  session has meaningful activity
+- `dedupe-audit.jsonl` exists even if the bounded run had few or no duplicates
+- `summary.md` reports the expected bundle counts for one scoped session
 
 Verify the hardened publish behavior did not leave a published staging or backup sibling:
 
@@ -162,8 +184,8 @@ The analyzer:
 - loads the compactor bundle as its only input surface
 - assembles a deterministic per-session context pack
 - infers a task frame from the compacted history
-- scores exactly three drift classes in v0.1
-- emits a replay-facing checkpoint bundle for the sentinel
+- scores drift and emits replay-facing checkpoints
+- exports `checkpoints.jsonl` plus `summary.md`
 
 Expected analyzer output contract:
 
@@ -217,45 +239,12 @@ sed -n '1,120p' "$ANALYZER_OUT/checkpoints.jsonl"
 
 Expected success signatures:
 
-- `summary.md` should show `Sessions analyzed: 1` for the bounded single-session smoke
-- `summary.md` should show `Checkpoints emitted: <n>` with `n >= 1`
-- `checkpoints.jsonl` should contain at least one checkpoint object, and may contain multiple
-  progressive checkpoints for a single session
-- each checkpoint should include:
-  - `schema_version`
-  - `checkpoint_id`
-  - `boundary.start` and `boundary.end`
-  - `diagnostics`
-  - `task_frame`
-  - `drift_scores`
-  - `expected_next_step`
-
-Known-good bounded example for `019e767c-e64b-7b93-a540-7a33a90f780f`:
-
-- analyzer summary reports `Sessions analyzed: 1`
-- analyzer summary reports `Turns observed: 1`
-- analyzer summary reports `User prompts observed: 1`
-- analyzer summary reports `Checkpoints emitted: 16`
-- analyzer summary reports `Checkpoints per turn: 16.00`
-- analyzer summary reports `Checkpoints per user prompt: 16.00`
-- analyzer summary reports `Avg rows between checkpoints: 17.33`
-- analyzer summary reports `Avg seconds between checkpoints: 45.40`
-- analyzer summary reports `Flagged checkpoints: 8`
-- analyzer summary reports `Longest flagged streak: 7`
-- analyzer summary reports `Flagged checkpoint rate: 0.50`
-- analyzer summary reports `Drift-class flagged frequency: wrong_plan_branch=0.44, ignoring_repo_truth=0.06, dead_end_thrash=0.00`
-- analyzer summary reports `Task-frame transition count: 14`
-- analyzer summary reports `Task-frame confidence distribution: low=1, medium=15, high=0`
-- analyzer summary reports `Working-set churn: 0.93`
-- analyzer summary reports `Verification density: 0.02`
-- analyzer summary reports `Average evidence items per checkpoint: 174.31`
-- the session block reports `Distinct task frames: 15`
-- the session block reports `Truth artifacts referenced: 4`
-- the session block reports `Verification commands observed: 0`
-- the emitted checkpoints use `schema_version: "v0.2"` and include a compact `diagnostics` object
-- `checkpoints.jsonl` contains progressive checkpoint ids from
-  `019e767c-e64b-7b93-a540-7a33a90f780f:0001` through
-  `019e767c-e64b-7b93-a540-7a33a90f780f:0016`
+- `summary.md` shows `Sessions analyzed: 1` for the bounded single-session smoke
+- `summary.md` shows `Checkpoints emitted: <n>` with `n >= 1` once the source session is rich
+  enough for analysis
+- `checkpoints.jsonl` contains one or more progressive checkpoint objects for that session
+- each checkpoint includes `schema_version`, `checkpoint_id`, `boundary`, `diagnostics`,
+  `task_frame`, `drift_scores`, and `expected_next_step`
 
 ## 3. Agent Drift Sentinel Replay
 
@@ -269,7 +258,7 @@ The replay sentinel:
 - renders a console-oriented replay report
 - optionally shapes bounded adjudication requests, disabled by default
 
-Replay mode is the only CLI-enabled mode today.
+Replay mode remains the manual static-bundle surface. Live mode is a separate real-session path.
 
 ### Fast crate smoke
 
@@ -317,15 +306,7 @@ The replay command prints a console report. Inspect these fields first:
 - `Next cursor`
 - the warning block with `Objective`, `Drift`, `Expected next step`, and `Evidence`
 
-Known-good bounded example for `019e767c-e64b-7b93-a540-7a33a90f780f`:
-
-- `Processed checkpoints: 1`
-- `Visible warnings: 1`
-- `Silent checkpoints: 0`
-- `Next cursor: 019e767c-e64b-7b93-a540-7a33a90f780f:1`
-
-The current sample warning is a high-severity `wrong_plan_branch` visible warning rendered through
-the `repeated_failure` trigger path.
+Success means the replay report is internally consistent with the analyzer bundle you just built.
 
 ### Optional adjudication-shaping smoke
 
@@ -343,79 +324,107 @@ cargo run -p agent-drift-sentinel -- \
 Success means the replay report still renders and a `Prepared model adjudication requests:` section
 appears after it.
 
-## 4. Agent Drift Sentinel Live Integration
+## 4. Agent Drift Sentinel Real-Session Live Mode
 
 ### Capability
 
-The current live-integration slice is intentionally bounded and library-first:
+The current live slice is real-session, bounded, and library-first:
 
-- it defines an incremental live checkpoint event contract
-- it validates fixture-backed append-only event intake
-- it reuses shared scheduler and presentation logic in a `LiveRuntime`
-- it emits structured operator events through a sink surface
-- it proves the seam with a fixture-driven end-to-end test
+- it discovers one active `rollout-*.jsonl` artifact for a target `session_id`
+- it reruns the compactor and analyzer crates through their library APIs into a bounded state dir
+- it keeps polling when the session is still in a legitimate sparse startup state
+- it surfaces real compactor/analyzer contract failures instead of broadly hiding them
+- it emits only checkpoints strictly after the last delivered cursor within one live process
+- it prints live console blocks using the shared scheduler and presentation surfaces
 
-It does **not** provide a CLI-enabled live runtime. The CLI gate must still hold.
+It does **not** integrate with `shell`, `world`, `shim`, or any broader host-runtime wiring.
 
-### Fast live-seam smoke
+### Fast live-surface smoke
 
 ```bash
+cargo build -p agent-drift-sentinel
 cargo test -p agent-drift-sentinel live_input -- --nocapture
 cargo test -p agent-drift-sentinel live_input_adapter -- --nocapture
 cargo test -p agent-drift-sentinel live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel live_runtime -- --nocapture
 cargo test -p agent-drift-sentinel operator_sink -- --nocapture
 cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture
+cargo test -p agent-drift-sentinel real_session_live -- --nocapture
+cargo test -p agent-drift-sentinel -- --nocapture
 ```
 
-### What the bounded live proof covers
+### Bounded real live-session smoke
 
-The fixture-backed end-to-end proof uses:
-
-- `crates/agent-drift-sentinel/tests/fixtures/live/append_only_stream.jsonl`
-
-The expected event sequence is:
-
-1. visible warning from `checkpoint_ready`
-2. heartbeat event
-3. silent checkpoint event
-4. manual-review status event
-
-If `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture` passes, the bounded `L7`
-proof is intact.
-
-### Manual gate smoke: live CLI must still fail
-
-This is the correct negative smoke today:
+Use the portable stock-shell form by default:
 
 ```bash
-cargo run -p agent-drift-sentinel -- \
-  --checkpoint-dir "$ANALYZER_OUT" \
-  --mode live
+sh -c 'cargo run -p agent-drift-sentinel -- --mode live --codex-home "$CODEX_HOME" --session-id "$SESSION_ID" --checkpoint-dir "$LIVE_STATE_DIR" & pid=$!; sleep 8; kill "$pid" 2>/dev/null || true; wait "$pid"'
 ```
 
-Expected result:
+If you have GNU `timeout`, this is equivalent:
 
-```text
-Error: live mode remains gated by S10; replay usefulness review must pass first
+```bash
+timeout 8 cargo run -p agent-drift-sentinel -- \
+  --mode live \
+  --codex-home "$CODEX_HOME" \
+  --session-id "$SESSION_ID" \
+  --checkpoint-dir "$LIVE_STATE_DIR"
 ```
 
-That failure is not a regression. It proves the post-`L8` runtime gate is still enforced.
+### What success looks like
+
+The live command should print a header like:
+
+- `# Agent Drift Sentinel Live`
+- `Session: ...`
+- `Rollout artifact: ...`
+- `State dir: ...`
+
+Then interpret progress by phase:
+
+1. Sparse startup is allowed.
+   - If the rollout is still too early to analyze, polls may rerun the pipeline and emit `0` new
+     checkpoints.
+   - This is acceptable only while the rollout still lacks analyzer-usable session activity,
+     directive text, path hints, or parseable tool-call arguments.
+2. Once the session becomes analyzable and the rollout grows, the live command should emit one or
+   more checkpoints.
+3. Later growth polls may rerun the pipeline and emit `0` new checkpoints, which is the expected
+   proof that already delivered checkpoints are not replayed within the same live process.
+
+Expected bounded-exit behavior:
+
+- the portable `sh -c ... kill ... wait` form usually exits `143`
+- the GNU `timeout` form usually exits `124`
+
+Neither exit code is a sentinel failure here; both mean the bounded proof intentionally stopped an
+otherwise infinite live monitor.
+
+Inspect the bounded live state directory after the run:
+
+```bash
+find "$LIVE_STATE_DIR" -maxdepth 2 -type f | sort
+printf '\n--- analyzer summary ---\n'
+sed -n '1,80p' "$LIVE_STATE_DIR/analyzer/summary.md"
+printf '\n--- first checkpoints ---\n'
+sed -n '1,5p' "$LIVE_STATE_DIR/analyzer/checkpoints.jsonl"
+```
+
+Success means:
+
+- the state dir contains `compactor/` and `analyzer/` artifacts
+- the analyzer artifacts are scoped to the target session
+- the live console output reflects real rollout growth rather than static replay only
 
 ## 5. Full Chained Smoke
 
 Use this when you want one bounded proof across all four layers.
 
 ```bash
-export SESSION_ID=019e767c-e64b-7b93-a540-7a33a90f780f
-export SMOKE_ROOT=target/hybrid-drift-smoke/$SESSION_ID
-export COMPACTOR_OUT=$SMOKE_ROOT/compactor
-export ANALYZER_OUT=$SMOKE_ROOT/analyzer
-
-rm -rf "$SMOKE_ROOT"
+rm -rf "$SMOKE_ROOT" "$LIVE_STATE_DIR"
 
 cargo run -p agent-session-compactor -- \
-  --codex-home ~/.codex \
+  --codex-home "$CODEX_HOME" \
   --session-id "$SESSION_ID" \
   --output-dir "$COMPACTOR_OUT"
 
@@ -426,15 +435,16 @@ cargo run -p agent-drift-analyzer -- \
 cargo run -p agent-drift-sentinel -- \
   --checkpoint-dir "$ANALYZER_OUT"
 
-cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture
+sh -c 'cargo run -p agent-drift-sentinel -- --mode live --codex-home "$CODEX_HOME" --session-id "$SESSION_ID" --checkpoint-dir "$LIVE_STATE_DIR" & pid=$!; sleep 8; kill "$pid" 2>/dev/null || true; wait "$pid"'
 ```
 
 Success means:
 
 - compactor emitted the five-file bundle
 - analyzer emitted `checkpoints.jsonl` and `summary.md`
-- sentinel replay rendered a visible warning report
-- live integration passed the fixture-driven bounded proof
+- sentinel replay rendered a replay report over the bounded bundle
+- the live proof attached to the real rollout artifact and emitted real checkpoint output or a
+  legitimate sparse-startup `0`-checkpoint poll before later growth
 
 ## 6. Failure Triage
 
@@ -442,14 +452,14 @@ Success means:
 
 Check these first:
 
-- does `~/.codex` exist and contain rollout JSONL files?
+- does `"$CODEX_HOME"` exist and contain rollout JSONL files?
 - did the output directory already contain stale test artifacts you meant to remove?
 - does `manifest.json` exist without the other four files? If so, that is a bug.
 
 Useful commands:
 
 ```bash
-find ~/.codex/sessions -name "rollout-*.jsonl" | head
+find "$CODEX_HOME/sessions" -name "rollout-*.jsonl" | head
 find "$(dirname "$COMPACTOR_OUT")" -maxdepth 1 -type d | sort
 ```
 
@@ -459,7 +469,8 @@ Check these first:
 
 - is the compactor bundle missing one of the five required files?
 - does `rows.compact.jsonl` exist and contain JSONL rows?
-- did you accidentally point `--input-dir` at the analyzer output directory instead of the compactor output directory?
+- did you accidentally point `--input-dir` at the analyzer output directory instead of the
+  compactor output directory?
 
 Useful commands:
 
@@ -473,8 +484,8 @@ sed -n '1,5p' "$COMPACTOR_OUT/rows.compact.jsonl"
 Check these first:
 
 - does `"$ANALYZER_OUT/checkpoints.jsonl"` exist?
-- does the checkpoint JSON include the fields shown above?
-- are you accidentally passing `--mode live`?
+- does the checkpoint JSON include the expected fields?
+- are you accidentally passing live-only flags such as `--session-id` or `--codex-home`?
 
 Useful commands:
 
@@ -483,38 +494,46 @@ ls -1 "$ANALYZER_OUT"
 sed -n '1,3p' "$ANALYZER_OUT/checkpoints.jsonl"
 ```
 
-### Live integration fails
+### Sentinel live fails
 
 Interpret the failure by path:
 
-- `live_input*` failures usually mean fixture ordering/cursor rules regressed
+- `real_session_live` test failures usually mean session discovery, startup readiness, or
+  checkpoint-delta delivery regressed
+- `live_input*` failures usually mean fixture ordering or cursor rules regressed
 - `live_checkpoint_compatibility` failures usually mean the analyzer checkpoint contract changed
-- `live_runtime` or `operator_sink` failures usually mean scheduler/presentation reuse drifted
-- `live_end_to_end` failures usually mean the bounded operator-event sequence changed
-- `cargo run ... --mode live` succeeding would be a scope regression today
+- `live_runtime` or `operator_sink` failures usually mean scheduler or presentation reuse drifted
+- `MissingRolloutArtifact` usually means `SESSION_ID` is wrong or the target file is gone
+- `AmbiguousRolloutArtifacts` usually means your session filter matched more than one rollout file
+- `RolloutShrank` usually means the source file rotated, truncated, or the wrong session was picked
+- `NoSessions` can be a legitimate first-poll startup state only when the rollout still has no
+  real session activity beyond `session_meta`
+- `InsufficientContract` is only a legitimate sparse-startup state when the rollout genuinely lacks
+  directive text, path hints, or parseable tool-call arguments; after real activity exists, treat
+  it as an upstream contract problem rather than a sentinel retry case
 
-## 7. Current Known-Good Commands
+## 7. Current Command Set
 
-These commands were re-validated in this worktree while writing this guide:
+These commands reflect the current Packet 18 surfaces:
 
 ```bash
-cargo test -p agent-session-compactor end_to_end -- --nocapture
-cargo test -p agent-drift-analyzer end_to_end -- --nocapture
-cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture
+cargo test -p agent-session-compactor -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
+cargo test -p agent-drift-sentinel real_session_live -- --nocapture
+cargo test -p agent-drift-sentinel live_runtime -- --nocapture
+cargo test -p agent-drift-sentinel -- --nocapture
 
 cargo run -p agent-session-compactor -- \
-  --codex-home ~/.codex \
-  --session-id 019e767c-e64b-7b93-a540-7a33a90f780f \
-  --output-dir target/hybrid-drift-smoke/019e767c-e64b-7b93-a540-7a33a90f780f/compactor
+  --codex-home "$CODEX_HOME" \
+  --session-id "$SESSION_ID" \
+  --output-dir "$COMPACTOR_OUT"
 
 cargo run -p agent-drift-analyzer -- \
-  --input-dir target/hybrid-drift-smoke/019e767c-e64b-7b93-a540-7a33a90f780f/compactor \
-  --output-dir target/hybrid-drift-smoke/019e767c-e64b-7b93-a540-7a33a90f780f/analyzer
+  --input-dir "$COMPACTOR_OUT" \
+  --output-dir "$ANALYZER_OUT"
 
 cargo run -p agent-drift-sentinel -- \
-  --checkpoint-dir target/hybrid-drift-smoke/019e767c-e64b-7b93-a540-7a33a90f780f/analyzer
+  --checkpoint-dir "$ANALYZER_OUT"
 
-cargo run -p agent-drift-sentinel -- \
-  --checkpoint-dir target/hybrid-drift-smoke/019e767c-e64b-7b93-a540-7a33a90f780f/analyzer \
-  --mode live
+sh -c 'cargo run -p agent-drift-sentinel -- --mode live --codex-home "$CODEX_HOME" --session-id "$SESSION_ID" --checkpoint-dir "$LIVE_STATE_DIR" & pid=$!; sleep 8; kill "$pid" 2>/dev/null || true; wait "$pid"'
 ```

@@ -512,6 +512,10 @@ Packet 18 note:
   `timeout 8 cargo run -p agent-drift-sentinel -- --mode live --codex-home "/Users/spensermcconnell/.codex" --session-id "019e8491-d694-75c1-8bb6-dc4ebd1082cb" --checkpoint-dir "target/hybrid-drift-live/019e8491-d694-75c1-8bb6-dc4ebd1082cb"`.
   Expected exit context: `timeout` stops the intentional infinite live poll loop, so exit status
   `124` is the expected bounded-proof result, not a sentinel failure.
+  Portable rerun on stock macOS without GNU `timeout`:
+  `sh -c 'cargo run -p agent-drift-sentinel -- --mode live --codex-home "/Users/spensermcconnell/.codex" --session-id "019e8491-d694-75c1-8bb6-dc4ebd1082cb" --checkpoint-dir "target/hybrid-drift-live/019e8491-d694-75c1-8bb6-dc4ebd1082cb" & pid=$!; sleep 8; kill "$pid" 2>/dev/null || true; wait "$pid"'`.
+  Expected exit context for the portable rerun: the shell sends `SIGTERM` after eight seconds, so
+  `wait` typically returns `143` when the sentinel is still inside the intentional live poll loop.
   Observed progression: the rollout file
   `/Users/spensermcconnell/.codex/sessions/2026/06/01/rollout-2026-06-01T15-03-30-019e8491-d694-75c1-8bb6-dc4ebd1082cb.jsonl`
   was `628620` bytes before the proof, the first live poll observed `632575` bytes and emitted
