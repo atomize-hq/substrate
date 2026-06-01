@@ -688,7 +688,11 @@ fn try_single_active_session(fixture: &AgentControlFixture) -> Option<(String, S
         .collect::<Vec<_>>();
     dirs.sort();
     let dir = dirs.into_iter().next()?;
-    let session = read_json_file(&dir.join("session.json"));
+    let session_path = dir.join("session.json");
+    if !session_path.is_file() {
+        return None;
+    }
+    let session = read_json_file(&session_path);
     if session.get("state").and_then(Value::as_str) != Some("active") {
         return None;
     }
@@ -697,10 +701,11 @@ fn try_single_active_session(fixture: &AgentControlFixture) -> Option<(String, S
         .get("active_session_handle_id")
         .and_then(Value::as_str)
         .map(str::to_string)?;
-    let participant = read_json_file(
-        &dir.join("participants")
-            .join(format!("{participant_id}.json")),
-    );
+    let participant_path = dir.join("participants").join(format!("{participant_id}.json"));
+    if !participant_path.is_file() {
+        return None;
+    }
+    let participant = read_json_file(&participant_path);
     let participant_ready = participant
         .get("state")
         .and_then(Value::as_str)

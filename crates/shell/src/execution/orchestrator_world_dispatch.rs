@@ -20,7 +20,7 @@ use crate::execution::agent_runtime::control::world_task_terminal_state_from_exi
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
     ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1,
-    WorkerContinuePayloadV1,
+    InspectWorldWorkerOutcomeV1, WorkerContinuePayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -163,9 +163,7 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
         WorldDispatchActionV1::RunWorldTask => run_world_task(prepared).await,
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
         WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
-        WorldDispatchActionV1::InspectWorldWorker => anyhow::bail!(
-            "unsupported_dispatch_action: inspect_world_worker routing is deferred until packet 3"
-        ),
+        WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
     }
 }
 
@@ -193,6 +191,15 @@ async fn continue_world_worker(
 ) -> Result<WorldDispatchOutcomeV1> {
     anyhow::bail!(
         "unsupported_platform_or_posture: continue_world_worker exact-target validation is available in v1, but retained-worker routing is supported only on linux in v1"
+    );
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn inspect_world_worker(
+    _prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    anyhow::bail!(
+        "unsupported_platform_or_posture: inspect_world_worker retained snapshot routing is supported only on linux in v1"
     );
 }
 
@@ -368,6 +375,62 @@ async fn continue_world_worker(
             world_generation: submit_request.world_generation,
             thread_id: stream_result.surfaced_thread_id,
             worker_event: stream_result.surfaced_worker_event,
+            summary,
+        },
+    ))
+}
+
+#[cfg(target_os = "linux")]
+async fn inspect_world_worker(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
+
+    let resolved = prepared
+        .store
+        .resolve_internal_inspect_world_dispatch_target(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            prepared
+                .request
+                .target_participant_id
+                .as_deref()
+                .expect("validated inspect request must include target_participant_id"),
+            &prepared.request.target_backend_id,
+        )
+        .map_err(map_world_dispatch_resolution_error)?;
+
+    let target_participant_id = resolved.target_participant.participant_id().to_string();
+    let target_backend_id = resolved.target_participant.handle.backend_id.clone();
+    let world_id = resolved.session.world_id.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing_world_binding: orchestration session {} has no authoritative world binding",
+            resolved.session.orchestration_session_id
+        )
+    })?;
+    let world_generation = resolved.session.world_generation.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing_world_binding: orchestration session {} has no authoritative world binding",
+            resolved.session.orchestration_session_id
+        )
+    })?;
+    let snapshot = resolved.project_snapshot();
+    let summary = summarize_inspect_world_worker_result(&target_participant_id, &target_backend_id);
+
+    Ok(WorldDispatchOutcomeV1::InspectWorldWorker(
+        InspectWorldWorkerOutcomeV1 {
+            request_id: prepared.request.request_id,
+            orchestration_session_id: resolved.session.orchestration_session_id.clone(),
+            action: WorldDispatchActionV1::InspectWorldWorker,
+            mode: prepared.request.mode,
+            orchestrator_participant_id: resolved.caller_participant.participant_id().to_string(),
+            target_participant_id,
+            target_backend_id,
+            world_id,
+            world_generation,
+            snapshot,
             summary,
         },
     ))
@@ -1671,6 +1734,16 @@ fn summarize_continue_world_worker_result(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn summarize_inspect_world_worker_result(
+    participant_id: &str,
+    backend_id: &str,
+) -> String {
+    format!(
+        "inspect_world_worker returned an authoritative retained snapshot for worker {participant_id} on backend {backend_id} without invoking world-side execution transport"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1685,9 +1758,11 @@ mod tests {
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
     #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::dispatch_contract::WorkerInspectPayloadV1;
+    #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
     use crate::execution::agent_runtime::{
-        TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+        AgentRuntimeSessionState, TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::config_model::AgentCliMode;
@@ -1813,6 +1888,7 @@ mod tests {
                 "run_world_task".to_string(),
                 "spawn_world_worker".to_string(),
                 "continue_world_worker".to_string(),
+                "inspect_world_worker".to_string(),
             ],
             agents_world_dispatch_allowed_modes: vec![
                 "ephemeral".to_string(),
@@ -1902,6 +1978,23 @@ mod tests {
         sample_continue_world_dispatch_request()
             .validate()
             .expect("validated continue request")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_inspect_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_inspect".to_string()),
+            idempotency_key: Some("idem_inspect".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::InspectWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -2220,6 +2313,23 @@ mod tests {
 
         let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
             panic!("expected continue_world_worker outcome envelope");
+        };
+        outcome
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn dispatch_real_inspect_world_worker_request(
+        store: &AgentRuntimeStateStore,
+    ) -> InspectWorldWorkerOutcomeV1 {
+        let prepared =
+            prepare_orchestrator_world_dispatch(store, sample_inspect_world_dispatch_request())
+                .expect("prepare inspect dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch prepared inspect request");
+
+        let WorldDispatchOutcomeV1::InspectWorldWorker(outcome) = outcome else {
+            panic!("expected inspect_world_worker outcome envelope");
         };
         outcome
     }
@@ -2915,6 +3025,162 @@ mod tests {
                 "steering denial must not leak retained-worker topology drift first: {message}"
             );
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_inspect_world_worker_policy_denials_precede_target_resolution() {
+        struct DenialCase<'a> {
+            enabled: bool,
+            allowed_backends: &'a [&'a str],
+            allowed_actions: &'a [&'a str],
+            allowed_modes: &'a [&'a str],
+            expected_denial: &'a str,
+        }
+
+        let cases = [
+            DenialCase {
+                enabled: false,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["inspect_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "world_dispatch_disabled:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["continue_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "action_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["inspect_world_worker"],
+                allowed_modes: &["ephemeral"],
+                expected_denial: "mode_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:other_world"],
+                allowed_actions: &["inspect_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "backend_not_allowed:",
+            },
+        ];
+
+        for case in cases {
+            let substrate_home = tempdir().expect("substrate home tempdir");
+            let _substrate_home_guard =
+                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            write_world_dispatch_policy(
+                substrate_home.path(),
+                case.enabled,
+                case.allowed_backends,
+                case.allowed_actions,
+                case.allowed_modes,
+            );
+
+            let workspace_root = tempdir().expect("workspace root tempdir");
+            let store = AgentRuntimeStateStore::new().expect("state store");
+            persist_authoritative_continue_dispatch_state(
+                &store,
+                workspace_root.path(),
+                "world-17",
+                2,
+            );
+
+            let mut request = sample_inspect_world_dispatch_request();
+            request.target_participant_id = Some("ash_missing".to_string());
+            let err = dispatch_orchestrator_world_request(&store, request)
+                .await
+                .expect_err("steering denial must fail closed before inspect target resolution");
+            let message = err.to_string();
+
+            assert!(
+                message.contains(case.expected_denial),
+                "expected {} in {message}",
+                case.expected_denial
+            );
+            assert!(
+                !message.contains("target_not_in_session:"),
+                "steering denial must not leak inspect target resolution truth first: {message}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_inspect_world_worker_returns_authoritative_snapshot_without_mutation()
+    {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["inspect_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let session_before = store
+            .load_session("sess_dispatch")
+            .expect("load session before inspect")
+            .expect("authoritative session before inspect");
+        let participant_before = store
+            .load_participant("ash_member")
+            .expect("load participant before inspect")
+            .expect("retained participant before inspect");
+
+        let outcome = dispatch_real_inspect_world_worker_request(&store).await;
+
+        assert_eq!(outcome.request_id, "req_inspect");
+        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+        assert_eq!(outcome.action, WorldDispatchActionV1::InspectWorldWorker);
+        assert_eq!(outcome.mode, WorldDispatchModeV1::Retained);
+        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+        assert_eq!(
+            outcome.snapshot.participant_state,
+            AgentRuntimeSessionState::Running
+        );
+        assert_eq!(outcome.snapshot.session_state, OrchestrationSessionState::Active);
+        assert_eq!(
+            outcome.snapshot.session_posture,
+            OrchestrationSessionPosture::ActiveAttached
+        );
+        assert!(outcome.snapshot.authoritative_live);
+        assert!(!outcome.snapshot.attention_required);
+        assert_eq!(outcome.snapshot.parent_participant_id, None);
+        assert_eq!(outcome.snapshot.resumed_from_participant_id, None);
+        assert!(
+            outcome
+                .summary
+                .contains("without invoking world-side execution transport"),
+            "summary should stay explicit about inspect's snapshot-only seam: {}",
+            outcome.summary
+        );
+
+        let session_after = store
+            .load_session("sess_dispatch")
+            .expect("load session after inspect")
+            .expect("authoritative session after inspect");
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load participant after inspect")
+            .expect("retained participant after inspect");
+
+        assert_eq!(session_after.session, session_before.session);
+        assert_eq!(session_after.participants, session_before.participants);
+        assert_eq!(participant_after, participant_before);
     }
 
     #[cfg(target_os = "linux")]
@@ -3849,6 +4115,20 @@ mod tests {
         assert!(
             summary.contains("ongoing steering remains out of scope"),
             "summary must stay explicit about Packet 3 scope: {summary}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn inspect_world_worker_summary_stays_snapshot_only() {
+        let summary = summarize_inspect_world_worker_result("ash_member", "cli:codex_world");
+        assert!(
+            summary.contains("authoritative retained snapshot"),
+            "summary should describe inspect as a snapshot surface: {summary}"
+        );
+        assert!(
+            summary.contains("without invoking world-side execution transport"),
+            "summary must stay explicit about inspect remaining store-backed: {summary}"
         );
     }
 }

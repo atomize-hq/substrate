@@ -4896,14 +4896,10 @@ async fn handle_internal_toolbox_world_dispatch_request(
     };
 
     match request.action {
-        WorldDispatchActionV1::RunWorldTask | WorldDispatchActionV1::ContinueWorldWorker => {
+        WorldDispatchActionV1::RunWorldTask
+        | WorldDispatchActionV1::ContinueWorldWorker
+        | WorldDispatchActionV1::InspectWorldWorker => {
             dispatch_orchestrator_world_request(&startup_context.store, request).await
-        }
-        WorldDispatchActionV1::InspectWorldWorker => {
-            request.validate()?;
-            anyhow::bail!(
-                "unsupported_dispatch_action: inspect_world_worker routing is deferred until packet 3"
-            )
         }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         WorldDispatchActionV1::SpawnWorldWorker => {
@@ -10696,7 +10692,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_validates_inspect_requests_before_packet_three_deferral()
+    fn orchestrator_world_dispatch_surface_validates_inspect_requests_before_dispatch_routing()
     {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
@@ -10777,7 +10773,7 @@ mod tests {
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
                 payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
-                    prompt: "inspect should validate typed payloads before deferral".to_string(),
+                    prompt: "inspect should validate typed payloads before routing".to_string(),
                 }),
             };
             let transport_path =
@@ -10806,7 +10802,7 @@ mod tests {
                 .await
                 .expect("timed out waiting for internal toolbox response")
                 .expect("internal toolbox task should join")
-                .expect_err("malformed inspect request must fail before packet three deferral");
+                .expect_err("malformed inspect request must fail before dispatch routing");
 
             assert!(
                 err.to_string().contains(
@@ -10832,7 +10828,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_defers_well_formed_inspect_without_runtime_resolution() {
+    fn orchestrator_world_dispatch_surface_routes_well_formed_inspect_into_runtime_resolution() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
@@ -10937,19 +10933,17 @@ mod tests {
                 .await
                 .expect("timed out waiting for internal toolbox response")
                 .expect("internal toolbox task should join")
-                .expect_err(
-                    "well-formed inspect must stop at packet-one deferred rejection before runtime resolution",
-                );
+                .expect_err("well-formed inspect without authoritative runtime state must fail during runtime resolution");
 
             assert!(
                 err.to_string().contains(
-                    "unsupported_dispatch_action: inspect_world_worker routing is deferred until packet 3"
+                    "missing_orchestration_session: internal world dispatch requires authoritative orchestration session sess_unknown_shape_valid"
                 ),
-                "unexpected inspect deferral error: {err}"
+                "unexpected inspect routing error: {err}"
             );
             assert!(
-                !err.to_string().contains("resolve_internal_world_dispatch_caller"),
-                "inspect ingress must not attempt authoritative runtime resolution: {err}"
+                !err.to_string().contains("unsupported_dispatch_action"),
+                "inspect ingress should route into packet-three resolution instead of deferring: {err}"
             );
 
             shutdown_host_orchestrator_runtime(
