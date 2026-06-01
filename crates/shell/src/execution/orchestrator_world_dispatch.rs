@@ -59,6 +59,7 @@ use transport_api_types::ExecuteCancelRequestV1;
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct PreparedOrchestratorWorldDispatch {
+    pub store: AgentRuntimeStateStore,
     pub request: ValidatedWorldDispatchRequestV1,
     pub session: OrchestrationSessionRecord,
     pub caller_participant: AgentRuntimeParticipantRecord,
@@ -136,6 +137,7 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     )?;
 
     Ok(PreparedOrchestratorWorldDispatch {
+        store: store.clone(),
         request,
         session,
         caller_participant,
@@ -555,10 +557,8 @@ fn resolve_continue_world_dispatch_target_for_routing(
         return Ok(prepared);
     }
 
-    let store = AgentRuntimeStateStore::new().context(
-        "failed to load runtime state for continue_world_worker exact-target resolution",
-    )?;
-    let resolved = store
+    let resolved = prepared
+        .store
         .resolve_internal_continue_world_dispatch_target(
             &prepared.request.orchestration_session_id,
             &prepared.request.caller_participant_id,
@@ -572,6 +572,7 @@ fn resolve_continue_world_dispatch_target_for_routing(
         .map_err(map_continue_world_dispatch_resolution_error)?;
 
     Ok(PreparedOrchestratorWorldDispatch {
+        store: prepared.store,
         request: prepared.request,
         session: resolved.session,
         caller_participant: resolved.caller_participant,
@@ -1820,6 +1821,11 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_state_store() -> AgentRuntimeStateStore {
+        AgentRuntimeStateStore::new().expect("state store")
+    }
+
+    #[cfg(target_os = "linux")]
     fn write_allowed_world_dispatch_policy(
         substrate_home: &Path,
         backend_id: &str,
@@ -2398,6 +2404,7 @@ mod tests {
     #[test]
     fn continue_world_worker_submit_request_uses_authoritative_retained_identity() {
         let prepared = PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
             request: sample_continue_request(),
             session: sample_session(),
             caller_participant: sample_orchestrator_participant(),
@@ -2779,6 +2786,42 @@ mod tests {
         assert!(
             prepared.target_participant.is_none(),
             "prepare must not resolve retained continue targets before steering policy runs"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn dispatch_contract_continue_target_resolution_reuses_prepared_authoritative_store() {
+        let authoritative_home = tempdir().expect("authoritative substrate home tempdir");
+        let _authoritative_home_guard =
+            EnvVarGuard::set_path("SUBSTRATE_HOME", authoritative_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("authoritative state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_continue_world_dispatch_request())
+                .expect("prepare should capture authoritative caller truth");
+
+        let ambient_home = tempdir().expect("ambient substrate home tempdir");
+        let _ambient_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", ambient_home.path());
+
+        let resolved = resolve_continue_world_dispatch_target_for_routing(prepared)
+            .expect("continue target resolution should reuse the prepared authoritative store");
+
+        assert_eq!(resolved.session.orchestration_session_id, "sess_dispatch");
+        assert_eq!(
+            resolved.caller_participant.participant_id(),
+            "orch_dispatch"
+        );
+        assert_eq!(
+            resolved
+                .target_participant
+                .as_ref()
+                .expect("resolved retained target")
+                .participant_id(),
+            "ash_member"
         );
     }
 
@@ -3370,6 +3413,7 @@ mod tests {
     fn dispatch_contract_steering_policy_rejects_disabled_world_dispatch() {
         let err = enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request: sample_request(),
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
@@ -3394,6 +3438,7 @@ mod tests {
 
         let err = enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request: sample_request(),
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
@@ -3418,6 +3463,7 @@ mod tests {
 
         let err = enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request: sample_request(),
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
@@ -3442,6 +3488,7 @@ mod tests {
 
         let err = enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request: sample_request(),
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
@@ -3466,6 +3513,7 @@ mod tests {
 
         let err = enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request: sample_request(),
                 session: sample_session(),
                 caller_participant: caller,
@@ -3492,6 +3540,7 @@ mod tests {
 
         enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request: sample_request(),
                 session: sample_session(),
                 caller_participant: caller,
@@ -3511,6 +3560,7 @@ mod tests {
 
         let err = enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request,
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
@@ -3537,6 +3587,7 @@ mod tests {
 
         enforce_world_dispatch_steering_policy(
             &PreparedOrchestratorWorldDispatch {
+                store: sample_state_store(),
                 request,
                 session: sample_session(),
                 caller_participant: sample_orchestrator_participant(),
@@ -3581,6 +3632,7 @@ mod tests {
         policy.agents_world_dispatch_max_concurrent_ephemeral = 1;
 
         let prepared = PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
             request: sample_request(),
             session: sample_session(),
             caller_participant: sample_orchestrator_participant(),
@@ -3606,6 +3658,7 @@ mod tests {
         policy.agents_world_dispatch_max_live_retained_workers = 1;
 
         let prepared = PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
             request: sample_spawn_request(),
             session: sample_session(),
             caller_participant: sample_orchestrator_participant(),
