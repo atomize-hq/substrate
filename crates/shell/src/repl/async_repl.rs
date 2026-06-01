@@ -10692,8 +10692,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_validates_inspect_requests_before_dispatch_routing()
-    {
+    fn orchestrator_world_dispatch_surface_validates_inspect_requests_before_dispatch_routing() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");

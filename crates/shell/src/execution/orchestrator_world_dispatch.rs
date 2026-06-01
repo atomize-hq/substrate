@@ -1735,10 +1735,7 @@ fn summarize_continue_world_worker_result(
 }
 
 #[cfg(target_os = "linux")]
-fn summarize_inspect_world_worker_result(
-    participant_id: &str,
-    backend_id: &str,
-) -> String {
+fn summarize_inspect_world_worker_result(participant_id: &str, backend_id: &str) -> String {
     format!(
         "inspect_world_worker returned an authoritative retained snapshot for worker {participant_id} on backend {backend_id} without invoking world-side execution transport"
     )
@@ -1753,12 +1750,12 @@ mod tests {
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
     #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::dispatch_contract::WorkerInspectPayloadV1;
+    #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::agent_runtime::orchestration_session::{
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
-    #[cfg(target_os = "linux")]
-    use crate::execution::agent_runtime::dispatch_contract::WorkerInspectPayloadV1;
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
     use crate::execution::agent_runtime::{
@@ -3113,8 +3110,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn dispatch_contract_inspect_world_worker_returns_authoritative_snapshot_without_mutation()
-    {
+    async fn dispatch_contract_inspect_world_worker_returns_authoritative_snapshot_without_mutation(
+    ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -3152,7 +3149,10 @@ mod tests {
             outcome.snapshot.participant_state,
             AgentRuntimeSessionState::Running
         );
-        assert_eq!(outcome.snapshot.session_state, OrchestrationSessionState::Active);
+        assert_eq!(
+            outcome.snapshot.session_state,
+            OrchestrationSessionState::Active
+        );
         assert_eq!(
             outcome.snapshot.session_posture,
             OrchestrationSessionPosture::ActiveAttached

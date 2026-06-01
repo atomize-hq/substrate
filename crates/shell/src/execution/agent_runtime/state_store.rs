@@ -343,7 +343,8 @@ impl ResolvedInternalInspectWorldDispatchTarget {
             session_posture: self.session.posture,
             authoritative_live: self.target_participant.is_authoritative_live()
                 && owner_process_is_alive(&self.target_participant),
-            attention_required: self.session.posture == OrchestrationSessionPosture::AwaitingAttention
+            attention_required: self.session.posture
+                == OrchestrationSessionPosture::AwaitingAttention
                 || self.session.pending_inbox_count > 0,
             parent_participant_id: self.target_participant.handle.parent_participant_id.clone(),
             resumed_from_participant_id: self
@@ -6122,12 +6123,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let member = live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
 
             store
                 .persist_orchestration_session(&parent)
@@ -6159,12 +6155,8 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let mut member =
+                live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
             member.mark_terminal_state("worker exited");
             member.transition_state(AgentRuntimeSessionState::Invalidated);
             member.internal.shell_owner_pid = 999_999_999;
@@ -6184,7 +6176,9 @@ mod tests {
                     "ash_inspect",
                     "cli:codex_world",
                 )
-                .expect("inspect must accept exact retained workers even when not continue-routable");
+                .expect(
+                    "inspect must accept exact retained workers even when not continue-routable",
+                );
 
             assert_eq!(
                 resolved.target_participant.handle.state,
@@ -6202,12 +6196,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let member = live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
 
             store
                 .persist_orchestration_session(&parent)
@@ -6292,12 +6281,8 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let mut member =
+                live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
             member.handle.world_generation = Some(3);
 
             store
@@ -6332,12 +6317,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let member = live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
 
             store
                 .persist_orchestration_session(&parent)
@@ -6379,12 +6359,8 @@ mod tests {
             parent.set_world_binding("world-17", 2);
             parent.set_pending_inbox_count(2);
 
-            let mut member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let mut member =
+                live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
             member.handle.parent_participant_id = Some("ash_parent".to_string());
             member.handle.resumed_from_participant_id = Some("ash_prev".to_string());
 
@@ -6414,7 +6390,10 @@ mod tests {
             );
             assert!(snapshot.authoritative_live);
             assert!(snapshot.attention_required);
-            assert_eq!(snapshot.parent_participant_id.as_deref(), Some("ash_parent"));
+            assert_eq!(
+                snapshot.parent_participant_id.as_deref(),
+                Some("ash_parent")
+            );
             assert_eq!(
                 snapshot.resumed_from_participant_id.as_deref(),
                 Some("ash_prev")
@@ -6424,7 +6403,10 @@ mod tests {
                 .load_session("sess_inspect")
                 .expect("load session")
                 .expect("session must remain persisted");
-            assert_eq!(stored.session.posture, OrchestrationSessionPosture::AwaitingAttention);
+            assert_eq!(
+                stored.session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
             assert_eq!(stored.session.pending_inbox_count, 2);
         });
     }
@@ -6437,12 +6419,8 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let mut member =
+                live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
             member.mark_terminal_state("worker invalidated");
             member.transition_state(AgentRuntimeSessionState::Invalidated);
 
@@ -6486,12 +6464,8 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member = live_member(
-                "codex_world",
-                "sess_inspect",
-                "ash_inspect",
-                "orch_inspect",
-            );
+            let mut member =
+                live_member("codex_world", "sess_inspect", "ash_inspect", "orch_inspect");
             member.mark_terminal_state("worker stopped");
             member.transition_state(AgentRuntimeSessionState::Stopped);
 
@@ -6513,7 +6487,10 @@ mod tests {
                 .expect("resolve inspect target");
             let snapshot = resolved.project_snapshot();
 
-            assert_eq!(snapshot.participant_state, AgentRuntimeSessionState::Stopped);
+            assert_eq!(
+                snapshot.participant_state,
+                AgentRuntimeSessionState::Stopped
+            );
             assert_eq!(snapshot.session_state, OrchestrationSessionState::Active);
             assert_eq!(
                 snapshot.session_posture,

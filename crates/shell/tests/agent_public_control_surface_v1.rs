@@ -701,7 +701,9 @@ fn try_single_active_session(fixture: &AgentControlFixture) -> Option<(String, S
         .get("active_session_handle_id")
         .and_then(Value::as_str)
         .map(str::to_string)?;
-    let participant_path = dir.join("participants").join(format!("{participant_id}.json"));
+    let participant_path = dir
+        .join("participants")
+        .join(format!("{participant_id}.json"));
     if !participant_path.is_file() {
         return None;
     }
