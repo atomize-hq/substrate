@@ -2134,6 +2134,31 @@ agents:
     }
 
     #[test]
+    fn policy_patch_rejects_unknown_agents_world_dispatch_action() {
+        let path = Path::new("policy.yaml");
+        let err = parse_policy_patch_yaml(
+            path,
+            r#"
+agents:
+  world_dispatch:
+    allowed_actions:
+      - "unknown_world_dispatch_action"
+"#,
+        )
+        .expect_err("unknown world-dispatch action must fail closed");
+
+        let msg = err.to_string();
+        assert!(
+            msg.contains("agents.world_dispatch.allowed_actions"),
+            "expected world dispatch action diagnostic, got: {msg}"
+        );
+        assert!(
+            msg.contains("unknown_world_dispatch_action"),
+            "expected invalid action value in diagnostic, got: {msg}"
+        );
+    }
+
+    #[test]
     fn policy_patch_keeps_world_dispatch_action_allowlist_empty_when_absent() {
         let path = Path::new("policy.yaml");
         let patch = parse_policy_patch_yaml(

@@ -336,6 +336,26 @@ fn pcm1_policy_yaml_accepts_explicit_stop_world_worker_action() {
 }
 
 #[test]
+fn pcm1_policy_yaml_rejects_unknown_world_dispatch_action() {
+    let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex")
+        .replace(
+            "- \"continue_world_worker\"",
+            "- \"continue_world_worker\"\n      - \"unknown_world_dispatch_action\"",
+        );
+    let err = serde_yaml::from_str::<Policy>(&raw)
+        .expect_err("unknown agents.world_dispatch.allowed_actions entry should fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("agents.world_dispatch.allowed_actions"),
+        "expected world dispatch action diagnostic, got: {msg}"
+    );
+    assert!(
+        msg.contains("unknown_world_dispatch_action"),
+        "expected invalid action value in diagnostic, got: {msg}"
+    );
+}
+
+#[test]
 fn pcm1_policy_yaml_accepts_explicit_inspect_world_worker_action() {
     let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex").replace(
         "      - \"stop_world_worker\"\n",
