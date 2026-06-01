@@ -357,6 +357,24 @@ impl ResolvedInternalInspectWorldDispatchTarget {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedInternalStopWorldDispatchTarget {
+    pub session: OrchestrationSessionRecord,
+    #[allow(dead_code)]
+    pub caller_participant: AgentRuntimeParticipantRecord,
+    #[allow(dead_code)]
+    pub target_participant: AgentRuntimeParticipantRecord,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ResolvedInternalStopWorldDispatchTarget {
+    #[allow(dead_code)]
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PublicTurnTargetKind {
@@ -1232,6 +1250,124 @@ impl AgentRuntimeStateStore {
         }
 
         Ok(ResolvedInternalInspectWorldDispatchTarget {
+            session: authoritative.session,
+            caller_participant: authoritative.participant,
+            target_participant,
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    pub(crate) fn resolve_internal_stop_world_dispatch_target(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+    ) -> Result<ResolvedInternalStopWorldDispatchTarget> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            anyhow::bail!(
+                "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
+                orchestration_session_id
+            );
+        };
+
+        let authoritative =
+            resolve_authoritative_session_control(&record, orchestration_session_id)?;
+        if authoritative.participant.participant_id() != caller_participant_id {
+            anyhow::bail!(
+                "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
+                orchestration_session_id,
+                authoritative.participant.participant_id(),
+                caller_participant_id
+            );
+        }
+
+        let mut matching_participants = record
+            .participants
+            .iter()
+            .filter(|participant| participant.participant_id() == target_participant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if matching_participants.is_empty() {
+            anyhow::bail!(
+                "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if matching_participants.len() > 1 {
+            anyhow::bail!(
+                "ambiguous_target_participant: orchestration session {} has multiple retained worker records for {}",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+
+        let target_participant = matching_participants
+            .pop()
+            .expect("target participant count checked above");
+        if target_participant.handle.backend_id != target_backend_id {
+            anyhow::bail!(
+                "backend_mismatch: orchestration session {} retained worker {} backend is {} not {}",
+                orchestration_session_id,
+                target_participant_id,
+                target_participant.handle.backend_id,
+                target_backend_id
+            );
+        }
+        if target_participant.handle.role != MEMBER_ROLE
+            || target_participant.handle.execution.scope != AgentExecutionScope::World
+        {
+            anyhow::bail!(
+                "invalid_target_participant: orchestration session {} participant {} is not a retained world worker",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if target_participant
+            .handle
+            .orchestrator_participant_id
+            .as_deref()
+            != Some(authoritative.participant.participant_id())
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
+                orchestration_session_id,
+                target_participant_id,
+                authoritative.participant.participant_id()
+            );
+        }
+        if !target_participant.matches_authoritative_parent_world_binding(&authoritative.session) {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if !target_participant.handle.state.is_live()
+            || target_participant.internal.terminal_observed_at.is_some()
+        {
+            let terminal_state = match target_participant.handle.state {
+                super::session::AgentRuntimeSessionState::Stopped => "stopped",
+                super::session::AgentRuntimeSessionState::Failed => "failed",
+                super::session::AgentRuntimeSessionState::Invalidated => "invalidated",
+                super::session::AgentRuntimeSessionState::Allocating
+                | super::session::AgentRuntimeSessionState::Ready
+                | super::session::AgentRuntimeSessionState::Running
+                | super::session::AgentRuntimeSessionState::Restarting
+                | super::session::AgentRuntimeSessionState::Stopping => "terminal",
+            };
+            anyhow::bail!(
+                "target_already_terminal: orchestration session {} retained worker {} is already terminal ({})",
+                orchestration_session_id,
+                target_participant_id,
+                terminal_state
+            );
+        }
+
+        Ok(ResolvedInternalStopWorldDispatchTarget {
             session: authoritative.session,
             caller_participant: authoritative.participant,
             target_participant,
@@ -6499,6 +6635,360 @@ mod tests {
             );
             assert!(!snapshot.authoritative_live);
             assert!(!snapshot.attention_required);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_returns_exact_live_retained_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect("resolve exact retained stop target");
+
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_stop");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_stop");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_accepts_non_authoritative_live_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+            member.release_runtime_ownership();
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect("stop must accept exact retained workers even when not continue-routable");
+
+            assert_eq!(resolved.target_participant.participant_id(), "ash_stop");
+            assert_eq!(
+                resolved.target_participant.handle.state,
+                AgentRuntimeSessionState::Ready
+            );
+            assert!(!resolved.target_participant.is_authoritative_live());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_non_authoritative_caller() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "ash_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err("member caller must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "caller_not_authoritative: orchestration session sess_stop authoritative orchestrator participant is orch_stop not ash_stop"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_cross_session_target() {
+        with_store(|store| {
+            let orchestrator_a = live_orchestrator("codex", "sess_stop_a", "orch_stop_a");
+            let mut parent_a = active_parent(&orchestrator_a);
+            parent_a.set_world_binding("world-17", 2);
+
+            let orchestrator_b = live_orchestrator("codex", "sess_stop_b", "orch_stop_b");
+            let mut parent_b = active_parent(&orchestrator_b);
+            parent_b.set_world_binding("world-17", 2);
+
+            let member_b = live_member("codex_world", "sess_stop_b", "ash_stop_b", "orch_stop_b");
+
+            store
+                .persist_orchestration_session(&parent_a)
+                .expect("persist session a");
+            store
+                .persist_participant(&orchestrator_a)
+                .expect("persist orchestrator a");
+            store
+                .persist_orchestration_session(&parent_b)
+                .expect("persist session b");
+            store
+                .persist_participant(&orchestrator_b)
+                .expect("persist orchestrator b");
+            store.persist_participant(&member_b).expect("persist member b");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop_a",
+                    "orch_stop_a",
+                    "ash_stop_b",
+                    "cli:codex_world",
+                )
+                .expect_err("cross-session target must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_in_session: orchestration session sess_stop_a has no exact retained worker ash_stop_b"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_backend_mismatch() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:other_world",
+                )
+                .expect_err("backend drift must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "backend_mismatch: orchestration session sess_stop retained worker ash_stop backend is cli:codex_world not cli:other_world"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_non_worker_target() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "orch_stop",
+                    "cli:codex",
+                )
+                .expect_err("host orchestrator target must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "invalid_target_participant: orchestration session sess_stop participant orch_stop is not a retained world worker"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_stale_orchestrator_linkage() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+            member.handle.orchestrator_participant_id = Some("orch_stale".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err("stale orchestrator linkage must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "stale_linkage: orchestration session sess_stop retained worker ash_stop is not linked to authoritative orchestrator orch_stop"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_world_binding_drift() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+            member.handle.world_generation = Some(3);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err("world binding drift must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "world_binding_mismatch: orchestration session sess_stop retained worker ash_stop no longer matches the authoritative world binding"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_stopped_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+            member.mark_terminal_state("worker stopped");
+            member.transition_state(AgentRuntimeSessionState::Stopped);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err("already-stopped retained workers must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_already_terminal: orchestration session sess_stop retained worker ash_stop is already terminal (stopped)"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_other_terminal_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+            member.mark_terminal_state("worker invalidated");
+            member.transition_state(AgentRuntimeSessionState::Invalidated);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err("other terminal retained workers must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_already_terminal: orchestration session sess_stop retained worker ash_stop is already terminal (invalidated)"
+            );
         });
     }
 
