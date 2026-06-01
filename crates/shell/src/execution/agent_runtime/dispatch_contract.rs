@@ -223,6 +223,7 @@ pub(crate) struct WorkerContinuePayloadV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct WorkerInspectPayloadV1 {}
 
 #[allow(dead_code)]
@@ -2433,6 +2434,32 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid_dispatch_action_mode: action inspect_world_worker is incompatible with mode ephemeral"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_unknown_inspect_payload_fields_during_deserialization() {
+        let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
+            "request_id": "req-32",
+            "idempotency_key": "idem-32",
+            "orchestration_session_id": "sess-32",
+            "caller_participant_id": "orch-32",
+            "action": "inspect_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex_world",
+            "target_participant_id": "ash-worker-35",
+            "world_id": "world-17",
+            "world_generation": 2,
+            "payload": {
+                "payload_kind": "worker_inspect",
+                "future_runtime_selector": "packet-2"
+            }
+        }))
+        .expect_err("unknown inspect payload fields must fail closed");
+
+        assert!(
+            error.to_string().contains("unknown field `future_runtime_selector`"),
+            "unexpected inspect payload serde error: {error}"
         );
     }
 
