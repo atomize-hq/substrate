@@ -5,6 +5,12 @@ This task list implements:
 - [agent-drift-sentinel-live-integration-v0.3-spec.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-spec.md:1)
 - [agent-drift-sentinel-live-integration-v0.3-plan.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-plan.md:1)
 
+Continuity note:
+
+- `2026-06-01`: the underlying live fixtures now carry analyzer checkpoint `schema_version =
+  "v0.2"` with `diagnostics` as part of `SC2`. The live-integration tasks below remain bounded to
+  runtime/sink behavior and do not authorize diagnostics-driven policy changes.
+
 ## Task List
 
 - [x] Task: Define the incremental live checkpoint event contract

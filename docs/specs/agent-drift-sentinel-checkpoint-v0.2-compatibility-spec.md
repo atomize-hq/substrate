@@ -19,11 +19,11 @@
 4. Live mode remains bounded and library-first. Updating `live_input.rs`, `live_runtime.rs`, and
    live fixtures for current-schema compatibility does not authorize broader shell/world wiring or
    removing the existing live-mode CLI gate.
-5. The stale downstream state is real and current: `cargo test -p agent-drift-sentinel -- --nocapture`
-   presently fails because sentinel test support still initializes `Checkpoint` without the new
-   `diagnostics` field and multiple sentinel paths still hardcode checkpoint schema `v0.1`.
-6. Continuity docs and task checklists should be refreshed only after sentinel proves green against
-   current analyzer checkpoints, so they describe the restored seam rather than the pre-fix gap.
+5. `SC1` is already landed before this packet, so replay input and bounded live compatibility
+   already accept analyzer checkpoint `schema_version = "v0.2"`; `SC2` is limited to canonical
+   test-support parity, fixture parity, full regression proof, and continuity-doc refresh.
+6. Continuity docs and task checklists should describe the restored downstream seam after the
+   green proof and continue to defer first sentinel behavior that consumes `diagnostics`.
 
 ## Objective
 
@@ -96,7 +96,7 @@ Upstream confirmation:
 cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
-Current downstream failure proof:
+Restored downstream proof wall:
 
 ```bash
 cargo test -p agent-drift-sentinel -- --nocapture

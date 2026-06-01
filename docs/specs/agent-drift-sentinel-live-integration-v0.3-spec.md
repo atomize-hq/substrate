@@ -48,6 +48,12 @@ Success means:
 - a bounded live proof can be verified with synthetic or file-backed checkpoint streams
 - broader runtime integration stays explicitly deferred after this slice
 
+Continuity note:
+
+- `2026-06-01`: the checked-in live fixtures and sentinel test support now encode analyzer
+  checkpoint `schema_version = "v0.2"` with `diagnostics`. The live slice still treats
+  `diagnostics` as compatibility-only data; no scheduler or operator behavior consumes it yet.
+
 ## Tech Stack
 
 - Language: Rust 2021

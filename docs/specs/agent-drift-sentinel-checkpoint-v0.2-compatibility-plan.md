@@ -13,6 +13,12 @@ The goal is to restore the downstream sentinel seam after analyzer checkpoint `v
 - proving the full sentinel crate is green again
 - refreshing stale continuity docs only after the seam is restored
 
+Status note:
+
+- `2026-06-01`: `SC1` and `SC2` are green. Sentinel test support and the checked-in live fixtures
+  now emit current-schema `v0.2` checkpoints with `diagnostics`, while scheduler and operator
+  behavior remain compatibility-only and do not consume `diagnostics`.
+
 This packet is intentionally compatibility-only.
 
 It should:
@@ -31,21 +37,30 @@ It should not:
 
 ## Why This Boundary Is Correct
 
-The live repo state supports a narrow compatibility-first packet:
+The repo state that motivated this packet was a narrow compatibility-first break:
 
 - analyzer already exports checkpoint `schema_version = "v0.2"` and includes a compact
   `diagnostics` payload
-- replay input in `crates/agent-drift-sentinel/src/input.rs` still hard-rejects anything except
+- replay input in `crates/agent-drift-sentinel/src/input.rs` hard-rejected anything except
   `v0.1`
-- live compatibility in `crates/agent-drift-sentinel/src/live_input.rs` still hard-rejects
+- live compatibility in `crates/agent-drift-sentinel/src/live_input.rs` hard-rejected
   anything except `v0.1`
-- sentinel test support in `crates/agent-drift-sentinel/tests/support/mod.rs` still initializes
+- sentinel test support in `crates/agent-drift-sentinel/tests/support/mod.rs` initialized
   `Checkpoint` without `diagnostics`
-- both checked-in live fixtures still serialize `schema_version = "v0.1"` checkpoints without
+- both checked-in live fixtures serialized `schema_version = "v0.1"` checkpoints without
   `diagnostics`
-- `cargo test -p agent-drift-sentinel -- --nocapture` currently fails at
+- `cargo test -p agent-drift-sentinel -- --nocapture` failed at
   `crates/agent-drift-sentinel/tests/support/mod.rs:79` with `missing field diagnostics in
   initializer of Checkpoint`
+
+That break is now repaired:
+
+- replay and live compatibility accept current-schema analyzer checkpoints
+- `tests/support/mod.rs` is the canonical minimal `v0.2` checkpoint builder with explicit
+  `CheckpointDiagnostics`
+- both checked-in live fixtures encode `diagnostics` on every `checkpoint_ready` payload
+- `cargo test -p agent-drift-sentinel -- --nocapture` and
+  `cargo test -p agent-drift-analyzer -- --nocapture` pass without widening sentinel behavior
 
 The same repo state argues against consuming `diagnostics` in this packet:
 
@@ -121,7 +136,7 @@ Deliver third:
 
 Why third:
 
-- the current red failure is caused by stale test-only construction
+- the initial red failure was caused by stale test-only construction
 - test support should become the canonical local source for minimal valid checkpoints
 
 ### 4. Full Sentinel Regression

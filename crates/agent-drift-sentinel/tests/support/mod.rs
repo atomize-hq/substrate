@@ -77,8 +77,9 @@ pub(crate) fn checkpoint(
         event_index: ordinal,
         row_ordinal: 0,
     };
+    let evidence_item_count = if flagged { 2 } else { 1 };
     Checkpoint {
-        schema_version: "v0.1".to_string(),
+        schema_version: "v0.2".to_string(),
         session_id: session_id.to_string(),
         checkpoint_id: format!("{session_id}:{ordinal:04}"),
         ordinal,
@@ -86,7 +87,13 @@ pub(crate) fn checkpoint(
             start: row.clone(),
             end: row.clone(),
         },
-        diagnostics: CheckpointDiagnostics::default(),
+        diagnostics: CheckpointDiagnostics {
+            task_frame_transitioned: ordinal == 1,
+            working_set_changed: false,
+            interval_command_count: 1,
+            interval_verification_command_count: 1,
+            evidence_item_count,
+        },
         task_frame: TaskFrame {
             objective: format!(
                 "/goal Complete replay validation for {session_id} checkpoint {ordinal}"

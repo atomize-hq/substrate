@@ -429,6 +429,11 @@ Current landing evidence:
 
 - `crates/agent-drift-sentinel/tests/live_end_to_end.rs` proves the bounded sentinel-local live
   seam over `tests/fixtures/live/append_only_stream.jsonl`
+- `2026-06-01`: the downstream checkpoint-compatibility follow-up (`SC2`) refreshed
+  `tests/support/mod.rs` and both checked-in live fixtures to current-schema `v0.2` checkpoints
+  with `diagnostics`; `cargo test -p agent-drift-sentinel -- --nocapture` and
+  `cargo test -p agent-drift-analyzer -- --nocapture` both passed without adding
+  diagnostics-driven sentinel behavior
 - the packet still stops before shell/world or broader host-runtime wiring; `L8` remains an
   explicit user gate even after the bounded proof passes
 

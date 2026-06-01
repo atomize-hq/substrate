@@ -7,9 +7,18 @@ This task list implements:
 
 ## Task List
 
+Landed proof note:
+
+- `2026-06-01`: `cargo test -p agent-drift-sentinel replay_input -- --nocapture`,
+  `cargo test -p agent-drift-sentinel live_input_adapter -- --nocapture`,
+  `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`,
+  `cargo test -p agent-drift-sentinel -- --nocapture`, and
+  `cargo test -p agent-drift-analyzer -- --nocapture` all passed after the `SC2` support/fixture
+  refresh while keeping `diagnostics` compatibility-only.
+
 ## Packet SC1: Boundary And Current-Schema Compatibility
 
-- [ ] Task: Lock the packet as compatibility-only in repo docs
+- [x] Task: Lock the packet as compatibility-only in repo docs
   - Acceptance: the spec/plan/tasks chain explicitly says this packet restores sentinel
     compatibility with analyzer checkpoint `v0.2`, requires `diagnostics` in the checkpoint shape,
     and defers any new scheduler/operator behavior that would consume `diagnostics`.
@@ -24,7 +33,7 @@ This task list implements:
     - `docs/specs/agent-drift-sentinel-checkpoint-v0.2-compatibility-plan.md`
     - `docs/specs/agent-drift-sentinel-checkpoint-v0.2-compatibility-tasks.md`
 
-- [ ] Task: Cut replay bundle loading to analyzer checkpoint schema `v0.2`
+- [x] Task: Cut replay bundle loading to analyzer checkpoint schema `v0.2`
   - Acceptance: `load_replay_bundle` accepts non-empty replay bundles whose checkpoint rows all use
     `schema_version = "v0.2"`, reports `bundle.schema_version = "v0.2"`, preserves stable sorting,
     and still rejects mixed or unsupported schema versions explicitly.
@@ -34,7 +43,7 @@ This task list implements:
     - `crates/agent-drift-sentinel/src/input.rs`
     - `crates/agent-drift-sentinel/tests/replay_input.rs`
 
-- [ ] Task: Cut live checkpoint compatibility to analyzer checkpoint schema `v0.2`
+- [x] Task: Cut live checkpoint compatibility to analyzer checkpoint schema `v0.2`
   - Acceptance: `verify_live_checkpoint_compatibility` accepts checkpoints with
     `schema_version = "v0.2"` and `diagnostics`, preserves the existing validation for cursor
     identity, non-empty `session_id`, non-empty `checkpoint_id`, non-empty
@@ -58,7 +67,7 @@ Packet `SC1` exit condition:
 
 ## Packet SC2: Test Support, Fixtures, And Downstream Proof
 
-- [ ] Task: Update sentinel test support to build current-schema checkpoints with
+- [x] Task: Update sentinel test support to build current-schema checkpoints with
   `CheckpointDiagnostics`
   - Acceptance: `crates/agent-drift-sentinel/tests/support/mod.rs` becomes the canonical minimal
     sentinel checkpoint builder for the current analyzer contract by emitting:
@@ -72,7 +81,7 @@ Packet `SC1` exit condition:
   - Files:
     - `crates/agent-drift-sentinel/tests/support/mod.rs`
 
-- [ ] Task: Rewrite or regenerate the checked-in live fixtures to include `diagnostics`
+- [x] Task: Rewrite or regenerate the checked-in live fixtures to include `diagnostics`
   - Acceptance: both checked-in live fixture files encode `schema_version = "v0.2"` and a
     `diagnostics` object on every `checkpoint_ready` payload, while preserving:
     - append-only emission ordinals in `append_only_stream.jsonl`
@@ -88,7 +97,7 @@ Packet `SC1` exit condition:
     - `crates/agent-drift-sentinel/tests/live_input_adapter.rs`
     - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
 
-- [ ] Task: Run the full sentinel regression and prove the downstream seam is restored
+- [x] Task: Run the full sentinel regression and prove the downstream seam is restored
   - Acceptance: the sentinel crate passes against the current analyzer checkpoint contract, no test
     or runtime path still hardcodes checkpoint schema `v0.1`, and `diagnostics` is successfully
     deserialized and carried through replay and bounded live paths without new behavior changes.
@@ -106,7 +115,7 @@ Packet `SC1` exit condition:
     - `crates/agent-drift-sentinel/tests/live_runtime.rs`
     - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
 
-- [ ] Task: Refresh stale continuity docs and task checklists after the green proof
+- [x] Task: Refresh stale continuity docs and task checklists after the green proof
   - Acceptance: repo docs that currently imply sentinel is still behind analyzer checkpoint `v0.2`
     are updated to say the downstream seam is restored and that first sentinel behavior using
     `diagnostics` remains deferred to a later packet.

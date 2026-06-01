@@ -16,6 +16,12 @@ This plan is explicitly **not** broader runtime integration.
 It does not authorize or require edits in `shell`, `world`, `shim`, `broker`, or host-orchestrator
 code.
 
+Continuity note:
+
+- `2026-06-01`: the sentinel-local live fixtures now carry current-schema analyzer checkpoints with
+  `diagnostics`, and the downstream compatibility seam is green. This live plan still defers any
+  new scheduler or operator behavior that would consume `diagnostics`.
+
 ## Fixed Seam From Replay Mode
 
 The following surfaces stay fixed unless a concrete defect forces redesign:
