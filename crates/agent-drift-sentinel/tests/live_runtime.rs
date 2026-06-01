@@ -7,9 +7,19 @@ use agent_drift_sentinel::{
     WarningDisposition, WarningPolicy,
 };
 
+fn current_schema_sample_checkpoints() -> Vec<agent_drift_analyzer::Checkpoint> {
+    support::sample_checkpoints()
+        .into_iter()
+        .map(|mut checkpoint| {
+            checkpoint.schema_version = "v0.2".to_string();
+            checkpoint
+        })
+        .collect()
+}
+
 #[test]
 fn live_runtime_reuses_scheduler_state_across_incremental_events() {
-    let checkpoints = support::sample_checkpoints();
+    let checkpoints = current_schema_sample_checkpoints();
     let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
 
     let first = runtime
@@ -68,7 +78,7 @@ fn live_runtime_reuses_scheduler_state_across_incremental_events() {
 
 #[test]
 fn live_runtime_rejects_synthetic_cursor_mismatches() {
-    let checkpoints = support::sample_checkpoints();
+    let checkpoints = current_schema_sample_checkpoints();
     let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
     runtime
         .observe(LiveCheckpointEvent::checkpoint_ready(

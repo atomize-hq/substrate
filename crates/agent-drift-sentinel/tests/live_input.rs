@@ -6,11 +6,25 @@ use agent_drift_sentinel::{
     validate_live_event_sequence, CheckpointCursor, LiveCheckpointEvent, LiveInputError,
 };
 
+fn current_schema_checkpoint(
+    session_id: &str,
+    ordinal: usize,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+) -> agent_drift_analyzer::Checkpoint {
+    let mut checkpoint =
+        support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.schema_version = "v0.2".to_string();
+    checkpoint
+}
+
 #[test]
 fn live_input_accepts_append_only_checkpoint_and_trigger_sequence() {
-    let first = support::checkpoint("session-alpha", 1, 72, true, "review the latest objective");
+    let first =
+        current_schema_checkpoint("session-alpha", 1, 72, true, "review the latest objective");
     let first_cursor = CheckpointCursor::from(&first);
-    let second = support::checkpoint(
+    let second = current_schema_checkpoint(
         "session-alpha",
         2,
         0,
@@ -33,12 +47,12 @@ fn live_input_rejects_out_of_order_checkpoint_cursor() {
     let events = vec![
         LiveCheckpointEvent::checkpoint_ready(
             1,
-            support::checkpoint("session-alpha", 2, 60, true, "repair the plan"),
+            current_schema_checkpoint("session-alpha", 2, 60, true, "repair the plan"),
             None,
         ),
         LiveCheckpointEvent::checkpoint_ready(
             2,
-            support::checkpoint("session-alpha", 1, 60, true, "repair the plan"),
+            current_schema_checkpoint("session-alpha", 1, 60, true, "repair the plan"),
             None,
         ),
     ];

@@ -8,9 +8,22 @@ use agent_drift_sentinel::{
     TriggerClass, WarningDisposition, WarningPolicy,
 };
 
+fn current_schema_checkpoint(
+    session_id: &str,
+    ordinal: usize,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+) -> agent_drift_analyzer::Checkpoint {
+    let mut checkpoint =
+        support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.schema_version = "v0.2".to_string();
+    checkpoint
+}
+
 #[test]
 fn live_checkpoint_compatibility_proves_existing_analyzer_checkpoint_is_sufficient() {
-    let checkpoint = support::checkpoint(
+    let checkpoint = current_schema_checkpoint(
         "session-alpha",
         1,
         88,
@@ -49,7 +62,7 @@ fn live_checkpoint_compatibility_proves_existing_analyzer_checkpoint_is_sufficie
 
 #[test]
 fn live_checkpoint_compatibility_surfaces_analyzer_contract_gaps_explicitly() {
-    let mut checkpoint = support::checkpoint(
+    let mut checkpoint = current_schema_checkpoint(
         "session-alpha",
         1,
         88,

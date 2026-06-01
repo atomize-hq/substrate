@@ -3,7 +3,8 @@
 use std::fs;
 
 use agent_drift_analyzer::{
-    Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, EvidenceRef, TaskFrame,
+    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftClass,
+    DriftScore, EvidenceRef, TaskFrame,
 };
 use agent_session_compactor::RowRef;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -85,6 +86,7 @@ pub(crate) fn checkpoint(
             start: row.clone(),
             end: row.clone(),
         },
+        diagnostics: CheckpointDiagnostics::default(),
         task_frame: TaskFrame {
             objective: format!(
                 "/goal Complete replay validation for {session_id} checkpoint {ordinal}"
