@@ -6,7 +6,8 @@ use std::collections::BTreeSet;
 use std::fs;
 
 use agent_drift_analyzer::checkpoint::{
-    export_checkpoints, summarize_checkpoint_diagnostics, CheckpointDiagnostics,
+    build_session_checkpoint, export_checkpoints, summarize_checkpoint_diagnostics,
+    CheckpointDiagnostics,
 };
 use agent_drift_analyzer::{
     BundleSession, Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, EvidenceRef,
@@ -522,6 +523,69 @@ fn export_bundle_uses_interval_counters_for_verification_density() {
     assert_optional_metric_eq(stats.verification_density(), 3.0 / 7.0);
     assert!(summary.contains("Verification density: `0.43`"));
     assert!(!summary.contains("Verification density: `0.45`"));
+}
+
+#[test]
+fn export_bundle_dedupes_duplicate_evidence_items_in_checkpoint_diagnostics() {
+    let session = fixture_session(
+        "session-evidence",
+        vec![
+            fixture_row(
+                "session-evidence",
+                0,
+                CompactionKind::UserMessage,
+                "/goal Evidence",
+                Some(UserMessageRole::Prompt),
+            ),
+            fixture_row(
+                "session-evidence",
+                1,
+                CompactionKind::ToolCall,
+                "{\"command\":\"cargo test\"}",
+                None,
+            ),
+        ],
+    );
+    let first_row = &session.compact_rows[0];
+    let second_row = &session.compact_rows[1];
+    let duplicated = EvidenceRef {
+        row: RowRef::from_row(first_row),
+        reason: "same reason".to_string(),
+    };
+    let unique = EvidenceRef {
+        row: RowRef::from_row(second_row),
+        reason: "unique reason".to_string(),
+    };
+    let task_frame = TaskFrame {
+        objective: "Validate evidence dedupe".to_string(),
+        confidence: Confidence::Medium,
+        truth_artifacts: vec!["docs/spec.md".to_string()],
+        working_set_paths: vec!["src/lib.rs".to_string()],
+        tools: vec!["functions.shell_command".to_string()],
+        command_families: vec!["cargo".to_string()],
+        verification_commands: vec!["cargo test".to_string()],
+        supporting_evidence: vec![duplicated.clone(), unique.clone()],
+        counter_evidence: vec![duplicated.clone()],
+    };
+    let checkpoint = build_session_checkpoint(
+        &session,
+        1,
+        &task_frame,
+        vec![DriftScore {
+            class: DriftClass::WrongPlanBranch,
+            raw_score: 80,
+            confidence: Confidence::Medium,
+            flagged: true,
+            evidence: vec![duplicated],
+        }],
+    );
+    let stats = summarize_checkpoint_diagnostics(std::slice::from_ref(&checkpoint));
+    let summary = export_summary(vec![session], vec![checkpoint.clone()]);
+
+    assert_eq!(checkpoint.diagnostics.evidence_item_count, 2);
+    assert_eq!(stats.total_evidence_item_count, 2);
+    assert_optional_metric_eq(stats.average_evidence_items_per_checkpoint(), 2.0);
+    assert!(summary.contains("Average evidence items per checkpoint: `2.00`"));
 }
 
 fn assert_optional_metric_eq(actual: Option<f64>, expected: f64) {
