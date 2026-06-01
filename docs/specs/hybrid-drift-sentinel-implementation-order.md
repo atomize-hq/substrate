@@ -96,6 +96,23 @@ Primary sources:
 - `L7` run a bounded live end-to-end proof over fixture streams
 - `L8` hold the post-slice runtime gate after the bounded live proof
 
+### Sentinel Diagnostics Output
+
+- `SD1` lock the shared replay/live diagnostics-output contract
+- `SD2` render compact diagnostics in replay checkpoint presentation
+- `SD3` carry the same diagnostics summary through live sink events
+- `SD4` prove replay/live diagnostics alignment without scheduler changes
+- `SD5` re-run the full sentinel regression wall after the output contract lands
+
+### Sentinel Real Session Live
+
+- `RT1` lock the real-session live contract over one active Codex session
+- `RT2` add a sentinel-owned real-session coordinator for one target session
+- `RT3` invoke compactor and analyzer libraries directly for the target session
+- `RT4` emit only newly observed checkpoints into the existing live runtime
+- `RT5` enable the bounded `--mode live` CLI for real-session monitoring
+- `RT6` prove the path on an actually active live session while the source session is growing
+
 ## Dependency Chart
 
 ```mermaid
@@ -120,11 +137,12 @@ flowchart TD
     S4 --> S5
     S5 --> S6 --> S7 --> S8 --> S9 --> S10
     S10 --> L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8
+    L8 --> SD1 --> SD2 --> SD3 --> SD4 --> SD5 --> RT1 --> RT2 --> RT3 --> RT4 --> RT5 --> RT6
 ```
 
 ## Recommended Packeting
 
-Recommended total: `19 packets`
+Recommended total: `21 packets`
 
 This is the best balance between forward progress and safe checkpoints. It keeps each packet
 focused, gives you clean stop points at the high-risk gates, and preserves the module dependency
@@ -442,9 +460,56 @@ Why:
 - proves the live slice over fixture-driven streams without pretending shell/world integration
 - ends with a fresh approval gate before any broader runtime wiring starts
 
+### Packet 17: Sentinel diagnostics output
+
+- `SD1`
+- `SD2`
+- `SD3`
+- `SD4`
+- `SD5`
+
+Why:
+
+- turns already-landed analyzer diagnostics into a durable downstream operator contract
+- improves warning legibility before changing real-session runtime behavior
+- keeps the next slice bounded to output semantics rather than scheduler policy
+
+Packet 17 note:
+
+- this packet should not change `SchedulerPolicy`, cooldowns, heartbeat cadence, or
+  repeated-failure semantics
+- replay console output and live sink events should expose the same diagnostics facts for the same
+  checkpoint
+- bounded replay proofs should use current analyzer bundles regenerated from the live upstream
+  contract
+
+### Packet 18: Real-session live mode over active Codex session artifacts
+
+- `RT1`
+- `RT2`
+- `RT3`
+- `RT4`
+- `RT5`
+- `RT6`
+
+Why:
+
+- graduates the sentinel from fixture-only live proofs to honest real-session monitoring
+- keeps the real-time path grounded in the existing compactor/analyzer crates instead of inventing
+  a second transcript parser inside the sentinel
+- satisfies the proof bar with an actually active session rather than archived playback alone
+
+Packet 18 note:
+
+- the real-session source of truth is the active `rollout-*.jsonl` artifact under `CODEX_HOME`
+- the semantic path remains `rollout -> compactor -> analyzer -> sentinel`, even though the
+  sentinel coordinates the live loop
+- `RT6` must be proven against a session that is actively growing while the sentinel is running;
+  archived/static session files are insufficient evidence for this packet
+
 ## If You Want Fewer Packets
 
-Minimum safe compression: `15 packets`
+Minimum safe compression: `17 packets`
 
 Safe merges:
 
@@ -456,6 +521,8 @@ Safe merges:
   are still isolated to the compactor/analyzer seam and sentinel fixture regeneration remains
   strictly downstream
 - merge Packet 12 and Packet 13 only if replay-mode usefulness is already obvious
+- merge Packet 17 and Packet 18 only if the diagnostics-output contract is already settled before
+  real-session live work begins and the packet still ends with a real active-session proof
 - no additional live-slice merges are recommended because `L3`, `L7`, and `L8` are the point of
   keeping the post-`S10` work bounded
 
