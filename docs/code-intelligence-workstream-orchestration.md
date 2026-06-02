@@ -4,8 +4,6 @@ Status: canonical design document for workstream/worktree orchestration inside t
 
 This document defines the intended ownership split, contract families, and rollout shape for deterministic multi-workstream planning and worktree materialization inside the `substrate` repository.
 
-It supersedes `workstream_worktree_parallel_orchestration_proposal.md` as the active design reference for this feature area.
-
 ---
 
 ## 0. Scope
