@@ -304,6 +304,7 @@ impl ResolvedInternalWorldDispatchCaller {
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalForkWorldDispatchLineage {
     pub orchestration_session_id: String,
