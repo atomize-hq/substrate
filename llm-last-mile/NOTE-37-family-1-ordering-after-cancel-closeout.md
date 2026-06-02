@@ -5,8 +5,12 @@ Date: `2026-06-02`
 Validated against live code in:
 
 - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
+- [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
 - [`crates/shell/src/execution/policy_model.rs`](../crates/shell/src/execution/policy_model.rs)
+- [`crates/broker/src/policy.rs`](../crates/broker/src/policy.rs)
+- [`crates/broker/src/effective_policy.rs`](../crates/broker/src/effective_policy.rs)
+- [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs)
 - [PLAN-37.md](./PLAN-37.md)
 - [TASKS-37.md](./TASKS-37.md)
 - [SPEC-37-internal-cancel-world-work.md](./SPEC-37-internal-cancel-world-work.md)
@@ -19,28 +23,36 @@ Validated against live code in:
 
 ## Purpose
 
-Record the current repo truth after Slice `37`, and make explicit why the next honest Family-1 implementation-bearing slice is now `fork_world_worker`, while active-ephemeral inspect/cancel widening, broader fork autonomy, and Family-2 router/attach execution remain later work.
+Record the current repo truth after Slice `38`, and preserve why `fork_world_worker` was the next honest Family-1 implementation-bearing slice after cancel closeout while making explicit that the narrow host-initiated retained-to-retained fork is now landed. Broader fork autonomy, active-ephemeral inspect/cancel widening, and Family-2 router/attach execution remain later work.
+
+Validated outcome after Slice `38`:
+
+1. that ordering has now landed as planned,
+2. `fork_world_worker` is now the internal host-initiated retained-to-retained v1 fork surface for one exact retained source worker,
+3. allowed Linux requests reuse the retained bootstrap seam, preserve explicit source-to-child lineage, and keep the child in the same authoritative session and world binding,
+4. worker-requested fork, fork recommendations, auto-fork, approval/fork autonomy, active-ephemeral inspect/cancel widening, and Family-2 router/attach work remain deferred.
 
 ## Current Repo Truth
 
-### 1. The live internal dispatch vocabulary now lands six verbs, not seven
+### 1. The live internal dispatch vocabulary now lands seven verbs
 
 The current tree now has:
 
 1. `run_world_task`,
 2. `spawn_world_worker`,
-3. `continue_world_worker`,
-4. `inspect_world_worker`,
-5. `cancel_world_work`,
-6. `stop_world_worker`
+3. `fork_world_worker`,
+4. `continue_world_worker`,
+5. `inspect_world_worker`,
+6. `cancel_world_work`,
+7. `stop_world_worker`
 
 as typed internal dispatch actions and routed internal control-plane surfaces.
 
 Repo-truth implication:
 
-1. Slices `32` through `37` collectively froze six real Family-1 verbs,
-2. the only design-stack verb still missing from live code is `fork_world_worker`,
-3. the next Family-1 question is no longer “which later verb lands first between stop/cancel/fork.”
+1. Slices `32` through `38` collectively froze seven real Family-1 verbs,
+2. the missing-verb gap is now closed for the current design-stack Family-1 vocabulary,
+3. the next Family-1 question is now about later widening work rather than which remaining verb lands first.
 
 ### 2. Active-ephemeral inspect/cancel is still design truth, not runtime truth
 
@@ -62,35 +74,35 @@ Repo-truth implication:
 2. it is a follow-on widening of already-landed verbs rather than the next missing Family-1 verb,
 3. it should not be mistaken for the smallest next slice just because the design docs leave room for it.
 
-### 3. `fork_world_worker` is absent across the live contract, router, and policy parser
+### 3. `fork_world_worker` is now present across the live contract, router, and policy parser
 
-The current tree still lacks:
+The current tree now has:
 
 1. `ForkWorldWorker` in `WorldDispatchActionV1`,
-2. any `fork_world_worker` route in the orchestrator dispatch match,
-3. policy-model allowlist validation that recognizes `fork_world_worker`,
-4. a typed fork payload/outcome contract.
+2. routed `fork_world_worker` handling in the orchestrator dispatch match,
+3. shell-local plus broker allowlist validation that recognizes `fork_world_worker`,
+4. a typed fork payload/outcome contract with explicit source and child identities.
 
 Repo-truth implication:
 
-1. `fork_world_worker` is now the only missing action in the Family-1 design verb set,
-2. the repo is no longer blocked on “more cancel” before it can honestly plan the missing fork verb,
-3. the post-Slice-37 grounding note should shift from cancel widening-first rhetoric to missing-verb-first rhetoric.
+1. `fork_world_worker` is no longer the missing action in the Family-1 design verb set,
+2. the repo is no longer blocked on fork-contract cleanup before it can honestly sequence later widening work,
+3. broader fork autonomy remains a follow-on scope decision rather than a missing contract/parser gap.
 
-### 4. The spawn/bootstrap seam already exposes the narrow implementation thread for fork
+### 4. The retained spawn/bootstrap seam now carries the landed narrow implementation thread for fork
 
 The live runtime already has:
 
 1. retained worker bootstrap through `spawn_world_worker`,
-2. `SpawnWorldWorkerOutcomeV1` fields for `parent_participant_id` and `resumed_from_participant_id`,
-3. transport/bootstrap requests that already carry those lineage-adjacent fields,
-4. current direct spawn behavior that leaves those fields `None`.
+2. a routed `fork_world_worker` path that reuses that bootstrap seam on Linux in v1,
+3. explicit authoritative source-to-child lineage persistence distinct from plain spawn semantics,
+4. direct spawn behavior that still leaves lineage-adjacent `parent_participant_id` and `resumed_from_participant_id` fields unset when there is no source worker.
 
 Repo-truth implication:
 
-1. the tree already has a natural child-allocation seam for fork,
-2. Slice `38` can stay narrow by reusing retained spawn/bootstrap truth instead of inventing a second retained allocation plane,
-3. the missing work is explicit source-to-child lineage and fork-specific routing, not basic retained-worker creation.
+1. the tree used the natural child-allocation seam for fork without inventing a second retained allocation plane,
+2. Slice `38` stayed narrow by reusing retained spawn/bootstrap truth instead of widening into a broader retained allocation redesign,
+3. the landed fork path is reviewable because explicit source-to-child lineage is now distinct from basic retained-worker creation.
 
 ### 5. Broader fork autonomy is still explicitly deferred
 
@@ -110,20 +122,20 @@ Repo-truth implication:
 
 The current honest Family-1 order is now:
 
-1. `fork_world_worker` as the next missing verb slice,
-2. broader worker-requested fork autonomy and approval policy as later work,
+1. `fork_world_worker` as the now-landed missing verb slice,
+2. broader worker-requested fork autonomy and approval policy as later work if still needed,
 3. active-ephemeral inspect/cancel widening as separate later identity-model work when exact task identity becomes runtime truth,
 4. Family-2 router/attach execution only after Family-1 control-plane semantics are frozen enough for downstream consumers.
 
-## Why `fork_world_worker` Is Now The Next Honest Slice
+## Why `fork_world_worker` Was The Next Honest Slice
 
-1. it is the only design-stack Family-1 verb still absent from the live typed contract and policy parser,
-2. the repo already froze retained-only inspect/cancel/stop semantics, so the missing-verb frontier moved forward,
-3. the retained spawn/bootstrap seam already exists and already carries lineage-adjacent fields that direct spawn leaves unset,
-4. host-initiated explicit fork can stay materially narrower than worker-requested autonomy by reusing existing action allowlisting and retained concurrency caps,
-5. active-ephemeral inspect/cancel widening would reopen exact task identity across already-landed verbs instead of closing the remaining verb gap.
+1. it was the only design-stack Family-1 verb still absent from the live typed contract and policy parser,
+2. the repo had already frozen retained-only inspect/cancel/stop semantics, so the missing-verb frontier had moved forward,
+3. the retained spawn/bootstrap seam already existed and already carried lineage-adjacent fields that direct spawn leaves unset,
+4. host-initiated explicit fork could stay materially narrower than worker-requested autonomy by reusing existing action allowlisting and retained concurrency caps,
+5. active-ephemeral inspect/cancel widening would have reopened exact task identity across already-landed verbs instead of closing the remaining verb gap.
 
-## Why Slice `38` Should Stay Narrower Than Full Fork Autonomy
+## Why Slice `38` Had To Stay Narrower Than Full Fork Autonomy
 
 Slice `38` should freeze:
 
@@ -134,7 +146,7 @@ Slice `38` should freeze:
 5. explicit source-to-child lineage in the typed fork outcome,
 6. worker-requested fork, fork recommendations, auto-fork, and approval/fork autonomy as explicitly deferred work.
 
-That is the smallest honest fork slice consistent with the live tree.
+That was the smallest honest fork slice consistent with the live tree, and it is now the landed Slice `38` posture.
 
 ## Reopen Rule
 
@@ -144,4 +156,4 @@ Reopen this ordering note only if one of these becomes true in follow-on groundi
 2. host-initiated fork cannot be isolated from worker-requested autonomy without immediate policy-schema widening,
 3. the retained spawn/bootstrap seam proves unable to carry exact source-to-child lineage without a larger architecture shift.
 
-If none of those conditions is true, Slice `38` should remain the narrow host-initiated `fork_world_worker` slice.
+If none of those conditions is true, Slice `38` should remain the landed narrow host-initiated `fork_world_worker` slice and later work should stay sequenced after it.

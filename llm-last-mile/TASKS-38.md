@@ -5,7 +5,11 @@ Source plan: [PLAN-38.md](./PLAN-38.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: proposed on `2026-06-02`
+Status: Packet 4 complete on `2026-06-02`; docs truth is aligned and the final validation wall is green
+Landed posture note: the typed fork contract, steering-policy allowlisting, exact-source retained-worker fork resolution, explicit source-to-child lineage, and Linux-routed retained-child allocation are landed repo-wide, but v1 fork remains host-initiated, exact-source, and retained-to-retained only.
+Validation note: final validation exposed one narrow in-scope stabilization follow-up in the landed Packet 4 commit:
+[`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) removed a nested `format!` from the fork-lineage rollback error path and accepted the corresponding `cargo fmt --all` normalization in adjacent test scaffolding;
+no broader runtime feature work or deferred later verbs were reopened.
 
 ## Execution Packets
 
@@ -28,14 +32,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the fork action, retained-only validation, and typed fork payload/outcome scaffolding
+- [x] Task 1.1: Add the fork action, retained-only validation, and typed fork payload/outcome scaffolding
   - Acceptance: `fork_world_worker` is a valid internal dispatch action; request validation requires retained mode and exact retained source `target_participant_id`; the contract exposes a typed fork payload plus a typed fork outcome that freezes explicit source and child identity expectations.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Widen steering-policy parsing so `fork_world_worker` can be explicitly allowlisted
+- [x] Task 1.2: Widen steering-policy parsing so `fork_world_worker` can be explicitly allowlisted
   - Acceptance: the effective policy/config model accepts `fork_world_worker` as an allowed world-dispatch action while keeping deny-by-default defaults unchanged when the action is absent; REPL-facing internal toolbox fork ingress continues to validate malformed requests and reject denied requests before the Packet 1 unsupported-dispatch stub. Packet 1 regression anchors are `orchestrator_world_dispatch_surface_routes_valid_fork_requests_into_packet_one_unsupported_dispatch`, `orchestrator_world_dispatch_surface_validates_fork_requests_before_packet_one_unsupported_dispatch`, and `orchestrator_world_dispatch_surface_rejects_denied_fork_requests_before_packet_one_unsupported_dispatch`.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -72,14 +76,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Add exact retained source-worker fork target resolution in the state store
+- [x] Task 2.1: Add exact retained source-worker fork target resolution in the state store
   - Acceptance: fork source-target resolution is same-session-only, same-world-binding-only, and authoritative-caller-only; it accepts only exact retained source workers that are still valid fork sources under the live lifecycle model.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Add explicit fork lineage truth for the child outcome/state surface
+- [x] Task 2.2: Add explicit fork lineage truth for the child outcome/state surface
   - Acceptance: authoritative runtime/session state can surface explicit source-to-child lineage without collapsing the fork path into plain spawn terminology; invalidated or terminal source workers fail closed with a stable, reviewable error path.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -109,7 +113,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add `fork_world_worker` handling to the internal dispatch path
+- [x] Task 3.1: Add `fork_world_worker` handling to the internal dispatch path
   - Acceptance: the orchestrator dispatch layer evaluates steering policy, resolves the exact source worker, and returns a typed fork outcome for exact retained source workers.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -119,7 +123,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs)
 
-- [ ] Task 3.2: Reuse the retained bootstrap seam to allocate the child and surface explicit lineage
+- [x] Task 3.2: Reuse the retained bootstrap seam to allocate the child and surface explicit lineage
   - Acceptance: allowed fork requests allocate one retained child through the existing retained bootstrap path, persist explicit source-to-child lineage, respect retained-worker caps, and do not widen into worker-requested autonomy, plain spawn-without-lineage, or active-ephemeral child mode.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -150,7 +154,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
+- [x] Task 4.1: Align planning/config truth without widening the slice
   - Acceptance: repo-local docs describe fork as internal, host-initiated, exact-source, and retained-to-retained in Slice `38`; no wording implies worker-requested fork, fork recommendations, auto-fork, active-ephemeral task identity widening, approval autonomy, or Family-2 execution have landed.
   - Verify:
     - manual diff review
@@ -161,7 +165,7 @@ Session goal:
     - [`llm-last-mile/PLAN-38.md`](./PLAN-38.md)
     - [`llm-last-mile/TASKS-38.md`](./TASKS-38.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker tests, and full workspace tests are green; no public CLI regression or unintended Family-2 coupling appears.
   - Verify:
     - `cargo fmt --all -- --check`
@@ -174,7 +178,9 @@ Session goal:
     - `cargo test -p substrate-broker -- --nocapture`
     - `cargo test --workspace -- --nocapture`
   - Expected files touched:
-    - validation-only unless narrow in-scope stabilization is required to keep the landed fork path green; any such follow-up must not reopen deferred autonomy, task-identity widening, or Family-2 work
+    - final validation exposed one narrow in-scope stabilization follow-up in the landed Packet 4 commit:
+      [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) removed a nested `format!` from the fork-lineage rollback error path and accepted the corresponding `cargo fmt --all` normalization in adjacent test scaffolding;
+      no broader runtime feature work or deferred later verbs were reopened
 
 ### Packet 4 Checkpoint
 

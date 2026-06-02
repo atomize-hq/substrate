@@ -262,7 +262,7 @@ async fn fork_world_worker(
                             "fork_lineage_persist_failed: failed to persist explicit fork lineage for child {} after authoritative registration, and automatic stop rollback did not reach durable closeout ({}; {})",
                             receipt.participant_id,
                             lineage_err_text,
-                            format!("{rollback_err:#}")
+                            rollback_err
                         );
                     }
                 }
@@ -5650,8 +5650,9 @@ mod tests {
                     write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
                     tokio::spawn(async move {
                         tokio::time::sleep(Duration::from_millis(50)).await;
-                        let (stop_tx, mut stop_rx) = crate::execution::agent_runtime::control::
-                            private_stop_request_channel();
+                        let (stop_tx, mut stop_rx) =
+                            crate::execution::agent_runtime::control::private_stop_request_channel(
+                            );
                         let mut stop_transport = crate::execution::agent_runtime::control::
                             register_private_stop_transport(
                                 &store_for_stop,

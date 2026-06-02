@@ -11,21 +11,23 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: proposed on `2026-06-02`
+Status: implemented on `2026-06-02`
+Landed posture note: the typed fork contract, steering-policy allowlisting, exact-source retained-worker fork resolution, explicit source-to-child lineage, and Linux-routed retained-child allocation are landed in the repo, but worker-requested fork, fork recommendations, auto-fork, approval/fork autonomy, active-ephemeral inspect/cancel widening, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation exposed one narrow in-scope stabilization follow-up in the landed commit: [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) removed a nested `format!` from the fork-lineage rollback error path and accepted the corresponding `cargo fmt --all` normalization in adjacent test scaffolding. That follow-up preserved the intended Slice `38` contract without widening into deferred autonomy, task-identity, or Family-2 work.
 
 ## Assumptions
 
 ASSUMPTIONS I'M MAKING:
 
 1. Slice `37` is fully landed on the current tree, so the live Family-1 action surface is `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
-2. The next honest Family-1 gap is the only design-stack verb still absent from live code and policy parsing: `fork_world_worker`.
+2. Slice `38` is now landed on the current tree, so the live Family-1 action surface now includes `fork_world_worker` as the seventh typed internal verb.
 3. Slice `38` remains internal-only and orchestrator-only. It does not widen public `substrate agent ...` caller surfaces and it does not convert deferred worker event classes into live autonomy.
-4. The narrowest honest v1 fork scope is host-initiated, exact-source, retained-to-retained fork only:
+4. The landed v1 fork scope is host-initiated, exact-source, retained-to-retained fork only:
    - exact retained source `target_participant_id` is mandatory,
    - the child remains in the same `orchestration_session_id`,
    - the child inherits the same authoritative `world_id` and `world_generation`,
    - the child is retained, not ephemeral, in v1.
-5. This slice should reuse the existing retained spawn/bootstrap seam where possible:
+5. This slice reuses the existing retained spawn/bootstrap seam:
    - `spawn_world_worker` bootstrap already exists,
    - spawn transport/outcome already carries `parent_participant_id` and `resumed_from_participant_id`,
    - direct spawn currently leaves those lineage-adjacent fields `None`,
@@ -48,12 +50,12 @@ Primary runtime story:
 5. the typed outcome returns explicit child identity plus exact source-to-child lineage,
 6. worker-requested fork, fork recommendations, auto-fork, active-ephemeral inspect/cancel widening, approval/fork autonomy, and Family-2 routing work remain deferred.
 
-Current repo-truth note:
+Current landed runtime note:
 
-1. `fork_world_worker` is absent from `WorldDispatchActionV1`, from the orchestrator dispatch router, and from policy-model action validation,
+1. `fork_world_worker` is present in `WorldDispatchActionV1`, in the orchestrator dispatch router, and in shell-local plus broker policy-model action validation,
 2. `inspect_world_worker` and `cancel_world_work` still reject `mode=ephemeral`, so active-ephemeral widening is not yet live contract truth,
 3. `RunWorldTaskOutcomeV1` still exposes no typed `task_run_id`, which keeps active-ephemeral exact targeting out of runtime truth,
-4. retained spawn/bootstrap already exists and already carries lineage-adjacent `parent_participant_id` / `resumed_from_participant_id` fields that direct spawn leaves unset,
+4. allowed Linux fork requests reuse the retained spawn/bootstrap seam, persist explicit source-to-child lineage, and keep the child in the same authoritative `orchestration_session_id`, `world_id`, and `world_generation`,
 5. deferred worker event classes still include `fork_request`, `fork_recommendation`, `fork_command`, `approval_request`, and `approval_response`, which keeps broader fork autonomy and approval flows out of Slice `38`.
 
 ## Tech Stack

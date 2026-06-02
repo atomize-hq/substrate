@@ -3,7 +3,9 @@
 Source spec: [SPEC-38-internal-retained-world-worker-fork.md](./SPEC-38-internal-retained-world-worker-fork.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: seventh implementation-bearing Family-1 control-plane slice  
-Status: proposed on `2026-06-02`
+Status: implemented on `2026-06-02`
+Landed posture note: the typed fork contract, steering-policy allowlisting, exact-source retained-worker fork resolution, explicit source-to-child lineage, and Linux-routed retained-child allocation are landed repo-wide, but v1 fork remains host-initiated, exact-source, and retained-to-retained only.
+Validation note: Packet 4's validation wall is green. Final validation exposed one narrow in-scope stabilization follow-up in the landed commit: [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) removed a nested `format!` from the fork-lineage rollback error path and accepted the corresponding `cargo fmt --all` normalization in adjacent test scaffolding. Those changes did not widen Slice `38` beyond the landed retained-to-retained fork path.
 
 ## Objective
 
@@ -20,7 +22,7 @@ This slice is complete only when all of the following are true:
 
 ## Plan Summary
 
-The repo already has the prerequisites that make `fork_world_worker` the next honest Family-1 slice:
+The repo already had the prerequisites that made `fork_world_worker` the next honest Family-1 slice:
 
 1. six typed internal dispatch actions are already landed: `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`,
 2. exact orchestrator/session/worker/world-binding validation is already a live contract,
@@ -29,7 +31,7 @@ The repo already has the prerequisites that make `fork_world_worker` the next ho
 5. spawn transport/outcome surfaces already carry lineage-adjacent `parent_participant_id` and `resumed_from_participant_id` fields even though direct spawn currently leaves them unset,
 6. retained worker caps are already enforced through the live steering-policy concurrency model.
 
-What the repo still lacks before Slice `38` can land is:
+What the repo lacked before Slice `38` landed was:
 
 1. a typed internal `fork_world_worker` action,
 2. policy-model allowlist support for the new action,
@@ -37,16 +39,24 @@ What the repo still lacks before Slice `38` can land is:
 4. typed child-lineage outcome truth,
 5. routed child allocation that reuses retained bootstrap without collapsing into plain spawn.
 
-That matters because the post-Slice-37 design vocabulary is now missing one verb, not missing another widening of already-landed verbs. The live repo still rejects `inspect_world_worker` and `cancel_world_work` in `mode=ephemeral` and still exposes no typed task identity on `run_world_task`, so active-ephemeral widening remains later identity-model work rather than the next missing verb slice.
+That mattered because the post-Slice-37 design vocabulary was missing one verb, not missing another widening of already-landed verbs. The live repo still rejects `inspect_world_worker` and `cancel_world_work` in `mode=ephemeral` and still exposes no typed task identity on `run_world_task`, so active-ephemeral widening remains later identity-model work rather than the next missing verb slice.
 
-The narrowest honest implementation order is therefore:
+The narrowest honest implementation order was therefore:
 
 1. freeze `fork_world_worker` as a typed retained-only action and allowlist surface first,
 2. add authoritative retained source-target resolution and explicit child-lineage truth,
 3. route fork through the internal dispatch layer by reusing the retained bootstrap seam,
 4. finish with docs and the validation wall.
 
-Broader worker-requested fork autonomy does not come first because the live runtime still treats `fork_request`, `fork_recommendation`, and related approval/control labels as deferred wire classes, and the current policy model still lacks dedicated fork-autonomy keys. Family 2 does not come first because it remains downstream of the Family-1 control-plane vocabulary.
+Broader worker-requested fork autonomy did not come first because the live runtime still treats `fork_request`, `fork_recommendation`, and related approval/control labels as deferred wire classes, and the current policy model still lacks dedicated fork-autonomy keys. Family 2 does not come first because it remains downstream of the Family-1 control-plane vocabulary.
+
+Current landed runtime note:
+
+1. `fork_world_worker` is now a routed internal action with retained-only validation and exact retained source targeting,
+2. steering policy can explicitly allow or deny `fork_world_worker` through the existing generic `agents.world_dispatch` allowlist surface,
+3. allowed Linux requests allocate one retained child through the existing retained bootstrap seam and return a typed fork outcome with explicit source and child identities,
+4. non-Linux builds fail closed with `unsupported_platform_or_posture`,
+5. worker-requested fork, fork recommendations, auto-fork, approval/fork autonomy, active-ephemeral inspect/cancel widening, and Family-2 router/attach work remain deferred.
 
 ## Locked Decisions
 
@@ -177,6 +187,7 @@ Primary touch surface:
 4. `llm-last-mile/PLAN-38.md`
 5. `llm-last-mile/TASKS-38.md`
 6. targeted test suites
+7. if final validation exposes narrow stabilization needed to keep the landed fork path green, bounded follow-up fixes may touch already-landed fork runtime surfaces without reopening deferred autonomy, task-identity widening, or Family-2 work
 
 What this packet must enforce:
 

@@ -301,12 +301,13 @@ world_fs:
 Internal host-to-world steering example:
 
 - This surface is internal-only and deny-by-default. The built-in defaults keep `agents.world_dispatch.enabled=false`, keep the allowlists empty, require exact same-session and same-world-binding truth, disallow capability narrowing, and set both current concurrency caps to `0`.
-- Current action ids accepted by `agents.world_dispatch.allowed_actions` are `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
+- Current action ids accepted by `agents.world_dispatch.allowed_actions` are `run_world_task`, `spawn_world_worker`, `fork_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
+- `fork_world_worker` remains internal, host-initiated, exact-source, and retained-to-retained in Slice `38`. On Linux in v1, an allowlisted exact-source fork request reuses the retained bootstrap seam to allocate one retained child in the same authoritative session and world binding, and returns explicit source-to-child lineage; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `inspect_world_worker` remains internal, retained-worker-only in v1, and returns an authoritative store-backed snapshot instead of invoking world-side execution transport. Routed snapshot delivery is currently supported only on Linux in v1; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `cancel_world_work` remains internal, retained-worker-only in Slice `37`, and distinct from `stop_world_worker`. On Linux in v1, an allowlisted exact-target cancel request uses the dedicated private owner cancel surface to interrupt active retained work in flight and wait for authoritative cancelled closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `stop_world_worker` remains internal, retained-worker-only in v1, and is a durable closeout action distinct from `cancel_world_work`. On Linux in v1, an allowlisted exact-target stop request reuses the existing private owner stop surface to drive authoritative stopped closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - Current mode ids are limited to `ephemeral` and `retained`.
-- This patch surface does not imply active-ephemeral inspect, active-ephemeral or dual-target cancel semantics, later mutating verbs like `fork_world_worker`, router-owned attach execution, or broader approval/fork autonomy policy.
+- This patch surface does not imply worker-requested fork, fork recommendations, auto-fork, active-ephemeral inspect, active-ephemeral or dual-target cancel semantics, router-owned attach execution, or broader approval/fork autonomy policy.
 
 ```yaml
 agents:
@@ -317,6 +318,7 @@ agents:
     allowed_actions:
       - run_world_task
       - spawn_world_worker
+      - fork_world_worker
       - continue_world_worker
       - inspect_world_worker
     allowed_modes:
