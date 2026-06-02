@@ -213,6 +213,16 @@ pub(crate) struct AgentRuntimeReplacementParticipantInit {
     pub lease_token: String,
 }
 
+#[allow(dead_code)]
+pub(crate) struct AgentRuntimeForkParticipantInit {
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub source_participant_id: String,
+    pub world: AgentRuntimeParticipantWorldBinding,
+    pub lease_token: String,
+}
+
 impl AgentRuntimeParticipantRecord {
     pub(crate) fn new(
         descriptor: &RuntimeSelectionDescriptor,
@@ -276,6 +286,29 @@ impl AgentRuntimeParticipantRecord {
                     orchestrator_participant_id: Some(orchestrator_participant_id),
                 },
                 world,
+                ownership_mode: AgentRuntimeOwnershipMode::MemberRuntime,
+            },
+        )
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn new_fork_child_participant(
+        descriptor: &RuntimeSelectionDescriptor,
+        init: AgentRuntimeForkParticipantInit,
+    ) -> anyhow::Result<Self> {
+        Self::build_participant(
+            descriptor,
+            AgentRuntimeParticipantInit {
+                orchestration_session_id: init.orchestration_session_id,
+                participant_id: init.participant_id,
+                role: MEMBER_ROLE.to_string(),
+                lease_token: init.lease_token,
+                lineage: AgentRuntimeParticipantLineage {
+                    parent_participant_id: Some(init.source_participant_id),
+                    resumed_from_participant_id: None,
+                    orchestrator_participant_id: Some(init.orchestrator_participant_id),
+                },
+                world: Some(init.world),
                 ownership_mode: AgentRuntimeOwnershipMode::MemberRuntime,
             },
         )
@@ -542,6 +575,18 @@ impl AgentRuntimeParticipantRecord {
             && self.handle.execution.scope == AgentExecutionScope::World
             && self.handle.world_id.as_deref() == Some(world_id)
             && self.handle.world_generation == Some(world_generation)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn fork_source_participant_id(&self) -> Option<&str> {
+        if self.handle.role != MEMBER_ROLE
+            || self.handle.execution.scope != AgentExecutionScope::World
+            || self.handle.resumed_from_participant_id.is_some()
+        {
+            return None;
+        }
+
+        self.handle.parent_participant_id.as_deref()
     }
 
     pub(crate) fn set_uaa_session_id(&mut self, backend_session_id: impl Into<String>) {
@@ -859,6 +904,38 @@ mod tests {
     }
 
     #[test]
+    fn fork_child_participant_constructor() {
+        let participant = AgentRuntimeParticipantRecord::new_fork_child_participant(
+            &descriptor(AgentExecutionScope::World),
+            AgentRuntimeForkParticipantInit {
+                orchestration_session_id: "sess_001".to_string(),
+                participant_id: "ash_004".to_string(),
+                orchestrator_participant_id: "ash_orchestrator".to_string(),
+                source_participant_id: "ash_source".to_string(),
+                world: AgentRuntimeParticipantWorldBinding {
+                    world_id: "world-19".to_string(),
+                    world_generation: 5,
+                },
+                lease_token: "lease_004".to_string(),
+            },
+        )
+        .expect("fork child constructor should succeed");
+
+        assert_eq!(participant.handle.participant_id, "ash_004");
+        assert_eq!(participant.handle.role, MEMBER_ROLE);
+        assert_eq!(
+            participant.handle.orchestrator_participant_id.as_deref(),
+            Some("ash_orchestrator")
+        );
+        assert_eq!(
+            participant.handle.parent_participant_id.as_deref(),
+            Some("ash_source")
+        );
+        assert_eq!(participant.handle.resumed_from_participant_id, None);
+        assert_eq!(participant.fork_source_participant_id(), Some("ash_source"));
+    }
+
+    #[test]
     fn invalidation_helper_marks_world_generation_rollover_tombstone() {
         let mut participant = AgentRuntimeParticipantRecord::new_member_participant(
             &descriptor(AgentExecutionScope::World),
@@ -976,6 +1053,60 @@ mod tests {
         );
         assert!(participant.internal.terminal_observed_at.is_some());
         assert_eq!(participant.internal.latest_run_id, None);
+    }
+
+    #[test]
+    fn fork_source_participant_id_distinguishes_fork_from_spawn_and_replacement() {
+        let spawned = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor(AgentExecutionScope::World),
+            "sess_001".to_string(),
+            "ash_spawn".to_string(),
+            "ash_orchestrator".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-17".to_string(),
+                world_generation: 3,
+            }),
+            "lease_spawn".to_string(),
+        )
+        .expect("spawned member");
+        assert_eq!(spawned.fork_source_participant_id(), None);
+
+        let replacement = AgentRuntimeParticipantRecord::new_replacement_participant(
+            &descriptor(AgentExecutionScope::World),
+            AgentRuntimeReplacementParticipantInit {
+                orchestration_session_id: "sess_001".to_string(),
+                participant_id: "ash_replacement".to_string(),
+                role: MEMBER_ROLE.to_string(),
+                orchestrator_participant_id: Some("ash_orchestrator".to_string()),
+                parent_participant_id: Some("ash_parent".to_string()),
+                resumed_from_participant_id: "ash_prev".to_string(),
+                world: Some(AgentRuntimeParticipantWorldBinding {
+                    world_id: "world-17".to_string(),
+                    world_generation: 3,
+                }),
+                lease_token: "lease_replacement".to_string(),
+            },
+        )
+        .expect("replacement member");
+        assert_eq!(replacement.fork_source_participant_id(), None);
+
+        let forked = AgentRuntimeParticipantRecord::new_fork_child_participant(
+            &descriptor(AgentExecutionScope::World),
+            AgentRuntimeForkParticipantInit {
+                orchestration_session_id: "sess_001".to_string(),
+                participant_id: "ash_fork".to_string(),
+                orchestrator_participant_id: "ash_orchestrator".to_string(),
+                source_participant_id: "ash_source".to_string(),
+                world: AgentRuntimeParticipantWorldBinding {
+                    world_id: "world-17".to_string(),
+                    world_generation: 3,
+                },
+                lease_token: "lease_fork".to_string(),
+            },
+        )
+        .expect("forked member");
+        assert_eq!(forked.fork_source_participant_id(), Some("ash_source"));
     }
 
     #[test]

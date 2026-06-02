@@ -10,7 +10,7 @@ use crate::execution::config_model::AgentExecutionScope;
 use super::dispatch_contract::ResolvedLaunchContract;
 use super::dispatch_contract::{AttachLaunchKnobs, AttachModePreference, HostExecutionClientStart};
 use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
-use super::session::AgentRuntimeSessionManifest;
+use super::session::{AgentRuntimeParticipantWorldBinding, AgentRuntimeSessionManifest};
 
 #[allow(dead_code)]
 const CANCELLED_INVALIDATION_REASON: &str = "cancelled";
@@ -414,6 +414,16 @@ impl OrchestrationSessionRecord {
 
     pub(crate) fn has_world_binding(&self) -> bool {
         self.world_id.is_some() && self.world_generation.is_some()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn authoritative_world_binding(
+        &self,
+    ) -> Option<AgentRuntimeParticipantWorldBinding> {
+        Some(AgentRuntimeParticipantWorldBinding {
+            world_id: self.world_id.clone()?,
+            world_generation: self.world_generation?,
+        })
     }
 
     pub(crate) fn host_attach_contract(&self) -> Option<&HostAttachContract> {
@@ -946,6 +956,31 @@ mod tests {
         assert_eq!(successor.capabilities, original.capabilities);
         assert_eq!(successor.attach_launch_knobs, original.attach_launch_knobs);
         assert_eq!(successor.continuity_uaa_session_id, None);
+    }
+
+    #[test]
+    fn authoritative_world_binding_projects_exact_world_identity() {
+        let manifest = manifest();
+        let mut session = OrchestrationSessionRecord::new(
+            "sess_001".to_string(),
+            "trace_001".to_string(),
+            "/workspace".to_string(),
+            &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
+        );
+
+        assert!(
+            session.authoritative_world_binding().is_none(),
+            "sessions without both world_id and world_generation must not project a binding"
+        );
+
+        session.set_world_binding("world-17", 4);
+        let binding = session
+            .authoritative_world_binding()
+            .expect("session should project authoritative world binding");
+
+        assert_eq!(binding.world_id, "world-17");
+        assert_eq!(binding.world_generation, 4);
     }
 
     #[test]
