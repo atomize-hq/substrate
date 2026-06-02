@@ -375,6 +375,26 @@ impl ResolvedInternalStopWorldDispatchTarget {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedInternalCancelWorldDispatchTarget {
+    pub session: OrchestrationSessionRecord,
+    #[allow(dead_code)]
+    pub caller_participant: AgentRuntimeParticipantRecord,
+    #[allow(dead_code)]
+    pub target_participant: AgentRuntimeParticipantRecord,
+    #[allow(dead_code)]
+    pub active_run_id: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ResolvedInternalCancelWorldDispatchTarget {
+    #[allow(dead_code)]
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PublicTurnTargetKind {
@@ -1371,6 +1391,145 @@ impl AgentRuntimeStateStore {
             session: authoritative.session,
             caller_participant: authoritative.participant,
             target_participant,
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    pub(crate) fn resolve_internal_cancel_world_dispatch_target(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+    ) -> Result<ResolvedInternalCancelWorldDispatchTarget> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            anyhow::bail!(
+                "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
+                orchestration_session_id
+            );
+        };
+
+        let authoritative =
+            resolve_authoritative_session_control(&record, orchestration_session_id)?;
+        if authoritative.participant.participant_id() != caller_participant_id {
+            anyhow::bail!(
+                "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
+                orchestration_session_id,
+                authoritative.participant.participant_id(),
+                caller_participant_id
+            );
+        }
+
+        let mut matching_participants = record
+            .participants
+            .iter()
+            .filter(|participant| participant.participant_id() == target_participant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if matching_participants.is_empty() {
+            anyhow::bail!(
+                "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if matching_participants.len() > 1 {
+            anyhow::bail!(
+                "ambiguous_target_participant: orchestration session {} has multiple retained worker records for {}",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+
+        let target_participant = matching_participants
+            .pop()
+            .expect("target participant count checked above");
+        if target_participant.handle.backend_id != target_backend_id {
+            anyhow::bail!(
+                "backend_mismatch: orchestration session {} retained worker {} backend is {} not {}",
+                orchestration_session_id,
+                target_participant_id,
+                target_participant.handle.backend_id,
+                target_backend_id
+            );
+        }
+        if target_participant.handle.role != MEMBER_ROLE
+            || target_participant.handle.execution.scope != AgentExecutionScope::World
+        {
+            anyhow::bail!(
+                "invalid_target_participant: orchestration session {} participant {} is not a retained world worker",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if target_participant
+            .handle
+            .orchestrator_participant_id
+            .as_deref()
+            != Some(authoritative.participant.participant_id())
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
+                orchestration_session_id,
+                target_participant_id,
+                authoritative.participant.participant_id()
+            );
+        }
+        if !target_participant.matches_authoritative_parent_world_binding(&authoritative.session) {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if !target_participant.handle.state.is_live()
+            || target_participant.internal.terminal_observed_at.is_some()
+        {
+            anyhow::bail!(
+                "target_already_terminal: orchestration session {} retained worker {} is already terminal ({})",
+                orchestration_session_id,
+                target_participant_id,
+                target_participant.reviewable_terminal_state_label()
+            );
+        }
+        if !target_participant.is_authoritative_live()
+            || !owner_process_is_alive(&target_participant)
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        if !target_participant.internal.cancel_supported {
+            anyhow::bail!(
+                "target_not_cancelable: orchestration session {} retained worker {} does not advertise cancel support",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+        let Some(active_run_id) = target_participant.internal.latest_run_id.clone() else {
+            anyhow::bail!(
+                "target_not_cancelable: orchestration session {} retained worker {} has no active cancelable work in flight",
+                orchestration_session_id,
+                target_participant_id
+            );
+        };
+        if target_participant.handle.state != super::session::AgentRuntimeSessionState::Running {
+            anyhow::bail!(
+                "target_not_cancelable: orchestration session {} retained worker {} has no active cancelable work in flight",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
+
+        Ok(ResolvedInternalCancelWorldDispatchTarget {
+            session: authoritative.session,
+            caller_participant: authoritative.participant,
+            target_participant,
+            active_run_id,
         })
     }
 
@@ -6990,6 +7149,318 @@ mod tests {
             assert_eq!(
                 err.to_string(),
                 "target_already_terminal: orchestration session sess_stop retained worker ash_stop is already terminal (invalidated)"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_returns_exact_running_retained_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect("resolve exact retained cancel target");
+
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_cancel");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_cancel");
+            assert_eq!(resolved.active_run_id, "run-cancel");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_non_authoritative_caller() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "ash_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("member caller must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "caller_not_authoritative: orchestration session sess_cancel authoritative orchestrator participant is orch_cancel not ash_cancel"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_cross_session_target() {
+        with_store(|store| {
+            let orchestrator_a = live_orchestrator("codex", "sess_cancel_a", "orch_cancel_a");
+            let mut parent_a = active_parent(&orchestrator_a);
+            parent_a.set_world_binding("world-17", 2);
+
+            let orchestrator_b = live_orchestrator("codex", "sess_cancel_b", "orch_cancel_b");
+            let mut parent_b = active_parent(&orchestrator_b);
+            parent_b.set_world_binding("world-17", 2);
+
+            let mut member_b = live_member(
+                "codex_world",
+                "sess_cancel_b",
+                "ash_cancel_b",
+                "orch_cancel_b",
+            );
+            member_b.transition_state(AgentRuntimeSessionState::Running);
+            member_b.internal.latest_run_id = Some("run-cancel".to_string());
+
+            store
+                .persist_orchestration_session(&parent_a)
+                .expect("persist session a");
+            store
+                .persist_participant(&orchestrator_a)
+                .expect("persist orchestrator a");
+            store
+                .persist_orchestration_session(&parent_b)
+                .expect("persist session b");
+            store
+                .persist_participant(&orchestrator_b)
+                .expect("persist orchestrator b");
+            store
+                .persist_participant(&member_b)
+                .expect("persist member b");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel_a",
+                    "orch_cancel_a",
+                    "ash_cancel_b",
+                    "cli:codex_world",
+                )
+                .expect_err("cross-session target must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_in_session: orchestration session sess_cancel_a has no exact retained worker ash_cancel_b"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_world_binding_drift() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+            member.handle.world_generation = Some(3);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("world binding drift must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "world_binding_mismatch: orchestration session sess_cancel retained worker ash_cancel no longer matches the authoritative world binding"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_idle_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("idle retained workers must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_cancelable: orchestration session sess_cancel retained worker ash_cancel has no active cancelable work in flight"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_worker_without_cancel_support() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+            member.internal.cancel_supported = false;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("workers without cancel support must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_cancelable: orchestration session sess_cancel retained worker ash_cancel does not advertise cancel support"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_worker_without_active_run_id() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("running workers without active run ids must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_cancelable: orchestration session sess_cancel retained worker ash_cancel has no active cancelable work in flight"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_already_cancelled_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+            member.mark_cancelled_terminal_state();
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("already-cancelled retained workers must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_already_terminal: orchestration session sess_cancel retained worker ash_cancel is already terminal (cancelled)"
             );
         });
     }

@@ -9,6 +9,9 @@ use super::mapping::{
 use super::orchestration_session::OrchestrationSessionRecord;
 use super::validator::RuntimeSelectionDescriptor;
 
+#[allow(dead_code)]
+const CANCELLED_TERMINATION_REASON: &str = "cancelled";
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct AgentRuntimeParticipantExecution {
     pub scope: AgentExecutionScope,
@@ -608,6 +611,37 @@ impl AgentRuntimeParticipantRecord {
         }
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn mark_cancelled_terminal_state(&mut self) {
+        self.mark_terminal_state(CANCELLED_TERMINATION_REASON);
+        self.transition_state(AgentRuntimeSessionState::Invalidated);
+        self.internal.latest_run_id = None;
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn has_cancelled_terminal_truth(&self) -> bool {
+        self.internal.terminal_observed_at.is_some()
+            && self.internal.termination_reason.as_deref() == Some(CANCELLED_TERMINATION_REASON)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn reviewable_terminal_state_label(&self) -> &'static str {
+        if self.has_cancelled_terminal_truth() {
+            return CANCELLED_TERMINATION_REASON;
+        }
+
+        match self.handle.state {
+            AgentRuntimeSessionState::Stopped => "stopped",
+            AgentRuntimeSessionState::Failed => "failed",
+            AgentRuntimeSessionState::Invalidated => "invalidated",
+            AgentRuntimeSessionState::Allocating
+            | AgentRuntimeSessionState::Ready
+            | AgentRuntimeSessionState::Running
+            | AgentRuntimeSessionState::Restarting
+            | AgentRuntimeSessionState::Stopping => "terminal",
+        }
+    }
+
     pub(crate) fn has_valid_ownership(&self) -> bool {
         self.internal.ownership_valid && self.can_advertise_live()
     }
@@ -906,6 +940,39 @@ mod tests {
         assert!(participant.attached_client_present());
         assert!(participant.is_resume_eligible());
         assert!(participant.internal.last_attached_at.is_some());
+    }
+
+    #[test]
+    fn mark_cancelled_terminal_state_surfaces_explicit_cancelled_truth() {
+        let mut participant = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor(AgentExecutionScope::World),
+            "sess_001".to_string(),
+            "ash_002".to_string(),
+            "ash_orchestrator".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-17".to_string(),
+                world_generation: 3,
+            }),
+            "lease_002".to_string(),
+        )
+        .expect("member constructor should succeed");
+        participant.mark_runtime_ownership_retained();
+        participant.set_uaa_session_id("uaa_session");
+        participant.transition_state(AgentRuntimeSessionState::Running);
+        participant.internal.latest_run_id = Some("run-cancel".to_string());
+
+        participant.mark_cancelled_terminal_state();
+
+        assert_eq!(
+            participant.handle.state,
+            AgentRuntimeSessionState::Invalidated
+        );
+        assert!(participant.has_cancelled_terminal_truth());
+        assert_eq!(participant.reviewable_terminal_state_label(), "cancelled");
+        assert_eq!(participant.internal.termination_reason.as_deref(), Some("cancelled"));
+        assert!(participant.internal.terminal_observed_at.is_some());
+        assert_eq!(participant.internal.latest_run_id, None);
     }
 
     #[test]

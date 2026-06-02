@@ -12,6 +12,9 @@ use super::dispatch_contract::{AttachLaunchKnobs, AttachModePreference, HostExec
 use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
 use super::session::AgentRuntimeSessionManifest;
 
+#[allow(dead_code)]
+const CANCELLED_INVALIDATION_REASON: &str = "cancelled";
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum OrchestrationSessionState {
@@ -591,6 +594,35 @@ impl OrchestrationSessionRecord {
         self.apply_posture(OrchestrationSessionPosture::Terminal);
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn mark_cancelled_terminal(&mut self) {
+        self.transition_state(OrchestrationSessionState::Invalidated);
+        self.mark_terminal(CANCELLED_INVALIDATION_REASON);
+        self.latest_run_id = None;
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn has_cancelled_terminal_truth(&self) -> bool {
+        self.state.is_terminal()
+            && self.invalidation_reason.as_deref() == Some(CANCELLED_INVALIDATION_REASON)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn reviewable_terminal_state_label(&self) -> &'static str {
+        if self.has_cancelled_terminal_truth() {
+            return CANCELLED_INVALIDATION_REASON;
+        }
+
+        match self.state {
+            OrchestrationSessionState::Stopped => "stopped",
+            OrchestrationSessionState::Failed => "failed",
+            OrchestrationSessionState::Invalidated => "invalidated",
+            OrchestrationSessionState::Allocating
+            | OrchestrationSessionState::Active
+            | OrchestrationSessionState::Stopping => "terminal",
+        }
+    }
+
     pub(crate) fn initialize_startup_prompt(&mut self, participant_id: impl Into<String>) {
         self.startup_prompt = Some(StartupPromptRecord {
             participant_id: participant_id.into(),
@@ -838,6 +870,29 @@ mod tests {
         session
             .validate_persisted_invariants()
             .expect("attention invariants");
+    }
+
+    #[test]
+    fn mark_cancelled_terminal_surfaces_explicit_cancelled_truth() {
+        let manifest = manifest();
+        let mut session = OrchestrationSessionRecord::new(
+            "sess_001".to_string(),
+            "trace_001".to_string(),
+            "/workspace".to_string(),
+            &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
+        );
+        session.latest_run_id = Some("run-cancel".to_string());
+
+        session.mark_cancelled_terminal();
+
+        assert_eq!(session.state, OrchestrationSessionState::Invalidated);
+        assert_eq!(session.posture, OrchestrationSessionPosture::Terminal);
+        assert!(session.has_cancelled_terminal_truth());
+        assert_eq!(session.reviewable_terminal_state_label(), "cancelled");
+        assert_eq!(session.invalidation_reason.as_deref(), Some("cancelled"));
+        assert!(session.closed_at.is_some());
+        assert_eq!(session.latest_run_id, None);
     }
 
     #[test]
