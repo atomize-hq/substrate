@@ -1,5 +1,11 @@
 # substrate-lift
 
+This document is the Lift crate-local architecture guide.
+
+The top-level source of truth for the broader code-intelligence program now lives at [docs/code-intelligence-program.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/docs/code-intelligence-program.md).
+
+Use this README for Lift-only seams, Lift-owned internals, and the Lift engine/app boundary. Do not use it as the top-level ownership map for the peer-crate program.
+
 `substrate-lift` is being reshaped around a deterministic code-intelligence engine.
 
 Before, `lift score` was the center and everything else existed to support it.
@@ -11,13 +17,13 @@ The biggest structural changes are:
 2. Generic seams for `query`, `patch/rewrite`, and `export/index` become first-class.
 3. The old generic resolve seam splits into:
    - generic fact derivation and provenance
-   - app-specific materializers like score, contract diff, and context pack
+   - app-specific materializers like score, contract diff, and index/export artifacts
 4. Legacy compatibility becomes an edge seam, not a core seam.
 
 The clean mental model is:
 
 - Engine seams stop at snapshots, parsed units, graph, topology, matches, facts, derived facts, patches, and exports.
-- App seams turn those engine artifacts into user-facing products like score, impact, policy findings, contract diff, context packs, and rewrites.
+- App seams turn those engine artifacts into user-facing products like score, impact, policy findings, contract diff, index/export artifacts, and rewrites.
 
 ## Updated top-level shape
 
@@ -47,7 +53,7 @@ flowchart TB
         I[13b. Impact]
         O[13c. Policy]
         C[13d. Contract]
-        CX[13e. Context and Index]
+        IX[13e. Index]
         QR[13f. Query and Rewrite]
     end
 
@@ -78,14 +84,14 @@ flowchart TB
     RT --> I
     RT --> O
     RT --> C
-    RT --> CX
+    RT --> IX
     RT --> QR
 
     D --> S
     G --> I
     D --> O
     D --> C
-    X --> CX
+    X --> IX
     Q --> QR
     W --> QR
 
@@ -140,7 +146,7 @@ crates/lift/
       impact/
       policy/
       contract/
-      context/
+      context/   # inherited placeholder, non-owning after the program pivot
       index/
       query_app/
       rewrite/
@@ -285,7 +291,7 @@ Detector families:
 - migration/backfill
 - platform/cross-platform
 
-Done when detectors emit only facts and evidence, and no detector writes into a score vector, contract report, or context pack directly.
+Done when detectors emit only facts and evidence, and no detector writes into a score vector, contract report, or index/export artifact directly.
 
 ### 9. Derive and provenance
 
@@ -293,7 +299,7 @@ Owns generic derivation rules, fact normalization, provenance graphs, conflict r
 
 Exposes `DerivedFacts`, `ProvenanceGraph`, and `DeriveEngine`.
 
-Must not own Lift scoring math, contract-report formatting, or context serialization.
+Must not own Lift scoring math, contract-report formatting, or peer-crate context serialization.
 
 Done when any derived fact can explain where it came from and what source facts or rules produced it.
 
@@ -315,13 +321,13 @@ Done when a rewrite recipe can turn a `MatchSet` into a deterministic preview pl
 
 ### 11. Export and index
 
-Owns stable export schemas, graph export, topology export, fact export, match export, context-pack export, index export, and canonical serialization.
+Owns stable export schemas, graph export, topology export, fact export, match export, index export, and canonical serialization.
 
-Exposes `ExportService`, `ContextPackV1`, `RepoIndexV1`, and `GraphExportV1`.
+Exposes `ExportService`, `RepoIndexV1`, and `GraphExportV1`.
 
 Must not own new analysis or user-facing business logic.
 
-Done when engine artifacts can be exported byte-stably from fixtures.
+Done when engine artifacts and Lift-owned export artifacts can be exported byte-stably from fixtures.
 
 ### 12. App runtime
 
@@ -380,15 +386,19 @@ Must not own general score logic.
 
 Done when `lift contract` can compare two revisions and emit a contract delta report.
 
-#### 13e. Context and index apps
+#### 13e. Index app and Lift export surfaces
 
-Context owns task-bounded packs for humans or agents, scope summaries, and selected files, symbols, and facts.
+Ownership of general context assembly moved to the peer `context` crate described in [docs/code-intelligence-program.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/docs/code-intelligence-program.md).
 
-Index owns repo-wide export jobs and reusable intelligence artifacts.
+`app::context` remains an inherited placeholder only. It is not the owning direction for future cross-crate context packet assembly.
+
+Index owns repo-wide export jobs and reusable Lift intelligence artifacts.
+
+Lift may still export artifacts that peer crates consume, but Lift does not regain ownership of program-level context packet assembly.
 
 Must not own graph building or serialization internals.
 
-Done when `lift context` and `lift index` can emit useful deterministic bundles from existing engine artifacts.
+Done when `lift index` and the Lift-owned export surfaces can emit useful deterministic bundles from existing engine artifacts.
 
 #### 13f. Query and rewrite apps
 
@@ -412,7 +422,6 @@ Commands:
 - `lift impact`
 - `lift policy`
 - `lift contract`
-- `lift context`
 - `lift index`
 - `lift query`
 - `lift rewrite`
@@ -491,7 +500,7 @@ flowchart LR
 6. `facts` plus `derive`
 7. `app::score`
 8. `app::impact` plus `app::policy`
-9. `export` plus `app::context` plus `app::index`
+9. `export` plus `app::index`
 10. `app::contract`
 11. `patch` plus `app::rewrite`
 12. `cli`
@@ -504,4 +513,4 @@ That sequence still gets `lift score` early, but avoids designing the entire cra
 
 The engine should stop at facts, matches, patches, and exports.
 
-The moment a lower seam starts knowing what a Lift score, contract delta, or context pack is, the boundaries start collapsing again. Keeping apps above the engine is what gives `lift` room to grow into a genuine code-intelligence toolkit instead of another tightly coupled scoring pipeline.
+The moment a lower seam starts knowing what a Lift score, contract delta, or Lift-owned export artifact is, the boundaries start collapsing again. Keeping apps above the engine is what gives `lift` room to grow into a genuine code-intelligence toolkit instead of another tightly coupled scoring pipeline.
