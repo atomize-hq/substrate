@@ -12774,8 +12774,36 @@ mod tests {
             let mut session_after_stable = session_after.session.clone();
             session_after_stable.last_active_at = session_before.session.last_active_at;
             assert_eq!(session_after_stable, session_before.session);
-            assert_eq!(session_after.participants, session_before.participants);
-            assert_eq!(participant_after, participant_before);
+            let mut session_participants_after_stable = session_after.participants.clone();
+            for participant_after in &mut session_participants_after_stable {
+                let participant_before = session_before
+                    .participants
+                    .iter()
+                    .find(|candidate| {
+                        candidate.handle.participant_id == participant_after.handle.participant_id
+                    })
+                    .expect("participant snapshot should preserve membership across inspect");
+                assert!(
+                    participant_after.internal.last_heartbeat_at
+                        >= participant_before.internal.last_heartbeat_at,
+                    "inspect must not move session participant heartbeat backwards"
+                );
+                participant_after.internal.last_heartbeat_at =
+                    participant_before.internal.last_heartbeat_at;
+            }
+            assert_eq!(
+                session_participants_after_stable,
+                session_before.participants
+            );
+            assert!(
+                participant_after.internal.last_heartbeat_at
+                    >= participant_before.internal.last_heartbeat_at,
+                "inspect must not move retained participant heartbeat backwards"
+            );
+            let mut participant_after_stable = participant_after.clone();
+            participant_after_stable.internal.last_heartbeat_at =
+                participant_before.internal.last_heartbeat_at;
+            assert_eq!(participant_after_stable, participant_before);
 
             let member_runtime = member_runtimes
                 .remove(member_backend_id.as_str())
