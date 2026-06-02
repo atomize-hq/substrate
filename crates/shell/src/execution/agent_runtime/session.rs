@@ -72,6 +72,8 @@ pub(crate) struct AgentRuntimeParticipantHandle {
     // compatibility mirrors for legacy reads only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_participant_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fork_source_participant_id: Option<String>,
     #[serde(skip)]
     pub parent_session_handle_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -172,6 +174,7 @@ impl TryFrom<AgentRuntimeParticipantRecordWire> for AgentRuntimeParticipantRecor
             world_generation: wire.handle.world_generation,
             parent_session_handle_id: wire.handle.parent_participant_id.clone(),
             parent_participant_id: wire.handle.parent_participant_id,
+            fork_source_participant_id: wire.handle.fork_source_participant_id,
             resumed_from_session_handle_id: wire.handle.resumed_from_participant_id.clone(),
             resumed_from_participant_id: wire.handle.resumed_from_participant_id,
             orchestrator_participant_id: wire.handle.orchestrator_participant_id,
@@ -296,7 +299,7 @@ impl AgentRuntimeParticipantRecord {
         descriptor: &RuntimeSelectionDescriptor,
         init: AgentRuntimeForkParticipantInit,
     ) -> anyhow::Result<Self> {
-        Self::build_participant(
+        let mut participant = Self::build_participant(
             descriptor,
             AgentRuntimeParticipantInit {
                 orchestration_session_id: init.orchestration_session_id,
@@ -311,7 +314,11 @@ impl AgentRuntimeParticipantRecord {
                 world: Some(init.world),
                 ownership_mode: AgentRuntimeOwnershipMode::MemberRuntime,
             },
-        )
+        )?;
+        participant.handle.fork_source_participant_id =
+            participant.handle.parent_participant_id.clone();
+        participant.validate()?;
+        Ok(participant)
     }
 
     #[allow(dead_code)]
@@ -371,6 +378,7 @@ impl AgentRuntimeParticipantRecord {
                 world_generation,
                 parent_session_handle_id: init.lineage.parent_participant_id.clone(),
                 parent_participant_id: init.lineage.parent_participant_id,
+                fork_source_participant_id: None,
                 resumed_from_session_handle_id: init.lineage.resumed_from_participant_id.clone(),
                 resumed_from_participant_id: init.lineage.resumed_from_participant_id,
                 orchestrator_participant_id: init.lineage.orchestrator_participant_id,
@@ -510,6 +518,26 @@ impl AgentRuntimeParticipantRecord {
         {
             anyhow::bail!("resumed_from_participant_id must not point to the participant itself");
         }
+        if let Some(fork_source_participant_id) = self.handle.fork_source_participant_id.as_deref()
+        {
+            if self.handle.role != MEMBER_ROLE
+                || self.handle.execution.scope != AgentExecutionScope::World
+            {
+                anyhow::bail!(
+                    "fork_source_participant_id requires a world-scoped member participant"
+                );
+            }
+            if self.handle.resumed_from_participant_id.is_some() {
+                anyhow::bail!(
+                    "fork_source_participant_id must not be set on replacement participants"
+                );
+            }
+            if self.handle.parent_participant_id.as_deref() != Some(fork_source_participant_id) {
+                anyhow::bail!(
+                    "fork_source_participant_id must match parent_participant_id when present"
+                );
+            }
+        }
 
         Ok(())
     }
@@ -579,14 +607,7 @@ impl AgentRuntimeParticipantRecord {
 
     #[allow(dead_code)]
     pub(crate) fn fork_source_participant_id(&self) -> Option<&str> {
-        if self.handle.role != MEMBER_ROLE
-            || self.handle.execution.scope != AgentExecutionScope::World
-            || self.handle.resumed_from_participant_id.is_some()
-        {
-            return None;
-        }
-
-        self.handle.parent_participant_id.as_deref()
+        self.handle.fork_source_participant_id.as_deref()
     }
 
     pub(crate) fn set_uaa_session_id(&mut self, backend_session_id: impl Into<String>) {
@@ -770,6 +791,8 @@ struct AgentRuntimeParticipantHandleWire {
     world_generation: Option<u64>,
     #[serde(default, alias = "parent_session_handle_id")]
     parent_participant_id: Option<String>,
+    #[serde(default)]
+    fork_source_participant_id: Option<String>,
     #[serde(default, alias = "resumed_from_session_handle_id")]
     resumed_from_participant_id: Option<String>,
     #[serde(default)]
@@ -931,6 +954,10 @@ mod tests {
             participant.handle.parent_participant_id.as_deref(),
             Some("ash_source")
         );
+        assert_eq!(
+            participant.handle.fork_source_participant_id.as_deref(),
+            Some("ash_source")
+        );
         assert_eq!(participant.handle.resumed_from_participant_id, None);
         assert_eq!(participant.fork_source_participant_id(), Some("ash_source"));
     }
@@ -1062,7 +1089,7 @@ mod tests {
             "sess_001".to_string(),
             "ash_spawn".to_string(),
             "ash_orchestrator".to_string(),
-            None,
+            Some("ash_source".to_string()),
             Some(AgentRuntimeParticipantWorldBinding {
                 world_id: "world-17".to_string(),
                 world_generation: 3,
@@ -1070,6 +1097,11 @@ mod tests {
             "lease_spawn".to_string(),
         )
         .expect("spawned member");
+        assert_eq!(
+            spawned.handle.parent_participant_id.as_deref(),
+            Some("ash_source")
+        );
+        assert_eq!(spawned.handle.fork_source_participant_id, None);
         assert_eq!(spawned.fork_source_participant_id(), None);
 
         let replacement = AgentRuntimeParticipantRecord::new_replacement_participant(
@@ -1107,6 +1139,34 @@ mod tests {
         )
         .expect("forked member");
         assert_eq!(forked.fork_source_participant_id(), Some("ash_source"));
+    }
+
+    #[test]
+    fn fork_source_participant_id_round_trips_through_json() {
+        let participant = AgentRuntimeParticipantRecord::new_fork_child_participant(
+            &descriptor(AgentExecutionScope::World),
+            AgentRuntimeForkParticipantInit {
+                orchestration_session_id: "sess_001".to_string(),
+                participant_id: "ash_fork".to_string(),
+                orchestrator_participant_id: "ash_orchestrator".to_string(),
+                source_participant_id: "ash_source".to_string(),
+                world: AgentRuntimeParticipantWorldBinding {
+                    world_id: "world-17".to_string(),
+                    world_generation: 3,
+                },
+                lease_token: "lease_fork".to_string(),
+            },
+        )
+        .expect("forked member");
+
+        let round_tripped: AgentRuntimeParticipantRecord =
+            serde_json::from_value(serde_json::to_value(&participant).expect("serialize"))
+                .expect("deserialize");
+
+        assert_eq!(
+            round_tripped.fork_source_participant_id(),
+            Some("ash_source")
+        );
     }
 
     #[test]
