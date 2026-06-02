@@ -548,7 +548,7 @@ pub(crate) struct CancelWorldWorkOutcomeV1 {
     pub target_backend_id: String,
     pub world_id: String,
     pub world_generation: u64,
-    pub state: WorldTaskTerminalStateV1,
+    pub cancelled: bool,
     pub summary: String,
 }
 
@@ -1488,17 +1488,16 @@ mod tests {
 
     use super::{
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
-        AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference,
-        CancelWorldWorkOutcomeV1, ContinueWorldWorkerEventClassV1, DispatchBaselineKind,
-        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
-        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
-        FieldValueOrigin, HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
-        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerCancelPayloadV1,
-        WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
-        WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference, CancelWorldWorkOutcomeV1,
+        ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
+        DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
+        DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
+        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
+        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
+        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
         WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
+        WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2828,7 +2827,7 @@ mod tests {
             target_backend_id: "cli:codex_world".to_string(),
             world_id: "world-37".to_string(),
             world_generation: 7,
-            state: WorldTaskTerminalStateV1::Cancelled,
+            cancelled: true,
             summary: "cancel closeout is distinct from stop".to_string(),
         });
 
@@ -2838,11 +2837,12 @@ mod tests {
             Some("cancel_world_work")
         );
         assert_eq!(
-            json.get("state").and_then(|value| value.as_str()),
-            Some("cancelled")
+            json.get("cancelled").and_then(|value| value.as_bool()),
+            Some(true)
         );
         assert!(json.get("closeout").is_none());
         assert!(json.get("snapshot").is_none());
+        assert!(json.get("state").is_none());
     }
 
     #[test]

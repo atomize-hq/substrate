@@ -1937,7 +1937,9 @@ mod tests {
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
     #[cfg(target_os = "linux")]
-    use crate::execution::agent_runtime::dispatch_contract::WorkerInspectPayloadV1;
+    use crate::execution::agent_runtime::dispatch_contract::{
+        WorkerCancelPayloadV1, WorkerInspectPayloadV1,
+    };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::agent_runtime::orchestration_session::{
@@ -2200,6 +2202,26 @@ mod tests {
             payload: WorldDispatchPayloadV1::WorkerStop(
                 crate::execution::agent_runtime::dispatch_contract::WorkerStopPayloadV1::default(),
             ),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_cancel_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_cancel".to_string()),
+            idempotency_key: Some("idem_cancel".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
+                reason: Some("operator requested cancel".to_string()),
+                graceful: Some(true),
+            }),
         }
     }
 
@@ -3477,6 +3499,37 @@ mod tests {
         assert_eq!(session_after.session, session_before.session);
         assert_eq!(session_after.participants, session_before.participants);
         assert_eq!(participant_after, participant_before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_cancel_world_work_reaches_packet_one_unsupported_dispatch_after_validation(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["cancel_world_work"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_cancel_world_dispatch_request())
+                .expect("prepare cancel dispatch request");
+        let err = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect_err("packet 1 cancel must fail closed at dispatch routing");
+
+        assert_eq!(
+            err.to_string(),
+            "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
+        );
     }
 
     #[cfg(target_os = "linux")]
