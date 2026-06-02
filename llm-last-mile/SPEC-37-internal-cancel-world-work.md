@@ -113,7 +113,7 @@ cargo test --workspace -- --nocapture
 This slice is expected to touch these areas:
 
 - `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
-  - add `cancel_world_work` action, typed cancel payload, typed cancel outcome, and retained-only request validation
+  - add `cancel_world_work` action, typed cancel payload, a typed cancel outcome that freezes explicit cancelled terminal state plus a cancel-closeout scaffold distinct from stop closeout, and retained-only request validation
 - `crates/shell/src/execution/policy_model.rs`
   - widen allowed action parsing/validation so the steering-policy layer can explicitly admit `cancel_world_work`
 - `crates/broker/src/policy.rs`
@@ -184,26 +184,35 @@ Test levels for this slice:
    - exact required fields,
    - retained-only mode validity,
    - typed cancel payload acceptance,
-   - exact target requirement
+   - exact target requirement,
+   - typed cancel outcome freeze with explicit cancelled terminal state and cancel-closeout scaffold distinct from stop closeout
 2. unit tests for steering-policy parsing and gating:
    - `cancel_world_work` may be allowlisted explicitly,
    - deny-by-default behavior remains intact when it is not allowlisted
-3. unit tests for authoritative retained-worker cancel target resolution:
+3. REPL-facing internal ingress/gating tests:
+   - well-formed cancel requests reach the Packet 1 unsupported-dispatch stub only after shared dispatch validation succeeds,
+   - malformed cancel requests fail contract validation before the Packet 1 unsupported-dispatch stub,
+   - denied cancel requests fail at steering-policy gating before the Packet 1 unsupported-dispatch stub
+   - regression anchors:
+     `orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_packet_one_unsupported_dispatch`,
+     `orchestrator_world_dispatch_surface_validates_cancel_requests_before_packet_one_unsupported_dispatch`,
+     `orchestrator_world_dispatch_surface_rejects_denied_cancel_requests_before_packet_one_unsupported_dispatch`
+4. unit tests for authoritative retained-worker cancel target resolution:
    - same-session only,
    - same-world-binding only,
    - authoritative orchestrator caller only,
    - exact retained worker only,
    - target must still be actively cancelable,
    - parked, stopped, failed, invalidated, or otherwise non-cancelable workers fail closed
-4. lifecycle tests for cancel-closeout truth:
+5. lifecycle tests for cancel-closeout truth:
    - cancelled state is distinct from stopped state,
    - retained session/participant records surface explicit cancelled terminal truth,
    - repeat cancel against already-terminal workers is denied
-5. integration tests for routed cancel outcomes:
+6. integration tests for routed cancel outcomes:
    - allowed cancel requests interrupt active retained work in flight,
    - runtime cleanup and stored state converge on the typed cancel result,
    - cancel does not widen into stop, continue, inspect, or fork behavior
-6. regression tests proving:
+7. regression tests proving:
    - active-ephemeral cancel is still rejected or unsupported in Slice `37`,
    - public CLI behavior does not regress,
    - no Family-2 ledger, inbox, or router widening is required

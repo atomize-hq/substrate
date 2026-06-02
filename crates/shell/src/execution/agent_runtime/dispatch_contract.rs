@@ -538,6 +538,15 @@ pub(crate) struct InspectWorldWorkerOutcomeV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RetainedWorkerCancelCloseoutV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub participant_state: Option<AgentRuntimeSessionState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_state: Option<OrchestrationSessionState>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct CancelWorldWorkOutcomeV1 {
     pub request_id: String,
     pub orchestration_session_id: String,
@@ -548,7 +557,9 @@ pub(crate) struct CancelWorldWorkOutcomeV1 {
     pub target_backend_id: String,
     pub world_id: String,
     pub world_generation: u64,
-    pub cancelled: bool,
+    pub state: WorldTaskTerminalStateV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closeout: Option<RetainedWorkerCancelCloseoutV1>,
     pub summary: String,
 }
 
@@ -1492,12 +1503,13 @@ mod tests {
         ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
         DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
         DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerInspectSnapshotV1,
-        RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
-        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
-        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
+        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerCancelPayloadV1,
+        WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
+        WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
         WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1,
+        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2827,7 +2839,11 @@ mod tests {
             target_backend_id: "cli:codex_world".to_string(),
             world_id: "world-37".to_string(),
             world_generation: 7,
-            cancelled: true,
+            state: WorldTaskTerminalStateV1::Cancelled,
+            closeout: Some(RetainedWorkerCancelCloseoutV1 {
+                participant_state: None,
+                session_state: None,
+            }),
             summary: "cancel closeout is distinct from stop".to_string(),
         });
 
@@ -2837,12 +2853,20 @@ mod tests {
             Some("cancel_world_work")
         );
         assert_eq!(
-            json.get("cancelled").and_then(|value| value.as_bool()),
-            Some(true)
+            json.get("state").and_then(|value| value.as_str()),
+            Some("cancelled")
         );
-        assert!(json.get("closeout").is_none());
+        let closeout = json.get("closeout").expect("closeout should serialize");
+        assert_eq!(
+            closeout.get("participant_state").and_then(|value| value.as_str()),
+            None
+        );
+        assert_eq!(
+            closeout.get("session_state").and_then(|value| value.as_str()),
+            None
+        );
         assert!(json.get("snapshot").is_none());
-        assert!(json.get("state").is_none());
+        assert!(json.get("cancelled").is_none());
     }
 
     #[test]

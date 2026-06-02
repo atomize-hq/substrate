@@ -74,6 +74,7 @@ That matters because the design stack still frames cancel as dual-target, but th
 Goal:
 
 1. freeze the cancel action, payload, and outcome contract,
+   with explicit cancelled terminal state and a cancel-closeout scaffold distinct from stop closeout,
 2. allow steering policy to explicitly admit `cancel_world_work`,
 3. keep deny-by-default behavior intact when the action is not allowlisted,
 4. freeze v1 scope as retained-worker-only.
@@ -97,7 +98,13 @@ Verification checkpoint:
 
 1. `cancel_world_work` is a valid internal dispatch action,
 2. it validates as retained-only with exact target identity,
-3. effective policy parsing can explicitly allow the action without relaxing deny-by-default defaults.
+3. the typed cancel outcome freezes explicit cancelled terminal state plus a cancel-closeout scaffold distinct from stop closeout,
+4. effective policy parsing can explicitly allow the action without relaxing deny-by-default defaults,
+5. REPL-facing internal toolbox cancel ingress still proves validation and steering-policy gating happen before the Packet 1 unsupported-dispatch stub.
+   Required regression anchors:
+   `orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_packet_one_unsupported_dispatch`,
+   `orchestrator_world_dispatch_surface_validates_cancel_requests_before_packet_one_unsupported_dispatch`,
+   `orchestrator_world_dispatch_surface_rejects_denied_cancel_requests_before_packet_one_unsupported_dispatch`
 
 ### Packet 2: Retained Cancel Target Resolution And Lifecycle Truth
 

@@ -29,17 +29,20 @@ Session goal:
 ### Tasks
 
 - [ ] Task 1.1: Add the cancel action, retained-only validation, and typed cancel payload/outcome scaffolding
-  - Acceptance: `cancel_world_work` is a valid internal dispatch action; request validation requires retained mode and exact `target_participant_id`; the contract exposes a typed cancel payload and cancel outcome suitable for retained-turn cancellation.
+  - Acceptance: `cancel_world_work` is a valid internal dispatch action; request validation requires retained mode and exact `target_participant_id`; the contract exposes a typed cancel payload plus a typed cancel outcome suitable for retained-turn cancellation that freezes explicit cancelled terminal state and a cancel-closeout scaffold distinct from stop closeout.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
 - [ ] Task 1.2: Widen steering-policy parsing so `cancel_world_work` can be explicitly allowlisted
-  - Acceptance: the effective policy/config model accepts `cancel_world_work` as an allowed world-dispatch action while keeping deny-by-default defaults unchanged when the action is absent.
+  - Acceptance: the effective policy/config model accepts `cancel_world_work` as an allowed world-dispatch action while keeping deny-by-default defaults unchanged when the action is absent; REPL-facing internal toolbox cancel ingress continues to validate malformed requests and reject denied requests before the Packet 1 unsupported-dispatch stub. Packet 1 regression anchors are `orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_packet_one_unsupported_dispatch`, `orchestrator_world_dispatch_surface_validates_cancel_requests_before_packet_one_unsupported_dispatch`, and `orchestrator_world_dispatch_surface_rejects_denied_cancel_requests_before_packet_one_unsupported_dispatch`.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
     - `cargo test -p substrate-broker -- --nocapture`
+    - `cargo test -p shell orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_packet_one_unsupported_dispatch -- --nocapture`
+    - `cargo test -p shell orchestrator_world_dispatch_surface_validates_cancel_requests_before_packet_one_unsupported_dispatch -- --nocapture`
+    - `cargo test -p shell orchestrator_world_dispatch_surface_rejects_denied_cancel_requests_before_packet_one_unsupported_dispatch -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/policy_model.rs`](../crates/shell/src/execution/policy_model.rs)
     - [`crates/broker/src/policy.rs`](../crates/broker/src/policy.rs)
@@ -53,7 +56,9 @@ Packet 1 is complete only when:
 
 1. `cancel_world_work` is a valid internal action,
 2. it validates as retained-only with exact target identity,
-3. steering-policy parsing can explicitly allow the action.
+3. the typed cancel outcome freezes explicit cancelled terminal state plus a cancel-closeout scaffold distinct from stop closeout,
+4. steering-policy parsing can explicitly allow the action,
+5. REPL-facing internal toolbox cancel ingress proves validation and steering-policy gating before the Packet 1 unsupported-dispatch stub through `orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_packet_one_unsupported_dispatch`, `orchestrator_world_dispatch_surface_validates_cancel_requests_before_packet_one_unsupported_dispatch`, and `orchestrator_world_dispatch_surface_rejects_denied_cancel_requests_before_packet_one_unsupported_dispatch`.
 
 Do not start Packet 2 until Packet 1 verification is green.
 
