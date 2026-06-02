@@ -27,9 +27,9 @@ use crate::execution::agent_runtime::control::{
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
     CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1,
-    ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
-    RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
-    WorkerContinuePayloadV1,
+    ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1,
+    InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1,
+    StopWorldWorkerOutcomeV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -183,11 +183,78 @@ async fn fork_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
-    let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
-    enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
-    anyhow::bail!(
-        "unsupported_dispatch_action: fork_world_worker dispatch routing is not available in packet 1"
-    );
+    let context = resolve_internal_dispatch_context(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!(
+            "unsupported_platform_or_posture: fork_world_worker world dispatch bootstrap is supported only on linux in v1"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let resolved = prepared
+            .store
+            .resolve_internal_fork_world_dispatch_target(
+                &prepared.request.orchestration_session_id,
+                &prepared.request.caller_participant_id,
+                prepared
+                    .request
+                    .target_participant_id
+                    .as_deref()
+                    .expect("validated fork request must include target_participant_id"),
+                &prepared.request.target_backend_id,
+            )
+            .map_err(map_fork_world_dispatch_resolution_error)?;
+        let contract = resolve_world_dispatch_contract(
+            &workspace_root,
+            &context,
+            &prepared.request,
+            "fork_world_worker",
+        )?;
+        let descriptor = materialize_runtime_descriptor(&contract).map_err(|err| {
+            anyhow::anyhow!(
+                "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+                contract.agent_id,
+                err.reason
+            )
+        })?;
+        let _concurrency_guard =
+            acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
+        let dispatch_workspace_root = std::env::current_dir()
+            .context("failed to resolve cwd for fork_world_worker bootstrap")?;
+        let transport_request = build_fork_world_worker_transport_request(
+            &prepared.request,
+            &resolved.source_participant,
+            &descriptor,
+        )?;
+        let receipt = execute_spawn_world_worker_stream(
+            &dispatch_workspace_root,
+            &transport_request,
+            &prepared.request,
+        )
+        .await?;
+        let lineage =
+            persist_fork_child_lineage(&prepared.store, &resolved, &receipt.participant_id)?;
+        let summary = summarize_fork_world_worker_result(&receipt, &lineage.source_participant_id);
+
+        Ok(WorldDispatchOutcomeV1::ForkWorldWorker(
+            ForkWorldWorkerOutcomeV1 {
+                request_id: prepared.request.request_id,
+                orchestration_session_id: lineage.orchestration_session_id,
+                action: WorldDispatchActionV1::ForkWorldWorker,
+                mode: prepared.request.mode,
+                orchestrator_participant_id: lineage.orchestrator_participant_id,
+                source_participant_id: lineage.source_participant_id,
+                child_participant_id: lineage.child_participant_id,
+                target_backend_id: receipt.backend_id,
+                world_id: lineage.world_id,
+                world_generation: lineage.world_generation,
+                summary,
+            },
+        ))
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -873,6 +940,19 @@ fn map_continue_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::E
 }
 
 #[cfg(target_os = "linux")]
+fn map_fork_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error {
+    let message = err.to_string();
+    if message.starts_with("stale_linkage:") || message.starts_with("target_already_terminal:") {
+        return steering_policy_denial(
+            WorldDispatchSteeringDenialV1::InvalidatedWorkerNotRoutable,
+            message,
+        );
+    }
+
+    map_world_dispatch_resolution_error(err)
+}
+
+#[cfg(target_os = "linux")]
 fn resolve_continue_world_dispatch_target_for_routing(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<PreparedOrchestratorWorldDispatch> {
@@ -941,7 +1021,7 @@ fn acquire_world_dispatch_concurrency_guard(
                 kind: WorldDispatchConcurrencyKind::Ephemeral,
             }))
         }
-        WorldDispatchActionV1::SpawnWorldWorker => {
+        WorldDispatchActionV1::SpawnWorldWorker | WorldDispatchActionV1::ForkWorldWorker => {
             let cap = steering_policy.max_live_retained_workers as usize;
             let reserved = tracker
                 .retained_bootstrap_by_session
@@ -967,8 +1047,7 @@ fn acquire_world_dispatch_concurrency_guard(
                 kind: WorldDispatchConcurrencyKind::RetainedBootstrap,
             }))
         }
-        WorldDispatchActionV1::ForkWorldWorker
-        | WorldDispatchActionV1::ContinueWorldWorker
+        WorldDispatchActionV1::ContinueWorldWorker
         | WorldDispatchActionV1::CancelWorldWork
         | WorldDispatchActionV1::InspectWorldWorker
         | WorldDispatchActionV1::StopWorldWorker => Ok(None),
@@ -1136,6 +1215,36 @@ fn build_spawn_world_worker_transport_request(
         participant_id: format!("ash_{}", Uuid::now_v7()),
         orchestrator_participant_id: request.caller_participant_id.clone(),
         parent_participant_id: None,
+        resumed_from_participant_id: None,
+        backend_id: descriptor.backend_id.clone(),
+        protocol: descriptor.protocol.clone(),
+        run_id: request.request_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        initial_prompt: Some(prompt.clone()),
+        backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
+        binary_path: descriptor.binary_path.display().to_string(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn build_fork_world_worker_transport_request(
+    request: &ValidatedWorldDispatchRequestV1,
+    source_participant: &AgentRuntimeParticipantRecord,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> Result<MemberDispatchTransportRequest> {
+    let WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 { prompt, .. }) = &request.payload
+    else {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action fork_world_worker requires matching typed payload"
+        );
+    };
+
+    Ok(MemberDispatchTransportRequest {
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        participant_id: format!("ash_{}", Uuid::now_v7()),
+        orchestrator_participant_id: request.caller_participant_id.clone(),
+        parent_participant_id: Some(source_participant.participant_id().to_string()),
         resumed_from_participant_id: None,
         backend_id: descriptor.backend_id.clone(),
         protocol: descriptor.protocol.clone(),
@@ -1975,6 +2084,51 @@ fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> Str
 }
 
 #[cfg(target_os = "linux")]
+fn persist_fork_child_lineage(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalForkWorldDispatchTarget,
+    child_participant_id: &str,
+) -> Result<crate::execution::agent_runtime::state_store::ResolvedInternalForkWorldDispatchLineage>
+{
+    let mut child = store
+        .load_participant(child_participant_id)?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing_fork_child_registration: fork_world_worker child {} was not persisted after authoritative registration",
+                child_participant_id
+            )
+        })?;
+    let source_participant_id = resolved.source_participant.participant_id();
+    if child.handle.parent_participant_id.as_deref() != Some(source_participant_id) {
+        anyhow::bail!(
+            "invalid_fork_lineage: authoritative child {} persisted parent_participant_id {:?} instead of source {}",
+            child_participant_id,
+            child.handle.parent_participant_id,
+            source_participant_id
+        );
+    }
+    child.handle.fork_source_participant_id = Some(source_participant_id.to_string());
+    store.persist_participant(&child).with_context(|| {
+        format!(
+            "failed to persist explicit fork lineage for child {}",
+            child_participant_id
+        )
+    })?;
+    resolved.project_child_lineage(&child)
+}
+
+#[cfg(target_os = "linux")]
+fn summarize_fork_world_worker_result(
+    receipt: &SpawnWorldWorkerReceipt,
+    source_participant_id: &str,
+) -> String {
+    format!(
+        "fork_world_worker launched retained child {} from source {} on backend {}; launch receipt is authoritative and explicit source-to-child lineage is preserved",
+        receipt.participant_id, source_participant_id, receipt.backend_id
+    )
+}
+
+#[cfg(target_os = "linux")]
 fn summarize_continue_world_worker_result(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     exit_code: i32,
@@ -2142,9 +2296,9 @@ mod tests {
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
     #[cfg(target_os = "linux")]
-    use crate::execution::agent_runtime::AgentRuntimeSessionState;
-    #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::{AgentRuntimeSessionState, PURE_AGENT_PROTOCOL};
     use crate::execution::agent_runtime::{
         TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
     };
@@ -2309,6 +2463,24 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn write_runtime_inventory_entry(
+        substrate_home: &Path,
+        agent_id: &str,
+        scope: AgentExecutionScope,
+    ) {
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("create agents dir");
+        let scope = match scope {
+            AgentExecutionScope::Host => "host",
+            AgentExecutionScope::World => "world",
+        };
+        let raw = format!(
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: codex\n    binary: /bin/sh\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: true\n"
+        );
+        fs::write(agents_dir.join(format!("{agent_id}.yaml")), raw).expect("write agent file");
+    }
+
+    #[cfg(target_os = "linux")]
     fn write_world_dispatch_policy(
         substrate_home: &Path,
         enabled: bool,
@@ -2322,6 +2494,11 @@ mod tests {
             .map(|value| format!("      - \"{value}\""))
             .collect::<Vec<_>>()
             .join("\n");
+        let agent_backends = allowed_backends
+            .iter()
+            .map(|value| format!("    - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
         let actions = allowed_actions
             .iter()
             .map(|value| format!("      - \"{value}\""))
@@ -2333,7 +2510,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let policy = format!(
-            "id: test-global-policy\nname: Test Global Policy\nagents:\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n"
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n"
         );
         fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
     }
@@ -2363,6 +2540,34 @@ mod tests {
         sample_continue_world_dispatch_request()
             .validate()
             .expect("validated continue request")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_fork_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_fork".to_string()),
+            idempotency_key: Some("idem_fork".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ForkWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+                prompt: "split off a child worker".to_string(),
+                fork_reason: Some("parallelize investigation".to_string()),
+                fork_strategy: Some("exact_source_retained".to_string()),
+            }),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_fork_request() -> ValidatedWorldDispatchRequestV1 {
+        sample_fork_world_dispatch_request()
+            .validate()
+            .expect("validated fork request")
     }
 
     #[cfg(target_os = "linux")]
@@ -2737,6 +2942,32 @@ mod tests {
 
         let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
             panic!("expected continue_world_worker outcome envelope");
+        };
+        outcome
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn dispatch_real_fork_world_worker_request(
+        store: &AgentRuntimeStateStore,
+        request_id: &str,
+        idempotency_key: &str,
+        world_id: &str,
+        world_generation: u64,
+    ) -> ForkWorldWorkerOutcomeV1 {
+        let mut request = sample_fork_world_dispatch_request();
+        request.request_id = Some(request_id.to_string());
+        request.idempotency_key = Some(idempotency_key.to_string());
+        request.world_id = Some(world_id.to_string());
+        request.world_generation = Some(world_generation);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(store, request).expect("prepare fork dispatch");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch prepared fork request");
+
+        let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
+            panic!("expected fork_world_worker outcome envelope");
         };
         outcome
     }
@@ -4795,6 +5026,33 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dispatch_contract_steering_policy_rejects_fork_when_live_retained_worker_cap_is_exceeded() {
+        let mut policy = sample_world_dispatch_policy();
+        policy
+            .agents_world_dispatch_allowed_actions
+            .push("fork_world_worker".to_string());
+        policy.agents_world_dispatch_max_live_retained_workers = 1;
+
+        let prepared = PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
+            request: sample_fork_request(),
+            session: sample_session(),
+            caller_participant: sample_orchestrator_participant(),
+            target_participant: None,
+            live_retained_worker_count: 1,
+        };
+
+        let err = acquire_world_dispatch_concurrency_guard(&prepared, &policy)
+            .expect_err("fork above retained worker cap must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_dispatch; authoritative live count is 1"
+        );
+    }
+
     #[test]
     fn run_world_task_summary_mentions_terminal_registered_metadata_without_retention() {
         let summary = summarize_run_world_task_result("cli:codex_world", 0, true);
@@ -4836,6 +5094,44 @@ mod tests {
         assert!(
             transport.participant_id.starts_with("ash_"),
             "retained worker receipt should use participant-style identity: {}",
+            transport.participant_id
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn build_fork_world_worker_transport_request_preserves_exact_source_lineage() {
+        let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
+            agent_id: "codex_world".to_string(),
+            backend_id: "cli:codex_world".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            execution_scope: crate::execution::config_model::AgentExecutionScope::World,
+            binary_path: PathBuf::from("/bin/true"),
+        };
+
+        let request = sample_fork_request();
+        let source = sample_member_participant();
+        let transport = build_fork_world_worker_transport_request(&request, &source, &descriptor)
+            .expect("transport");
+
+        assert_eq!(transport.orchestration_session_id, "sess_dispatch");
+        assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(
+            transport.parent_participant_id.as_deref(),
+            Some("ash_member")
+        );
+        assert_eq!(transport.resumed_from_participant_id, None);
+        assert_eq!(transport.backend_id, "cli:codex_world");
+        assert_eq!(transport.world_id, "world-17");
+        assert_eq!(transport.world_generation, 2);
+        assert_eq!(
+            transport.initial_prompt.as_deref(),
+            Some("split off a child worker")
+        );
+        assert!(
+            transport.participant_id.starts_with("ash_"),
+            "retained fork child should use participant-style identity: {}",
             transport.participant_id
         );
     }
@@ -4948,6 +5244,183 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_fork_world_worker_returns_typed_lineage_after_authoritative_bootstrap(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["fork_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex_world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let store_for_server = store.clone();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("member dispatch execute request");
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("member dispatch request");
+                    let descriptor =
+                        crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
+                            agent_id: execute_request.agent_id.clone(),
+                            backend_id: member_dispatch.backend_id.clone(),
+                            backend_kind: match member_dispatch.resolved_runtime.backend_kind {
+                                MemberRuntimeBackendKindV1::Codex => AgentRuntimeBackendKind::Codex,
+                                MemberRuntimeBackendKindV1::ClaudeCode => {
+                                    AgentRuntimeBackendKind::ClaudeCode
+                                }
+                            },
+                            protocol: member_dispatch.protocol.clone(),
+                            execution_scope:
+                                crate::execution::config_model::AgentExecutionScope::World,
+                            binary_path: PathBuf::from(
+                                &member_dispatch.resolved_runtime.binary_path,
+                            ),
+                        };
+                    let child = AgentRuntimeParticipantRecord::new_member_participant(
+                        &descriptor,
+                        member_dispatch.orchestration_session_id.clone(),
+                        member_dispatch.participant_id.clone(),
+                        member_dispatch.orchestrator_participant_id.clone(),
+                        member_dispatch.parent_participant_id.clone(),
+                        Some(
+                            crate::execution::agent_runtime::session::AgentRuntimeParticipantWorldBinding {
+                                world_id: member_dispatch.world_id.clone(),
+                                world_generation: member_dispatch.world_generation,
+                            },
+                        ),
+                        format!("lease_{}", member_dispatch.participant_id),
+                    )
+                    .expect("authoritative child participant");
+                    store_for_server
+                        .persist_participant(&child)
+                        .expect("persist authoritative child participant");
+
+                    let start =
+                        serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "spn_fork".to_string(),
+                        })
+                        .expect("serialize start frame");
+                    let event = substrate_common::agent_events::AgentEvent {
+                        ts: chrono::Utc::now(),
+                        kind: AgentEventKind::Registered,
+                        data: json!({}),
+                        agent_id: execute_request.agent_id,
+                        orchestration_session_id: member_dispatch.orchestration_session_id.clone(),
+                        run_id: member_dispatch.run_id.clone(),
+                        parent_run_id: None,
+                        participant_id: Some(member_dispatch.participant_id.clone()),
+                        parent_participant_id: member_dispatch.parent_participant_id.clone(),
+                        resumed_from_participant_id: member_dispatch
+                            .resumed_from_participant_id
+                            .clone(),
+                        backend_id: Some(member_dispatch.backend_id.clone()),
+                        thread_id: None,
+                        role: Some("member".to_string()),
+                        world_id: Some(member_dispatch.world_id.clone()),
+                        world_generation: Some(member_dispatch.world_generation),
+                        cmd_id: None,
+                        span_id: Some("spn_fork".to_string()),
+                        channel: None,
+                        identity_tuple: None,
+                        placement_posture: None,
+                        project: None,
+                    };
+                    let registered =
+                        serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            event,
+                        })
+                        .expect("serialize registered frame");
+                    let mut body = Vec::new();
+                    body.extend_from_slice(&start);
+                    body.push(b'\n');
+                    body.extend_from_slice(&registered);
+                    body.push(b'\n');
+                    write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
+                    continue;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let outcome = dispatch_real_fork_world_worker_request(
+            &store,
+            "req_fork_lineage",
+            "idem_fork_lineage",
+            "world-17",
+            2,
+        )
+        .await;
+
+        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(outcome.source_participant_id, "ash_member");
+        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+        assert!(
+            outcome.child_participant_id.starts_with("ash_"),
+            "fork child should be allocated through the retained bootstrap seam: {}",
+            outcome.child_participant_id
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("explicit source-to-child lineage is preserved"),
+            "fork summary should stay explicit about lineage: {}",
+            outcome.summary
+        );
+
+        let child = store
+            .load_participant(&outcome.child_participant_id)
+            .expect("load persisted fork child")
+            .expect("persisted fork child");
+        assert_eq!(
+            child.handle.parent_participant_id.as_deref(),
+            Some("ash_member")
+        );
+        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+
+        server.abort();
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn spawn_world_worker_summary_keeps_follow_up_out_of_scope() {
         let summary = summarize_spawn_world_worker_result(&SpawnWorldWorkerReceipt {
@@ -4963,6 +5436,28 @@ mod tests {
         assert!(
             summary.contains("ongoing steering remains out of scope"),
             "summary must stay explicit about Packet 3 scope: {summary}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fork_world_worker_summary_keeps_lineage_explicit() {
+        let summary = summarize_fork_world_worker_result(
+            &SpawnWorldWorkerReceipt {
+                participant_id: "ash_child_receipt".to_string(),
+                orchestrator_participant_id: "orch_dispatch".to_string(),
+                parent_participant_id: Some("ash_member".to_string()),
+                resumed_from_participant_id: None,
+                backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+                launch_span_id: "spn_fork".to_string(),
+            },
+            "ash_member",
+        );
+        assert!(
+            summary.contains("explicit source-to-child lineage is preserved"),
+            "summary must keep explicit fork lineage in scope: {summary}"
         );
     }
 
