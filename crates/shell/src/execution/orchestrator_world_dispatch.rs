@@ -2115,6 +2115,26 @@ fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> Str
 }
 
 #[cfg(target_os = "linux")]
+async fn request_private_stop_after_transport_registration(
+    transport_path: &Path,
+) -> Result<PrivateStopOutcome> {
+    match request_private_stop(transport_path).await {
+        Ok(outcome) => Ok(outcome),
+        Err(err) if !transport_path.exists() => {
+            let started_at = Instant::now();
+            while !transport_path.exists() {
+                if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
+                    return Err(err);
+                }
+                tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
+            }
+            request_private_stop(transport_path).await
+        }
+        Err(err) => Err(err),
+    }
+}
+
+#[cfg(target_os = "linux")]
 async fn rollback_failed_fork_child_launch(
     store: &AgentRuntimeStateStore,
     resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalForkWorldDispatchTarget,
@@ -2125,7 +2145,7 @@ async fn rollback_failed_fork_child_launch(
         resolved.orchestration_session_id(),
         child_participant_id,
     );
-    let transport_result = request_private_stop(&transport_path).await;
+    let transport_result = request_private_stop_after_transport_registration(&transport_path).await;
     let closeout = wait_for_stop_world_worker_closeout(
         store,
         resolved.orchestration_session_id(),
@@ -5584,49 +5604,9 @@ mod tests {
                         .persist_participant(&child)
                         .expect("persist authoritative child participant");
 
-                    let (stop_tx, mut stop_rx) =
-                        crate::execution::agent_runtime::control::private_stop_request_channel();
-                    let mut stop_transport =
-                        crate::execution::agent_runtime::control::register_private_stop_transport(
-                            &store_for_server,
-                            &member_dispatch.orchestration_session_id,
-                            &member_dispatch.participant_id,
-                            stop_tx,
-                        )
-                        .await
-                        .expect("register private stop transport for rollback");
                     let store_for_stop = store_for_server.clone();
                     let child_id = member_dispatch.participant_id.clone();
                     let session_id = member_dispatch.orchestration_session_id.clone();
-                    tokio::spawn(async move {
-                        let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
-                            .await
-                            .expect("timed out waiting for rollback stop request")
-                            .expect("rollback stop request");
-                        let mut session = store_for_stop
-                            .load_orchestration_session(&session_id)
-                            .expect("load orchestration session for rollback closeout")
-                            .expect("authoritative orchestration session for rollback closeout");
-                        let mut participant = store_for_stop
-                            .load_participant(&child_id)
-                            .expect("load retained child for rollback closeout")
-                            .expect("authoritative retained child for rollback closeout");
-                        participant.transition_state(AgentRuntimeSessionState::Stopped);
-                        participant.mark_terminal_state("fork lineage rollback");
-                        participant.touch_heartbeat();
-                        session.touch_active();
-                        crate::execution::agent_runtime::control::persist_runtime_snapshots(
-                            &store_for_stop,
-                            &session,
-                            &participant,
-                        )
-                        .expect("persist retained rollback closeout");
-                        let _ = request.response_tx.send(
-                            crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted,
-                        );
-                        stop_transport.close().await;
-                    });
-
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
                             span_id: "spn_fork".to_string(),
@@ -5668,6 +5648,46 @@ mod tests {
                     body.extend_from_slice(&registered);
                     body.push(b'\n');
                     write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        let (stop_tx, mut stop_rx) = crate::execution::agent_runtime::control::
+                            private_stop_request_channel();
+                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            register_private_stop_transport(
+                                &store_for_stop,
+                                &session_id,
+                                &child_id,
+                                stop_tx,
+                            )
+                            .await
+                            .expect("register private stop transport for rollback");
+                        let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
+                            .await
+                            .expect("timed out waiting for rollback stop request")
+                            .expect("rollback stop request");
+                        let mut session = store_for_stop
+                            .load_orchestration_session(&session_id)
+                            .expect("load orchestration session for rollback closeout")
+                            .expect("authoritative orchestration session for rollback closeout");
+                        let mut participant = store_for_stop
+                            .load_participant(&child_id)
+                            .expect("load retained child for rollback closeout")
+                            .expect("authoritative retained child for rollback closeout");
+                        participant.transition_state(AgentRuntimeSessionState::Stopped);
+                        participant.mark_terminal_state("fork lineage rollback");
+                        participant.touch_heartbeat();
+                        session.touch_active();
+                        crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                            &store_for_stop,
+                            &session,
+                            &participant,
+                        )
+                        .expect("persist retained rollback closeout");
+                        let _ = request.response_tx.send(
+                            crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted,
+                        );
+                        stop_transport.close().await;
+                    });
                     continue;
                 }
 

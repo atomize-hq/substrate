@@ -11637,7 +11637,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_routes_valid_fork_requests_into_packet_one_unsupported_dispatch(
+    fn orchestrator_world_dispatch_surface_routes_valid_fork_requests_into_packet_three_retained_bootstrap_launch(
     ) {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
@@ -11794,7 +11794,7 @@ mod tests {
             );
             assert!(
                 !err.to_string().contains("unsupported_dispatch_action"),
-                "allowed fork must no longer fall into the Packet 1 unsupported stub: {err}"
+                "allowed fork must no longer fall into the legacy unsupported dispatch stub: {err}"
             );
             assert!(
                 !err.to_string().contains("action_not_allowed:"),
