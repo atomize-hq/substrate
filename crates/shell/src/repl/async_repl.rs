@@ -11647,6 +11647,7 @@ mod tests {
         fs::create_dir_all(&substrate_home).expect("substrate home");
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -11666,6 +11667,11 @@ mod tests {
             runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
+        fs::write(
+            agents_dir.join("codex_world.yaml"),
+            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+        )
+        .expect("write codex_world agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -11703,6 +11709,34 @@ mod tests {
             )
             .await
             .expect("register toolbox transport");
+            let selected_descriptor =
+                select_member_runtime_descriptor_for_backend(&startup_context, "cli:codex_world")
+                    .expect("member selection should succeed")
+                    .expect("member runtime should be selected");
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor,
+                &world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_internal_dispatch_member_runtime(
+                member_prepared,
+                "internal fork source bootstrap".to_string(),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+            let member_manifest = runtime_manifest_snapshot(&member_runtime);
+            let member_backend_id = runtime_backend_id(&member_runtime);
+            wait_for_persisted_participant_snapshot(
+                &startup_context.store,
+                &member_manifest.handle.participant_id,
+                AgentRuntimeSessionState::Running,
+            )
+            .await;
 
             let request = WorldDispatchRequestV1 {
                 request_id: Some("req_toolbox_fork_unsupported".to_string()),
@@ -11714,7 +11748,7 @@ mod tests {
                 action: WorldDispatchActionV1::ForkWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
                 target_backend_id: Some("cli:codex_world".to_string()),
-                target_participant_id: Some("ash-worker-source-38".to_string()),
+                target_participant_id: Some(member_manifest.handle.participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
                 payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
@@ -11726,6 +11760,7 @@ mod tests {
             let transport_path =
                 internal_toolbox_transport_path(&startup_context.orchestration_session_id());
             let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            member_runtimes.insert(member_backend_id.clone(), member_runtime);
             let request_task = tokio::spawn({
                 let transport_path = transport_path.clone();
                 let request = request.clone();
@@ -11749,13 +11784,17 @@ mod tests {
                 .await
                 .expect("timed out waiting for internal toolbox response")
                 .expect("internal toolbox task should join")
-                .expect_err("fork should reach the packet 1 unsupported stub");
+                .expect_err("fork should route into retained bootstrap once Packet 3 dispatch wiring is live");
 
             assert!(
                 err.to_string().contains(
-                    "unsupported_dispatch_action: fork_world_worker dispatch routing is not available in packet 1"
+                    "failed to launch spawn_world_worker over world member dispatch"
                 ),
-                "unexpected fork unsupported error: {err}"
+                "allowed fork should now fail only at retained bootstrap launch in this harness: {err}"
+            );
+            assert!(
+                !err.to_string().contains("unsupported_dispatch_action"),
+                "allowed fork must no longer fall into the Packet 1 unsupported stub: {err}"
             );
             assert!(
                 !err.to_string().contains("action_not_allowed:"),
@@ -11765,9 +11804,19 @@ mod tests {
                 !err.to_string().contains("missing_dispatch_field:"),
                 "well-formed fork should not fail contract validation: {err}"
             );
+            assert!(
+                !err.to_string().contains("target_not_in_session:"),
+                "allowed fork with a live retained source should not fail exact-source resolution: {err}"
+            );
 
             shutdown_host_orchestrator_runtime(
                 host_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            shutdown_all_member_runtimes(
+                &mut member_runtimes,
                 &ReplPrinter::Stdout,
                 &mut telemetry,
             )

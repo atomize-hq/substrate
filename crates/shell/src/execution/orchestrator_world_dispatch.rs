@@ -235,8 +235,39 @@ async fn fork_world_worker(
             &prepared.request,
         )
         .await?;
-        let lineage =
-            persist_fork_child_lineage(&prepared.store, &resolved, &receipt.participant_id)?;
+        let lineage = match persist_fork_child_lineage(
+            &prepared.store,
+            &resolved,
+            &receipt.participant_id,
+        ) {
+            Ok(lineage) => lineage,
+            Err(lineage_err) => {
+                let lineage_err_text = format!("{lineage_err:#}");
+                match rollback_failed_fork_child_launch(
+                    &prepared.store,
+                    &resolved,
+                    &receipt.participant_id,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        anyhow::bail!(
+                            "fork_lineage_persist_failed: failed to persist explicit fork lineage for child {} after authoritative registration; retained child was durably stopped before returning the error ({})",
+                            receipt.participant_id,
+                            lineage_err_text
+                        );
+                    }
+                    Err(rollback_err) => {
+                        anyhow::bail!(
+                            "fork_lineage_persist_failed: failed to persist explicit fork lineage for child {} after authoritative registration, and automatic stop rollback did not reach durable closeout ({}; {})",
+                            receipt.participant_id,
+                            lineage_err_text,
+                            format!("{rollback_err:#}")
+                        );
+                    }
+                }
+            }
+        };
         let summary = summarize_fork_world_worker_result(&receipt, &lineage.source_participant_id);
 
         Ok(WorldDispatchOutcomeV1::ForkWorldWorker(
@@ -2081,6 +2112,54 @@ fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> Str
         "spawn_world_worker launched retained worker {} on backend {}; launch receipt is authoritative but ongoing steering remains out of scope for this packet",
         receipt.participant_id, receipt.backend_id
     )
+}
+
+#[cfg(target_os = "linux")]
+async fn rollback_failed_fork_child_launch(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalForkWorldDispatchTarget,
+    child_participant_id: &str,
+) -> Result<()> {
+    let transport_path = private_stop_transport_path(
+        store,
+        resolved.orchestration_session_id(),
+        child_participant_id,
+    );
+    let transport_result = request_private_stop(&transport_path).await;
+    let closeout = wait_for_stop_world_worker_closeout(
+        store,
+        resolved.orchestration_session_id(),
+        child_participant_id,
+    )
+    .await;
+
+    match (transport_result, closeout) {
+        (Ok(PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal), Ok(_)) => Ok(()),
+        (Ok(PrivateStopOutcome::OwnerUnreachable), Ok(_))
+        | (Ok(PrivateStopOutcome::ProtocolError), Ok(_))
+        | (Err(_), Ok(_)) => Ok(()),
+        (Ok(PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal), Err(err)) => {
+            Err(err)
+        }
+        (Ok(PrivateStopOutcome::OwnerUnreachable), Err(err)) => {
+            anyhow::bail!(
+                "owner_unreachable: private stop transport for retained fork child {} did not stay reachable until durable rollback closeout completed: {err}",
+                child_participant_id
+            );
+        }
+        (Ok(PrivateStopOutcome::ProtocolError), Err(err)) => {
+            anyhow::bail!(
+                "owner_unreachable: private stop transport for retained fork child {} returned a protocol error before durable rollback closeout completed: {err}",
+                child_participant_id
+            );
+        }
+        (Err(connect_err), Err(closeout_err)) => {
+            anyhow::bail!(
+                "owner_unreachable: failed to deliver rollback stop to retained fork child {} and durable rollback closeout was not observed ({connect_err:#}; {closeout_err})",
+                child_participant_id
+            );
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -5416,6 +5495,229 @@ mod tests {
             Some("ash_member")
         );
         assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+
+        server.abort();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_fork_world_worker_rolls_back_child_when_lineage_persist_fails() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["fork_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex_world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let store_for_server = store.clone();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("member dispatch execute request");
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("member dispatch request");
+                    let descriptor =
+                        crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
+                            agent_id: execute_request.agent_id.clone(),
+                            backend_id: member_dispatch.backend_id.clone(),
+                            backend_kind: match member_dispatch.resolved_runtime.backend_kind {
+                                MemberRuntimeBackendKindV1::Codex => AgentRuntimeBackendKind::Codex,
+                                MemberRuntimeBackendKindV1::ClaudeCode => {
+                                    AgentRuntimeBackendKind::ClaudeCode
+                                }
+                            },
+                            protocol: member_dispatch.protocol.clone(),
+                            execution_scope:
+                                crate::execution::config_model::AgentExecutionScope::World,
+                            binary_path: PathBuf::from(
+                                &member_dispatch.resolved_runtime.binary_path,
+                            ),
+                        };
+                    let child = AgentRuntimeParticipantRecord::new_member_participant(
+                        &descriptor,
+                        member_dispatch.orchestration_session_id.clone(),
+                        member_dispatch.participant_id.clone(),
+                        member_dispatch.orchestrator_participant_id.clone(),
+                        Some("ash_wrong_parent".to_string()),
+                        Some(
+                            crate::execution::agent_runtime::session::AgentRuntimeParticipantWorldBinding {
+                                world_id: member_dispatch.world_id.clone(),
+                                world_generation: member_dispatch.world_generation,
+                            },
+                        ),
+                        format!("lease_{}", member_dispatch.participant_id),
+                    )
+                    .expect("authoritative child participant with mismatched lineage");
+                    store_for_server
+                        .persist_participant(&child)
+                        .expect("persist authoritative child participant");
+
+                    let (stop_tx, mut stop_rx) =
+                        crate::execution::agent_runtime::control::private_stop_request_channel();
+                    let mut stop_transport =
+                        crate::execution::agent_runtime::control::register_private_stop_transport(
+                            &store_for_server,
+                            &member_dispatch.orchestration_session_id,
+                            &member_dispatch.participant_id,
+                            stop_tx,
+                        )
+                        .await
+                        .expect("register private stop transport for rollback");
+                    let store_for_stop = store_for_server.clone();
+                    let child_id = member_dispatch.participant_id.clone();
+                    let session_id = member_dispatch.orchestration_session_id.clone();
+                    tokio::spawn(async move {
+                        let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
+                            .await
+                            .expect("timed out waiting for rollback stop request")
+                            .expect("rollback stop request");
+                        let mut session = store_for_stop
+                            .load_orchestration_session(&session_id)
+                            .expect("load orchestration session for rollback closeout")
+                            .expect("authoritative orchestration session for rollback closeout");
+                        let mut participant = store_for_stop
+                            .load_participant(&child_id)
+                            .expect("load retained child for rollback closeout")
+                            .expect("authoritative retained child for rollback closeout");
+                        participant.transition_state(AgentRuntimeSessionState::Stopped);
+                        participant.mark_terminal_state("fork lineage rollback");
+                        participant.touch_heartbeat();
+                        session.touch_active();
+                        crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                            &store_for_stop,
+                            &session,
+                            &participant,
+                        )
+                        .expect("persist retained rollback closeout");
+                        let _ = request.response_tx.send(
+                            crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted,
+                        );
+                        stop_transport.close().await;
+                    });
+
+                    let start =
+                        serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "spn_fork".to_string(),
+                        })
+                        .expect("serialize start frame");
+                    let event = substrate_common::agent_events::AgentEvent {
+                        ts: chrono::Utc::now(),
+                        kind: AgentEventKind::Registered,
+                        data: json!({}),
+                        agent_id: execute_request.agent_id,
+                        orchestration_session_id: member_dispatch.orchestration_session_id.clone(),
+                        run_id: member_dispatch.run_id.clone(),
+                        parent_run_id: None,
+                        participant_id: Some(member_dispatch.participant_id.clone()),
+                        parent_participant_id: member_dispatch.parent_participant_id.clone(),
+                        resumed_from_participant_id: member_dispatch
+                            .resumed_from_participant_id
+                            .clone(),
+                        backend_id: Some(member_dispatch.backend_id.clone()),
+                        thread_id: None,
+                        role: Some("member".to_string()),
+                        world_id: Some(member_dispatch.world_id.clone()),
+                        world_generation: Some(member_dispatch.world_generation),
+                        cmd_id: None,
+                        span_id: Some("spn_fork".to_string()),
+                        channel: None,
+                        identity_tuple: None,
+                        placement_posture: None,
+                        project: None,
+                    };
+                    let registered =
+                        serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            event,
+                        })
+                        .expect("serialize registered frame");
+                    let mut body = Vec::new();
+                    body.extend_from_slice(&start);
+                    body.push(b'\n');
+                    body.extend_from_slice(&registered);
+                    body.push(b'\n');
+                    write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
+                    continue;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let mut request = sample_fork_world_dispatch_request();
+        request.request_id = Some("req_fork_lineage_rollback".to_string());
+        request.idempotency_key = Some("idem_fork_lineage_rollback".to_string());
+        request.world_id = Some("world-17".to_string());
+        request.world_generation = Some(2);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, request).expect("prepare fork dispatch");
+        let err = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect_err("lineage mismatch must roll back the retained child");
+
+        assert!(
+            err.to_string().contains("fork_lineage_persist_failed:"),
+            "expected rollback wrapper in error: {err}"
+        );
+        assert!(
+            err.to_string()
+                .contains("retained child was durably stopped"),
+            "expected durable rollback closeout in error: {err}"
+        );
+        assert!(
+            err.to_string().contains("invalid_fork_lineage:"),
+            "expected original lineage failure to be preserved: {err}"
+        );
+
+        let child = store
+            .list_participants()
+            .expect("list participants after rollback")
+            .into_iter()
+            .find(|participant| {
+                participant.participant_id().starts_with("ash_")
+                    && participant.participant_id() != "ash_member"
+            })
+            .expect("rolled back child participant");
+        assert_eq!(child.handle.state, AgentRuntimeSessionState::Stopped);
+        assert_eq!(
+            child.internal.termination_reason.as_deref(),
+            Some("fork lineage rollback")
+        );
+        assert_eq!(child.fork_source_participant_id(), None);
 
         server.abort();
     }
