@@ -546,6 +546,13 @@ pub(crate) struct RetainedWorkerCancelCloseoutV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CancelWorldWorkTerminalStateV1 {
+    Cancelled,
+}
+
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct CancelWorldWorkOutcomeV1 {
     pub request_id: String,
@@ -557,9 +564,8 @@ pub(crate) struct CancelWorldWorkOutcomeV1 {
     pub target_backend_id: String,
     pub world_id: String,
     pub world_generation: u64,
-    pub state: WorldTaskTerminalStateV1,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub closeout: Option<RetainedWorkerCancelCloseoutV1>,
+    pub state: CancelWorldWorkTerminalStateV1,
+    pub closeout: RetainedWorkerCancelCloseoutV1,
     pub summary: String,
 }
 
@@ -1500,16 +1506,16 @@ mod tests {
     use super::{
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
         AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference, CancelWorldWorkOutcomeV1,
-        ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
-        DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
-        DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
-        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerCancelPayloadV1,
-        WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
-        WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1, DispatchBaselineKind,
+        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
+        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
+        FieldValueOrigin, HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
+        RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
+        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
+        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
         WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
+        WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2839,11 +2845,11 @@ mod tests {
             target_backend_id: "cli:codex_world".to_string(),
             world_id: "world-37".to_string(),
             world_generation: 7,
-            state: WorldTaskTerminalStateV1::Cancelled,
-            closeout: Some(RetainedWorkerCancelCloseoutV1 {
+            state: CancelWorldWorkTerminalStateV1::Cancelled,
+            closeout: RetainedWorkerCancelCloseoutV1 {
                 participant_state: None,
                 session_state: None,
-            }),
+            },
             summary: "cancel closeout is distinct from stop".to_string(),
         });
 
@@ -2858,15 +2864,70 @@ mod tests {
         );
         let closeout = json.get("closeout").expect("closeout should serialize");
         assert_eq!(
-            closeout.get("participant_state").and_then(|value| value.as_str()),
+            closeout
+                .get("participant_state")
+                .and_then(|value| value.as_str()),
             None
         );
         assert_eq!(
-            closeout.get("session_state").and_then(|value| value.as_str()),
+            closeout
+                .get("session_state")
+                .and_then(|value| value.as_str()),
             None
         );
         assert!(json.get("snapshot").is_none());
         assert!(json.get("cancelled").is_none());
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_cancel_outcome_without_closeout() {
+        let error = serde_json::from_value::<WorldDispatchOutcomeV1>(serde_json::json!({
+            "outcome_kind": "cancel_world_work",
+            "request_id": "req-37",
+            "orchestration_session_id": "sess-37",
+            "action": "cancel_world_work",
+            "mode": "retained",
+            "orchestrator_participant_id": "orch-37",
+            "target_participant_id": "ash-worker-37",
+            "target_backend_id": "cli:codex_world",
+            "world_id": "world-37",
+            "world_generation": 7,
+            "state": "cancelled",
+            "summary": "cancel closeout is distinct from stop"
+        }))
+        .expect_err("missing cancel closeout must fail closed");
+
+        assert!(
+            error.to_string().contains("missing field `closeout`"),
+            "unexpected cancel closeout serde error: {error}"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_non_cancelled_cancel_outcome_state() {
+        let error = serde_json::from_value::<WorldDispatchOutcomeV1>(serde_json::json!({
+            "outcome_kind": "cancel_world_work",
+            "request_id": "req-37",
+            "orchestration_session_id": "sess-37",
+            "action": "cancel_world_work",
+            "mode": "retained",
+            "orchestrator_participant_id": "orch-37",
+            "target_participant_id": "ash-worker-37",
+            "target_backend_id": "cli:codex_world",
+            "world_id": "world-37",
+            "world_generation": 7,
+            "state": "failed",
+            "closeout": {},
+            "summary": "cancel closeout is distinct from stop"
+        }))
+        .expect_err("non-cancelled cancel outcome state must fail closed");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unknown variant `failed`, expected `cancelled`"),
+            "unexpected cancel state serde error: {error}"
+        );
     }
 
     #[test]
