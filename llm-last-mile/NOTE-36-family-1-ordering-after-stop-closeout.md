@@ -1,6 +1,6 @@
 # Note: Family-1 Ordering After Stop Closeout
 
-Date: `2026-06-01`
+Date: `2026-06-02`
 
 Validated against live code in:
 
@@ -23,35 +23,36 @@ Validated against live code in:
 
 ## Purpose
 
-Record the current repo truth after Slice `36`, and make explicit why the next implementation-bearing Family-1 work remains `cancel_world_work` after stop closeout lands.
+Record the current repo truth after Slice `37`, and make explicit why retained active-turn `cancel_world_work` landed before active-ephemeral cancel widening or `fork_world_worker`.
 
-Validated outcome after Slice `36`:
+Validated outcome after Slice `37`:
 
-1. Slice `36` is actually landed on the current tree,
-2. `stop_world_worker` is now real internal dispatch/runtime truth,
-3. `cancel_world_work` is still absent from the internal dispatch surface,
-4. the honest next slice is still `cancel_world_work`, but repo truth now narrows the smallest honest v1 scope to retained active-turn cancel first rather than full dual-target cancel.
+1. that ordering has now landed as planned,
+2. `cancel_world_work` is now the internal retained-worker-only v1 cancel surface for active work in flight,
+3. routed cancel closeout remains Linux-only in v1 and stays distinct from `stop_world_worker`,
+4. active-ephemeral cancel, `fork_world_worker`, approval/fork autonomy, and Family-2 router/attach work remain deferred.
 
 ## Current Repo Truth
 
-### 1. Slice `36` is actually landed
+### 1. Slice `36` and Slice `37` are now both landed
 
 The current tree now has:
 
 1. `stop_world_worker` in `WorldDispatchActionV1`,
-2. retained-only request validation and typed stop payload/outcome shapes,
-3. steering-policy allowlisting for `stop_world_worker` in both shell-local and broker policy validation,
-4. authoritative retained-worker stop target resolution in the state store,
-5. routed retained-worker stop handling in the orchestrator dispatch layer,
-6. internal toolbox ingress and regression coverage for stop routing.
+2. `cancel_world_work` in `WorldDispatchActionV1`,
+3. retained-only request validation and typed stop/cancel payload/outcome shapes,
+4. steering-policy allowlisting for `stop_world_worker` and `cancel_world_work` in both shell-local and broker policy validation,
+5. authoritative retained-worker stop/cancel target resolution in the state store,
+6. routed retained-worker stop/cancel handling in the orchestrator dispatch layer,
+7. internal toolbox ingress and regression coverage for both later verbs.
 
 Repo-truth implication:
 
-1. Slice `36` is not planning-only anymore,
-2. Family 1 now includes landed internal stop closeout in addition to run, spawn, continue, and inspect,
-3. the next gap is the cancel verb family rather than more stop cleanup.
+1. Slices `36` and `37` are not planning-only anymore,
+2. Family 1 now includes landed internal cancel and stop verbs in addition to run, spawn, continue, and inspect,
+3. the next gap is follow-on widening work rather than missing retained-turn cancel semantics.
 
-### 2. `stop_world_worker` is now present in the routed internal action set
+### 2. `cancel_world_work` is now present in the routed internal action set
 
 The live repo now admits and routes:
 
@@ -59,38 +60,22 @@ The live repo now admits and routes:
 2. `spawn_world_worker`,
 3. `continue_world_worker`,
 4. `inspect_world_worker`,
-5. `stop_world_worker`.
+5. `cancel_world_work`,
+6. `stop_world_worker`.
 
-The stop route is now distinct runtime truth:
+The cancel route is now distinct runtime truth:
 
-1. Linux v1 routes exact retained-worker stop through the existing private owner stop surface,
-2. durable closeout waits for authoritative stopped-state persistence,
+1. Linux v1 routes exact retained-worker cancel through the dedicated private owner cancel surface,
+2. active work in flight is interrupted before authoritative cancelled-state closeout is returned,
 3. non-Linux builds fail closed with `unsupported_platform_or_posture`.
 
 Repo-truth implication:
 
-1. stop is no longer a candidate next slice,
-2. stop closeout semantics are frozen enough to compare cancel against them explicitly,
-3. Slice `37` must keep cancel distinct from stop instead of reusing stopped terminology.
+1. cancel is no longer a missing Family-1 verb,
+2. cancel closeout semantics are frozen enough to compare against stop explicitly,
+3. Slice `37` landed without reusing stopped terminology or widening into a second generic control plane.
 
-### 3. `cancel_world_work` is still not landed in the internal dispatch surface
-
-The current tree does not yet have:
-
-1. `cancel_world_work` in `WorldDispatchActionV1`,
-2. a typed cancel payload or cancel outcome shape,
-3. policy validation or allowlisting for `cancel_world_work`,
-4. state-store target resolution for cancel,
-5. orchestrator dispatch routing for cancel,
-6. internal toolbox ingress handling for cancel.
-
-Repo-truth implication:
-
-1. cancel remains a real missing verb,
-2. the next Family-1 slice still needs to create a new internal cancel contract rather than widening existing stop behavior,
-3. Slice `37` should stay named `cancel_world_work` unless the repo also disproves it as the next honest scope.
-
-### 4. Full dual-target cancel is not yet the smallest honest Slice `37`
+### 3. Full dual-target cancel is still not the landed Slice `37` scope
 
 The design stack still says:
 
@@ -102,14 +87,13 @@ The current repo, however, still has:
 
 1. `run_world_task` as a one-shot terminal outcome surface with no typed `task_run_id`,
 2. no state-store resolver for active-ephemeral inspect or cancel targets,
-3. retained-worker-only target resolvers for `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker`,
-4. retained runtime/session enums that still model `Stopping` and `Stopped`, but not retained-worker `Cancelled` terminal truth.
+3. retained-worker-only target resolvers for `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
 
 Repo-truth implication:
 
-1. the full design-level dual-target cancel surface is not yet implementation-ready,
-2. the smallest honest Slice `37` is retained active-turn cancel first, because exact retained worker identity is already frozen while exact active-ephemeral task identity is not,
-3. Slice `37` must explicitly defer active-ephemeral cancel rather than pretending both cancel target families are equally ready.
+1. the full design-level dual-target cancel surface is still not implementation-ready,
+2. Slice `37` landed as retained active-turn cancel first because exact retained worker identity was already frozen while exact active-ephemeral task identity is not,
+3. the current repo still explicitly defers active-ephemeral cancel rather than pretending both cancel target families are equally ready.
 
 ### 5. `fork_world_worker` remains later and not the smallest honest next slice
 
@@ -133,23 +117,23 @@ Repo-truth implication:
 2. Slice `37` should not widen into fork or approval/fork autonomy work,
 3. Family 2 router/attach work remains downstream of these remaining Family-1 control-plane semantics.
 
-## Ordering Decision
+## Ordering Outcome
 
-The next narrow Family-1 slice should now be:
+The landed narrow Family-1 order is now:
 
-1. `cancel_world_work` first, but frozen to retained active-turn cancel in v1,
-2. active-ephemeral cancel widening only after the repo gains an exact task-identity surface,
-3. `fork_world_worker` only after the cancel family is real,
-4. broader approval/fork autonomy after the later verb family is in place,
-5. Family-2 router/attach work after Family 1 control-plane semantics are frozen.
+1. `stop_world_worker` first,
+2. `cancel_world_work` next, frozen to retained active-turn cancel in v1,
+3. active-ephemeral cancel widening only after the repo gains an exact task-identity surface,
+4. `fork_world_worker` only after the cancel family is real,
+5. broader approval/fork autonomy and then Family-2 router/attach work after Family 1 control-plane semantics are frozen.
 
-## Why `cancel_world_work` Next
+## Why Retained-Only Cancel Was The Right Next Slice
 
 1. stop is already landed, so the next remaining execution-affecting verb is cancel,
 2. retained active-turn cancel can reuse exact retained participant identity that is already frozen by continue, inspect, and stop,
-3. active-ephemeral dual-target cancel is broader because the repo still lacks authoritative task-target resolution and a typed task-run identity,
-4. fork remains later because it introduces lineage and autonomy policy on top of a still-incomplete cancel family,
-5. Family 2 remains later because it depends on the remaining Family-1 verb semantics being frozen first.
+3. Slice `37` proves that explicit cancelled terminal truth can stay distinct from stopped closeout without widening into active-ephemeral identity work,
+4. active-ephemeral dual-target cancel is still broader because the repo still lacks authoritative task-target resolution and a typed task-run identity,
+5. fork remains later because it introduces lineage and autonomy policy on top of a now-real but still intentionally bounded cancel family.
 
 ## Why Slice `37` Must Be Narrower Than Full Dual-Target Cancel
 
@@ -163,22 +147,20 @@ Slice `37` should freeze:
 
 That is the smallest honest slice consistent with the current tree.
 
-## Blocking Rule
+## Reopen Rule
 
-Reopen this ordering note only if one of these becomes true:
+Reopen this ordering note only if one of these becomes true in follow-on work:
 
-1. the live repo gains an exact active-ephemeral task resolver and typed task identity before Slice `37` implementation begins,
-2. retained active-turn cancel proves impossible without landing active-ephemeral cancel in the same slice,
-3. cancel semantics cannot be expressed distinctly from stop without widening into broader lifecycle or public-surface redesign,
-4. fork or Family-2 work unexpectedly becomes a prerequisite for cancel routing.
+1. the live repo gains an exact active-ephemeral task resolver and typed task identity that makes dual-target cancel the honest next widening step,
+2. retained active-turn cancel semantics prove insufficient for future caller needs without broader lifecycle redesign,
+3. fork or Family-2 work unexpectedly becomes a prerequisite for widening cancel beyond retained active-turn scope.
 
-If none of those conditions is true, Slice `37` should remain `cancel_world_work` with retained active-turn scope first.
+If none of those conditions is true, Slice `37` should remain the landed retained active-turn cancel slice and later work should stay sequenced after it.
 
-## Follow-On Truth After Slice `37` Planning
+## Follow-On Truth After Slice `37` Lands
 
-With Slice `36` landed and Slice `37` now framed honestly:
+With Slice `37` now landed:
 
-1. `cancel_world_work` remains the next implementation-bearing Family-1 slice,
-2. active-ephemeral target identity and dual-target cancel remain a later widening step unless implementation proves otherwise,
-3. `fork_world_worker` remains later because lineage and autonomy policy are still deferred,
-4. approval/fork autonomy and Family-2 router/attach execution remain downstream work rather than current repo truth.
+1. active-ephemeral target identity and dual-target cancel remain a later widening step unless implementation proves otherwise,
+2. `fork_world_worker` remains later because lineage and autonomy policy are still deferred,
+3. approval/fork autonomy and Family-2 router/attach execution remain downstream work rather than current repo truth.

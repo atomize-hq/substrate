@@ -3,7 +3,8 @@
 Source spec: [SPEC-37-internal-cancel-world-work.md](./SPEC-37-internal-cancel-world-work.md)  
 Source validation note: [NOTE-36-family-1-ordering-after-stop-closeout.md](./NOTE-36-family-1-ordering-after-stop-closeout.md)  
 Plan type: sixth implementation-bearing Family-1 control-plane slice  
-Status: drafted on `2026-06-01`
+Status: implemented on `2026-06-02`
+Landed posture note: the typed cancel contract, steering-policy allowlisting, exact-target retained-worker cancel resolution, explicit cancelled terminal truth, and routed cancel closeout are landed repo-wide, but retained-worker cancel routing is Linux-only in v1 and fails closed on non-Linux builds.
 
 ## Objective
 
@@ -28,7 +29,7 @@ The repo already has the prerequisites that make `cancel_world_work` the next ho
 4. retained-runtime records that already carry live ownership and control metadata such as `latest_run_id` and `cancel_supported`,
 5. Linux-first routed world-dispatch posture and internal toolbox ingress coverage.
 
-What the repo still lacks is:
+What the repo lacked before Slice `37` landed was:
 
 1. a typed internal cancel action,
 2. authoritative retained-worker cancel target resolution,
@@ -36,14 +37,20 @@ What the repo still lacks is:
 4. routed cancel behavior distinct from stop closeout,
 5. any exact active-ephemeral task target surface.
 
-That matters because the design stack still frames cancel as dual-target, but the current tree does not yet have the exact task identity needed for active-ephemeral inspect/cancel. The narrowest honest implementation order is therefore:
+That mattered because the design stack still framed cancel as dual-target, but the tree did not yet have the exact task identity needed for active-ephemeral inspect/cancel. The narrowest honest implementation order was therefore:
 
 1. freeze `cancel_world_work` as retained active-turn cancel first,
 2. land explicit cancel lifecycle truth distinct from stop,
 3. route cancel through the internal dispatch layer,
 4. leave active-ephemeral cancel widening and fork for later slices.
 
-`fork_world_worker` does not come first because it still drags in lineage and autonomy policy. Family 2 does not come first because it remains downstream of the Family-1 control-plane vocabulary. Full dual-target cancel does not belong in Slice `37` because the exact active-ephemeral task-target seam is not yet runtime truth.
+`fork_world_worker` did not come first because it still drags in lineage and autonomy policy. Family 2 did not come first because it remains downstream of the Family-1 control-plane vocabulary. Full dual-target cancel did not belong in Slice `37` because the exact active-ephemeral task-target seam is not yet runtime truth.
+
+Current landed runtime note:
+
+1. cancel contract admission, policy parsing, exact retained-worker target resolution, and explicit cancelled-state persistence are repo-wide,
+2. allowed retained-worker cancel routing interrupts active work in flight on Linux in v1 through the dedicated private owner cancel surface,
+3. non-Linux builds reject retained cancel routing rather than widening into stop behavior or active-ephemeral cancel.
 
 ## Locked Decisions
 

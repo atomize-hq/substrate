@@ -34,20 +34,18 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
-    apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
-    build_session_resume_extension,
+    apply_runtime_cancel_closeout, apply_runtime_stop_closeout, build_session_resume_extension,
     invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
     mark_runtime_startup_failed, note_runtime_stop_requested, persist_runtime_snapshots,
     persist_world_binding_authority, private_cancel_request_channel,
     private_prompt_request_channel, private_stop_request_channel, prompt_runtime_from_parts,
     register_private_cancel_transport, register_private_prompt_transport,
     register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
-    runtime_stop_transport_ids, spawn_local_private_cancel_owner,
-    spawn_local_private_prompt_owner, spawn_local_private_stop_owner,
-    submit_host_prompt_turn, toolbox_transport_path, HiddenOwnerHelperLaunchPlan,
-    OwnerHelperMode, PersistedWorldBinding, PrivateCancelRequestReceiver,
-    PrivateCancelTransport, PrivatePromptTransport, PrivateStopOutcome,
-    PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
+    runtime_stop_transport_ids, spawn_local_private_cancel_owner, spawn_local_private_prompt_owner,
+    spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_transport_path,
+    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
+    PrivateCancelRequestReceiver, PrivateCancelTransport, PrivatePromptTransport,
+    PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
     PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
     SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
@@ -3817,10 +3815,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         }
                         startup_failure = Some(reason);
                     } else if cancel_requested_for_completion.load(Ordering::SeqCst)
-                        && completion
-                            .status
-                            .code()
-                            .is_some_and(exit_code_is_cancelled)
+                        && completion.status.code().is_some_and(exit_code_is_cancelled)
                     {
                         apply_runtime_cancel_closeout(
                             &mut orchestration_guard,
@@ -5612,7 +5607,9 @@ fn spawn_remote_private_cancel_owner(
                     })
                     .await
                 {
-                    Ok(_) => crate::execution::agent_runtime::control::PrivateCancelOutcome::Accepted,
+                    Ok(_) => {
+                        crate::execution::agent_runtime::control::PrivateCancelOutcome::Accepted
+                    }
                     Err(_) => {
                         shutdown_requested.store(false, Ordering::SeqCst);
                         cancel_requested.store(false, Ordering::SeqCst);
@@ -11188,8 +11185,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_typed_cancel_closeout(
-    ) {
+    fn orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_typed_cancel_closeout()
+    {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
@@ -11281,6 +11278,12 @@ mod tests {
             .expect("member runtime start should succeed")
             .expect("member runtime");
             let member_manifest = runtime_manifest_snapshot(&member_runtime);
+            wait_for_persisted_participant_snapshot(
+                &startup_context.store,
+                &member_manifest.handle.participant_id,
+                AgentRuntimeSessionState::Running,
+            )
+            .await;
 
             let request = WorldDispatchRequestV1 {
                 request_id: Some("req_toolbox_cancel".to_string()),

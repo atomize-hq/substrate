@@ -26,10 +26,10 @@ use crate::execution::agent_runtime::control::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
-    CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1,
-    ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1,
-    InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
-    RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, WorkerContinuePayloadV1,
+    CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1,
+    ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
+    RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
+    WorkerContinuePayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -3687,8 +3687,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn dispatch_contract_cancel_world_work_returns_typed_closeout_after_authoritative_cancel(
-    ) {
+    async fn dispatch_contract_cancel_world_work_returns_typed_closeout_after_authoritative_cancel()
+    {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -3756,9 +3756,9 @@ mod tests {
                 &participant,
             )
             .expect("persist retained cancel closeout");
-            let _ = request.response_tx.send(
-                crate::execution::agent_runtime::control::PrivateCancelOutcome::Accepted,
-            );
+            let _ = request
+                .response_tx
+                .send(crate::execution::agent_runtime::control::PrivateCancelOutcome::Accepted);
         });
 
         let prepared =

@@ -5,7 +5,7 @@ Source plan: [PLAN-37.md](./PLAN-37.md)
 Source validation note: [NOTE-36-family-1-ordering-after-stop-closeout.md](./NOTE-36-family-1-ordering-after-stop-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: drafted on `2026-06-01`
+Status: Packets 1-3 are complete on the current tree; Packet 4 docs/validation is the remaining session on `2026-06-02`
 
 ## Execution Packets
 
@@ -28,14 +28,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the cancel action, retained-only validation, and typed cancel payload/outcome scaffolding
+- [x] Task 1.1: Add the cancel action, retained-only validation, and typed cancel payload/outcome scaffolding
   - Acceptance: `cancel_world_work` is a valid internal dispatch action; request validation requires retained mode and exact `target_participant_id`; the contract exposes a typed cancel payload plus a typed cancel outcome suitable for retained-turn cancellation that freezes explicit cancelled terminal state and a cancel-closeout scaffold distinct from stop closeout.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Widen steering-policy parsing so `cancel_world_work` can be explicitly allowlisted
+- [x] Task 1.2: Widen steering-policy parsing so `cancel_world_work` can be explicitly allowlisted
   - Acceptance: the effective policy/config model accepts `cancel_world_work` as an allowed world-dispatch action while keeping deny-by-default defaults unchanged when the action is absent; REPL-facing internal toolbox cancel ingress continues to validate malformed requests and reject denied requests before the Packet 1 unsupported-dispatch stub. Packet 1 regression anchors are `orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_packet_one_unsupported_dispatch`, `orchestrator_world_dispatch_surface_validates_cancel_requests_before_packet_one_unsupported_dispatch`, and `orchestrator_world_dispatch_surface_rejects_denied_cancel_requests_before_packet_one_unsupported_dispatch`.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -72,14 +72,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Add exact retained-worker cancel target resolution in the state store
+- [x] Task 2.1: Add exact retained-worker cancel target resolution in the state store
   - Acceptance: cancel target resolution is same-session-only, same-world-binding-only, and authoritative-caller-only; it accepts only exact retained workers that still have active cancelable work in flight.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Add explicit retained cancelled-state truth
+- [x] Task 2.2: Add explicit retained cancelled-state truth
   - Acceptance: retained participant/session state can surface cancelled terminal truth without reusing `stopped` or `failed`; repeated cancel against already-terminal workers fails closed with a stable, reviewable error path.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -109,7 +109,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add `cancel_world_work` handling to the internal dispatch path
+- [x] Task 3.1: Add `cancel_world_work` handling to the internal dispatch path
   - Acceptance: the orchestrator dispatch layer evaluates steering policy, resolves the cancel target, and returns a typed cancel outcome for exact retained workers with active work in flight.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -119,7 +119,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs)
 
-- [ ] Task 3.2: Add the retained-turn cancel control seam and persist cancel closeout
+- [x] Task 3.2: Add the retained-turn cancel control seam and persist cancel closeout
   - Acceptance: allowed cancel requests interrupt active retained work in flight through a dedicated cancel-only internal transport, converge on explicit cancelled terminal truth, and do not widen into stop, inspect, continue, or fork behavior.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`

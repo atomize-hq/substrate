@@ -970,7 +970,10 @@ mod tests {
         );
         assert!(participant.has_cancelled_terminal_truth());
         assert_eq!(participant.reviewable_terminal_state_label(), "cancelled");
-        assert_eq!(participant.internal.termination_reason.as_deref(), Some("cancelled"));
+        assert_eq!(
+            participant.internal.termination_reason.as_deref(),
+            Some("cancelled")
+        );
         assert!(participant.internal.terminal_observed_at.is_some());
         assert_eq!(participant.internal.latest_run_id, None);
     }

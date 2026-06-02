@@ -11,8 +11,8 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: drafted on `2026-06-01`  
-Planned posture note: the repo has landed internal retained-worker stop closeout, but it still lacks a cancel action, a retained-worker cancelled terminal state, and an exact active-ephemeral task-target surface. Slice `37` therefore freezes `cancel_world_work` as retained active-turn cancel first in v1.
+Status: implemented on `2026-06-02`  
+Landed posture note: the typed cancel contract, steering-policy allowlisting, exact-target retained-worker cancel resolution, explicit cancelled terminal truth, and Linux-routed cancel closeout are landed in the repo, but active-ephemeral or dual-target cancel, `fork_world_worker`, approval/fork autonomy, and Family-2 router/attach execution remain deferred.
 
 ## Assumptions
 
@@ -44,12 +44,12 @@ Primary runtime story:
 5. the outcome surfaces a typed cancel result for the exact retained worker,
 6. active-ephemeral cancel, `fork_world_worker`, approval/fork autonomy, and Family-2 routing work remain deferred.
 
-Current repo-truth note:
+Current landed runtime note:
 
-1. exact stop request validation, policy parsing, retained-worker target resolution, and stop closeout routing are already landed,
-2. exact active-ephemeral inspect/cancel identity is still not landed,
-3. retained runtime/session enums do not yet model a cancelled terminal state, so Slice `37` must freeze that runtime truth instead of assuming it already exists,
-4. the larger design docs freeze cancel semantics and policy boundaries, but they do not yet force a shared retained-control transport abstraction for implementation.
+1. exact cancel request validation, policy parsing, retained-worker target resolution, and cancel closeout routing are already landed,
+2. allowed retained-worker cancel routing on Linux in v1 uses the dedicated private owner cancel surface and persists explicit cancelled terminal truth distinct from stop closeout,
+3. exact active-ephemeral inspect/cancel identity is still not landed,
+4. the larger design docs still leave room for future widening, but Slice `37` freezes retained active-turn cancel first without widening into a shared retained-control bus.
 
 ## Tech Stack
 
@@ -61,7 +61,7 @@ Current repo-truth note:
 - Existing runtime control and closeout surfaces that cancel must stay distinct from:
   - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
   - [`crates/shell/src/execution/agents_cmd.rs`](../crates/shell/src/execution/agents_cmd.rs)
-- Existing lifecycle state surfaces that do not yet expose retained `cancelled` truth:
+- Existing lifecycle state surfaces that now expose retained `cancelled` truth distinctly from stopped/failed:
   - [`crates/shell/src/execution/agent_runtime/session.rs`](../crates/shell/src/execution/agent_runtime/session.rs)
   - [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](../crates/shell/src/execution/agent_runtime/orchestration_session.rs)
 - Existing steering-policy/config surfaces:

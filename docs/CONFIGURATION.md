@@ -47,7 +47,7 @@ Config keys:
 Policy keys:
 - `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
 - Existing `agents.allowed_backends` entries stay valid across the successor `substrate agent ...` command surface because the policy token is still the derived `backend_id`, not `client`, `router`, `protocol`, `provider`, or `auth_authority`.
-- `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, and governs the live internal verbs `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker`.
+- `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, and governs the live internal verbs `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
 
 Minimal example:
 
@@ -303,10 +303,10 @@ Internal host-to-world steering example:
 - This surface is internal-only and deny-by-default. The built-in defaults keep `agents.world_dispatch.enabled=false`, keep the allowlists empty, require exact same-session and same-world-binding truth, disallow capability narrowing, and set both current concurrency caps to `0`.
 - Current action ids accepted by `agents.world_dispatch.allowed_actions` are `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
 - `inspect_world_worker` remains internal, retained-worker-only in v1, and returns an authoritative store-backed snapshot instead of invoking world-side execution transport. Routed snapshot delivery is currently supported only on Linux in v1; non-Linux builds fail closed with `unsupported_platform_or_posture`.
-- `cancel_world_work` is a valid internal allowlisted action in Packet 1, but Packet 1 only freezes the retained-worker-only contract/policy surface. Runtime dispatch routing still fails closed with `unsupported_dispatch_action` until later packets land routed cancel behavior.
+- `cancel_world_work` remains internal, retained-worker-only in Slice `37`, and distinct from `stop_world_worker`. On Linux in v1, an allowlisted exact-target cancel request uses the dedicated private owner cancel surface to interrupt active retained work in flight and wait for authoritative cancelled closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `stop_world_worker` remains internal, retained-worker-only in v1, and is a durable closeout action distinct from `cancel_world_work`. On Linux in v1, an allowlisted exact-target stop request reuses the existing private owner stop surface to drive authoritative stopped closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - Current mode ids are limited to `ephemeral` and `retained`.
-- This patch surface does not imply active-ephemeral inspect, routed cancel execution beyond the Packet 1 `cancel_world_work` contract/policy surface, active-ephemeral or dual-target cancel semantics, later mutating verbs like `fork_world_worker`, router-owned attach execution, or broader approval/fork autonomy policy.
+- This patch surface does not imply active-ephemeral inspect, active-ephemeral or dual-target cancel semantics, later mutating verbs like `fork_world_worker`, router-owned attach execution, or broader approval/fork autonomy policy.
 
 ```yaml
 agents:

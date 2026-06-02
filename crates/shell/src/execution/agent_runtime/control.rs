@@ -31,6 +31,7 @@ use uuid::Uuid;
 
 #[cfg(unix)]
 use crate::execution::agent_events::format_event_line;
+use crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1;
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, StartupPromptStreamState,
 };
@@ -38,7 +39,6 @@ use crate::execution::agent_runtime::orchestration_session::{
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
 use crate::execution::prompt_fulfillment::PromptFulfillmentCancelHandle;
-use crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1;
 
 use super::{
     mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
@@ -1574,6 +1574,7 @@ pub(crate) fn persist_runtime_stop_closeout(
     persist_runtime_snapshots(store, orchestration_session, manifest)
 }
 
+#[allow(dead_code)]
 pub(crate) fn persist_runtime_cancel_closeout(
     store: &AgentRuntimeStateStore,
     orchestration_session: &mut OrchestrationSessionRecord,
@@ -3213,14 +3214,13 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 mod tests {
     use super::{
         apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
-        prompt_completion_session_state,
-        reconcile_hidden_owner_helper_start_timeout, validate_public_prompt_command_request,
-        HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperParticipantPlan,
-        HiddenOwnerHelperSessionPlan, HiddenOwnerHelperStartTimeoutReconciliation,
-        HiddenOwnerHelperStartupPromptPlan, LoadedPublicPrompt, OwnerHelperMode,
-        PrivateCancelOutcome, PrivateStopOutcome, PromptSubmitRuntime, PublicPromptAction,
-        PublicPromptCommandRequest, PublicSessionPosture, ResolvedRuntimeBackendKind,
-        ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
+        prompt_completion_session_state, reconcile_hidden_owner_helper_start_timeout,
+        validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
+        HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+        HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
+        LoadedPublicPrompt, OwnerHelperMode, PrivateCancelOutcome, PrivateStopOutcome,
+        PromptSubmitRuntime, PublicPromptAction, PublicPromptCommandRequest, PublicSessionPosture,
+        ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
     };
     #[cfg(unix)]
     use super::{

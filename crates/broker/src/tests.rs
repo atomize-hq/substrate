@@ -541,8 +541,7 @@ agents:
         )
         .expect("cancel_world_work should be accepted in Packet 1");
         assert!(
-            policy.agents_world_dispatch_allowed_actions
-                == vec!["cancel_world_work".to_string()],
+            policy.agents_world_dispatch_allowed_actions == vec!["cancel_world_work".to_string()],
             "expected Packet 1 cancel action to be accepted, got: {:?}",
             policy.agents_world_dispatch_allowed_actions
         );

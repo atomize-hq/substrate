@@ -4523,8 +4523,7 @@ fn public_world_retained_cancelled_snapshot_preserves_explicit_terminal_truth() 
         Some(2)
     );
 
-    let persisted_member =
-        fixture.load_participant("sess_world_cancelled", "ash_world_cancelled");
+    let persisted_member = fixture.load_participant("sess_world_cancelled", "ash_world_cancelled");
     assert_eq!(
         persisted_member.get("state").and_then(Value::as_str),
         Some("invalidated")
@@ -4546,7 +4545,9 @@ fn public_world_retained_cancelled_snapshot_preserves_explicit_terminal_truth() 
         Some("world-17")
     );
     assert_eq!(
-        persisted_member.get("world_generation").and_then(Value::as_u64),
+        persisted_member
+            .get("world_generation")
+            .and_then(Value::as_u64),
         Some(2)
     );
 }
