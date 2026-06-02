@@ -100,9 +100,10 @@ pub fn validate_world_dispatch_action_id(value: &str) -> Result<(), String> {
         | "spawn_world_worker"
         | "continue_world_worker"
         | "inspect_world_worker"
+        | "cancel_world_work"
         | "stop_world_worker" => Ok(()),
         _ => Err(format!(
-            "invalid world dispatch action '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, stop_world_worker",
+            "invalid world dispatch action '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, cancel_world_work, stop_world_worker",
             trimmed
         )),
     }
@@ -162,7 +163,7 @@ fn validate_world_dispatch_action_ids(values: &[String], key: &str) -> Result<()
     for value in values {
         validate_world_dispatch_action_id(value).map_err(|_| {
             format!(
-                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, stop_world_worker",
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, cancel_world_work, stop_world_worker",
                 key,
                 value.trim()
             )

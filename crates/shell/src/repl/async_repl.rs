@@ -4913,6 +4913,9 @@ async fn handle_internal_toolbox_world_dispatch_request(
             }
             Ok(outcome)
         }
+        WorldDispatchActionV1::CancelWorldWork => anyhow::bail!(
+            "unsupported_dispatch_action: cancel_world_work internal routing is not available in packet 1"
+        ),
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         WorldDispatchActionV1::SpawnWorldWorker => {
             let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;

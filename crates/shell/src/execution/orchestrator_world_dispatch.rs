@@ -171,6 +171,9 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
         WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
         WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
+        WorldDispatchActionV1::CancelWorldWork => anyhow::bail!(
+            "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
+        ),
         WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
     }
 }
@@ -829,6 +832,7 @@ fn acquire_world_dispatch_concurrency_guard(
             }))
         }
         WorldDispatchActionV1::ContinueWorldWorker
+        | WorldDispatchActionV1::CancelWorldWork
         | WorldDispatchActionV1::InspectWorldWorker
         | WorldDispatchActionV1::StopWorldWorker => Ok(None),
     }

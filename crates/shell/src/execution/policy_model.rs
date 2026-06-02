@@ -505,7 +505,7 @@ fn validate_world_dispatch_action_list_opt(values: &Option<Vec<String>>, key: &s
     for value in values {
         validate_world_dispatch_action_id(value).map_err(|_| {
             config_model::user_error(format!(
-                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, stop_world_worker",
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, cancel_world_work, stop_world_worker",
                 key,
                 value.trim()
             ))
@@ -1163,7 +1163,7 @@ fn validate_world_dispatch_action_list(values: &[String], key: &str) -> Result<(
     for value in values {
         validate_world_dispatch_action_id(value).map_err(|_| {
             config_model::user_error(format!(
-                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, stop_world_worker",
+                "invalid {} entry '{}'; expected one of run_world_task, spawn_world_worker, continue_world_worker, inspect_world_worker, cancel_world_work, stop_world_worker",
                 key,
                 value.trim()
             ))
@@ -2081,6 +2081,7 @@ agents:
       - "spawn_world_worker"
       - "continue_world_worker"
       - "inspect_world_worker"
+      - "cancel_world_work"
       - "stop_world_worker"
     allowed_modes:
       - "ephemeral"
@@ -2103,6 +2104,7 @@ agents:
                     "spawn_world_worker".to_string(),
                     "continue_world_worker".to_string(),
                     "inspect_world_worker".to_string(),
+                    "cancel_world_work".to_string(),
                     "stop_world_worker".to_string()
                 ][..]
             )
@@ -2130,6 +2132,26 @@ agents:
         assert_eq!(
             patch.agents.world_dispatch.allowed_actions.as_deref(),
             Some(&["stop_world_worker".to_string()][..])
+        );
+    }
+
+    #[test]
+    fn policy_patch_accepts_cancel_agents_world_dispatch_action() {
+        let path = Path::new("policy.yaml");
+        let patch = parse_policy_patch_yaml(
+            path,
+            r#"
+agents:
+  world_dispatch:
+    allowed_actions:
+      - "cancel_world_work"
+"#,
+        )
+        .expect("cancel_world_work should be allowlistable in packet 1");
+
+        assert_eq!(
+            patch.agents.world_dispatch.allowed_actions.as_deref(),
+            Some(&["cancel_world_work".to_string()][..])
         );
     }
 

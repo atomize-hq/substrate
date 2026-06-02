@@ -530,6 +530,25 @@ agents:
     }
 
     #[test]
+    fn accepts_cancel_world_dispatch_action_with_packet_one_allowlist() {
+        let policy = load_policy_from_yaml(
+            r#"
+agents:
+  world_dispatch:
+    allowed_actions:
+      - cancel_world_work
+"#,
+        )
+        .expect("cancel_world_work should be accepted in Packet 1");
+        assert!(
+            policy.agents_world_dispatch_allowed_actions
+                == vec!["cancel_world_work".to_string()],
+            "expected Packet 1 cancel action to be accepted, got: {:?}",
+            policy.agents_world_dispatch_allowed_actions
+        );
+    }
+
+    #[test]
     fn rejects_legacy_isolation_project_value() {
         // R-001: breaking schema; legacy values must hard error (only workspace|full allowed).
         expect_err_contains(

@@ -132,6 +132,7 @@ pub(crate) enum WorldDispatchActionV1 {
     SpawnWorldWorker,
     ContinueWorldWorker,
     InspectWorldWorker,
+    CancelWorldWork,
     StopWorldWorker,
 }
 
@@ -142,6 +143,7 @@ impl WorldDispatchActionV1 {
             Self::SpawnWorldWorker => "spawn_world_worker",
             Self::ContinueWorldWorker => "continue_world_worker",
             Self::InspectWorldWorker => "inspect_world_worker",
+            Self::CancelWorldWork => "cancel_world_work",
             Self::StopWorldWorker => "stop_world_worker",
         }
     }
@@ -231,6 +233,16 @@ pub(crate) struct WorkerInspectPayloadV1 {}
 #[allow(dead_code)]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct WorkerCancelPayloadV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graceful: Option<bool>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct WorkerStopPayloadV1 {}
 
 #[allow(dead_code)]
@@ -241,6 +253,7 @@ pub(crate) enum WorldDispatchPayloadV1 {
     WorkerSpawn(WorkerSpawnPayloadV1),
     WorkerContinue(WorkerContinuePayloadV1),
     WorkerInspect(WorkerInspectPayloadV1),
+    WorkerCancel(WorkerCancelPayloadV1),
     WorkerStop(WorkerStopPayloadV1),
 }
 
@@ -340,6 +353,7 @@ fn validate_world_dispatch_action_mode(
         | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::StopWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_action_mode: action {} is incompatible with mode {}",
@@ -370,6 +384,9 @@ fn validate_world_dispatch_payload(
         (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchPayloadV1::WorkerInspect(_)) => {
             Ok(())
         }
+        (WorldDispatchActionV1::CancelWorldWork, WorldDispatchPayloadV1::WorkerCancel(worker)) => {
+            validate_optional_world_dispatch_string(action, "reason", &worker.reason)
+        }
         (WorldDispatchActionV1::StopWorldWorker, WorldDispatchPayloadV1::WorkerStop(_)) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action {} requires matching typed payload",
@@ -385,6 +402,7 @@ fn validate_world_dispatch_target(
     match action {
         WorldDispatchActionV1::ContinueWorldWorker
         | WorldDispatchActionV1::InspectWorldWorker
+        | WorldDispatchActionV1::CancelWorldWork
         | WorldDispatchActionV1::StopWorldWorker => Ok(Some(required_world_dispatch_string(
             "target_participant_id",
             value,
@@ -520,6 +538,22 @@ pub(crate) struct InspectWorldWorkerOutcomeV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct CancelWorldWorkOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    pub target_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub state: WorldTaskTerminalStateV1,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct RetainedWorkerStopCloseoutV1 {
     pub participant_state: AgentRuntimeSessionState,
     pub session_state: OrchestrationSessionState,
@@ -609,6 +643,7 @@ pub(crate) enum WorldDispatchOutcomeV1 {
     SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
     ContinueWorldWorker(ContinueWorldWorkerOutcomeV1),
     InspectWorldWorker(InspectWorldWorkerOutcomeV1),
+    CancelWorldWork(CancelWorldWorkOutcomeV1),
     StopWorldWorker(StopWorldWorkerOutcomeV1),
 }
 
@@ -1454,14 +1489,16 @@ mod tests {
     use super::{
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
         AgentRuntimeBackendKind, AttachLaunchKnobs, AttachModePreference,
-        ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
-        DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
-        DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, RetainedWorkerInspectSnapshotV1,
-        RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
-        WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
+        CancelWorldWorkOutcomeV1, ContinueWorldWorkerEventClassV1, DispatchBaselineKind,
+        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
+        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
+        FieldValueOrigin, HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
+        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerCancelPayloadV1,
+        WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
+        WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2340,6 +2377,26 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_accepts_cancel_world_work_retained_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::CancelWorldWork,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
+                reason: Some("operator requested cancel".to_string()),
+                graceful: Some(true),
+            }),
+        )
+        .with_target_participant_id("ash-worker-37")
+        .validate()
+        .expect("cancel request should validate");
+
+        assert_eq!(
+            validated.target_participant_id.as_deref(),
+            Some("ash-worker-37")
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_accepts_stop_world_worker_retained_shape() {
         let validated = base_world_dispatch_request(
             WorldDispatchActionV1::StopWorldWorker,
@@ -2488,6 +2545,39 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_rejects_cancel_world_work_without_exact_target() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::CancelWorldWork,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
+        )
+        .validate()
+        .expect_err("cancel target must be mandatory");
+
+        assert_eq!(
+            error.to_string(),
+            "missing_dispatch_field: world dispatch request requires target_participant_id"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_cancel_world_work_ephemeral_mode() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::CancelWorldWork,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-37")
+        .validate()
+        .expect_err("cancel must stay retained-only in packet 1");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_action_mode: action cancel_world_work is incompatible with mode ephemeral"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_stop_world_worker_without_exact_target() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::StopWorldWorker,
@@ -2545,6 +2635,34 @@ mod tests {
                 .to_string()
                 .contains("unknown field `future_runtime_selector`"),
             "unexpected inspect payload serde error: {error}"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_unknown_cancel_payload_fields_during_deserialization() {
+        let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
+            "request_id": "req-37",
+            "idempotency_key": "idem-37",
+            "orchestration_session_id": "sess-37",
+            "caller_participant_id": "orch-37",
+            "action": "cancel_world_work",
+            "mode": "retained",
+            "target_backend_id": "cli:codex_world",
+            "target_participant_id": "ash-worker-37",
+            "world_id": "world-37",
+            "world_generation": 7,
+            "payload": {
+                "payload_kind": "worker_cancel",
+                "future_lifecycle_redirect": "packet-2"
+            }
+        }))
+        .expect_err("unknown cancel payload fields must fail closed");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unknown field `future_lifecycle_redirect`"),
+            "unexpected cancel payload serde error: {error}"
         );
     }
 
@@ -2696,6 +2814,35 @@ mod tests {
         );
         assert!(json.get("snapshot").is_none());
         assert!(json.get("worker_event").is_none());
+    }
+
+    #[test]
+    fn world_dispatch_contract_round_trips_typed_cancel_outcome_shape() {
+        let outcome = WorldDispatchOutcomeV1::CancelWorldWork(CancelWorldWorkOutcomeV1 {
+            request_id: "req-37".to_string(),
+            orchestration_session_id: "sess-37".to_string(),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch-37".to_string(),
+            target_participant_id: "ash-worker-37".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-37".to_string(),
+            world_generation: 7,
+            state: WorldTaskTerminalStateV1::Cancelled,
+            summary: "cancel closeout is distinct from stop".to_string(),
+        });
+
+        let json = serde_json::to_value(&outcome).expect("serialize cancel outcome");
+        assert_eq!(
+            json.get("outcome_kind").and_then(|value| value.as_str()),
+            Some("cancel_world_work")
+        );
+        assert_eq!(
+            json.get("state").and_then(|value| value.as_str()),
+            Some("cancelled")
+        );
+        assert!(json.get("closeout").is_none());
+        assert!(json.get("snapshot").is_none());
     }
 
     #[test]
