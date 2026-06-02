@@ -21,13 +21,15 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
-    private_stop_transport_path, request_private_stop, PrivateStopOutcome,
+    private_cancel_transport_path, private_stop_transport_path, request_private_cancel,
+    request_private_stop, PrivateCancelOutcome, PrivateStopOutcome,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
+    CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1,
     ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1,
-    InspectWorldWorkerOutcomeV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
-    WorkerContinuePayloadV1,
+    InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
+    RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, WorkerContinuePayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -183,9 +185,112 @@ async fn cancel_world_work(
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
-    anyhow::bail!(
-        "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
-    );
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!(
+            "unsupported_platform_or_posture: cancel_world_work retained closeout routing is supported only on linux in v1"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let resolved = prepared
+            .store
+            .resolve_internal_cancel_world_dispatch_target(
+                &prepared.request.orchestration_session_id,
+                &prepared.request.caller_participant_id,
+                prepared
+                    .request
+                    .target_participant_id
+                    .as_deref()
+                    .expect("validated cancel request must include target_participant_id"),
+                &prepared.request.target_backend_id,
+            )
+            .map_err(map_world_dispatch_resolution_error)?;
+        let payload = match &prepared.request.payload {
+            WorldDispatchPayloadV1::WorkerCancel(payload) => payload,
+            _ => anyhow::bail!(
+                "invalid_dispatch_payload: action cancel_world_work requires matching typed payload"
+            ),
+        };
+        let transport_path = private_cancel_transport_path(
+            &prepared.store,
+            &resolved.session.orchestration_session_id,
+            resolved.target_participant.participant_id(),
+        );
+        let transport_result = request_private_cancel(&transport_path, payload).await;
+        let closeout = wait_for_cancel_world_work_closeout(
+            &prepared.store,
+            &resolved.session.orchestration_session_id,
+            resolved.target_participant.participant_id(),
+        )
+        .await;
+        let closeout = match (transport_result, closeout) {
+            (
+                Ok(PrivateCancelOutcome::Accepted | PrivateCancelOutcome::AlreadyTerminal),
+                Ok(closeout),
+            ) => closeout,
+            (Ok(PrivateCancelOutcome::OwnerUnreachable), Ok(closeout))
+            | (Ok(PrivateCancelOutcome::ProtocolError), Ok(closeout))
+            | (Err(_), Ok(closeout)) => closeout,
+            (
+                Ok(PrivateCancelOutcome::Accepted | PrivateCancelOutcome::AlreadyTerminal),
+                Err(err),
+            ) => return Err(err),
+            (Ok(PrivateCancelOutcome::OwnerUnreachable), Err(err)) => {
+                return Err(anyhow::anyhow!(
+                    "owner_unreachable: private cancel transport for retained worker {} did not stay reachable until durable cancel closeout completed: {err}",
+                    resolved.target_participant.participant_id()
+                ));
+            }
+            (Ok(PrivateCancelOutcome::ProtocolError), Err(err)) => {
+                return Err(anyhow::anyhow!(
+                    "owner_unreachable: private cancel transport for retained worker {} returned a protocol error before durable cancel closeout completed: {err}",
+                    resolved.target_participant.participant_id()
+                ));
+            }
+            (Err(connect_err), Err(closeout_err)) => {
+                return Err(anyhow::anyhow!(
+                    "owner_unreachable: failed to deliver cancel_world_work to retained worker {} and durable cancel closeout was not observed ({connect_err:#}; {closeout_err})",
+                    resolved.target_participant.participant_id()
+                ));
+            }
+        };
+        let summary = summarize_cancel_world_work_result(
+            resolved.target_participant.participant_id(),
+            &resolved.target_participant.handle.backend_id,
+        );
+
+        Ok(WorldDispatchOutcomeV1::CancelWorldWork(
+            CancelWorldWorkOutcomeV1 {
+                request_id: prepared.request.request_id,
+                orchestration_session_id: resolved.session.orchestration_session_id.clone(),
+                action: WorldDispatchActionV1::CancelWorldWork,
+                mode: prepared.request.mode,
+                orchestrator_participant_id: resolved
+                    .caller_participant
+                    .participant_id()
+                    .to_string(),
+                target_participant_id: resolved.target_participant.participant_id().to_string(),
+                target_backend_id: resolved.target_participant.handle.backend_id.clone(),
+                world_id: resolved.session.world_id.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "missing_world_binding: orchestration session {} has no authoritative world binding",
+                        resolved.session.orchestration_session_id
+                    )
+                })?,
+                world_generation: resolved.session.world_generation.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "missing_world_binding: orchestration session {} has no authoritative world binding",
+                        resolved.session.orchestration_session_id
+                    )
+                })?,
+                state: CancelWorldWorkTerminalStateV1::Cancelled,
+                closeout,
+                summary,
+            },
+        ))
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -1927,9 +2032,68 @@ async fn wait_for_stop_world_worker_closeout(
 }
 
 #[cfg(target_os = "linux")]
+async fn wait_for_cancel_world_work_closeout(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<RetainedWorkerCancelCloseoutV1> {
+    let started_at = Instant::now();
+    loop {
+        let participant = store.load_participant(participant_id)?.ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing_target_participant: retained worker {} disappeared before durable cancel closeout was observed",
+                participant_id
+            )
+        })?;
+        let session = store
+            .load_orchestration_session(orchestration_session_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_orchestration_session: orchestration session {} disappeared before durable cancel closeout was observed",
+                    orchestration_session_id
+                )
+            })?;
+        if participant.has_cancelled_terminal_truth() && session.has_cancelled_terminal_truth() {
+            return Ok(RetainedWorkerCancelCloseoutV1 {
+                participant_state: Some(participant.handle.state),
+                session_state: Some(session.state),
+            });
+        }
+        if !participant.handle.state.is_live() && !participant.has_cancelled_terminal_truth() {
+            anyhow::bail!(
+                "cancel_closeout_failed: retained worker {} reached terminal state {} instead of cancelled",
+                participant_id,
+                participant.reviewable_terminal_state_label()
+            );
+        }
+        if session.state.is_terminal() && !session.has_cancelled_terminal_truth() {
+            anyhow::bail!(
+                "cancel_closeout_failed: orchestration session {} reached terminal state {} instead of cancelled",
+                orchestration_session_id,
+                session.reviewable_terminal_state_label()
+            );
+        }
+        if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
+            anyhow::bail!(
+                "owner_unreachable: timed out waiting for retained worker {} to reach durable cancelled closeout",
+                participant_id
+            );
+        }
+        tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn summarize_stop_world_worker_result(participant_id: &str, backend_id: &str) -> String {
     format!(
         "stop_world_worker drove durable stopped closeout for retained worker {participant_id} on backend {backend_id} via the existing private owner stop surface"
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn summarize_cancel_world_work_result(participant_id: &str, backend_id: &str) -> String {
+    format!(
+        "cancel_world_work drove durable cancelled closeout for retained worker {participant_id} on backend {backend_id} via the dedicated private owner cancel surface"
     )
 }
 
@@ -3523,7 +3687,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn dispatch_contract_cancel_world_work_reaches_packet_one_unsupported_dispatch_after_validation(
+    async fn dispatch_contract_cancel_world_work_returns_typed_closeout_after_authoritative_cancel(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -3537,18 +3701,124 @@ mod tests {
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session for cancel setup")
+            .expect("authoritative orchestration session for cancel setup");
+        let mut active_member = store
+            .load_participant("ash_member")
+            .expect("load retained worker for cancel setup")
+            .expect("retained worker for cancel setup");
+        active_member.transition_state(AgentRuntimeSessionState::Running);
+        active_member.internal.latest_run_id = Some("run-cancel".to_string());
+        crate::execution::agent_runtime::control::persist_runtime_snapshots(
+            &store,
+            &session,
+            &active_member,
+        )
+        .expect("persist cancelable retained worker");
+        let (cancel_tx, mut cancel_rx) =
+            crate::execution::agent_runtime::control::private_cancel_request_channel();
+        let mut cancel_transport =
+            crate::execution::agent_runtime::control::register_private_cancel_transport(
+                &store,
+                "sess_dispatch",
+                "ash_member",
+                cancel_tx,
+            )
+            .await
+            .expect("register private cancel transport");
+        let store_for_task = store.clone();
+        let cancel_owner = tokio::spawn(async move {
+            let request = tokio::time::timeout(Duration::from_secs(3), cancel_rx.recv())
+                .await
+                .expect("timed out waiting for private cancel request")
+                .expect("private cancel request");
+            assert_eq!(
+                request.payload.reason.as_deref(),
+                Some("operator requested cancel")
+            );
+            assert_eq!(request.payload.graceful, Some(true));
+            let mut session = store_for_task
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for cancel closeout")
+                .expect("authoritative orchestration session for cancel closeout");
+            let mut participant = store_for_task
+                .load_participant("ash_member")
+                .expect("load retained participant for cancel closeout")
+                .expect("authoritative retained participant for cancel closeout");
+            participant.mark_cancelled_terminal_state();
+            participant.touch_heartbeat();
+            session.mark_cancelled_terminal();
+            crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                &store_for_task,
+                &session,
+                &participant,
+            )
+            .expect("persist retained cancel closeout");
+            let _ = request.response_tx.send(
+                crate::execution::agent_runtime::control::PrivateCancelOutcome::Accepted,
+            );
+        });
 
         let prepared =
             prepare_orchestrator_world_dispatch(&store, sample_cancel_world_dispatch_request())
                 .expect("prepare cancel dispatch request");
-        let err = dispatch_prepared_orchestrator_world_request(prepared)
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
             .await
-            .expect_err("packet 1 cancel must fail closed at dispatch routing");
+            .expect("dispatch prepared cancel request");
 
+        let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
+            panic!("expected cancel_world_work outcome envelope");
+        };
+        assert_eq!(outcome.request_id, "req_cancel");
+        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+        assert_eq!(outcome.action, WorldDispatchActionV1::CancelWorldWork);
+        assert_eq!(outcome.mode, WorldDispatchModeV1::Retained);
+        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+        assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
         assert_eq!(
-            err.to_string(),
-            "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
+            outcome.closeout.participant_state,
+            Some(AgentRuntimeSessionState::Invalidated)
         );
+        assert_eq!(
+            outcome.closeout.session_state,
+            Some(OrchestrationSessionState::Invalidated)
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("dedicated private owner cancel surface"),
+            "summary should stay explicit about the dedicated cancel seam: {}",
+            outcome.summary
+        );
+
+        let session_after = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session after cancel")
+            .expect("retained orchestration session after cancel");
+        assert!(session_after.has_cancelled_terminal_truth());
+        assert_eq!(
+            session_after.invalidation_reason.as_deref(),
+            Some("cancelled")
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after cancel")
+            .expect("retained participant after cancel");
+        assert!(participant_after.has_cancelled_terminal_truth());
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("cancelled")
+        );
+
+        cancel_owner.await.expect("cancel owner task should join");
+        cancel_transport.close().await;
     }
 
     #[cfg(target_os = "linux")]

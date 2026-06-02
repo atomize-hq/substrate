@@ -34,19 +34,26 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
-    apply_runtime_stop_closeout, build_session_resume_extension,
+    apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
+    build_session_resume_extension,
     invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
     mark_runtime_startup_failed, note_runtime_stop_requested, persist_runtime_snapshots,
-    persist_world_binding_authority, private_prompt_request_channel, private_stop_request_channel,
-    prompt_runtime_from_parts, register_private_prompt_transport, register_private_stop_transport,
-    runtime_controls_parent_session, runtime_is_terminal, runtime_stop_transport_ids,
-    spawn_local_private_prompt_owner, spawn_local_private_stop_owner, submit_host_prompt_turn,
-    toolbox_transport_path, HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
-    PrivatePromptTransport, PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport,
-    PublicPromptAction, PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
+    persist_world_binding_authority, private_cancel_request_channel,
+    private_prompt_request_channel, private_stop_request_channel, prompt_runtime_from_parts,
+    register_private_cancel_transport, register_private_prompt_transport,
+    register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
+    runtime_stop_transport_ids, spawn_local_private_cancel_owner,
+    spawn_local_private_prompt_owner, spawn_local_private_stop_owner,
+    submit_host_prompt_turn, toolbox_transport_path, HiddenOwnerHelperLaunchPlan,
+    OwnerHelperMode, PersistedWorldBinding, PrivateCancelRequestReceiver,
+    PrivateCancelTransport, PrivatePromptTransport, PrivateStopOutcome,
+    PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
+    PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
     SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
-use crate::execution::agent_runtime::dispatch_contract::StopWorldWorkerOutcomeV1;
+use crate::execution::agent_runtime::dispatch_contract::{
+    CancelWorldWorkOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
+};
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
@@ -1903,8 +1910,11 @@ struct AsyncReplAgentRuntime {
     uaa_session_handle_id: String,
     retained_control: RetainedRunControl,
     shutdown_requested: Arc<AtomicBool>,
+    cancel_requested: Arc<AtomicBool>,
     auto_park_rx: Option<UnboundedReceiver<()>>,
     private_stop_rx: Option<PrivateStopRequestReceiver>,
+    cancel_transport: Option<PrivateCancelTransport>,
+    cancel_owner_task: Option<tokio::task::JoinHandle<()>>,
     stop_transport: Option<PrivateStopTransport>,
     stop_owner_task: Option<tokio::task::JoinHandle<()>>,
     prompt_transport: Option<PrivatePromptTransport>,
@@ -2698,8 +2708,11 @@ async fn wait_for_hidden_owner_helper_completion(
         uaa_session_handle_id,
         mut retained_control,
         shutdown_requested,
+        cancel_requested,
         mut auto_park_rx,
         mut private_stop_rx,
+        mut cancel_transport,
+        mut cancel_owner_task,
         mut stop_transport,
         mut stop_owner_task,
         mut prompt_transport,
@@ -2721,8 +2734,11 @@ async fn wait_for_hidden_owner_helper_completion(
                     manifest: &manifest,
                     uaa_session_handle_id: uaa_session_handle_id.as_str(),
                     shutdown_requested: &shutdown_requested,
+                    cancel_requested: &cancel_requested,
                     auto_park_rx: &mut auto_park_rx,
                     private_stop_rx: &mut private_stop_rx,
+                    cancel_transport: &mut cancel_transport,
+                    cancel_owner_task: &mut cancel_owner_task,
                     stop_transport: &mut stop_transport,
                     stop_owner_task: &mut stop_owner_task,
                     prompt_transport: &mut prompt_transport,
@@ -2771,8 +2787,11 @@ async fn wait_for_hidden_owner_helper_completion(
                                             observe_task: retained_control.observe_task.take(),
                                         }),
                                         shutdown_requested: Arc::clone(&shutdown_requested),
+                                        cancel_requested: Arc::clone(&cancel_requested),
                                         auto_park_rx: Some(auto_park_requests),
                                         private_stop_rx,
+                                        cancel_transport,
+                                        cancel_owner_task,
                                         stop_transport,
                                         stop_owner_task,
                                         prompt_transport,
@@ -2798,6 +2817,12 @@ async fn wait_for_hidden_owner_helper_completion(
         }
     }
 
+    if let Some(mut cancel_transport) = cancel_transport.take() {
+        cancel_transport.close().await;
+    }
+    if let Some(task) = cancel_owner_task.take() {
+        let _ = task.await;
+    }
     if let Some(mut stop_transport) = stop_transport.take() {
         stop_transport.close().await;
     }
@@ -2853,8 +2878,11 @@ struct HiddenOwnerHelperLocalRuntimeContext<'a> {
     manifest: &'a Arc<Mutex<AgentRuntimeSessionManifest>>,
     uaa_session_handle_id: &'a str,
     shutdown_requested: &'a Arc<AtomicBool>,
+    cancel_requested: &'a Arc<AtomicBool>,
     auto_park_rx: &'a mut Option<UnboundedReceiver<()>>,
     private_stop_rx: &'a mut Option<PrivateStopRequestReceiver>,
+    cancel_transport: &'a mut Option<PrivateCancelTransport>,
+    cancel_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
     stop_transport: &'a mut Option<PrivateStopTransport>,
     stop_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
     prompt_transport: &'a mut Option<PrivatePromptTransport>,
@@ -2877,8 +2905,11 @@ async fn wait_for_hidden_owner_helper_local_runtime(
         manifest,
         uaa_session_handle_id,
         shutdown_requested,
+        cancel_requested,
         auto_park_rx,
         private_stop_rx,
+        cancel_transport,
+        cancel_owner_task,
         stop_transport,
         stop_owner_task,
         prompt_transport,
@@ -2912,8 +2943,11 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                             completion_task: None,
                         }),
                         shutdown_requested: Arc::clone(shutdown_requested),
+                        cancel_requested: Arc::clone(cancel_requested),
                         auto_park_rx: auto_park_rx.take(),
                         private_stop_rx: private_stop_rx.take(),
+                        cancel_transport: cancel_transport.take(),
+                        cancel_owner_task: cancel_owner_task.take(),
                         stop_transport: stop_transport.take(),
                         stop_owner_task: stop_owner_task.take(),
                         prompt_transport: prompt_transport.take(),
@@ -3042,8 +3076,11 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                             completion_task: retained_control.completion_task.take(),
                         }),
                         shutdown_requested: Arc::clone(shutdown_requested),
+                        cancel_requested: Arc::clone(cancel_requested),
                         auto_park_rx: auto_park_rx.take(),
                         private_stop_rx: private_stop_rx.take(),
+                        cancel_transport: cancel_transport.take(),
+                        cancel_owner_task: cancel_owner_task.take(),
                         stop_transport: stop_transport.take(),
                         stop_owner_task: stop_owner_task.take(),
                         prompt_transport: prompt_transport.take(),
@@ -3436,6 +3473,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let agent_api::AgentWrapperRunHandle { events, completion } = control.handle;
     let cancel = control.cancel;
     let shutdown_requested = Arc::new(AtomicBool::new(false));
+    let cancel_requested = Arc::new(AtomicBool::new(false));
     let (startup_tx, startup_rx) = tokio::sync::oneshot::channel::<RuntimeStartupSignal>();
     let startup_signal = Arc::new(Mutex::new(Some(startup_tx)));
     let (auto_park_tx, auto_park_rx) = if auto_park_after_public_turn {
@@ -3727,6 +3765,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let startup_signal_for_completion = Arc::clone(&startup_signal);
     let startup_backchannel_for_completion = startup_backchannel.clone();
     let shutdown_for_completion = Arc::clone(&shutdown_requested);
+    let cancel_requested_for_completion = Arc::clone(&cancel_requested);
     let run_id_for_completion = run_id.clone();
     let runtime_role_for_completion = runtime_role.clone();
     let completion_task = tokio::spawn(async move {
@@ -3777,6 +3816,16 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                             orchestration_guard.touch_active();
                         }
                         startup_failure = Some(reason);
+                    } else if cancel_requested_for_completion.load(Ordering::SeqCst)
+                        && completion
+                            .status
+                            .code()
+                            .is_some_and(exit_code_is_cancelled)
+                    {
+                        apply_runtime_cancel_closeout(
+                            &mut orchestration_guard,
+                            &mut manifest_guard,
+                        );
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Stopping
                     {
@@ -3861,6 +3910,13 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                             orchestration_guard.touch_active();
                         }
                         startup_failure = Some(reason);
+                    } else if cancel_requested_for_completion.load(Ordering::SeqCst)
+                        && reason == "cancelled"
+                    {
+                        apply_runtime_cancel_closeout(
+                            &mut orchestration_guard,
+                            &mut manifest_guard,
+                        );
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Stopping
                         && reason == "cancelled"
@@ -4183,6 +4239,49 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let (stop_tx, stop_rx) = private_stop_request_channel();
     let (stop_orchestration_session_id, stop_participant_id) =
         runtime_stop_transport_ids(&manifest);
+    let (cancel_transport, cancel_owner_task) = if runtime_role == MEMBER_ROLE {
+        let (cancel_tx, cancel_rx) = private_cancel_request_channel();
+        let cancel_transport = match register_private_cancel_transport(
+            &startup_context.store,
+            &stop_orchestration_session_id,
+            &stop_participant_id,
+            cancel_tx,
+        )
+        .await
+        {
+            Ok(cancel_transport) => cancel_transport,
+            Err(err) => {
+                abort_bootstrap_runtime(
+                    &shutdown_requested,
+                    &mut retained_control,
+                    &mut heartbeat_stop_tx,
+                    &mut heartbeat_task,
+                )
+                .await;
+                let message = format!("failed to register private cancel transport: {err:#}");
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &message,
+                );
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message,
+                });
+            }
+        };
+        let cancel_owner_task = spawn_local_private_cancel_owner(
+            Arc::clone(&manifest),
+            Arc::clone(&shutdown_requested),
+            Arc::clone(&cancel_requested),
+            retained_control.cancel.clone(),
+            cancel_rx,
+        );
+        (Some(cancel_transport), Some(cancel_owner_task))
+    } else {
+        (None, None)
+    };
     let stop_transport = match register_private_stop_transport(
         &startup_context.store,
         &stop_orchestration_session_id,
@@ -4279,8 +4378,11 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         uaa_session_handle_id,
         retained_control: RetainedRunControl::Local(retained_control),
         shutdown_requested,
+        cancel_requested,
         auto_park_rx,
         private_stop_rx,
+        cancel_transport,
+        cancel_owner_task,
         stop_transport: Some(stop_transport),
         stop_owner_task,
         prompt_transport: Some(prompt_transport),
@@ -4818,6 +4920,18 @@ fn runtime_launch_span_id(runtime: &AsyncReplAgentRuntime) -> Option<String> {
     }
 }
 
+fn private_cancel_signal(payload: &WorkerCancelPayloadV1) -> &'static str {
+    if payload.graceful == Some(false) {
+        "TERM"
+    } else {
+        "INT"
+    }
+}
+
+fn exit_code_is_cancelled(exit_code: i32) -> bool {
+    exit_code == 130
+}
+
 #[cfg(all(test, unix))]
 async fn request_internal_toolbox_world_dispatch(
     path: &Path,
@@ -4902,15 +5016,28 @@ async fn handle_internal_toolbox_world_dispatch_request(
         | WorldDispatchActionV1::InspectWorldWorker
         | WorldDispatchActionV1::CancelWorldWork
         | WorldDispatchActionV1::StopWorldWorker => {
-            let outcome = dispatch_orchestrator_world_request(&startup_context.store, request).await?;
-            if let WorldDispatchOutcomeV1::StopWorldWorker(stop) = &outcome {
-                reap_stopped_internal_dispatch_member_runtime(
-                    stop,
-                    member_runtimes,
-                    agent_printer,
-                    telemetry,
-                )
-                .await;
+            let outcome =
+                dispatch_orchestrator_world_request(&startup_context.store, request).await?;
+            match &outcome {
+                WorldDispatchOutcomeV1::CancelWorldWork(cancel) => {
+                    reap_cancelled_internal_dispatch_member_runtime(
+                        cancel,
+                        member_runtimes,
+                        agent_printer,
+                        telemetry,
+                    )
+                    .await;
+                }
+                WorldDispatchOutcomeV1::StopWorldWorker(stop) => {
+                    reap_stopped_internal_dispatch_member_runtime(
+                        stop,
+                        member_runtimes,
+                        agent_printer,
+                        telemetry,
+                    )
+                    .await;
+                }
+                _ => {}
             }
             Ok(outcome)
         }
@@ -5006,6 +5133,29 @@ async fn handle_internal_toolbox_world_dispatch_request(
 
 async fn reap_stopped_internal_dispatch_member_runtime(
     outcome: &StopWorldWorkerOutcomeV1,
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) {
+    let should_remove = member_runtimes
+        .get(outcome.target_backend_id.as_str())
+        .is_some_and(|runtime| {
+            let manifest = runtime_manifest_snapshot(runtime);
+            manifest.handle.role == MEMBER_ROLE
+                && manifest.handle.orchestration_session_id == outcome.orchestration_session_id
+                && manifest.handle.participant_id == outcome.target_participant_id
+        });
+    if !should_remove {
+        return;
+    }
+
+    if let Some(runtime) = member_runtimes.remove(outcome.target_backend_id.as_str()) {
+        shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
+    }
+}
+
+async fn reap_cancelled_internal_dispatch_member_runtime(
+    outcome: &CancelWorldWorkOutcomeV1,
     member_runtimes: &mut RetainedMemberRuntimeMap,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
@@ -5440,6 +5590,42 @@ fn spawn_remote_private_stop_owner(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn spawn_remote_private_cancel_owner(
+    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    shutdown_requested: Arc<AtomicBool>,
+    cancel_requested: Arc<AtomicBool>,
+    client: Arc<AgentClient>,
+    span_id: String,
+    mut cancel_rx: PrivateCancelRequestReceiver,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(request) = cancel_rx.recv().await {
+            let outcome = if runtime_is_terminal(&manifest) {
+                crate::execution::agent_runtime::control::PrivateCancelOutcome::AlreadyTerminal
+            } else {
+                shutdown_requested.store(true, Ordering::SeqCst);
+                cancel_requested.store(true, Ordering::SeqCst);
+                match client
+                    .cancel_execute(ExecuteCancelRequestV1 {
+                        span_id: span_id.clone(),
+                        sig: private_cancel_signal(&request.payload).to_string(),
+                    })
+                    .await
+                {
+                    Ok(_) => crate::execution::agent_runtime::control::PrivateCancelOutcome::Accepted,
+                    Err(_) => {
+                        shutdown_requested.store(false, Ordering::SeqCst);
+                        cancel_requested.store(false, Ordering::SeqCst);
+                        crate::execution::agent_runtime::control::PrivateCancelOutcome::ProtocolError
+                    }
+                }
+            };
+            let _ = request.response_tx.send(outcome);
+        }
+    })
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn start_remote_member_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
     initial_prompt: Option<String>,
@@ -5548,6 +5734,7 @@ async fn start_remote_member_runtime_with_prepared(
     })?;
 
     let shutdown_requested = Arc::new(AtomicBool::new(false));
+    let cancel_requested = Arc::new(AtomicBool::new(false));
     let (startup_tx, startup_rx) = tokio::sync::oneshot::channel::<RuntimeStartupSignal>();
     let startup_signal = Arc::new(Mutex::new(Some(startup_tx)));
     let span_id = Arc::new(Mutex::new(None::<String>));
@@ -5557,6 +5744,7 @@ async fn start_remote_member_runtime_with_prepared(
     let event_manifest = Arc::clone(&manifest);
     let startup_signal_for_events = Arc::clone(&startup_signal);
     let shutdown_for_events = Arc::clone(&shutdown_requested);
+    let cancel_requested_for_events = Arc::clone(&cancel_requested);
     let runtime_role_for_events = runtime_role.clone();
     let run_id_for_events = run_id.clone();
     let span_id_for_events = Arc::clone(&span_id);
@@ -5667,6 +5855,13 @@ async fn start_remote_member_runtime_with_prepared(
                                 manifest_guard.internal.last_error_message = Some(reason.clone());
                                 orchestration_guard.touch_active();
                                 startup_failure = Some(reason);
+                            } else if cancel_requested_for_events.load(Ordering::SeqCst)
+                                && exit_code_is_cancelled(exit)
+                            {
+                                apply_runtime_cancel_closeout(
+                                    &mut orchestration_guard,
+                                    &mut manifest_guard,
+                                );
                             } else if shutdown_for_events.load(Ordering::SeqCst)
                                 || matches!(exit, 0 | 129 | 130 | 131 | 143)
                             {
@@ -5899,9 +6094,40 @@ async fn start_remote_member_runtime_with_prepared(
             message: "runtime startup signalled ready without a streamed execute span_id"
                 .to_string(),
         })?;
-    let (stop_tx, stop_rx) = private_stop_request_channel();
     let (stop_orchestration_session_id, stop_participant_id) =
         runtime_stop_transport_ids(&manifest);
+    let (cancel_tx, cancel_rx) = private_cancel_request_channel();
+    let cancel_transport = match register_private_cancel_transport(
+        &startup_context.store,
+        &stop_orchestration_session_id,
+        &stop_participant_id,
+        cancel_tx,
+    )
+    .await
+    {
+        Ok(cancel_transport) => cancel_transport,
+        Err(err) => {
+            abort_remote_member_bootstrap_runtime(
+                &shutdown_requested,
+                &client,
+                &span_id,
+                &mut observe_task,
+            )
+            .await;
+            let message = format!("failed to register private cancel transport: {err:#}");
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message,
+            });
+        }
+    };
+    let (stop_tx, stop_rx) = private_stop_request_channel();
     let stop_transport = match register_private_stop_transport(
         &startup_context.store,
         &stop_orchestration_session_id,
@@ -5933,6 +6159,14 @@ async fn start_remote_member_runtime_with_prepared(
         }
     };
     let client = Arc::new(client);
+    let cancel_owner_task = spawn_remote_private_cancel_owner(
+        Arc::clone(&manifest),
+        Arc::clone(&shutdown_requested),
+        Arc::clone(&cancel_requested),
+        Arc::clone(&client),
+        resolved_span_id.clone(),
+        cancel_rx,
+    );
     let stop_owner_task = spawn_remote_private_stop_owner(
         Arc::clone(&manifest),
         Arc::clone(&shutdown_requested),
@@ -5995,8 +6229,11 @@ async fn start_remote_member_runtime_with_prepared(
             observe_task,
         }),
         shutdown_requested,
+        cancel_requested,
         auto_park_rx: None,
         private_stop_rx: None,
+        cancel_transport: Some(cancel_transport),
+        cancel_owner_task: Some(cancel_owner_task),
         stop_transport: Some(stop_transport),
         stop_owner_task: Some(stop_owner_task),
         prompt_transport: Some(prompt_transport),
@@ -6557,6 +6794,12 @@ async fn shutdown_host_orchestrator_runtime_with_mode(
         );
     }
 
+    if let Some(mut cancel_transport) = runtime.cancel_transport.take() {
+        cancel_transport.close().await;
+    }
+    if let Some(task) = runtime.cancel_owner_task.take() {
+        let _ = task.await;
+    }
     if let Some(mut stop_transport) = runtime.stop_transport.take() {
         stop_transport.close().await;
     }
@@ -6700,6 +6943,13 @@ async fn park_host_orchestrator_runtime(
         return false;
     }
 
+    if let Some(mut cancel_transport) = runtime.cancel_transport.take() {
+        cancel_transport.close().await;
+    }
+    if let Some(task) = runtime.cancel_owner_task.take() {
+        task.abort();
+        let _ = task.await;
+    }
     if let Some(mut stop_transport) = runtime.stop_transport.take() {
         stop_transport.close().await;
     }
@@ -8568,7 +8818,8 @@ mod tests {
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::dispatch_contract::{
-        WorkerCancelPayloadV1, WorkerInspectPayloadV1, WorkerStopPayloadV1,
+        CancelWorldWorkTerminalStateV1, WorkerCancelPayloadV1, WorkerInspectPayloadV1,
+        WorkerStopPayloadV1,
     };
     #[cfg(unix)]
     use crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs;
@@ -10923,7 +11174,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
-    fn orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_packet_one_unsupported_dispatch(
+    fn orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_typed_cancel_closeout(
     ) {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
@@ -10933,6 +11184,7 @@ mod tests {
         fs::create_dir_all(&substrate_home).expect("substrate home");
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -10952,6 +11204,11 @@ mod tests {
             runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
+        fs::write(
+            agents_dir.join("codex_world.yaml"),
+            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+        )
+        .expect("write codex_world agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -10989,6 +11246,27 @@ mod tests {
             )
             .await
             .expect("register toolbox transport");
+            let selected_descriptor =
+                select_member_runtime_descriptor_for_backend(&startup_context, "cli:codex_world")
+                    .expect("member selection should succeed")
+                    .expect("member runtime should be selected");
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor,
+                &world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_internal_dispatch_member_runtime(
+                member_prepared,
+                "internal cancel bootstrap".to_string(),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+            let member_manifest = runtime_manifest_snapshot(&member_runtime);
 
             let request = WorldDispatchRequestV1 {
                 request_id: Some("req_toolbox_cancel".to_string()),
@@ -11000,7 +11278,7 @@ mod tests {
                 action: WorldDispatchActionV1::CancelWorldWork,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
                 target_backend_id: Some("cli:codex_world".to_string()),
-                target_participant_id: Some("ash-worker-cancel".to_string()),
+                target_participant_id: Some(member_manifest.handle.participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
                 world_generation: Some(world_binding.world_generation),
                 payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
@@ -11011,6 +11289,7 @@ mod tests {
             let transport_path =
                 internal_toolbox_transport_path(&startup_context.orchestration_session_id());
             let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            member_runtimes.insert(runtime_backend_id(&member_runtime), member_runtime);
             let request_task = tokio::spawn({
                 let transport_path = transport_path.clone();
                 let request = request.clone();
@@ -11034,14 +11313,26 @@ mod tests {
                 .await
                 .expect("timed out waiting for internal toolbox response")
                 .expect("internal toolbox task should join")
-                .expect_err(
-                    "well-formed cancel request must reach packet 1 unsupported-dispatch ingress",
-                );
-
+                .expect("well-formed cancel request should return a typed outcome");
+            let WorldDispatchOutcomeV1::CancelWorldWork(cancel) = err else {
+                panic!("expected cancel_world_work outcome envelope");
+            };
+            assert_eq!(cancel.action, WorldDispatchActionV1::CancelWorldWork);
+            assert_eq!(cancel.state, CancelWorldWorkTerminalStateV1::Cancelled);
             assert_eq!(
-                err.to_string(),
-                "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
+                cancel.target_participant_id,
+                member_manifest.handle.participant_id
             );
+            assert!(
+                member_runtimes.is_empty(),
+                "cancel closeout should reap the retained member runtime"
+            );
+            let participant_after = startup_context
+                .store
+                .load_participant(&cancel.target_participant_id)
+                .expect("load cancelled participant")
+                .expect("cancelled participant");
+            assert!(participant_after.has_cancelled_terminal_truth());
 
             shutdown_host_orchestrator_runtime(
                 host_runtime,

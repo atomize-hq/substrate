@@ -1652,7 +1652,7 @@ fn wait_for_shell_owned_session_ready(
     timeout: Duration,
 ) -> (String, String) {
     let session = wait_for_single_active_session(fixture, timeout);
-    wait_for_output_after(repl, "substrate>", output_offset, Duration::from_secs(2))
+    wait_for_output_after(repl, "substrate>", output_offset, timeout)
         .unwrap_or_else(|| {
             panic!(
                 "timed out waiting for prompt after shell-owned session became active; output:\n{}\nsessions: {:#?}",

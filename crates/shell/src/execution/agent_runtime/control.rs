@@ -38,6 +38,7 @@ use crate::execution::agent_runtime::orchestration_session::{
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
 use crate::execution::prompt_fulfillment::PromptFulfillmentCancelHandle;
+use crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1;
 
 use super::{
     mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
@@ -486,16 +487,40 @@ pub(crate) enum PrivateStopOutcome {
     ProtocolError,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PrivateCancelOutcome {
+    Accepted,
+    AlreadyTerminal,
+    OwnerUnreachable,
+    ProtocolError,
+}
+
 #[derive(Debug)]
 pub(crate) struct PrivateStopRequest {
     pub response_tx: oneshot::Sender<PrivateStopOutcome>,
 }
 
+#[derive(Debug)]
+pub(crate) struct PrivateCancelRequest {
+    pub payload: WorkerCancelPayloadV1,
+    pub response_tx: oneshot::Sender<PrivateCancelOutcome>,
+}
+
 pub(crate) type PrivateStopRequestReceiver = mpsc::UnboundedReceiver<PrivateStopRequest>;
 pub(crate) type PrivateStopRequestSender = mpsc::UnboundedSender<PrivateStopRequest>;
+pub(crate) type PrivateCancelRequestReceiver = mpsc::UnboundedReceiver<PrivateCancelRequest>;
+pub(crate) type PrivateCancelRequestSender = mpsc::UnboundedSender<PrivateCancelRequest>;
 
 #[derive(Debug)]
 pub(crate) struct PrivateStopTransport {
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    task: Option<tokio::task::JoinHandle<()>>,
+    path: PathBuf,
+}
+
+#[derive(Debug)]
+pub(crate) struct PrivateCancelTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
     path: PathBuf,
@@ -598,6 +623,26 @@ pub(crate) enum PublicPromptEnvelope {
 }
 
 impl PrivateStopTransport {
+    #[allow(dead_code)]
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub(crate) async fn close(&mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        if let Some(task) = self.task.take() {
+            let _ = task.await;
+        }
+        #[cfg(unix)]
+        {
+            let _ = tokio::fs::remove_file(&self.path).await;
+        }
+    }
+}
+
+impl PrivateCancelTransport {
     #[allow(dead_code)]
     pub(crate) fn path(&self) -> &Path {
         &self.path
@@ -1345,6 +1390,11 @@ pub(crate) fn private_stop_request_channel(
     mpsc::unbounded_channel()
 }
 
+pub(crate) fn private_cancel_request_channel(
+) -> (PrivateCancelRequestSender, PrivateCancelRequestReceiver) {
+    mpsc::unbounded_channel()
+}
+
 pub(crate) fn runtime_is_terminal(manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>) -> bool {
     let state = manifest
         .lock()
@@ -1506,12 +1556,30 @@ pub(crate) fn apply_runtime_stop_closeout(
     }
 }
 
+pub(crate) fn apply_runtime_cancel_closeout(
+    orchestration_session: &mut OrchestrationSessionRecord,
+    manifest: &mut AgentRuntimeSessionManifest,
+) {
+    manifest.mark_cancelled_terminal_state();
+    manifest.touch_heartbeat();
+    orchestration_session.mark_cancelled_terminal();
+}
+
 pub(crate) fn persist_runtime_stop_closeout(
     store: &AgentRuntimeStateStore,
     orchestration_session: &mut OrchestrationSessionRecord,
     manifest: &mut AgentRuntimeSessionManifest,
 ) -> Result<()> {
     apply_runtime_stop_closeout(orchestration_session, manifest);
+    persist_runtime_snapshots(store, orchestration_session, manifest)
+}
+
+pub(crate) fn persist_runtime_cancel_closeout(
+    store: &AgentRuntimeStateStore,
+    orchestration_session: &mut OrchestrationSessionRecord,
+    manifest: &mut AgentRuntimeSessionManifest,
+) -> Result<()> {
+    apply_runtime_cancel_closeout(orchestration_session, manifest);
     persist_runtime_snapshots(store, orchestration_session, manifest)
 }
 
@@ -1529,6 +1597,25 @@ pub(crate) fn private_stop_transport_path(
     if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
         return PathBuf::from("/tmp")
             .join("substrate-agent-hub-stop")
+            .join(socket_name);
+    }
+    preferred
+}
+
+#[cfg(unix)]
+pub(crate) fn private_cancel_transport_path(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    let participant_fragment = compact_stop_transport_fragment(participant_id);
+    let socket_name = format!("{session_fragment}-{participant_fragment}.cancel.sock");
+    let preferred = store.handles_dir().join("cancel").join(&socket_name);
+    #[cfg(unix)]
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-hub-cancel")
             .join(socket_name);
     }
     preferred
@@ -1594,6 +1681,50 @@ pub(crate) async fn register_private_stop_transport(
     })
 }
 
+#[cfg(unix)]
+pub(crate) async fn register_private_cancel_transport(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    cancel_tx: PrivateCancelRequestSender,
+) -> Result<PrivateCancelTransport> {
+    let path = private_cancel_transport_path(store, orchestration_session_id, participant_id);
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "private cancel transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    remove_existing_private_cancel_transport_path(&path)?;
+    let listener = UnixListener::bind(&path)
+        .with_context(|| format!("failed to bind private cancel transport {}", path.display()))?;
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+    let path_for_task = path.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                accept = listener.accept() => {
+                    let Ok((stream, _)) = accept else {
+                        break;
+                    };
+                    let cancel_tx = cancel_tx.clone();
+                    tokio::spawn(async move {
+                        let _ = handle_private_cancel_connection(stream, cancel_tx).await;
+                    });
+                }
+            }
+        }
+        let _ = tokio::fs::remove_file(&path_for_task).await;
+    });
+    Ok(PrivateCancelTransport {
+        shutdown_tx: Some(shutdown_tx),
+        task: Some(task),
+        path,
+    })
+}
+
 #[cfg(not(unix))]
 pub(crate) async fn register_private_stop_transport(
     _store: &AgentRuntimeStateStore,
@@ -1602,6 +1733,20 @@ pub(crate) async fn register_private_stop_transport(
     _stop_tx: PrivateStopRequestSender,
 ) -> Result<PrivateStopTransport> {
     Ok(PrivateStopTransport {
+        shutdown_tx: None,
+        task: None,
+        path: PathBuf::new(),
+    })
+}
+
+#[cfg(not(unix))]
+pub(crate) async fn register_private_cancel_transport(
+    _store: &AgentRuntimeStateStore,
+    _orchestration_session_id: &str,
+    _participant_id: &str,
+    _cancel_tx: PrivateCancelRequestSender,
+) -> Result<PrivateCancelTransport> {
+    Ok(PrivateCancelTransport {
         shutdown_tx: None,
         task: None,
         path: PathBuf::new(),
@@ -1625,6 +1770,28 @@ pub(crate) fn spawn_local_private_stop_owner(
                 let _ = note_runtime_stop_requested(&store, &orchestration_session, &manifest);
                 cancel.cancel();
                 PrivateStopOutcome::Accepted
+            };
+            let _ = request.response_tx.send(outcome);
+        }
+    })
+}
+
+pub(crate) fn spawn_local_private_cancel_owner(
+    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    shutdown_requested: Arc<AtomicBool>,
+    cancel_requested: Arc<AtomicBool>,
+    cancel: PromptFulfillmentCancelHandle,
+    mut cancel_rx: PrivateCancelRequestReceiver,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(request) = cancel_rx.recv().await {
+            let outcome = if runtime_is_terminal(&manifest) {
+                PrivateCancelOutcome::AlreadyTerminal
+            } else {
+                shutdown_requested.store(true, Ordering::SeqCst);
+                cancel_requested.store(true, Ordering::SeqCst);
+                cancel.cancel();
+                PrivateCancelOutcome::Accepted
             };
             let _ = request.response_tx.send(outcome);
         }
@@ -2094,6 +2261,42 @@ pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutco
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
+pub(crate) async fn request_private_cancel(
+    path: &Path,
+    payload: &WorkerCancelPayloadV1,
+) -> Result<PrivateCancelOutcome> {
+    let mut stream = UnixStream::connect(path).await.with_context(|| {
+        format!(
+            "failed to connect to private cancel transport {}",
+            path.display()
+        )
+    })?;
+    let request = PrivateCancelRequestV1 {
+        version: 1,
+        action: "cancel".to_string(),
+        reason: payload.reason.clone(),
+        graceful: payload.graceful,
+    };
+    stream
+        .write_all(serde_json::to_string(&request)?.as_bytes())
+        .await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).await?;
+    let response: PrivateCancelResponse = serde_json::from_str(line.trim()).with_context(|| {
+        format!(
+            "failed to decode private cancel transport response from {}",
+            path.display()
+        )
+    })?;
+    Ok(response.outcome)
+}
+
+#[cfg(unix)]
 pub(crate) async fn register_private_prompt_transport(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -2171,6 +2374,25 @@ fn remove_existing_stop_transport_path(path: &Path) -> Result<()> {
 }
 
 #[cfg(unix)]
+fn remove_existing_private_cancel_transport_path(path: &Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => fs::remove_file(path).with_context(|| {
+            format!(
+                "failed to remove stale private cancel transport {}",
+                path.display()
+            )
+        }),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| {
+            format!(
+                "failed to inspect existing private cancel transport {}",
+                path.display()
+            )
+        }),
+    }
+}
+
+#[cfg(unix)]
 async fn handle_private_stop_connection(
     stream: UnixStream,
     stop_tx: PrivateStopRequestSender,
@@ -2206,11 +2428,69 @@ async fn handle_private_stop_connection(
 }
 
 #[cfg(unix)]
+async fn handle_private_cancel_connection(
+    stream: UnixStream,
+    cancel_tx: PrivateCancelRequestSender,
+) -> Result<()> {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let outcome = match reader.read_line(&mut line).await? {
+        0 => PrivateCancelOutcome::ProtocolError,
+        _ => match parse_private_cancel_request(line.trim()) {
+            Ok(request) => {
+                let (response_tx, response_rx) = oneshot::channel();
+                let payload = WorkerCancelPayloadV1 {
+                    reason: request.reason,
+                    graceful: request.graceful,
+                };
+                if cancel_tx
+                    .send(PrivateCancelRequest {
+                        payload,
+                        response_tx,
+                    })
+                    .is_err()
+                {
+                    PrivateCancelOutcome::OwnerUnreachable
+                } else {
+                    match tokio::time::timeout(Duration::from_secs(5), response_rx).await {
+                        Ok(Ok(outcome)) => outcome,
+                        Ok(Err(_)) | Err(_) => PrivateCancelOutcome::OwnerUnreachable,
+                    }
+                }
+            }
+            Err(_) => PrivateCancelOutcome::ProtocolError,
+        },
+    };
+
+    let response = PrivateCancelResponse {
+        version: 1,
+        outcome,
+    };
+    let mut stream = reader.into_inner();
+    stream
+        .write_all(serde_json::to_string(&response)?.as_bytes())
+        .await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+#[cfg(unix)]
 fn parse_private_stop_request(payload: &str) -> Result<PrivateStopRequestV1> {
     let request: PrivateStopRequestV1 =
         serde_json::from_str(payload).context("failed to decode private stop request")?;
     if request.version != 1 || request.action != "stop" {
         anyhow::bail!("unsupported private stop request");
+    }
+    Ok(request)
+}
+
+#[cfg(unix)]
+fn parse_private_cancel_request(payload: &str) -> Result<PrivateCancelRequestV1> {
+    let request: PrivateCancelRequestV1 =
+        serde_json::from_str(payload).context("failed to decode private cancel request")?;
+    if request.version != 1 || request.action != "cancel" {
+        anyhow::bail!("unsupported private cancel request");
     }
     Ok(request)
 }
@@ -2225,9 +2505,28 @@ struct PrivateStopRequestV1 {
 
 #[cfg(unix)]
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PrivateCancelRequestV1 {
+    version: u8,
+    action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    graceful: Option<bool>,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Deserialize, Serialize)]
 struct PrivateStopResponse {
     version: u8,
     outcome: PrivateStopOutcome,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Deserialize, Serialize)]
+struct PrivateCancelResponse {
+    version: u8,
+    outcome: PrivateCancelOutcome,
 }
 
 #[cfg(unix)]
@@ -2913,14 +3212,15 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_runtime_stop_closeout, prompt_completion_session_state,
+        apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
+        prompt_completion_session_state,
         reconcile_hidden_owner_helper_start_timeout, validate_public_prompt_command_request,
         HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperParticipantPlan,
         HiddenOwnerHelperSessionPlan, HiddenOwnerHelperStartTimeoutReconciliation,
         HiddenOwnerHelperStartupPromptPlan, LoadedPublicPrompt, OwnerHelperMode,
-        PrivateStopOutcome, PromptSubmitRuntime, PublicPromptAction, PublicPromptCommandRequest,
-        PublicSessionPosture, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
-        PURE_AGENT_PROTOCOL,
+        PrivateCancelOutcome, PrivateStopOutcome, PromptSubmitRuntime, PublicPromptAction,
+        PublicPromptCommandRequest, PublicSessionPosture, ResolvedRuntimeBackendKind,
+        ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
     };
     #[cfg(unix)]
     use super::{
@@ -2934,8 +3234,8 @@ mod tests {
             StartupPromptStreamState,
         },
         session::{
-            AgentRuntimeParticipantRecord, AgentRuntimeReplacementParticipantInit,
-            AgentRuntimeSessionState,
+            AgentRuntimeParticipantRecord, AgentRuntimeParticipantWorldBinding,
+            AgentRuntimeReplacementParticipantInit, AgentRuntimeSessionState,
         },
         validator::RuntimeSelectionDescriptor,
         AgentRuntimeStateStore, OrchestrationObligationAttachState, OrchestrationObligationKind,
@@ -3075,6 +3375,17 @@ mod tests {
     }
 
     #[test]
+    fn private_cancel_outcomes_are_exact() {
+        let outcomes = [
+            PrivateCancelOutcome::Accepted,
+            PrivateCancelOutcome::AlreadyTerminal,
+            PrivateCancelOutcome::OwnerUnreachable,
+            PrivateCancelOutcome::ProtocolError,
+        ];
+        assert_eq!(outcomes.len(), 4);
+    }
+
+    #[test]
     fn stop_closeout_helper_converges_on_stopped_terminal_snapshots() {
         let descriptor = RuntimeSelectionDescriptor {
             agent_id: "codex".to_string(),
@@ -3118,6 +3429,58 @@ mod tests {
         assert_eq!(
             orchestration.posture,
             crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::Terminal
+        );
+    }
+
+    #[test]
+    fn cancel_closeout_helper_converges_on_explicit_cancelled_terminal_truth() {
+        let descriptor = RuntimeSelectionDescriptor {
+            agent_id: "codex".to_string(),
+            backend_id: "cli:codex_world".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::World,
+            binary_path: PathBuf::from("/usr/bin/codex"),
+        };
+        let mut manifest = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor,
+            "sess_cancel_helper".to_string(),
+            "ash_cancel_helper".to_string(),
+            "orch_cancel_helper".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            }),
+            "lease_cancel_helper".to_string(),
+        )
+        .expect("member participant");
+        manifest.transition_state(AgentRuntimeSessionState::Running);
+        manifest.internal.latest_run_id = Some("run-cancel-helper".to_string());
+        manifest.mark_runtime_ownership_retained();
+        let mut orchestration = OrchestrationSessionRecord::new(
+            "sess_cancel_helper".to_string(),
+            "trace_session".to_string(),
+            "/workspace".to_string(),
+            &manifest,
+            None,
+        );
+        orchestration.transition_state(OrchestrationSessionState::Active);
+
+        apply_runtime_cancel_closeout(&mut orchestration, &mut manifest);
+
+        assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Invalidated);
+        assert!(manifest.has_cancelled_terminal_truth());
+        assert_eq!(
+            manifest.internal.termination_reason.as_deref(),
+            Some("cancelled")
+        );
+        assert_eq!(manifest.internal.latest_run_id, None);
+        assert_eq!(orchestration.state, OrchestrationSessionState::Invalidated);
+        assert!(orchestration.has_cancelled_terminal_truth());
+        assert_eq!(
+            orchestration.invalidation_reason.as_deref(),
+            Some("cancelled")
         );
     }
 
