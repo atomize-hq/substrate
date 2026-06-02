@@ -171,11 +171,23 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
     match prepared.request.action {
         WorldDispatchActionV1::RunWorldTask => run_world_task(prepared).await,
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
+        WorldDispatchActionV1::ForkWorldWorker => fork_world_worker(prepared).await,
         WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
         WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
         WorldDispatchActionV1::CancelWorldWork => cancel_world_work(prepared).await,
         WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
     }
+}
+
+async fn fork_world_worker(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
+    anyhow::bail!(
+        "unsupported_dispatch_action: fork_world_worker dispatch routing is not available in packet 1"
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -955,7 +967,8 @@ fn acquire_world_dispatch_concurrency_guard(
                 kind: WorldDispatchConcurrencyKind::RetainedBootstrap,
             }))
         }
-        WorldDispatchActionV1::ContinueWorldWorker
+        WorldDispatchActionV1::ForkWorldWorker
+        | WorldDispatchActionV1::ContinueWorldWorker
         | WorldDispatchActionV1::CancelWorldWork
         | WorldDispatchActionV1::InspectWorldWorker
         | WorldDispatchActionV1::StopWorldWorker => Ok(None),

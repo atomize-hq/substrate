@@ -548,6 +548,24 @@ agents:
     }
 
     #[test]
+    fn accepts_fork_world_dispatch_action_with_packet_one_allowlist() {
+        let policy = load_policy_from_yaml(
+            r#"
+agents:
+  world_dispatch:
+    allowed_actions:
+      - fork_world_worker
+"#,
+        )
+        .expect("fork_world_worker should be accepted in Packet 1");
+        assert!(
+            policy.agents_world_dispatch_allowed_actions == vec!["fork_world_worker".to_string()],
+            "expected Packet 1 fork action to be accepted, got: {:?}",
+            policy.agents_world_dispatch_allowed_actions
+        );
+    }
+
+    #[test]
     fn rejects_legacy_isolation_project_value() {
         // R-001: breaking schema; legacy values must hard error (only workspace|full allowed).
         expect_err_contains(

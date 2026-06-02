@@ -130,6 +130,7 @@ pub(crate) struct DispatchRequestEnvelope {
 pub(crate) enum WorldDispatchActionV1 {
     RunWorldTask,
     SpawnWorldWorker,
+    ForkWorldWorker,
     ContinueWorldWorker,
     InspectWorldWorker,
     CancelWorldWork,
@@ -141,6 +142,7 @@ impl WorldDispatchActionV1 {
         match self {
             Self::RunWorldTask => "run_world_task",
             Self::SpawnWorldWorker => "spawn_world_worker",
+            Self::ForkWorldWorker => "fork_world_worker",
             Self::ContinueWorldWorker => "continue_world_worker",
             Self::InspectWorldWorker => "inspect_world_worker",
             Self::CancelWorldWork => "cancel_world_work",
@@ -219,6 +221,17 @@ pub(crate) struct WorkerSpawnPayloadV1 {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkerForkPayloadV1 {
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_strategy: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct WorkerContinuePayloadV1 {
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -251,6 +264,7 @@ pub(crate) struct WorkerStopPayloadV1 {}
 pub(crate) enum WorldDispatchPayloadV1 {
     Task(TaskPayloadV1),
     WorkerSpawn(WorkerSpawnPayloadV1),
+    WorkerFork(WorkerForkPayloadV1),
     WorkerContinue(WorkerContinuePayloadV1),
     WorkerInspect(WorkerInspectPayloadV1),
     WorkerCancel(WorkerCancelPayloadV1),
@@ -351,6 +365,7 @@ fn validate_world_dispatch_action_mode(
     match (action, mode) {
         (WorldDispatchActionV1::RunWorldTask, WorldDispatchModeV1::Ephemeral)
         | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::ForkWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Retained)
@@ -373,6 +388,11 @@ fn validate_world_dispatch_payload(
         }
         (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchPayloadV1::WorkerSpawn(worker)) => {
             validate_world_dispatch_prompt(action, &worker.prompt)
+        }
+        (WorldDispatchActionV1::ForkWorldWorker, WorldDispatchPayloadV1::WorkerFork(worker)) => {
+            validate_world_dispatch_prompt(action, &worker.prompt)?;
+            validate_optional_world_dispatch_string(action, "fork_reason", &worker.fork_reason)?;
+            validate_optional_world_dispatch_string(action, "fork_strategy", &worker.fork_strategy)
         }
         (
             WorldDispatchActionV1::ContinueWorldWorker,
@@ -400,6 +420,19 @@ fn validate_world_dispatch_target(
     value: Option<String>,
 ) -> anyhow::Result<Option<String>> {
     match action {
+        WorldDispatchActionV1::ForkWorldWorker => {
+            let value = value.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_dispatch_field: fork_world_worker requires target_participant_id"
+                )
+            })?;
+            if value.trim().is_empty() {
+                anyhow::bail!(
+                    "missing_dispatch_field: fork_world_worker requires target_participant_id"
+                );
+            }
+            Ok(Some(value))
+        }
         WorldDispatchActionV1::ContinueWorldWorker
         | WorldDispatchActionV1::InspectWorldWorker
         | WorldDispatchActionV1::CancelWorldWork
@@ -484,6 +517,22 @@ pub(crate) struct SpawnWorldWorkerOutcomeV1 {
     pub world_id: String,
     pub world_generation: u64,
     pub launch_span_id: String,
+    pub summary: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct ForkWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    pub source_participant_id: String,
+    pub child_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
     pub summary: String,
 }
 
@@ -658,6 +707,7 @@ pub(crate) struct ContinueWorldWorkerEventV1 {
 pub(crate) enum WorldDispatchOutcomeV1 {
     RunWorldTask(RunWorldTaskOutcomeV1),
     SpawnWorldWorker(SpawnWorldWorkerOutcomeV1),
+    ForkWorldWorker(ForkWorldWorkerOutcomeV1),
     ContinueWorldWorker(ContinueWorldWorkerOutcomeV1),
     InspectWorldWorker(InspectWorldWorkerOutcomeV1),
     CancelWorldWork(CancelWorldWorkOutcomeV1),
@@ -1509,13 +1559,13 @@ mod tests {
         CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1, DispatchBaselineKind,
         DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
         DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
-        FieldValueOrigin, HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
-        RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
-        RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
-        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
-        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
-        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1,
+        FieldValueOrigin, ForkWorldWorkerOutcomeV1, HostExecutionClientStart,
+        InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
+        TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
+        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2357,6 +2407,27 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_accepts_fork_world_worker_retained_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ForkWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+                prompt: "split off the flaky integration investigation".to_string(),
+                fork_reason: Some("parallelize root cause isolation".to_string()),
+                fork_strategy: Some("exact_source_retained".to_string()),
+            }),
+        )
+        .with_target_participant_id("ash-worker-source-38")
+        .validate()
+        .expect("fork request should validate");
+
+        assert_eq!(
+            validated.target_participant_id.as_deref(),
+            Some("ash-worker-source-38")
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_accepts_continue_world_worker_retained_shape() {
         let validated = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
@@ -2529,6 +2600,47 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_rejects_fork_world_worker_without_exact_target() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ForkWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+                prompt: "split off the flaky integration investigation".to_string(),
+                fork_reason: None,
+                fork_strategy: None,
+            }),
+        )
+        .validate()
+        .expect_err("fork target must be mandatory");
+
+        assert_eq!(
+            error.to_string(),
+            "missing_dispatch_field: fork_world_worker requires target_participant_id"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_fork_world_worker_ephemeral_mode() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ForkWorldWorker,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+                prompt: "split off the flaky integration investigation".to_string(),
+                fork_reason: None,
+                fork_strategy: None,
+            }),
+        )
+        .with_target_participant_id("ash-worker-source-38")
+        .validate()
+        .expect_err("fork must stay retained-only in packet 1");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_action_mode: action fork_world_worker is incompatible with mode ephemeral"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_inspect_world_worker_without_exact_target() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::InspectWorldWorker,
@@ -2656,6 +2768,35 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_rejects_unknown_fork_payload_fields_during_deserialization() {
+        let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
+            "request_id": "req-38",
+            "idempotency_key": "idem-38",
+            "orchestration_session_id": "sess-38",
+            "caller_participant_id": "orch-38",
+            "action": "fork_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex_world",
+            "target_participant_id": "ash-worker-source-38",
+            "world_id": "world-38",
+            "world_generation": 8,
+            "payload": {
+                "payload_kind": "worker_fork",
+                "prompt": "split off the flaky integration investigation",
+                "future_child_allocator": "packet-3"
+            }
+        }))
+        .expect_err("unknown fork payload fields must fail closed");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unknown field `future_child_allocator`"),
+            "unexpected fork payload serde error: {error}"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_unknown_cancel_payload_fields_during_deserialization() {
         let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
             "request_id": "req-37",
@@ -2745,6 +2886,39 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_round_trips_typed_fork_outcome_shape() {
+        let outcome = WorldDispatchOutcomeV1::ForkWorldWorker(ForkWorldWorkerOutcomeV1 {
+            request_id: "req-38".to_string(),
+            orchestration_session_id: "sess-38".to_string(),
+            action: WorldDispatchActionV1::ForkWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch-38".to_string(),
+            source_participant_id: "ash-worker-source-38".to_string(),
+            child_participant_id: "ash-worker-child-38".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-38".to_string(),
+            world_generation: 8,
+            summary: "fork outcome preserves explicit source-to-child lineage".to_string(),
+        });
+
+        let json = serde_json::to_value(&outcome).expect("serialize fork outcome");
+        assert_eq!(
+            json.get("outcome_kind").and_then(|value| value.as_str()),
+            Some("fork_world_worker")
+        );
+        assert_eq!(
+            json.get("source_participant_id")
+                .and_then(|value| value.as_str()),
+            Some("ash-worker-source-38")
+        );
+        assert_eq!(
+            json.get("child_participant_id")
+                .and_then(|value| value.as_str()),
+            Some("ash-worker-child-38")
         );
     }
 
