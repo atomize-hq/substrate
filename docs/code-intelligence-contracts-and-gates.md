@@ -537,7 +537,118 @@ If any answer below becomes "yes", this design is drifting.
 
 ---
 
-## 15. Short version
+## 15. Appendix: Contract Families, Tooling, And License Posture
+
+This appendix preserves the broader inventory that informed this design.
+
+It is intentionally subordinate to the ownership and boundary rules above.
+
+The point of this appendix is:
+
+- keep the full contract-family map visible
+- keep likely adapter/tooling directions visible
+- keep permissive-license posture visible
+
+It is not:
+
+- a commitment to land every contract family in the MVP
+- a requirement to wrap every named tool directly
+- a reason to make external adapters the source of truth
+
+### 15.1 Contract-family taxonomy
+
+The code-intelligence program may eventually need contract support across the following families:
+
+| Contract family | Purpose | Examples of likely adapter or evidence surfaces |
+| --- | --- | --- |
+| Data shape | Validate fields, types, enums, maps, arrays, and nested objects. | JSON Schema, generated Rust schemas, fixture payloads |
+| Business-rule or invariant | Validate cross-field or semantic rules beyond raw shape. | CUE, CEL, OPA, Cedar |
+| Internal operation | Validate crate-local operations, planners, transforms, reducers, and algorithms. | Rust tests, property tests, implementation evidence records |
+| CLI | Validate command inputs, outputs, exit codes, side effects, and snapshots. | `assert_cmd`, `snapbox`, `trycmd`, stdout or stderr evidence |
+| HTTP API | Validate request or response contracts, drift, examples, and generated docs. | OpenAPI, Spectral, Schemathesis, Prism, Specmatic |
+| Event or message | Validate message-driven contracts and event payload compatibility. | AsyncAPI, Specmatic, Pact |
+| GraphQL | Validate schema, operation compatibility, and generated types. | SDL, introspection, GraphQL codegen, contract-test wrappers |
+| gRPC or protobuf | Validate RPC schemas, messages, and breaking changes. | `.proto`, Buf, Specmatic |
+| Database or migration | Validate schema drift, migration safety, and query compatibility. | Atlas, SQLx, migration evidence |
+| UI component | Validate component props, states, accessibility surfaces, and render contracts. | Storybook, Testing Library, component traces |
+| UI flow | Validate multi-step user flows and user-visible assertions. | Playwright, browser traces, scenario evidence |
+| Design token | Validate token shape, naming, and emitted platform artifacts. | DTCG format, Style Dictionary |
+| Policy or security | Validate allow or deny policy, authorization, sandbox posture, and identity boundaries. | OPA, Cedar, policy decision logs |
+| Stateful workflow or model | Validate transitions, concurrency rules, and state-machine behavior. | model-checking adapters, workflow traces |
+| Side effect | Validate writes, network use, spawned processes, and other runtime effects. | trace data, write-set evidence, world-policy logs |
+| Performance or resource | Validate latency, memory, throughput, or budget ceilings. | benchmark evidence, perf traces, resource reports |
+| Supply chain or license | Validate dependency posture, advisories, licenses, and SBOM outputs. | `cargo-deny`, `cargo-about`, `cargo-cyclonedx`, OSV Scanner |
+
+### 15.2 Tooling and adapter examples
+
+The current best-fit direction remains:
+
+- JSON Schema for portable shape validation
+- CUE or CEL for richer invariant evaluation
+- OPA or Cedar for policy-specific evaluation
+- OpenAPI as the HTTP API adapter and drift-check surface
+- AsyncAPI as the message-driven API adapter
+- Storybook, Playwright, and Testing Library as UI evidence surfaces
+
+Representative permissive or permissive-leaning tools that fit this direction include:
+
+| Area | Likely tools or specs | Typical role |
+| --- | --- | --- |
+| Data shape | JSON Schema, `jsonschema`, `schemars` | Portable shape validation and schema generation |
+| Rich invariants | CUE, CEL | Cross-field and embedded expression evaluation |
+| Policy and security | OPA, Cedar | Policy-specific contract evaluation |
+| HTTP APIs | OpenAPI, Prism, Schemathesis, Specmatic, Spectral | docs, mocks, fuzzing, validation, drift |
+| API docs and collections | Bruno, Scalar, Redoc, Swagger UI | human docs and local-first exploration |
+| Message APIs | AsyncAPI, Specmatic, Pact | event and message contract validation |
+| UI components | Storybook, Testing Library | component states, assertions, a11y surfaces |
+| UI flows | Playwright | scenario execution and browser evidence |
+| Design tokens | DTCG format, Style Dictionary | token validation and emitted artifacts |
+| Repo governance | `cargo-deny`, `cargo-about`, `cargo-cyclonedx`, OSV Scanner | licenses, advisories, SBOM, vulnerability posture |
+
+These examples are guidance, not lock-in.
+
+The main architectural rule still holds:
+
+- Substrate owns the meta-contract, evidence, verdict, and gate layer
+- external tools remain adapters, emitters, or evidence engines
+
+### 15.3 License posture notes
+
+The default preference for bundled or wrapped tooling should stay conservative and permissive.
+
+Preferred license posture:
+
+- MIT
+- Apache-2.0
+- MIT OR Apache-2.0
+- BSD-2, BSD-3, or ISC
+
+Accept with explicit review:
+
+- MPL-2.0
+- EPL
+- spec licenses that are acceptable for specs but not automatically for vendored implementation code
+
+Avoid embedding or vendoring by default:
+
+- GPL
+- AGPL
+- LGPL
+- SSPL
+- BSL
+- time-delayed or source-disclosure-heavy licenses
+
+This does not mean such tools are never usable.
+
+It means:
+
+- they should not become casual core dependencies
+- external-command integration is a separate architecture and packaging decision
+- repo governance should make license and advisory posture visible early
+
+---
+
+## 16. Short version
 
 - the code-intelligence program should adopt a Substrate-native contract/evidence/verdict/gate layer
 - this layer is a cross-cutting overlay, not a competing replacement for the program architecture
