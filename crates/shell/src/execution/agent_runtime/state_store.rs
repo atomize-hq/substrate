@@ -1410,8 +1410,19 @@ impl AgentRuntimeStateStore {
             );
         };
 
-        let authoritative =
-            resolve_authoritative_session_control(&record, orchestration_session_id)?;
+        let authoritative = if record.session.state == OrchestrationSessionState::Active {
+            resolve_authoritative_session_control(&record, orchestration_session_id)?
+        } else if record.session.has_cancelled_terminal_truth() {
+            let participant =
+                resolve_authoritative_session_participant(&record, orchestration_session_id)?;
+            ResolvedAuthoritativeSessionControl {
+                session: record.session.clone(),
+                participant: participant.clone(),
+                session_posture: classify_public_session_posture(&record, &participant),
+            }
+        } else {
+            resolve_authoritative_session_control(&record, orchestration_session_id)?
+        };
         if authoritative.participant.participant_id() != caller_participant_id {
             anyhow::bail!(
                 "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
@@ -1492,6 +1503,12 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id,
                 target_participant_id,
                 target_participant.reviewable_terminal_state_label()
+            );
+        }
+        if record.session.state != OrchestrationSessionState::Active {
+            anyhow::bail!(
+                "missing_active_parent: orchestration session {} is not active",
+                orchestration_session_id
             );
         }
         if !target_participant.is_authoritative_live()
@@ -3285,6 +3302,26 @@ fn resolve_authoritative_session_control(
         );
     }
 
+    let participant = resolve_authoritative_session_participant(record, orchestration_session_id)?;
+
+    Ok(ResolvedAuthoritativeSessionControl {
+        session: record.session.clone(),
+        participant: participant.clone(),
+        session_posture: classify_public_session_posture(record, &participant),
+    })
+}
+
+fn resolve_authoritative_session_participant(
+    record: &AgentRuntimeSessionRecord,
+    orchestration_session_id: &str,
+) -> Result<AgentRuntimeParticipantRecord> {
+    if !record.has_authoritative_parent() {
+        anyhow::bail!(
+            "missing_active_parent: orchestration session {} is missing authoritative parent metadata",
+            orchestration_session_id
+        );
+    }
+
     let active_participant_id = session_authoritative_participant_id(&record.session).ok_or_else(
         || {
             anyhow::anyhow!(
@@ -3321,11 +3358,7 @@ fn resolve_authoritative_session_control(
         );
     }
 
-    Ok(ResolvedAuthoritativeSessionControl {
-        session: record.session.clone(),
-        participant: participant.clone(),
-        session_posture: classify_public_session_posture(record, &participant),
-    })
+    Ok(participant)
 }
 
 fn detached_status_visible_participant(
@@ -7486,6 +7519,45 @@ mod tests {
                     "cli:codex_world",
                 )
                 .expect_err("already-cancelled retained workers must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_already_terminal: orchestration session sess_cancel retained worker ash_cancel is already terminal (cancelled)"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_repeat_cancel_after_cancelled_session_closeout(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.mark_cancelled_terminal();
+
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Running);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+            member.mark_cancelled_terminal_state();
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("repeat cancel after cancelled closeout must fail on the target");
 
             assert_eq!(
                 err.to_string(),

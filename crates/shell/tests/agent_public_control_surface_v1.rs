@@ -4421,6 +4421,136 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     terminate_pid(owner_pid);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_world_retained_cancelled_snapshot_preserves_explicit_terminal_truth() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
+
+    let ts = "2026-06-02T00:00:00Z";
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_world_cancelled",
+        Some("orch_world_cancelled"),
+        "invalidated",
+        Some("world-17"),
+        Some(2),
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "orch_world_cancelled",
+        "codex",
+        "sess_world_cancelled",
+        "invalidated",
+        false,
+        Some("uaa-world-cancelled-parent"),
+        None,
+        ts,
+    );
+    write_world_member_participant(
+        &fixture,
+        "ash_world_cancelled",
+        "codex_world",
+        "sess_world_cancelled",
+        "orch_world_cancelled",
+        "world-17",
+        2,
+        "invalidated",
+        false,
+        Some("uaa-world-cancelled-member"),
+        ts,
+    );
+
+    let session_path =
+        canonical_orchestration_session_path(&fixture.substrate_home, "sess_world_cancelled");
+    let mut session = read_json_file(&session_path);
+    session["invalidation_reason"] = json!("cancelled");
+    write_json_file(&session_path, &session);
+
+    let member_path = canonical_participant_manifest_path(
+        &fixture.substrate_home,
+        "sess_world_cancelled",
+        "ash_world_cancelled",
+    );
+    let mut member = read_json_file(&member_path);
+    member["internal"]["latest_run_id"] = Value::Null;
+    member["internal"]["terminal_observed_at"] = json!(ts);
+    member["internal"]["termination_reason"] = json!("cancelled");
+    write_json_file(&member_path, &member);
+
+    let snapshot = session_state_snapshot(&fixture);
+    let snapshot_row = snapshot
+        .iter()
+        .find(|row| {
+            row.get("orchestration_session_id").and_then(Value::as_str)
+                == Some("sess_world_cancelled")
+        })
+        .expect("cancelled world session snapshot row");
+    assert_eq!(
+        snapshot_row.get("state").and_then(Value::as_str),
+        Some("invalidated")
+    );
+    assert_eq!(
+        snapshot_row.get("posture").and_then(Value::as_str),
+        Some("terminal")
+    );
+    assert_eq!(
+        snapshot_row
+            .get("active_participant_state")
+            .and_then(Value::as_str),
+        Some("invalidated")
+    );
+
+    let persisted_session = fixture.load_orchestration_session("sess_world_cancelled");
+    assert_eq!(
+        persisted_session
+            .get("invalidation_reason")
+            .and_then(Value::as_str),
+        Some("cancelled")
+    );
+    assert_eq!(
+        persisted_session.get("world_id").and_then(Value::as_str),
+        Some("world-17")
+    );
+    assert_eq!(
+        persisted_session
+            .get("world_generation")
+            .and_then(Value::as_u64),
+        Some(2)
+    );
+
+    let persisted_member =
+        fixture.load_participant("sess_world_cancelled", "ash_world_cancelled");
+    assert_eq!(
+        persisted_member.get("state").and_then(Value::as_str),
+        Some("invalidated")
+    );
+    assert_eq!(
+        persisted_member
+            .pointer("/internal/termination_reason")
+            .and_then(Value::as_str),
+        Some("cancelled")
+    );
+    assert_eq!(
+        persisted_member
+            .pointer("/internal/terminal_observed_at")
+            .and_then(Value::as_str),
+        Some(ts)
+    );
+    assert_eq!(
+        persisted_member.get("world_id").and_then(Value::as_str),
+        Some("world-17")
+    );
+    assert_eq!(
+        persisted_member.get("world_generation").and_then(Value::as_u64),
+        Some(2)
+    );
+}
+
 #[test]
 #[serial]
 fn public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth() {
