@@ -171,11 +171,30 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
         WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
         WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
-        WorldDispatchActionV1::CancelWorldWork => anyhow::bail!(
-            "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
-        ),
+        WorldDispatchActionV1::CancelWorldWork => cancel_world_work(prepared).await,
         WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn cancel_world_work(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
+    anyhow::bail!(
+        "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
+    );
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+async fn cancel_world_work(
+    _prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<WorldDispatchOutcomeV1> {
+    anyhow::bail!(
+        "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
+    );
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -3530,6 +3549,94 @@ mod tests {
             err.to_string(),
             "unsupported_dispatch_action: cancel_world_work dispatch routing is not available in packet 1"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_cancel_world_work_policy_denials_precede_packet_one_unsupported_stub(
+    ) {
+        struct DenialCase<'a> {
+            enabled: bool,
+            allowed_backends: &'a [&'a str],
+            allowed_actions: &'a [&'a str],
+            allowed_modes: &'a [&'a str],
+            expected_denial: &'a str,
+        }
+
+        let cases = [
+            DenialCase {
+                enabled: false,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["cancel_world_work"],
+                allowed_modes: &["retained"],
+                expected_denial: "world_dispatch_disabled:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["inspect_world_worker"],
+                allowed_modes: &["retained"],
+                expected_denial: "action_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:codex_world"],
+                allowed_actions: &["cancel_world_work"],
+                allowed_modes: &["ephemeral"],
+                expected_denial: "mode_not_allowed:",
+            },
+            DenialCase {
+                enabled: true,
+                allowed_backends: &["cli:other_world"],
+                allowed_actions: &["cancel_world_work"],
+                allowed_modes: &["retained"],
+                expected_denial: "backend_not_allowed:",
+            },
+        ];
+
+        for case in cases {
+            let substrate_home = tempdir().expect("substrate home tempdir");
+            let _substrate_home_guard =
+                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            write_world_dispatch_policy(
+                substrate_home.path(),
+                case.enabled,
+                case.allowed_backends,
+                case.allowed_actions,
+                case.allowed_modes,
+            );
+
+            let workspace_root = tempdir().expect("workspace root tempdir");
+            let store = AgentRuntimeStateStore::new().expect("state store");
+            persist_authoritative_continue_dispatch_state(
+                &store,
+                workspace_root.path(),
+                "world-17",
+                2,
+            );
+
+            let mut request = sample_cancel_world_dispatch_request();
+            request.target_participant_id = Some("ash_missing".to_string());
+            let err = dispatch_orchestrator_world_request(&store, request)
+                .await
+                .expect_err("steering denial must fail closed before cancel stub");
+            let message = err.to_string();
+
+            assert!(
+                message.contains(case.expected_denial),
+                "expected {} in {message}",
+                case.expected_denial
+            );
+            assert!(
+                !message.contains("unsupported_dispatch_action"),
+                "steering denial must not collapse into packet 1 unsupported cancel: {message}"
+            );
+            assert!(
+                !message.contains("target_not_in_session:"),
+                "steering denial must not leak cancel target resolution truth first: {message}"
+            );
+        }
     }
 
     #[cfg(target_os = "linux")]
