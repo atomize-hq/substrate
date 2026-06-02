@@ -13,6 +13,7 @@ Related design stack:
 Phase: `SPECIFY`  
 Status: implemented on `2026-06-02`  
 Landed posture note: the typed cancel contract, steering-policy allowlisting, exact-target retained-worker cancel resolution, explicit cancelled terminal truth, and Linux-routed cancel closeout are landed in the repo, but active-ephemeral or dual-target cancel, `fork_world_worker`, approval/fork autonomy, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation exposed two narrow in-scope stabilization follow-ups in the landed commit: `crates/shell/src/execution/agent_runtime/control.rs` added a scoped `#[allow(dead_code)]` on `persist_runtime_cancel_closeout`, and `crates/shell/src/repl/async_repl.rs` added a persisted-snapshot ordering wait before the typed cancel-closeout assertion. Those fixes preserved the intended Slice `37` contract without widening into deferred features.
 
 ## Assumptions
 

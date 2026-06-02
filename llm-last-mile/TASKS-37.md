@@ -5,7 +5,8 @@ Source plan: [PLAN-37.md](./PLAN-37.md)
 Source validation note: [NOTE-36-family-1-ordering-after-stop-closeout.md](./NOTE-36-family-1-ordering-after-stop-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: Packets 1-3 are complete on the current tree; Packet 4 docs/validation is the remaining session on `2026-06-02`
+Status: Packet 4 complete on `2026-06-02`; docs truth is aligned and the final validation wall is green
+Landed posture note: the typed cancel contract, steering-policy allowlisting, exact-target retained-worker cancel resolution, explicit cancelled terminal truth, and routed cancel closeout are landed repo-wide, but retained-worker cancel routing is Linux-only in v1 and fails closed on non-Linux builds.
 
 ## Execution Packets
 
@@ -151,7 +152,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
+- [x] Task 4.1: Align planning/config truth without widening the slice
   - Acceptance: repo-local docs describe cancel as internal, retained-worker-only in Slice `37`, Linux-routed in v1 if applicable, and distinct from stop; no wording implies active-ephemeral dual-target cancel, `fork_world_worker`, approval autonomy, or Family-2 execution have landed.
   - Verify:
     - manual diff review
@@ -162,7 +163,7 @@ Session goal:
     - [`llm-last-mile/PLAN-37.md`](./PLAN-37.md)
     - [`llm-last-mile/TASKS-37.md`](./TASKS-37.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker tests, and full workspace tests are green; no public CLI regression or unintended Family-2 coupling appears.
   - Verify:
     - `cargo fmt --all -- --check`
@@ -175,7 +176,10 @@ Session goal:
     - `cargo test -p substrate-broker -- --nocapture`
     - `cargo test --workspace -- --nocapture`
   - Expected files touched:
-    - no planned source edits beyond rustfmt-only cleanup required to satisfy the final gate after the implementation tasks above
+    - final validation exposed two narrow in-scope stabilization follow-ups in the landed Packet 4 commit:
+      [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs) added a scoped `#[allow(dead_code)]` on `persist_runtime_cancel_closeout`, and
+      [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs) added a persisted-snapshot ordering wait before the typed cancel-closeout assertion;
+      no broader runtime feature work or deferred later verbs were reopened
 
 ### Packet 4 Checkpoint
 

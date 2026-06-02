@@ -5,6 +5,7 @@ Source validation note: [NOTE-36-family-1-ordering-after-stop-closeout.md](./NOT
 Plan type: sixth implementation-bearing Family-1 control-plane slice  
 Status: implemented on `2026-06-02`
 Landed posture note: the typed cancel contract, steering-policy allowlisting, exact-target retained-worker cancel resolution, explicit cancelled terminal truth, and routed cancel closeout are landed repo-wide, but retained-worker cancel routing is Linux-only in v1 and fails closed on non-Linux builds.
+Validation note: Packet 4's validation wall is green. Final validation exposed two narrow in-scope stabilization follow-ups in the landed commit: `crates/shell/src/execution/agent_runtime/control.rs` added a scoped `#[allow(dead_code)]` on `persist_runtime_cancel_closeout`, and `crates/shell/src/repl/async_repl.rs` added a persisted-snapshot ordering wait before the typed cancel-closeout assertion. Those changes did not widen Slice `37` beyond retained-worker cancel.
 
 ## Objective
 
@@ -185,12 +186,14 @@ Primary touch surface:
 4. `llm-last-mile/PLAN-37.md`
 5. `llm-last-mile/TASKS-37.md`
 6. targeted test suites
+7. if final validation exposes narrow stabilization needed to keep the landed cancel path green, `crates/shell/src/execution/agent_runtime/control.rs` and `crates/shell/src/repl/async_repl.rs` may take bounded follow-up fixes that do not reopen deferred verbs or widen Slice `37`
 
 What this packet must enforce:
 
 1. docs describe cancel as internal, retained-worker-only in Slice `37`, and distinct from stop,
 2. docs keep active-ephemeral cancel, fork, approval autonomy, and Family-2 work explicitly deferred,
-3. no wording implies full dual-target cancel has landed if the implementation only freezes retained-turn cancel.
+3. no wording implies full dual-target cancel has landed if the implementation only freezes retained-turn cancel,
+4. the validation story stays honest if the final gate needs narrow stabilization in already-landed cancel surfaces.
 
 Verification checkpoint:
 
