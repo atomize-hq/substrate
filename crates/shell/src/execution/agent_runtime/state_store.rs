@@ -7161,8 +7161,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member =
-                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
             member.transition_state(AgentRuntimeSessionState::Running);
             member.internal.latest_run_id = Some("run-cancel".to_string());
 
@@ -7197,8 +7196,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member =
-                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
             member.transition_state(AgentRuntimeSessionState::Running);
             member.internal.latest_run_id = Some("run-cancel".to_string());
 
@@ -7287,8 +7285,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member =
-                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
             member.transition_state(AgentRuntimeSessionState::Running);
             member.internal.latest_run_id = Some("run-cancel".to_string());
             member.handle.world_generation = Some(3);
@@ -7325,8 +7322,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member =
-                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
             member.internal.latest_run_id = Some("run-cancel".to_string());
 
             store
@@ -7361,8 +7357,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member =
-                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
             member.transition_state(AgentRuntimeSessionState::Running);
             member.internal.latest_run_id = Some("run-cancel".to_string());
             member.internal.cancel_supported = false;
@@ -7399,8 +7394,7 @@ mod tests {
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member =
-                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
             member.transition_state(AgentRuntimeSessionState::Running);
 
             store
@@ -7429,14 +7423,49 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_internal_cancel_world_dispatch_target_rejects_non_live_worker() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            member.transition_state(AgentRuntimeSessionState::Invalidated);
+            member.internal.latest_run_id = Some("run-cancel".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_cancel_world_dispatch_target(
+                    "sess_cancel",
+                    "orch_cancel",
+                    "ash_cancel",
+                    "cli:codex_world",
+                )
+                .expect_err("non-live retained workers must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_already_terminal: orchestration session sess_cancel retained worker ash_cancel is already terminal (invalidated)"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_internal_cancel_world_dispatch_target_rejects_already_cancelled_worker() {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_cancel", "orch_cancel");
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
 
-            let mut member =
-                live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
+            let mut member = live_member("codex_world", "sess_cancel", "ash_cancel", "orch_cancel");
             member.transition_state(AgentRuntimeSessionState::Running);
             member.internal.latest_run_id = Some("run-cancel".to_string());
             member.mark_cancelled_terminal_state();

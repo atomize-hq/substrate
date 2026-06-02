@@ -2573,12 +2573,22 @@ fn prompt_completion_session_state(
         };
     (
         posture,
-        runtime_state_label(&manifest.handle.state).to_string(),
+        runtime_state_label(&manifest, &session).to_string(),
     )
 }
 
-fn runtime_state_label(state: &AgentRuntimeSessionState) -> &'static str {
-    match state {
+fn runtime_state_label(
+    manifest: &AgentRuntimeSessionManifest,
+    session: &OrchestrationSessionRecord,
+) -> &'static str {
+    if manifest.has_cancelled_terminal_truth() {
+        return manifest.reviewable_terminal_state_label();
+    }
+    if session.has_cancelled_terminal_truth() {
+        return session.reviewable_terminal_state_label();
+    }
+
+    match manifest.handle.state {
         AgentRuntimeSessionState::Allocating
         | AgentRuntimeSessionState::Ready
         | AgentRuntimeSessionState::Running
@@ -2903,12 +2913,13 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_runtime_stop_closeout, reconcile_hidden_owner_helper_start_timeout,
-        validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
-        HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
-        HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
-        LoadedPublicPrompt, OwnerHelperMode, PrivateStopOutcome, PublicPromptAction,
-        PublicPromptCommandRequest, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
+        apply_runtime_stop_closeout, prompt_completion_session_state,
+        reconcile_hidden_owner_helper_start_timeout, validate_public_prompt_command_request,
+        HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperParticipantPlan,
+        HiddenOwnerHelperSessionPlan, HiddenOwnerHelperStartTimeoutReconciliation,
+        HiddenOwnerHelperStartupPromptPlan, LoadedPublicPrompt, OwnerHelperMode,
+        PrivateStopOutcome, PromptSubmitRuntime, PublicPromptAction, PublicPromptCommandRequest,
+        PublicSessionPosture, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
         PURE_AGENT_PROTOCOL,
     };
     #[cfg(unix)]
@@ -2932,6 +2943,7 @@ mod tests {
     };
     use crate::execution::config_model::AgentExecutionScope;
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
     #[cfg(unix)]
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -3019,6 +3031,28 @@ mod tests {
                 stream_path: PathBuf::from("/tmp/startup.sock"),
             }),
             source_orchestration_session_id: None,
+        }
+    }
+
+    fn prompt_submit_runtime_for_test(
+        store: &AgentRuntimeStateStore,
+        orchestration_session: OrchestrationSessionRecord,
+        manifest: AgentRuntimeParticipantRecord,
+    ) -> PromptSubmitRuntime {
+        PromptSubmitRuntime {
+            descriptor: RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            },
+            orchestration_session: Arc::new(Mutex::new(orchestration_session)),
+            manifest: Arc::new(Mutex::new(manifest)),
+            store: store.clone(),
+            uaa_session_handle_id: "uaa_session".to_string(),
+            park_after_turn_tx: None,
         }
     }
 
@@ -3118,6 +3152,84 @@ mod tests {
         assert!(backend_err
             .to_string()
             .contains("missing_backend: public turn actions require --backend <backend_id>"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn prompt_completion_session_state_surfaces_cancelled_participant_truth() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut manifest = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_prompt_cancelled_participant".to_string(),
+                "ash_prompt_cancelled_participant".to_string(),
+                "lease_prompt_cancelled_participant".to_string(),
+            )
+            .expect("orchestrator participant");
+            manifest.transition_state(AgentRuntimeSessionState::Running);
+            manifest.mark_cancelled_terminal_state();
+
+            let orchestration_session = OrchestrationSessionRecord::new(
+                "sess_prompt_cancelled_participant".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &manifest,
+                HostAttachContract::from_manifest_for_test(&manifest),
+            );
+            let runtime =
+                prompt_submit_runtime_for_test(store, orchestration_session, manifest.clone());
+
+            let (posture, state) = prompt_completion_session_state(&runtime);
+
+            assert_eq!(posture, PublicSessionPosture::Terminal);
+            assert_eq!(state, "cancelled");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn prompt_completion_session_state_surfaces_cancelled_session_truth() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut manifest = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_prompt_cancelled_session".to_string(),
+                "ash_prompt_cancelled_session".to_string(),
+                "lease_prompt_cancelled_session".to_string(),
+            )
+            .expect("orchestrator participant");
+            manifest.transition_state(AgentRuntimeSessionState::Running);
+
+            let mut orchestration_session = OrchestrationSessionRecord::new(
+                "sess_prompt_cancelled_session".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &manifest,
+                HostAttachContract::from_manifest_for_test(&manifest),
+            );
+            orchestration_session.transition_state(OrchestrationSessionState::Active);
+            orchestration_session.mark_cancelled_terminal();
+            let runtime = prompt_submit_runtime_for_test(store, orchestration_session, manifest);
+
+            let (posture, state) = prompt_completion_session_state(&runtime);
+
+            assert_eq!(posture, PublicSessionPosture::Terminal);
+            assert_eq!(state, "cancelled");
+        });
     }
 
     #[test]
