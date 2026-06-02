@@ -38,13 +38,16 @@ Use these documents in this order.
 1. [docs/code-intelligence-program.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/docs/code-intelligence-program.md)
    Owns program-wide crate ownership, dependency rules, and rollout sequencing.
 
-2. This document
+2. [docs/code-intelligence-contracts-and-gates.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/docs/code-intelligence-contracts-and-gates.md)
+   Owns the cross-program contract/evidence/verdict/gate model that this feature consumes.
+
+3. This document
    Owns the workstream/worktree orchestration design within that program.
 
-3. [crates/lift/README.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/crates/lift/README.md)
+4. [crates/lift/README.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/crates/lift/README.md)
    Owns Lift-local architecture and Lift-owned export surfaces.
 
-4. Manual operator artifacts such as [ORCH_PLAN.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/ORCH_PLAN.md) and [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
+5. Manual operator artifacts such as [ORCH_PLAN.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/ORCH_PLAN.md) and [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
    These are important references, but they are not the canonical contract for this feature.
 
 If this document conflicts with a proposal doc, this document wins.
@@ -347,6 +350,19 @@ The exact artifact boundary is still open and should be validated against more t
 2. `effort` outputs immutable plans.
 3. `exec` consumes those plans and may refuse to materialize them, but does not silently replan them.
 4. Worktree allocation and branch state belong to runtime artifacts, not planning artifacts.
+
+### 8.4 Relationship to contracts and gates
+
+This feature consumes the broader contract/evidence/verdict/gate layer described in [docs/code-intelligence-contracts-and-gates.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/docs/code-intelligence-contracts-and-gates.md).
+
+The practical meaning is:
+
+- locked contracts may define planning, handoff, validation-wall, or closeout claims
+- `effort` may emit artifacts that later become evidence against those claims
+- `exec` records runtime evidence and emits `GateDecisionV1` against verdict-bearing claim surfaces
+
+This document does not redefine the general contract model.
+It only defines how the orchestration capability uses it.
 
 ---
 

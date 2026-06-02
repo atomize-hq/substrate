@@ -85,11 +85,15 @@ This file is the authority for:
 - rollout sequencing
 - what replaced what
 
-### 2. Lift crate-local architecture
+### 2. Program-wide contracts and gates
+
+[docs/code-intelligence-contracts-and-gates.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/docs/code-intelligence-contracts-and-gates.md) is the authority for the executable contract, evidence, verdict, and gate model across the code-intelligence program.
+
+### 3. Lift crate-local architecture
 
 [crates/lift/README.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/crates/lift/README.md) is the authority for Lift-only architecture, seams, and Lift-owned internals.
 
-### 3. Landed Lift seam details
+### 4. Landed Lift seam details
 
 The `lift_seam*_spec*.md` files remain the detailed truth for the Lift seams already landed.
 
@@ -323,6 +327,16 @@ These are the contract families the program should converge on.
 - `CheckpointV1`
 - `ArtifactManifestV1`
 - `ResumePlanV1`
+
+### Cross-cutting contracts and gates
+
+The code-intelligence program also owns a cross-cutting contract/evidence/verdict/gate layer described in [docs/code-intelligence-contracts-and-gates.md](/Users/spensermcconnell/.codex/worktrees/9b83/substrate/docs/code-intelligence-contracts-and-gates.md).
+
+The important boundary is:
+
+- shared identity, ref, diagnostic, and fingerprint primitives still belong in `kernel`
+- runtime gate execution still belongs in `exec`
+- external validator ecosystems remain adapters or evidence engines, not default program authorities
 
 ### Lift artifacts to stabilize early
 
