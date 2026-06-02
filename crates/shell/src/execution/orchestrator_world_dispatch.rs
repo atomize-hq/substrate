@@ -235,39 +235,40 @@ async fn fork_world_worker(
             &prepared.request,
         )
         .await?;
-        let lineage = match persist_fork_child_lineage(
-            &prepared.store,
-            &resolved,
-            &receipt.participant_id,
-        ) {
-            Ok(lineage) => lineage,
-            Err(lineage_err) => {
-                let lineage_err_text = format!("{lineage_err:#}");
-                match rollback_failed_fork_child_launch(
-                    &prepared.store,
-                    &resolved,
-                    &receipt.participant_id,
-                )
-                .await
-                {
-                    Ok(()) => {
-                        anyhow::bail!(
-                            "fork_lineage_persist_failed: failed to persist explicit fork lineage for child {} after authoritative registration; retained child was durably stopped before returning the error ({})",
-                            receipt.participant_id,
-                            lineage_err_text
-                        );
-                    }
-                    Err(rollback_err) => {
-                        anyhow::bail!(
-                            "fork_lineage_persist_failed: failed to persist explicit fork lineage for child {} after authoritative registration, and automatic stop rollback did not reach durable closeout ({}; {})",
-                            receipt.participant_id,
-                            lineage_err_text,
-                            rollback_err
-                        );
+        let lineage =
+            match persist_fork_child_lineage(&prepared.store, &resolved, &receipt.participant_id) {
+                Ok(lineage) => lineage,
+                Err(lineage_err) => {
+                    match rollback_failed_fork_child_launch(
+                        &prepared.store,
+                        &resolved,
+                        &receipt.participant_id,
+                    )
+                    .await
+                    {
+                        Ok(()) => {
+                            anyhow::bail!(
+                                "{}",
+                                format_fork_lineage_persist_failure(
+                                    &receipt.participant_id,
+                                    &lineage_err,
+                                    None,
+                                )
+                            );
+                        }
+                        Err(rollback_err) => {
+                            anyhow::bail!(
+                                "{}",
+                                format_fork_lineage_persist_failure(
+                                    &receipt.participant_id,
+                                    &lineage_err,
+                                    Some(&rollback_err),
+                                )
+                            );
+                        }
                     }
                 }
-            }
-        };
+            };
         let summary = summarize_fork_world_worker_result(&receipt, &lineage.source_participant_id);
 
         Ok(WorldDispatchOutcomeV1::ForkWorldWorker(
@@ -285,6 +286,32 @@ async fn fork_world_worker(
                 summary,
             },
         ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn format_fork_lineage_persist_failure(
+    child_participant_id: &str,
+    lineage_err: &anyhow::Error,
+    rollback_err: Option<&anyhow::Error>,
+) -> String {
+    let lineage_err_text = format!("{lineage_err:#}");
+
+    match rollback_err {
+        Some(rollback_err) => {
+            let rollback_err_text = format!("{rollback_err:#}");
+            format!(
+                "fork_lineage_persist_failed: failed to persist explicit fork lineage for child {} after authoritative registration, and automatic stop rollback did not reach durable closeout ({}; {})",
+                child_participant_id,
+                lineage_err_text,
+                rollback_err_text
+            )
+        }
+        None => format!(
+            "fork_lineage_persist_failed: failed to persist explicit fork lineage for child {} after authoritative registration; retained child was durably stopped before returning the error ({})",
+            child_participant_id,
+            lineage_err_text
+        ),
     }
 }
 
@@ -5741,6 +5768,34 @@ mod tests {
         assert_eq!(child.fork_source_participant_id(), None);
 
         server.abort();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fork_lineage_persist_failure_message_preserves_rollback_cause_chain() {
+        let lineage_err = anyhow::anyhow!("invalid_fork_lineage: authoritative child ash_child persisted parent_participant_id Some(\"ash_wrong_parent\") instead of source ash_member");
+        let rollback_err = anyhow::anyhow!("rollback closeout timed out")
+            .context("owner_unreachable: failed to observe durable rollback closeout");
+
+        let message =
+            format_fork_lineage_persist_failure("ash_child", &lineage_err, Some(&rollback_err));
+
+        assert!(
+            message.contains("fork_lineage_persist_failed:"),
+            "wrapper prefix should be preserved: {message}"
+        );
+        assert!(
+            message.contains("invalid_fork_lineage:"),
+            "original lineage error should stay visible: {message}"
+        );
+        assert!(
+            message.contains("owner_unreachable: failed to observe durable rollback closeout"),
+            "rollback wrapper message should stay visible: {message}"
+        );
+        assert!(
+            message.contains("rollback closeout timed out"),
+            "pretty rollback formatting should preserve nested anyhow causes: {message}"
+        );
     }
 
     #[cfg(target_os = "linux")]
