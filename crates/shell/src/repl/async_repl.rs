@@ -12301,7 +12301,13 @@ mod tests {
                 .load_participant(&inspect.target_participant_id)
                 .expect("load retained participant after inspect")
                 .expect("retained participant after inspect");
-            assert_eq!(session_after.session, session_before.session);
+            assert!(
+                session_after.session.last_active_at >= session_before.session.last_active_at,
+                "inspect must not move orchestration session liveness backwards"
+            );
+            let mut session_after_stable = session_after.session.clone();
+            session_after_stable.last_active_at = session_before.session.last_active_at;
+            assert_eq!(session_after_stable, session_before.session);
             assert_eq!(session_after.participants, session_before.participants);
             assert_eq!(participant_after, participant_before);
 
