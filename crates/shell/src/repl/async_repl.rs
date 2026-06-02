@@ -4929,7 +4929,7 @@ fn private_cancel_signal(payload: &WorkerCancelPayloadV1) -> &'static str {
 }
 
 fn exit_code_is_cancelled(exit_code: i32) -> bool {
-    exit_code == 130
+    matches!(exit_code, 130 | 143)
 }
 
 #[cfg(all(test, unix))]
@@ -8884,6 +8884,20 @@ mod tests {
                 "unexpected eof"
             )),
         ]
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dispatch_contract_hard_cancel_term_exit_is_classified_as_cancelled() {
+        let payload = WorkerCancelPayloadV1 {
+            reason: Some("operator requested cancel".to_string()),
+            graceful: Some(false),
+        };
+
+        assert_eq!(private_cancel_signal(&payload), "TERM");
+        assert!(exit_code_is_cancelled(130));
+        assert!(exit_code_is_cancelled(143));
+        assert!(!exit_code_is_cancelled(0));
     }
 
     #[test]
