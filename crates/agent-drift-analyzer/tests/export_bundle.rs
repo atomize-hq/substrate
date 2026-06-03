@@ -279,7 +279,7 @@ fn export_bundle_summarizes_checkpoint_local_diagnostics() {
     );
     for class in [
         DriftClass::WrongPlanBranch,
-        DriftClass::IgnoringRepoTruth,
+        DriftClass::TruthGroundingGap,
         DriftClass::DeadEndThrash,
     ] {
         let expected = checkpoints
@@ -723,7 +723,7 @@ fn fixture_checkpoint(
         },
         drift_scores: [
             DriftClass::WrongPlanBranch,
-            DriftClass::IgnoringRepoTruth,
+            DriftClass::TruthGroundingGap,
             DriftClass::DeadEndThrash,
         ]
         .into_iter()
@@ -755,14 +755,14 @@ fn format_drift_class_frequencies(
 ) -> String {
     [
         DriftClass::WrongPlanBranch,
-        DriftClass::IgnoringRepoTruth,
+        DriftClass::TruthGroundingGap,
         DriftClass::DeadEndThrash,
     ]
     .into_iter()
     .map(|class| {
         let label = match class {
             DriftClass::WrongPlanBranch => "wrong_plan_branch",
-            DriftClass::IgnoringRepoTruth => "ignoring_repo_truth",
+            DriftClass::TruthGroundingGap => "truth_grounding_gap",
             DriftClass::DeadEndThrash => "dead_end_thrash",
         };
         format!(

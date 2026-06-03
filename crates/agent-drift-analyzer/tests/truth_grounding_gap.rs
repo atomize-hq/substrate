@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::AnalyzeRequest;
+use agent_drift_analyzer::{AnalyzeRequest, DriftClass};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -10,42 +10,37 @@ use camino::Utf8PathBuf;
 use support::{analyze_sample_bundle, read_checkpoints, BundleFixture};
 
 #[test]
-fn wrong_plan_branch_scores_out_of_scope_changes() {
+fn truth_grounding_gap_flags_verification_without_truth_reads() {
     let result = analyze_sample_bundle();
     let score = result.sessions[0]
         .checkpoints
         .iter()
         .flat_map(|checkpoint| checkpoint.drift_scores.iter())
-        .find(|score| {
-            score.class == agent_drift_analyzer::DriftClass::WrongPlanBranch && score.flagged
-        })
-        .expect("wrong plan branch score");
+        .find(|score| score.class == DriftClass::TruthGroundingGap && score.flagged)
+        .expect("truth grounding gap score");
 
     assert!(score.raw_score >= 60);
     assert!(score.flagged);
 }
 
 #[test]
-fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
+fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_active() {
     let rows = vec![
         row(
             0,
             CompactionKind::UserMessage,
-            "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md and verify with `cargo test -p agent-drift-analyzer wrong_plan_branch -- --nocapture`.",
+            "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md and verify with `cargo test -p agent-drift-analyzer -- --nocapture`.",
         ),
         row(
             1,
             CompactionKind::SystemMessage,
-            "Stay inside crates/agent-drift-analyzer/src/lib.rs and the v0.4 spec.",
+            "Read docs/specs/agent-drift-analyzer-v0.4-spec.md before acting.",
         ),
-        tool_row(
-            2,
-            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: /tmp/offscope-notes.md\n+rogue\n*** End Patch\nPATCH",
-        ),
+        tool_row(2, "cargo test -p agent-drift-analyzer -- --nocapture"),
         row(
             3,
             CompactionKind::AssistantMessage,
-            "I found the off-scope change. Next I am returning to the requested file.",
+            "I need to re-ground on the spec before editing again.",
         ),
         tool_row(4, "sed -n '1,120p' docs/specs/agent-drift-analyzer-v0.4-spec.md"),
         tool_row(
@@ -60,7 +55,7 @@ fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
     archival_rows.push(duplicate.clone());
     let dedupe_groups = vec![DedupeGroup {
         kind: CompactionKind::ToolCall,
-        canonical_text_hash_hex: "wrong-plan-branch-dup".to_string(),
+        canonical_text_hash_hex: "truth-grounding-gap-dup".to_string(),
         representative: RowRef::from_row(&rows[2]),
         duplicates: vec![RowRef::from_row(&duplicate)],
     }];
@@ -76,18 +71,22 @@ fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
     let first = checkpoints[0]
         .drift_scores
         .iter()
-        .find(|score| score.class == agent_drift_analyzer::DriftClass::WrongPlanBranch)
-        .expect("first wrong plan branch score");
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("first truth grounding gap score");
     let second = checkpoints[1]
         .drift_scores
         .iter()
-        .find(|score| score.class == agent_drift_analyzer::DriftClass::WrongPlanBranch)
-        .expect("second wrong plan branch score");
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("second truth grounding gap score");
 
     assert!(first.flagged);
-    assert_eq!(first.raw_score, 60);
     assert!(!second.flagged);
-    assert_eq!(second.raw_score, 0);
+    assert!(second
+        .evidence
+        .iter()
+        .any(|evidence| evidence
+            .reason
+            .starts_with("historical truth-grounding gap:")));
 }
 
 fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {

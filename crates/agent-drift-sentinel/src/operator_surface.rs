@@ -358,7 +358,7 @@ fn confidence_name(confidence: agent_drift_analyzer::Confidence) -> &'static str
 fn drift_class_name(class: DriftClass) -> &'static str {
     match class {
         DriftClass::WrongPlanBranch => "wrong_plan_branch",
-        DriftClass::IgnoringRepoTruth => "ignoring_repo_truth",
+        DriftClass::TruthGroundingGap => "truth_grounding_gap",
         DriftClass::DeadEndThrash => "dead_end_thrash",
     }
 }

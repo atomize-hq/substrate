@@ -1,7 +1,8 @@
-use crate::checkpoint::{Confidence, DriftClass, DriftScore, TaskFrame};
-use crate::context::ContextPack;
+use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore};
 
-pub fn score_wrong_plan_branch(context: &ContextPack, task_frame: &TaskFrame) -> DriftScore {
+pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> DriftScore {
+    let context = &analysis.current.context;
+    let task_frame = &analysis.current.task_frame;
     let mut expected = task_frame.truth_artifacts.clone();
     expected.extend(
         context
@@ -13,7 +14,7 @@ pub fn score_wrong_plan_branch(context: &ContextPack, task_frame: &TaskFrame) ->
     expected.sort();
     expected.dedup();
     let mut out_of_scope = Vec::new();
-    for command in &context.command_observations {
+    for command in &analysis.interval.command_observations {
         if command.paths.is_empty() || (!command.write_like && !command.verification_like) {
             continue;
         }

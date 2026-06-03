@@ -71,21 +71,20 @@ pub fn analyze_loaded_bundle(
     for session in &bundle.sessions {
         let context = assemble_context(session);
         let task_frame = infer_task_frame(&context);
-        let checkpoints = checkpoint::checkpoint_analyses(session)
-            .into_iter()
-            .map(|analysis| {
-                let scores = score_session(
-                    &analysis.current.window,
-                    &analysis.current.context,
-                    &analysis.current.task_frame,
-                );
-                checkpoint::build_session_checkpoint_from_analysis(
-                    &analysis,
-                    &analysis.current.task_frame,
-                    scores,
-                )
-            })
-            .collect::<Vec<_>>();
+        let mut checkpoints = Vec::new();
+        let mut previous_truth_grounding_gap = None;
+        for analysis in checkpoint::checkpoint_analyses(session) {
+            let scores = score_session(&analysis, previous_truth_grounding_gap.as_ref());
+            previous_truth_grounding_gap = scores
+                .iter()
+                .find(|score| score.class == DriftClass::TruthGroundingGap)
+                .cloned();
+            checkpoints.push(checkpoint::build_session_checkpoint_from_analysis(
+                &analysis,
+                &analysis.current.task_frame,
+                scores,
+            ));
+        }
         exported_checkpoints.extend(checkpoints.iter().cloned());
         analyses.push(SessionAnalysis {
             session_id: session.session_id.clone(),

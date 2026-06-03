@@ -806,7 +806,7 @@ fn drift_class_flagged_counts() -> BTreeMap<DriftClass, usize> {
 fn drift_classes() -> [DriftClass; 3] {
     [
         DriftClass::WrongPlanBranch,
-        DriftClass::IgnoringRepoTruth,
+        DriftClass::TruthGroundingGap,
         DriftClass::DeadEndThrash,
     ]
 }
@@ -814,7 +814,7 @@ fn drift_classes() -> [DriftClass; 3] {
 fn drift_class_label(class: DriftClass) -> &'static str {
     match class {
         DriftClass::WrongPlanBranch => "wrong_plan_branch",
-        DriftClass::IgnoringRepoTruth => "ignoring_repo_truth",
+        DriftClass::TruthGroundingGap => "truth_grounding_gap",
         DriftClass::DeadEndThrash => "dead_end_thrash",
     }
 }

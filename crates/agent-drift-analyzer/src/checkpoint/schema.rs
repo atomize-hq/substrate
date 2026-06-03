@@ -13,7 +13,8 @@ pub enum Confidence {
 #[serde(rename_all = "snake_case")]
 pub enum DriftClass {
     WrongPlanBranch,
-    IgnoringRepoTruth,
+    #[serde(alias = "ignoring_repo_truth")]
+    TruthGroundingGap,
     DeadEndThrash,
 }
 

@@ -6,7 +6,7 @@ use crate::checkpoint::{Confidence, DriftClass, DriftScore, EvidenceRef};
 use crate::context::{collect_command_observations, ContextPack};
 use crate::input::BundleSession;
 
-pub fn score_dead_end_thrash(session: &BundleSession, context: &ContextPack) -> DriftScore {
+pub(crate) fn score_dead_end_thrash(session: &BundleSession, context: &ContextPack) -> DriftScore {
     let mut repeated_commands = BTreeMap::<String, Vec<EvidenceRef>>::new();
     let mut repeated_failures = BTreeMap::<String, Vec<EvidenceRef>>::new();
 
