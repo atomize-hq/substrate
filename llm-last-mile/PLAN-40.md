@@ -22,9 +22,9 @@ This slice is complete only when all of the following are true:
 
 ## Plan Summary
 
-After Slice `39`, the repo can now accept worker-originated `approval_request` obligations, but the host still lacks a typed sanctioned response path. The live `continue_world_worker` payload remains prompt text plus optional thread id, and the design stack still treats `approval_response` as a distinct host-to-worker class rather than something that should stay indefinitely buried in ad hoc prompt wording.
+After Slice `40`, the repo can now accept worker-originated `approval_request` obligations and the matching typed host `approval_response` bootstrap through `continue_world_worker`. The live seam remains intentionally narrow: typed `approval_response` is compiled onto the existing member-turn prompt submit path, while broader host response/control classes, transport redesign, active-ephemeral identity widening, public approval UX, and Family-2 router execution remain deferred.
 
-That makes typed approval response the narrowest honest next widening because:
+That made typed approval response the narrowest honest next widening because:
 
 1. it closes the most immediate producer-consumer gap introduced by Slice `39`,
 2. it widens an already-landed verb rather than inventing an eighth verb,

@@ -313,7 +313,7 @@ Internal host-to-world steering example:
 - `cancel_world_work` remains internal, retained-worker-only in Slice `37`, and distinct from `stop_world_worker`. On Linux in v1, an allowlisted exact-target cancel request uses the dedicated private owner cancel surface to interrupt active retained work in flight and wait for authoritative cancelled closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `stop_world_worker` remains internal, retained-worker-only in v1, and is a durable closeout action distinct from `cancel_world_work`. On Linux in v1, an allowlisted exact-target stop request reuses the existing private owner stop surface to drive authoritative stopped closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - Current mode ids are limited to `ephemeral` and `retained`.
-- Outside the three narrow Slice `39` worker-event gates above, this patch surface does not imply typed host approval/control responses, worker-issued `fork_command`, auto-fork, active-ephemeral inspect, active-ephemeral or dual-target cancel semantics, router-owned attach execution, or broader Family-2 autonomy/execution policy.
+- Outside the four narrow Slice `39`/`40` approval/fork gates above, this patch surface does not imply broader typed host response/control classes beyond the landed `approval_response` bootstrap, worker-issued `fork_command`, auto-fork, active-ephemeral inspect, active-ephemeral or dual-target cancel semantics, router-owned attach execution, or broader Family-2 autonomy/execution policy.
 
 ```yaml
 agents:
