@@ -260,7 +260,7 @@ pub fn present_checkpoint(
     present_checkpoint_with_previous(checkpoint, None, trigger, decision, warning_policy)
 }
 
-fn present_checkpoint_with_previous(
+pub fn present_checkpoint_with_previous(
     checkpoint: &Checkpoint,
     previous_checkpoint: Option<&Checkpoint>,
     trigger: TriggerClass,
@@ -274,12 +274,7 @@ fn present_checkpoint_with_previous(
         .iter()
         .filter(|score| score.flagged)
         .collect::<Vec<_>>();
-    let evidence_lines = flagged_scores
-        .iter()
-        .flat_map(|score| score.evidence.iter())
-        .take(warning_policy.max_evidence_lines)
-        .map(format_evidence_ref)
-        .collect::<Vec<_>>();
+    let evidence_lines = collect_evidence_lines(checkpoint, warning_policy.max_evidence_lines);
     let severity = max_flagged_score(checkpoint)
         .map(severity_for_score)
         .unwrap_or("low")
@@ -374,6 +369,43 @@ fn historical_reason_prefixes(class: DriftClass) -> &'static [&'static str] {
             "historical repeated verification evidence:",
         ],
         DriftClass::WrongPlanBranch => &[],
+    }
+}
+
+fn collect_evidence_lines(checkpoint: &Checkpoint, max_evidence_lines: usize) -> Vec<String> {
+    let mut evidence_lines = Vec::new();
+    for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
+        push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);
+        if evidence_lines.len() >= max_evidence_lines {
+            return evidence_lines;
+        }
+    }
+    for score in checkpoint
+        .drift_scores
+        .iter()
+        .filter(|score| !score.flagged && score_has_historical_evidence(score))
+    {
+        push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);
+        if evidence_lines.len() >= max_evidence_lines {
+            return evidence_lines;
+        }
+    }
+    evidence_lines
+}
+
+fn push_evidence_lines(
+    evidence_lines: &mut Vec<String>,
+    evidence_refs: &[EvidenceRef],
+    max_evidence_lines: usize,
+) {
+    for evidence in evidence_refs {
+        let formatted = format_evidence_ref(evidence);
+        if !evidence_lines.contains(&formatted) {
+            evidence_lines.push(formatted);
+        }
+        if evidence_lines.len() >= max_evidence_lines {
+            return;
+        }
     }
 }
 
