@@ -645,7 +645,7 @@ async fn continue_world_worker(
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
-    let stream_result = execute_continue_world_worker_stream(&submit_request).await?;
+    let stream_result = execute_continue_world_worker_stream(&submit_request, &base_policy).await?;
     let summary = summarize_continue_world_worker_result(&submit_request, stream_result.exit_code);
 
     Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
@@ -1556,6 +1556,7 @@ async fn execute_spawn_world_worker_stream(
 #[cfg(target_os = "linux")]
 async fn execute_continue_world_worker_stream(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
+    policy: &Policy,
 ) -> Result<ContinueWorldWorkerStreamResult> {
     use http_body_util::BodyExt as _;
     use transport_api_types::ExecuteStreamFrame;
@@ -1631,6 +1632,14 @@ async fn execute_continue_world_worker_stream(
                             }
                         };
                     if let Some(classified_event) = classified_event {
+                        if let Err(err) = enforce_continue_world_worker_event_policy(
+                            policy,
+                            classified_event.event_class,
+                        ) {
+                            cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
+                                .await;
+                            return Err(err);
+                        }
                         surfaced_worker_event = Some(classified_event);
                     }
                 }
@@ -1664,6 +1673,39 @@ async fn execute_continue_world_worker_stream(
         surfaced_thread_id,
         surfaced_worker_event,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn enforce_continue_world_worker_event_policy(
+    policy: &Policy,
+    event_class: ContinueWorldWorkerEventClassV1,
+) -> Result<()> {
+    match event_class {
+        ContinueWorldWorkerEventClassV1::ApprovalRequest
+            if !policy.world_dispatch_approval_requests_allowed() =>
+        {
+            anyhow::bail!(
+                "approval_request_not_allowed: retained workers may not request approval under current policy"
+            );
+        }
+        ContinueWorldWorkerEventClassV1::ForkRequest
+            if !policy.world_dispatch_fork_requests_allowed() =>
+        {
+            anyhow::bail!(
+                "fork_request_not_allowed: retained workers may not request fork under current policy"
+            );
+        }
+        ContinueWorldWorkerEventClassV1::ForkRecommendation
+            if !policy.world_dispatch_fork_recommendations_allowed() =>
+        {
+            anyhow::bail!(
+                "fork_recommendation_not_allowed: retained workers may not recommend fork under current policy"
+            );
+        }
+        _ => {}
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -2561,6 +2603,9 @@ mod tests {
             ],
             agents_world_dispatch_same_session_only: true,
             agents_world_dispatch_same_world_binding_only: true,
+            agents_world_dispatch_fork_requests_allowed: true,
+            agents_world_dispatch_fork_recommendations_allowed: true,
+            agents_world_dispatch_obligations_approval_allowed: true,
             agents_world_dispatch_max_live_retained_workers: 4,
             agents_world_dispatch_max_concurrent_ephemeral: 4,
             ..Policy::default()
@@ -2886,6 +2931,41 @@ mod tests {
             "uaa_event": raw_event,
             "protocol": "substrate.agent.session",
         }))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn policy_allowing_continue_worker_event(
+        event_class: ContinueWorldWorkerEventClassV1,
+    ) -> Policy {
+        let mut policy = Policy::default();
+        match event_class {
+            ContinueWorldWorkerEventClassV1::ApprovalRequest => {
+                policy.agents_world_dispatch_obligations_approval_allowed = true;
+            }
+            ContinueWorldWorkerEventClassV1::ForkRequest => {
+                policy.agents_world_dispatch_fork_requests_allowed = true;
+            }
+            ContinueWorldWorkerEventClassV1::ForkRecommendation => {
+                policy.agents_world_dispatch_fork_recommendations_allowed = true;
+            }
+            _ => {}
+        }
+        policy
+    }
+
+    #[cfg(target_os = "linux")]
+    fn continue_worker_event_label(event_class: ContinueWorldWorkerEventClassV1) -> &'static str {
+        match event_class {
+            ContinueWorldWorkerEventClassV1::ApprovalRequest => "approval_request",
+            ContinueWorldWorkerEventClassV1::ForkRequest => "fork_request",
+            ContinueWorldWorkerEventClassV1::ForkRecommendation => "fork_recommendation",
+            ContinueWorldWorkerEventClassV1::Reply => "reply",
+            ContinueWorldWorkerEventClassV1::ProgressUpdate => "progress_update",
+            ContinueWorldWorkerEventClassV1::Result => "result",
+            ContinueWorldWorkerEventClassV1::Failure => "failure",
+            ContinueWorldWorkerEventClassV1::FollowUpQuestion => "follow_up_question",
+            ContinueWorldWorkerEventClassV1::Blocked => "blocked",
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -3667,11 +3747,15 @@ mod tests {
         let previous_socket = std::env::var("SUBSTRATE_WORLD_SOCKET").ok();
         std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
-        let err =
-            match execute_continue_world_worker_stream(&sample_continue_submit_request()).await {
-                Ok(_) => panic!("deferred worker event classes must fail closed"),
-                Err(err) => err,
-            };
+        let err = match execute_continue_world_worker_stream(
+            &sample_continue_submit_request(),
+            &Policy::default(),
+        )
+        .await
+        {
+            Ok(_) => panic!("deferred worker event classes must fail closed"),
+            Err(err) => err,
+        };
         assert!(
             err.to_string().contains("unsupported_worker_event_class"),
             "unexpected continue stream error: {err}"
@@ -3696,6 +3780,264 @@ mod tests {
         }
 
         server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_world_worker_stream_denies_packet_one_worker_requests_by_default() {
+        let cases = [
+            (
+                "approval_request",
+                "approval_request_not_allowed:",
+                sample_continue_stream_event(json!({
+                    "event_class": "approval_request",
+                    "payload": {
+                        "message": "requires approval"
+                    }
+                })),
+            ),
+            (
+                "fork_request",
+                "fork_request_not_allowed:",
+                sample_continue_stream_event(json!({
+                    "event_class": "fork_request",
+                    "payload": {
+                        "message": "please fork"
+                    }
+                })),
+            ),
+            (
+                "fork_recommendation",
+                "fork_recommendation_not_allowed:",
+                sample_continue_stream_event(json!({
+                    "event_class": "fork_recommendation",
+                    "payload": {
+                        "message": "consider a child worker"
+                    }
+                })),
+            ),
+        ];
+
+        for (event_label, expected_denial, event) in cases {
+            let _env_guard = world_env_guard();
+            let socket_home = tempdir().expect("socket tempdir");
+            let socket_path = socket_home.path().join(format!("{event_label}.sock"));
+            let cancel_requests = Arc::new(Mutex::new(Vec::<ExecuteCancelRequestV1>::new()));
+            let cancel_requests_for_server = cancel_requests.clone();
+
+            let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+            let server = tokio::spawn(async move {
+                while let Ok((mut stream, _addr)) = listener.accept().await {
+                    let Some((header, body)) = read_http_request(&mut stream).await else {
+                        continue;
+                    };
+                    let first_line = header.lines().next().unwrap_or("");
+
+                    if first_line.starts_with("GET /v1/capabilities ") {
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/member_turn/stream ") {
+                        let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                            serde_json::from_slice(&body).expect("member turn submit request");
+                        write_http_stream_start(&mut stream).await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Start {
+                                span_id: "member-turn-span".to_string(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Event {
+                                event: event.clone(),
+                            },
+                        )
+                        .await;
+                        finish_chunked_stream(&mut stream).await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/execute/cancel ") {
+                        let parsed: ExecuteCancelRequestV1 =
+                            serde_json::from_slice(&body).expect("execute cancel request");
+                        cancel_requests_for_server
+                            .lock()
+                            .expect("cancel request mutex poisoned")
+                            .push(parsed);
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"delivered":true}"#,
+                        )
+                        .await;
+                        break;
+                    }
+
+                    write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+                }
+            });
+
+            let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+            let err = match execute_continue_world_worker_stream(
+                &sample_continue_submit_request(),
+                &Policy::default(),
+            )
+            .await
+            {
+                Ok(_) => panic!("packet one worker events must fail closed by default"),
+                Err(err) => err,
+            };
+            assert!(
+                err.to_string().contains(expected_denial),
+                "expected {expected_denial} for {event_label}, got {err}"
+            );
+
+            server.await.expect("stub world server task");
+            let recorded = cancel_requests
+                .lock()
+                .expect("cancel request mutex poisoned")
+                .clone();
+            assert_eq!(
+                recorded.len(),
+                1,
+                "expected one cancel request for denied {event_label}: {recorded:?}"
+            );
+            assert_eq!(recorded[0].span_id, "member-turn-span");
+            assert_eq!(recorded[0].sig, "INT");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_world_worker_stream_allows_packet_one_worker_requests_when_explicitly_enabled(
+    ) {
+        let cases = [
+            (
+                ContinueWorldWorkerEventClassV1::ApprovalRequest,
+                sample_continue_stream_event(json!({
+                    "event_class": "approval_request",
+                    "payload": {
+                        "message": "requires approval"
+                    }
+                })),
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::ForkRequest,
+                sample_continue_stream_event(json!({
+                    "event_class": "fork_request",
+                    "payload": {
+                        "message": "please fork"
+                    }
+                })),
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::ForkRecommendation,
+                sample_continue_stream_event(json!({
+                    "event_class": "fork_recommendation",
+                    "payload": {
+                        "message": "consider a child worker"
+                    }
+                })),
+            ),
+        ];
+
+        for (event_class, event) in cases {
+            let _env_guard = world_env_guard();
+            let socket_home = tempdir().expect("socket tempdir");
+            let socket_path = socket_home.path().join(format!(
+                "allow-{}.sock",
+                continue_worker_event_label(event_class)
+            ));
+            let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+            let server = tokio::spawn(async move {
+                while let Ok((mut stream, _addr)) = listener.accept().await {
+                    let Some((header, body)) = read_http_request(&mut stream).await else {
+                        continue;
+                    };
+                    let first_line = header.lines().next().unwrap_or("");
+
+                    if first_line.starts_with("GET /v1/capabilities ") {
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/member_turn/stream ") {
+                        let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                            serde_json::from_slice(&body).expect("member turn submit request");
+                        write_http_stream_start(&mut stream).await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Start {
+                                span_id: "member-turn-span".to_string(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Event {
+                                event: event.clone(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Exit {
+                                exit: 0,
+                                span_id: "member-turn-span".to_string(),
+                                scopes_used: Vec::new(),
+                                fs_diff: None,
+                                process_telemetry: Default::default(),
+                            },
+                        )
+                        .await;
+                        finish_chunked_stream(&mut stream).await;
+                        break;
+                    }
+
+                    write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+                }
+            });
+
+            let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+            let outcome = execute_continue_world_worker_stream(
+                &sample_continue_submit_request(),
+                &policy_allowing_continue_worker_event(event_class),
+            )
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "explicit policy should allow {}: {err}",
+                    continue_worker_event_label(event_class)
+                )
+            });
+
+            assert_eq!(outcome.exit_code, 0);
+            assert_eq!(outcome.surfaced_thread_id.as_deref(), Some("thread-direct"));
+            assert_eq!(
+                outcome
+                    .surfaced_worker_event
+                    .as_ref()
+                    .map(|classified| classified.event_class),
+                Some(event_class)
+            );
+
+            server.await.expect("stub world server task");
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -4551,11 +4893,14 @@ mod tests {
         let previous_socket = std::env::var("SUBSTRATE_WORLD_SOCKET").ok();
         std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
-        let reply = execute_continue_world_worker_stream(&sample_continue_submit_request_for_run(
-            "run-reply",
-            &binding.world_id,
-            binding.world_generation,
-        ))
+        let reply = execute_continue_world_worker_stream(
+            &sample_continue_submit_request_for_run(
+                "run-reply",
+                &binding.world_id,
+                binding.world_generation,
+            ),
+            &sample_world_dispatch_policy(),
+        )
         .await
         .expect("reply turn should succeed");
         assert_eq!(reply.exit_code, 0);
@@ -4576,14 +4921,16 @@ mod tests {
             Some("reply from live runtime")
         );
 
-        let progress =
-            execute_continue_world_worker_stream(&sample_continue_submit_request_for_run(
+        let progress = execute_continue_world_worker_stream(
+            &sample_continue_submit_request_for_run(
                 "run-progress",
                 &binding.world_id,
                 binding.world_generation,
-            ))
-            .await
-            .expect("progress turn should succeed");
+            ),
+            &sample_world_dispatch_policy(),
+        )
+        .await
+        .expect("progress turn should succeed");
         assert_eq!(progress.exit_code, 0);
         assert_eq!(progress.surfaced_thread_id.as_deref(), Some("thread-real"));
         assert_eq!(
@@ -4602,14 +4949,16 @@ mod tests {
             Some("command_execution")
         );
 
-        let failure =
-            execute_continue_world_worker_stream(&sample_continue_submit_request_for_run(
+        let failure = execute_continue_world_worker_stream(
+            &sample_continue_submit_request_for_run(
                 "run-failure",
                 &binding.world_id,
                 binding.world_generation,
-            ))
-            .await
-            .expect("failure turn should still return typed outcome");
+            ),
+            &sample_world_dispatch_policy(),
+        )
+        .await
+        .expect("failure turn should still return typed outcome");
         assert_eq!(failure.exit_code, 1);
         assert_eq!(failure.surfaced_thread_id.as_deref(), Some("thread-real"));
         assert_eq!(

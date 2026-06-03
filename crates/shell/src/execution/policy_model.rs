@@ -2226,7 +2226,10 @@ agents:
             patch.agents.world_dispatch.allowed_modes.as_deref(),
             Some(&["ephemeral".to_string(), "retained".to_string()][..])
         );
-        assert_eq!(patch.agents.world_dispatch.fork.requests_allowed, Some(true));
+        assert_eq!(
+            patch.agents.world_dispatch.fork.requests_allowed,
+            Some(true)
+        );
         assert_eq!(
             patch.agents.world_dispatch.fork.recommendations_allowed,
             Some(true)

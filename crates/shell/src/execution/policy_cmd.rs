@@ -683,8 +683,7 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
                         .agents_world_dispatch_fork_recommendations_allowed,
                 },
                 obligations: AgentsWorldDispatchObligationsEffectiveDisplayV1 {
-                    approval_allowed: policy
-                        .agents_world_dispatch_obligations_approval_allowed,
+                    approval_allowed: policy.agents_world_dispatch_obligations_approval_allowed,
                 },
             },
         },

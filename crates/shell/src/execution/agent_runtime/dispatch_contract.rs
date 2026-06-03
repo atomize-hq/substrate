@@ -3152,8 +3152,9 @@ mod tests {
         );
         assert!(ContinueWorldWorkerEventClassV1::ApprovalRequest.attention_required_by_default());
         assert!(ContinueWorldWorkerEventClassV1::ForkRequest.attention_required_by_default());
-        assert!(!ContinueWorldWorkerEventClassV1::ForkRecommendation
-            .attention_required_by_default());
+        assert!(
+            !ContinueWorldWorkerEventClassV1::ForkRecommendation.attention_required_by_default()
+        );
         assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "approval_request"
         ));

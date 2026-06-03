@@ -1372,8 +1372,7 @@ impl Serialize for Policy {
                             .agents_world_dispatch_fork_recommendations_allowed,
                     },
                     obligations: AgentsWorldDispatchObligationsPolicyFileV1 {
-                        approval_allowed: self
-                            .agents_world_dispatch_obligations_approval_allowed,
+                        approval_allowed: self.agents_world_dispatch_obligations_approval_allowed,
                     },
                 },
             },

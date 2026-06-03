@@ -1527,7 +1527,11 @@ pub fn resolve_effective_policy_with_explain(
         agents_world_dispatch_fork_recommendations_allowed_src,
     ) = resolve_replace(
         effective.agents_world_dispatch_fork_recommendations_allowed,
-        global_patch.agents.world_dispatch.fork.recommendations_allowed,
+        global_patch
+            .agents
+            .world_dispatch
+            .fork
+            .recommendations_allowed,
         workspace_patch.and_then(|p| p.agents.world_dispatch.fork.recommendations_allowed),
         workspace_enabled,
     );
@@ -1552,7 +1556,11 @@ pub fn resolve_effective_policy_with_explain(
         agents_world_dispatch_obligations_approval_allowed_src,
     ) = resolve_replace(
         effective.agents_world_dispatch_obligations_approval_allowed,
-        global_patch.agents.world_dispatch.obligations.approval_allowed,
+        global_patch
+            .agents
+            .world_dispatch
+            .obligations
+            .approval_allowed,
         workspace_patch.and_then(|p| p.agents.world_dispatch.obligations.approval_allowed),
         workspace_enabled,
     );
