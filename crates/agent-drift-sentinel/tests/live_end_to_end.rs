@@ -266,6 +266,83 @@ fn live_end_to_end_replay_and_live_surfaces_share_posture_for_transition_sequenc
         .contains("- Posture: historical-only"));
 }
 
+#[test]
+fn live_end_to_end_replay_and_live_keep_posture_session_local_at_session_boundaries() {
+    let checkpoints = vec![
+        checkpoint_with_drift(
+            "session-a",
+            1,
+            DriftClass::TruthGroundingGap,
+            82,
+            true,
+            "align plan to repo truth",
+            &["flagged score for session-a:1"],
+        ),
+        checkpoint_with_drift(
+            "session-b",
+            1,
+            DriftClass::TruthGroundingGap,
+            20,
+            false,
+            "continue on the current task frame",
+            &["historical truth-grounding gap: flagged score for session-b:0"],
+        ),
+    ];
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        checkpoints.clone(),
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live active checkpoint");
+    let live_historical_only = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live historical-only checkpoint");
+
+    let replay_historical_only = replay
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-b:0001")
+        .expect("historical-only replay checkpoint");
+    let live_historical_only_event = match build_single_event(&live_historical_only) {
+        OperatorEvent::SilentCheckpoint(event) => event,
+        other => panic!("expected silent checkpoint event, got {other:?}"),
+    };
+
+    assert_eq!(
+        replay_historical_only.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+    assert_eq!(
+        live_historical_only.presentation.posture,
+        replay_historical_only.posture
+    );
+    assert_eq!(
+        live_historical_only_event.posture,
+        replay_historical_only.posture
+    );
+}
+
 fn fixture_path(name: &str) -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

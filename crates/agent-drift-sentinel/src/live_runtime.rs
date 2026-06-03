@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use agent_drift_analyzer::Checkpoint;
 
 use crate::input::CheckpointCursor;
@@ -59,6 +61,7 @@ pub struct LiveRuntime {
     scheduler: ReplayScheduler,
     warning_policy: WarningPolicy,
     previous_checkpoint: Option<Checkpoint>,
+    latest_checkpoint_by_session: HashMap<String, Checkpoint>,
     latest_checkpoint: Option<Checkpoint>,
     latest_compatibility: Option<LiveCheckpointCompatibility>,
     processed_events: usize,
@@ -71,6 +74,7 @@ impl LiveRuntime {
             scheduler: ReplayScheduler::new(policy),
             warning_policy,
             previous_checkpoint: None,
+            latest_checkpoint_by_session: HashMap::new(),
             latest_checkpoint: None,
             latest_compatibility: None,
             processed_events: 0,
@@ -101,7 +105,10 @@ impl LiveRuntime {
         let (checkpoint, previous_checkpoint, compatibility) = if let Some(checkpoint) =
             event.checkpoint.as_ref()
         {
-            let previous_checkpoint = self.latest_checkpoint.clone();
+            let previous_checkpoint = self
+                .latest_checkpoint_by_session
+                .get(checkpoint.session_id.as_str())
+                .cloned();
             let compatibility = verify_live_checkpoint_compatibility(checkpoint)?;
             if compatibility.cursor != event.cursor {
                 return Err(LiveRuntimeError::CursorMismatch {
@@ -113,6 +120,8 @@ impl LiveRuntime {
                 });
             }
             self.previous_checkpoint = previous_checkpoint.clone();
+            self.latest_checkpoint_by_session
+                .insert(checkpoint.session_id.clone(), checkpoint.clone());
             self.latest_checkpoint = Some(checkpoint.clone());
             self.latest_compatibility = Some(compatibility.clone());
             (checkpoint.clone(), previous_checkpoint, compatibility)
