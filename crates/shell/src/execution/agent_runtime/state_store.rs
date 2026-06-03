@@ -426,22 +426,14 @@ impl ResolvedInternalContinueWorldDispatchTarget {
 #[allow(dead_code)]
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PreparedInternalApprovalResponseObligationCloseout {
-    pub orchestration_session_id: String,
-    pub approval_obligation_id: String,
-    pub target_participant_id: String,
-    pub target_backend_id: String,
-    pub world_id: String,
-    pub world_generation: u64,
-    pub decision: ApprovalResponseDecisionV1,
-}
-
-#[allow(dead_code)]
-#[cfg(any(target_os = "linux", test))]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct InternalApprovalResponseDeliveryProof {
-    pub closeout: PreparedInternalApprovalResponseObligationCloseout,
-    pub delivered_at: DateTime<Utc>,
+struct PreparedInternalApprovalResponseObligationCloseout {
+    orchestration_session_id: String,
+    approval_obligation_id: String,
+    target_participant_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    decision: ApprovalResponseDecisionV1,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -1305,7 +1297,7 @@ impl AgentRuntimeStateStore {
 
     #[cfg(any(target_os = "linux", test))]
     #[allow(dead_code)]
-    pub(crate) fn prepare_internal_continue_approval_response_obligation_closeout(
+    fn prepare_internal_continue_approval_response_obligation_closeout(
         &self,
         resolved_target: &ResolvedInternalContinueWorldDispatchTarget,
         payload: &WorkerContinueApprovalResponsePayloadV1,
@@ -1349,12 +1341,11 @@ impl AgentRuntimeStateStore {
 
     #[cfg(any(target_os = "linux", test))]
     #[allow(dead_code)]
-    pub(crate) fn close_prepared_internal_continue_approval_response_obligation(
+    fn close_prepared_internal_continue_approval_response_obligation(
         &self,
-        delivery_proof: &InternalApprovalResponseDeliveryProof,
+        closeout: &PreparedInternalApprovalResponseObligationCloseout,
         resolution_note: Option<String>,
     ) -> Result<OrchestrationObligationRecord> {
-        let closeout = &delivery_proof.closeout;
         let mut obligation = self.load_exact_pending_approval_obligation_for_continue_target(
             &closeout.orchestration_session_id,
             &closeout.target_participant_id,
@@ -1367,12 +1358,9 @@ impl AgentRuntimeStateStore {
             ApprovalResponseDecisionV1::Approve => ApprovalObligationCloseoutDisposition::Resolve,
             ApprovalResponseDecisionV1::Deny => ApprovalObligationCloseoutDisposition::Dismiss,
         };
+        let resolved_at = Utc::now();
 
-        obligation.mark_approval_response_closed(
-            disposition,
-            resolution_note,
-            delivery_proof.delivered_at,
-        );
+        obligation.mark_approval_response_closed(disposition, resolution_note, resolved_at);
         self.persist_obligation(&obligation)?;
 
         Ok(obligation)
@@ -7293,23 +7281,31 @@ mod tests {
                         },
                     )
                     .expect("prepare approval closeout");
-                let delivered_at = Utc::now();
+                let closeout_started_at = Utc::now();
                 let closed = store
                     .close_prepared_internal_continue_approval_response_obligation(
-                        &InternalApprovalResponseDeliveryProof {
-                            closeout,
-                            delivered_at,
-                        },
+                        &closeout,
                         Some(note.to_string()),
                     )
                     .expect("close prepared approval obligation");
+                let closeout_finished_at = Utc::now();
 
                 assert_eq!(closed.state, OrchestrationObligationState::Resolved);
                 assert_eq!(closed.review_state, expected_review_state);
                 assert!(!closed.attention_required);
                 assert_eq!(closed.resolution_note.as_deref(), Some(note));
-                assert_eq!(closed.resolved_at, Some(delivered_at));
-                assert_eq!(closed.updated_at, delivered_at);
+                assert!(
+                    closed
+                        .resolved_at
+                        .is_some_and(|resolved_at| {
+                            resolved_at >= closeout_started_at
+                                && resolved_at <= closeout_finished_at
+                        }),
+                    "resolved_at must be minted by state-store closeout"
+                );
+                let closed_resolved_at =
+                    closed.resolved_at.clone().expect("resolved_at set");
+                assert_eq!(closed.updated_at, closed_resolved_at);
 
                 let persisted = store
                     .load_obligation(&session_id, &format!("obl_{suffix}"))
@@ -7319,8 +7315,8 @@ mod tests {
                 assert_eq!(persisted.review_state, expected_review_state);
                 assert!(!persisted.attention_required);
                 assert_eq!(persisted.resolution_note.as_deref(), Some(note));
-                assert_eq!(persisted.resolved_at, Some(delivered_at));
-                assert_eq!(persisted.updated_at, delivered_at);
+                assert_eq!(persisted.resolved_at, Some(closed_resolved_at));
+                assert_eq!(persisted.updated_at, closed.updated_at);
 
                 let compat_item = store
                     .load_inbox_item(&session_id, &format!("obl_{suffix}"))
@@ -7329,7 +7325,7 @@ mod tests {
                 assert_eq!(compat_item.kind, DurableInboxItemKind::ApprovalRequired);
                 assert_eq!(compat_item.state, expected_compat_state);
                 assert_eq!(compat_item.message.as_deref(), Some(note));
-                assert_eq!(compat_item.resolved_at, Some(delivered_at));
+                assert_eq!(compat_item.resolved_at, Some(closed_resolved_at));
 
                 let settled_session = store
                     .load_orchestration_session(&session_id)
@@ -7403,10 +7399,7 @@ mod tests {
 
             let err = store
                 .close_prepared_internal_continue_approval_response_obligation(
-                    &InternalApprovalResponseDeliveryProof {
-                        closeout,
-                        delivered_at: Utc::now(),
-                    },
+                    &closeout,
                     Some("approved by host".to_string()),
                 )
                 .expect_err("stale delivery proof must fail closed");
