@@ -38,6 +38,10 @@ use crate::execution::agent_runtime::orchestration_session::{
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
+#[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::{
+    capture_continue_world_worker_stream_event, persist_continue_world_worker_obligation,
+};
 use crate::execution::prompt_fulfillment::PromptFulfillmentCancelHandle;
 
 use super::{
@@ -1967,13 +1971,24 @@ where
 
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
     let response = client
-        .submit_member_turn_stream(request)
+        .submit_member_turn_stream(request.clone())
         .await
         .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
 
+    let workspace_root = {
+        let orchestration_guard = runtime
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        PathBuf::from(orchestration_guard.workspace_root.clone())
+    };
+    let (packet_three_policy, _) =
+        substrate_broker::resolve_effective_policy_with_explain(&workspace_root, false)
+            .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut observed_exit: Option<i32> = None;
+    let mut surfaced_worker_event = None;
     while let Some(frame) = body.as_mut().frame().await {
         let frame = frame.map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
         let Some(data) = frame.data_ref() else {
@@ -1995,6 +2010,13 @@ where
             match frame {
                 ExecuteStreamFrame::Start { .. } => {}
                 ExecuteStreamFrame::Event { event } => {
+                    capture_continue_world_worker_stream_event(
+                        &request,
+                        &packet_three_policy,
+                        &event,
+                        &mut surfaced_worker_event,
+                    )
+                    .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
                     on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
                 }
                 ExecuteStreamFrame::Stdout { chunk_b64 } => {
@@ -2023,6 +2045,10 @@ where
         }
     }
 
+    if let Some(worker_event) = surfaced_worker_event.as_ref() {
+        persist_continue_world_worker_obligation(&runtime.store, &request, worker_event)
+            .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
+    }
     let exit_code = observed_exit.unwrap_or(0);
     Ok(SubmittedPromptCompletion {
         exit_code,

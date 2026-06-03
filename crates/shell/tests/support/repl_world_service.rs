@@ -107,6 +107,8 @@ pub struct ReplWorldAgentStub {
     handle: Option<thread::JoinHandle<()>>,
 }
 
+const PACKET_THREE_MEMBER_TURN_PROMPT_PREFIX: &str = "__packet3_worker_event__:";
+
 fn assert_member_dispatch_capture(dispatch: &transport_api_types::MemberDispatchRequestV1) {
     assert!(
         Path::new(&dispatch.resolved_runtime.binary_path).is_absolute(),
@@ -374,6 +376,54 @@ impl ReplWorldAgentStub {
                                 "schema": "agent_api.session.handle.v1",
                                 "session": {
                                     "id": session_handle_id,
+                                }
+                            }),
+                        },
+                    }
+                }
+
+                fn packet_three_member_turn_event_class(prompt: &str) -> Option<&str> {
+                    prompt
+                        .strip_prefix(PACKET_THREE_MEMBER_TURN_PROMPT_PREFIX)
+                        .map(str::trim)
+                        .filter(|event_class| !event_class.is_empty())
+                }
+
+                fn build_member_turn_packet_three_event(
+                    request: &transport_api_types::MemberTurnSubmitRequestV1,
+                    event_class: &str,
+                    span_id: &str,
+                ) -> transport_api_types::ExecuteStreamFrame {
+                    transport_api_types::ExecuteStreamFrame::Event {
+                        event: substrate_common::agent_events::AgentEvent {
+                            ts: chrono::Utc::now(),
+                            agent_id: request
+                                .backend_id
+                                .strip_prefix("cli:")
+                                .unwrap_or(request.backend_id.as_str())
+                                .to_string(),
+                            kind: substrate_common::agent_events::AgentEventKind::TaskProgress,
+                            orchestration_session_id: request.orchestration_session_id.clone(),
+                            run_id: request.run_id.clone(),
+                            parent_run_id: None,
+                            participant_id: Some(request.participant_id.clone()),
+                            parent_participant_id: None,
+                            resumed_from_participant_id: None,
+                            backend_id: Some(request.backend_id.clone()),
+                            thread_id: Some("thread-direct".to_string()),
+                            role: Some("member".to_string()),
+                            world_id: Some(request.world_id.clone()),
+                            world_generation: Some(request.world_generation),
+                            cmd_id: None,
+                            span_id: Some(span_id.to_string()),
+                            channel: Some("worker.request".to_string()),
+                            identity_tuple: None,
+                            placement_posture: None,
+                            project: None,
+                            data: serde_json::json!({
+                                "event_class": event_class,
+                                "payload": {
+                                    "message": format!("stub packet three payload for {event_class}")
                                 }
                             }),
                         },
@@ -674,6 +724,19 @@ impl ReplWorldAgentStub {
                             },
                         )
                         .await;
+                        if let Some(event_class) =
+                            packet_three_member_turn_event_class(parsed.prompt.as_str())
+                        {
+                            write_chunked_frame(
+                                &mut stream,
+                                &build_member_turn_packet_three_event(
+                                    &parsed,
+                                    event_class,
+                                    &span_id,
+                                ),
+                            )
+                            .await;
+                        }
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Exit {

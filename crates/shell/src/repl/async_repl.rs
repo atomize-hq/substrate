@@ -84,6 +84,9 @@ use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
 use crate::execution::orchestrator_world_dispatch::{
+    capture_continue_world_worker_stream_event, persist_continue_world_worker_obligation,
+};
+use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
     prepare_spawn_world_worker_bootstrap,
 };
@@ -6633,13 +6636,24 @@ async fn submit_world_targeted_turn(
     };
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
     let response = client
-        .submit_member_turn_stream(request)
+        .submit_member_turn_stream(request.clone())
         .await
         .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
 
+    let workspace_root = {
+        let orchestration_guard = runtime
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        PathBuf::from(orchestration_guard.workspace_root.clone())
+    };
+    let (packet_three_policy, _) =
+        substrate_broker::resolve_effective_policy_with_explain(&workspace_root, false)
+            .map_err(|err| anyhow!("substrate: error: {}", err))?;
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut exit_code = 0;
+    let mut surfaced_worker_event = None;
     while let Some(frame) = body.as_mut().frame().await {
         let frame = frame.map_err(|err| anyhow!("substrate: error: {err:#}"))?;
         let Some(data) = frame.data_ref() else {
@@ -6661,6 +6675,13 @@ async fn submit_world_targeted_turn(
             match frame {
                 ExecuteStreamFrame::Start { .. } => {}
                 ExecuteStreamFrame::Event { event } => {
+                    capture_continue_world_worker_stream_event(
+                        &request,
+                        &packet_three_policy,
+                        &event,
+                        &mut surfaced_worker_event,
+                    )
+                    .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
                     handle_agent_event(event, telemetry, agent_printer);
                 }
                 ExecuteStreamFrame::Stdout { chunk_b64 } => {
@@ -6683,6 +6704,10 @@ async fn submit_world_targeted_turn(
                 }
             }
         }
+    }
+    if let Some(worker_event) = surfaced_worker_event.as_ref() {
+        persist_continue_world_worker_obligation(&runtime.store, &request, worker_event)
+            .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
     }
     if exit_code != 0 {
         write_best_effort_stderr_line(&format!("Command failed with status: {exit_code}"));
