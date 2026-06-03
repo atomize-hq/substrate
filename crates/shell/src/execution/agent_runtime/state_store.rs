@@ -27,9 +27,8 @@ use super::{
     control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
-        ApprovalObligationCloseoutDisposition, OrchestrationObligationAttachState,
-        OrchestrationObligationKind, OrchestrationObligationRecord,
-        OrchestrationObligationReviewState,
+        OrchestrationObligationAttachState, OrchestrationObligationKind,
+        OrchestrationObligationRecord, OrchestrationObligationReviewState,
     },
     orchestration_session::{
         HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -37,6 +36,8 @@ use super::{
     },
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
+#[cfg(test)]
+use super::obligation_ledger::ApprovalObligationCloseoutDisposition;
 
 #[derive(Clone, Debug)]
 pub(crate) struct AgentRuntimeSessionRecord {
@@ -1343,23 +1344,18 @@ impl AgentRuntimeStateStore {
     pub(crate) fn close_prepared_internal_continue_approval_response_obligation(
         &self,
         closeout: &PreparedInternalApprovalResponseObligationCloseout,
-        resolution_note: Option<String>,
+        _resolution_note: Option<String>,
     ) -> Result<OrchestrationObligationRecord> {
-        let mut obligation = self.load_exact_pending_approval_obligation_for_continue_target(
+        // Packet 2 only proves exact-causation against a still-pending approval obligation.
+        // The durable resolve/dismiss transition must wait for the later delivery proof path.
+        self.load_exact_pending_approval_obligation_for_continue_target(
             &closeout.orchestration_session_id,
             &closeout.target_participant_id,
             &closeout.target_backend_id,
             &closeout.world_id,
             closeout.world_generation,
             &closeout.approval_obligation_id,
-        )?;
-        let disposition = match closeout.decision {
-            ApprovalResponseDecisionV1::Approve => ApprovalObligationCloseoutDisposition::Resolve,
-            ApprovalResponseDecisionV1::Deny => ApprovalObligationCloseoutDisposition::Dismiss,
-        };
-        obligation.mark_approval_response_closed(disposition, resolution_note, Utc::now());
-        self.persist_obligation(&obligation)?;
-        Ok(obligation)
+        )
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -3270,11 +3266,16 @@ fn compatibility_inbox_item_from_obligation(
         item.resolved_at = None;
     } else {
         item.state = match obligation.review_state {
-            OrchestrationObligationReviewState::Acknowledged
-            | OrchestrationObligationReviewState::Resolved => {
+            OrchestrationObligationReviewState::Acknowledged => {
+                DurableInboxItemState::Acknowledged
+            }
+            OrchestrationObligationReviewState::Resolved
+                if obligation.kind == OrchestrationObligationKind::ApprovalRequired =>
+            {
                 DurableInboxItemState::Acknowledged
             }
             OrchestrationObligationReviewState::Unread
+            | OrchestrationObligationReviewState::Resolved
             | OrchestrationObligationReviewState::Dismissed => {
                 DurableInboxItemState::Dismissed
             }
@@ -4775,7 +4776,7 @@ mod tests {
                 .expect("load compatibility inbox item")
                 .expect("compatibility item exists");
             assert_eq!(compat_item.kind, DurableInboxItemKind::RuntimeAlert);
-            assert_eq!(compat_item.state, DurableInboxItemState::Acknowledged);
+            assert_eq!(compat_item.state, DurableInboxItemState::Dismissed);
             assert_eq!(
                 compat_item.message.as_deref(),
                 Some("host attach recovered")
@@ -7200,22 +7201,18 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn close_prepared_internal_continue_approval_response_obligation_preserves_compatibility_closeout_semantics(
+    fn close_prepared_internal_continue_approval_response_obligation_keeps_pending_obligation_until_delivery_proof(
     ) {
         with_store(|store| {
-            for (suffix, decision, expected_review_state, expected_compat_state, note) in [
+            for (suffix, decision, note) in [
                 (
                     "approve",
                     ApprovalResponseDecisionV1::Approve,
-                    OrchestrationObligationReviewState::Resolved,
-                    DurableInboxItemState::Acknowledged,
                     "approved by host",
                 ),
                 (
                     "deny",
                     ApprovalResponseDecisionV1::Deny,
-                    OrchestrationObligationReviewState::Dismissed,
-                    DurableInboxItemState::Dismissed,
                     "denied by host",
                 ),
             ] {
@@ -7273,20 +7270,85 @@ mod tests {
                     )
                     .expect("close prepared approval obligation");
 
-                assert_eq!(closed.state, OrchestrationObligationState::Resolved);
-                assert_eq!(closed.review_state, expected_review_state);
-                assert!(!closed.attention_required);
-                assert_eq!(closed.resolution_note.as_deref(), Some(note));
-                assert!(closed.resolved_at.is_some());
-                assert_eq!(closed.resolved_at, Some(closed.updated_at));
+                assert_eq!(closed.state, OrchestrationObligationState::Pending);
+                assert_eq!(closed.review_state, OrchestrationObligationReviewState::Unread);
+                assert!(closed.attention_required);
+                assert_eq!(closed.resolution_note, None);
+                assert!(closed.resolved_at.is_none());
 
                 let persisted = store
                     .load_obligation(&session_id, &format!("obl_{suffix}"))
                     .expect("load persisted obligation")
                     .expect("persisted obligation exists");
-                assert_eq!(persisted.review_state, expected_review_state);
-                assert_eq!(persisted.resolution_note.as_deref(), Some(note));
-                assert!(persisted.resolved_at.is_some());
+                assert_eq!(persisted.state, OrchestrationObligationState::Pending);
+                assert_eq!(
+                    persisted.review_state,
+                    OrchestrationObligationReviewState::Unread
+                );
+                assert!(persisted.attention_required);
+                assert_eq!(persisted.resolution_note, None);
+                assert!(persisted.resolved_at.is_none());
+
+                let compat_item = store
+                    .load_inbox_item(&session_id, &format!("obl_{suffix}"))
+                    .expect("load compatibility inbox item")
+                    .expect("compatibility item exists");
+                assert_eq!(compat_item.kind, DurableInboxItemKind::ApprovalRequired);
+                assert_eq!(compat_item.state, DurableInboxItemState::Pending);
+                assert_eq!(compat_item.message, Some(format!("summary for obl_{suffix}")));
+                assert!(compat_item.resolved_at.is_none());
+
+                let settled_session = store
+                    .load_orchestration_session(&session_id)
+                    .expect("load settled session")
+                    .expect("settled session exists");
+                assert_eq!(settled_session.pending_inbox_count, 1);
+            }
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolved_approval_required_obligations_keep_compatibility_ack_vs_dismiss_scoped_to_closeout(
+    ) {
+        with_store(|store| {
+            for (suffix, disposition, expected_review_state, expected_compat_state, note) in [
+                (
+                    "approve",
+                    ApprovalObligationCloseoutDisposition::Resolve,
+                    OrchestrationObligationReviewState::Resolved,
+                    DurableInboxItemState::Acknowledged,
+                    "approved by host",
+                ),
+                (
+                    "deny",
+                    ApprovalObligationCloseoutDisposition::Dismiss,
+                    OrchestrationObligationReviewState::Dismissed,
+                    DurableInboxItemState::Dismissed,
+                    "denied by host",
+                ),
+            ] {
+                let session_id = format!("sess_approval_projection_{suffix}");
+                let participant =
+                    detached_orchestrator("codex", &session_id, &format!("ash_proj_{suffix}"));
+                let parent = parked_parent(&participant);
+                store
+                    .persist_orchestration_session(&parent)
+                    .expect("persist parent");
+
+                let mut obligation = pending_obligation(
+                    &session_id,
+                    &format!("obl_{suffix}"),
+                    OrchestrationObligationKind::ApprovalRequired,
+                );
+                obligation.mark_approval_response_closed(
+                    disposition,
+                    Some(note.to_string()),
+                    Utc::now(),
+                );
+                store
+                    .persist_obligation(&obligation)
+                    .expect("persist resolved approval obligation");
 
                 let compat_item = store
                     .load_inbox_item(&session_id, &format!("obl_{suffix}"))
@@ -7295,13 +7357,13 @@ mod tests {
                 assert_eq!(compat_item.kind, DurableInboxItemKind::ApprovalRequired);
                 assert_eq!(compat_item.state, expected_compat_state);
                 assert_eq!(compat_item.message.as_deref(), Some(note));
-                assert_eq!(compat_item.resolved_at, persisted.resolved_at);
+                assert_eq!(compat_item.resolved_at, obligation.resolved_at);
 
-                let settled_session = store
-                    .load_orchestration_session(&session_id)
-                    .expect("load settled session")
-                    .expect("settled session exists");
-                assert_eq!(settled_session.pending_inbox_count, 0);
+                let persisted = store
+                    .load_obligation(&session_id, &format!("obl_{suffix}"))
+                    .expect("load persisted obligation")
+                    .expect("persisted obligation exists");
+                assert_eq!(persisted.review_state, expected_review_state);
             }
         });
     }
