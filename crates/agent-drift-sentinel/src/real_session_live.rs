@@ -145,7 +145,6 @@ pub struct LiveSessionCoordinator {
     request: LiveSessionRequest,
     rollout_path: Utf8PathBuf,
     runtime: LiveRuntime,
-    last_polled_size_bytes: Option<u64>,
     progress: LiveSessionProgress,
 }
 
@@ -178,6 +177,10 @@ impl Default for LiveSessionProgress {
 impl LiveSessionProgress {
     fn latest_cursor(&self) -> Option<&CheckpointCursor> {
         self.last_delivered_cursor.as_ref()
+    }
+
+    fn last_observed_size_bytes(&self) -> Option<u64> {
+        self.last_observed_size_bytes
     }
 
     fn checkpoint_is_fresh(&self, checkpoint: &Checkpoint) -> bool {
@@ -239,7 +242,6 @@ impl LiveSessionCoordinator {
             request,
             rollout_path,
             runtime: LiveRuntime::new(scheduler_policy, warning_policy),
-            last_polled_size_bytes: None,
             progress,
         })
     }
@@ -258,7 +260,7 @@ impl LiveSessionCoordinator {
 
     pub fn poll_once(&mut self) -> Result<LiveSessionPollResult, LiveSessionError> {
         let observed_size_bytes = file_size_bytes(&self.rollout_path)?;
-        if let Some(previous_size_bytes) = self.last_polled_size_bytes {
+        if let Some(previous_size_bytes) = self.progress.last_observed_size_bytes() {
             if observed_size_bytes < previous_size_bytes {
                 return Err(LiveSessionError::RolloutShrank {
                     path: self.rollout_path.clone(),
@@ -281,7 +283,6 @@ impl LiveSessionCoordinator {
                 if self.progress.last_delivered_cursor.is_none()
                     && sparse_startup_retry_allowed(&self.rollout_path, &error) =>
             {
-                self.last_polled_size_bytes = Some(observed_size_bytes);
                 self.progress.record_observed_size(observed_size_bytes);
                 self.persist_state()?;
                 return Ok(LiveSessionPollResult {
@@ -306,12 +307,12 @@ impl LiveSessionCoordinator {
                 .progress
                 .checkpoint_ready_event(checkpoint, &self.rollout_path);
             let observation = self.runtime.observe(event)?;
-            self.progress.record_delivery(observation.event.cursor.clone());
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
             self.persist_state()?;
             observations.push(observation);
         }
 
-        self.last_polled_size_bytes = Some(observed_size_bytes);
         self.progress.record_observed_size(observed_size_bytes);
         self.persist_state()?;
 
@@ -427,12 +428,13 @@ fn load_persisted_progress(
 
     match schema_version {
         LEGACY_LIVE_SESSION_STATE_SCHEMA_VERSION => {
-            let state: LegacyPersistedLiveSessionState = serde_json::from_str(&raw).map_err(
-                |source| LiveSessionError::ParsePersistedState {
-                    path: state_path.clone(),
-                    source,
-                },
-            )?;
+            let state: LegacyPersistedLiveSessionState =
+                serde_json::from_str(&raw).map_err(|source| {
+                    LiveSessionError::ParsePersistedState {
+                        path: state_path.clone(),
+                        source,
+                    }
+                })?;
             validate_persisted_state_session(&state_path, request, &state.session_id)?;
             validate_cursor_session(
                 &state_path,
@@ -446,12 +448,13 @@ fn load_persisted_progress(
             })
         }
         LIVE_SESSION_STATE_SCHEMA_VERSION => {
-            let state: PersistedLiveSessionState = serde_json::from_str(&raw).map_err(|source| {
-                LiveSessionError::ParsePersistedState {
-                    path: state_path.clone(),
-                    source,
-                }
-            })?;
+            let state: PersistedLiveSessionState =
+                serde_json::from_str(&raw).map_err(|source| {
+                    LiveSessionError::ParsePersistedState {
+                        path: state_path.clone(),
+                        source,
+                    }
+                })?;
             validate_persisted_state_session(&state_path, request, &state.session_id)?;
             validate_cursor_session(
                 &state_path,

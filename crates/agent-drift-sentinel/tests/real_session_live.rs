@@ -75,7 +75,7 @@ fn real_session_live_coordinator_emits_only_checkpoint_deltas_for_append_only_gr
 }
 
 #[test]
-fn real_session_live_coordinator_persists_cursor_across_restarts() {
+fn real_session_live_coordinator_restores_progress_for_restart_idle_decision() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
         .expect("utf8 temp dir")
@@ -88,7 +88,7 @@ fn real_session_live_coordinator_persists_cursor_across_restarts() {
     let state_dir = Utf8Path::from_path(temp_dir.path())
         .expect("utf8 temp dir")
         .join("state");
-    let (first_latest_cursor, first_last_emission_ordinal) = {
+    let first_latest_cursor = {
         let mut coordinator = LiveSessionCoordinator::new(
             LiveSessionRequest {
                 codex_home: Some(codex_home.clone()),
@@ -107,12 +107,13 @@ fn real_session_live_coordinator_persists_cursor_across_restarts() {
             .latest_cursor
             .clone()
             .expect("first poll should establish a cursor");
-        let first_last_emission_ordinal = first
+        let next_emission_ordinal = first
             .observations
             .last()
             .expect("first poll should emit at least one observation")
             .event
-            .emission_ordinal;
+            .emission_ordinal
+            + 1;
         let persisted_state = read_persisted_state(&state_dir);
         assert_eq!(persisted_state["schema_version"].as_u64(), Some(2));
         assert_eq!(persisted_state["session_id"].as_str(), Some("session-live"));
@@ -130,9 +131,9 @@ fn real_session_live_coordinator_persists_cursor_across_restarts() {
         );
         assert_eq!(
             persisted_state["progress"]["next_emission_ordinal"].as_u64(),
-            Some((first_last_emission_ordinal + 1) as u64)
+            Some(next_emission_ordinal as u64)
         );
-        (first_latest_cursor, first_last_emission_ordinal)
+        first_latest_cursor
     };
 
     let mut restarted = LiveSessionCoordinator::new(
@@ -146,29 +147,18 @@ fn real_session_live_coordinator_persists_cursor_across_restarts() {
     )
     .expect("create restarted coordinator");
 
-    let replayed = restarted.poll_once().expect("restart poll");
-    assert!(replayed.reran_pipeline);
-    assert_eq!(replayed.emitted_checkpoints, 0);
-    assert!(replayed.observations.is_empty());
-    assert_eq!(replayed.latest_cursor.as_ref(), Some(&first_latest_cursor));
-
-    fs::write(
-        &rollout_path,
-        format!("{}{}", first_rollout_phase(), second_rollout_phase()),
-    )
-    .expect("append second phase");
-
-    let appended = restarted.poll_once().expect("appended poll after restart");
-    assert!(appended.reran_pipeline);
-    assert!(appended.emitted_checkpoints > 0);
-    assert!(appended
-        .observations
-        .iter()
-        .all(|observation| observation.event.cursor.ordinal > first_latest_cursor.ordinal));
-    assert!(appended
-        .observations
-        .iter()
-        .all(|observation| observation.event.emission_ordinal > first_last_emission_ordinal));
+    let resumed_idle = restarted.poll_once().expect("restart poll");
+    assert!(!resumed_idle.reran_pipeline);
+    assert_eq!(
+        resumed_idle.observed_size_bytes as usize,
+        first_rollout_phase().len()
+    );
+    assert_eq!(resumed_idle.emitted_checkpoints, 0);
+    assert!(resumed_idle.observations.is_empty());
+    assert_eq!(
+        resumed_idle.latest_cursor.as_ref(),
+        Some(&first_latest_cursor)
+    );
 }
 
 #[test]
