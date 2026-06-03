@@ -643,6 +643,7 @@ async fn continue_world_worker(
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
+    enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
@@ -668,6 +669,30 @@ async fn continue_world_worker(
             summary,
         },
     ))
+}
+
+#[cfg(target_os = "linux")]
+fn enforce_continue_world_worker_payload_policy(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    base_policy: &Policy,
+) -> Result<()> {
+    match &prepared.request.payload {
+        WorldDispatchPayloadV1::WorkerContinueApprovalResponse(_) => {
+            if !base_policy.world_dispatch_approval_responses_allowed() {
+                return Err(steering_policy_denial(
+                    WorldDispatchSteeringDenialV1::ActionNotAllowed,
+                    "effective policy does not allow continue_world_worker approval_response payloads",
+                ));
+            }
+            anyhow::bail!(
+                "unsupported_dispatch_payload: continue_world_worker approval_response payloads are policy-gated but not yet transport-routable in packet 1"
+            );
+        }
+        WorldDispatchPayloadV1::WorkerContinue(_) => Ok(()),
+        _ => anyhow::bail!(
+            "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
+        ),
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -2667,7 +2692,8 @@ mod tests {
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::dispatch_contract::{
-        WorkerCancelPayloadV1, WorkerInspectPayloadV1,
+        ApprovalResponseDecisionV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
+        WorkerInspectPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
@@ -2922,6 +2948,29 @@ mod tests {
         sample_continue_world_dispatch_request()
             .validate()
             .expect("validated continue request")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_continue_approval_response_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_continue_approval_response".to_string()),
+            idempotency_key: Some("idem_continue_approval_response".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerContinueApprovalResponse(
+                WorkerContinueApprovalResponsePayloadV1 {
+                    approval_obligation_id: "obl-approval-40".to_string(),
+                    decision: ApprovalResponseDecisionV1::Approve,
+                    thread_id: Some("thread-approval-40".to_string()),
+                },
+            ),
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -4873,6 +4922,49 @@ agents:
                 "steering denial must not leak retained-worker topology drift first: {message}"
             );
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_approval_response_denies_by_default_before_target_resolution(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_approval_response_world_dispatch_request(),
+        )
+        .await
+        .expect_err("approval-response payloads must fail closed by default");
+        let message = err.to_string();
+
+        assert_eq!(
+            message,
+            "action_not_allowed: effective policy does not allow continue_world_worker approval_response payloads"
+        );
+        assert!(
+            !message.contains("stale_linkage:"),
+            "payload gate must not leak retained-worker lifecycle truth first: {message}"
+        );
+        assert!(
+            !message.contains(
+                "world_binding_mismatch: orchestration session sess_dispatch retained worker"
+            ),
+            "payload gate must not leak retained-worker topology drift first: {message}"
+        );
     }
 
     #[cfg(target_os = "linux")]

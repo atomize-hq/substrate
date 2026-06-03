@@ -566,6 +566,7 @@ struct AgentsWorldDispatchForkEffectiveDisplayV1 {
 #[serde(deny_unknown_fields)]
 struct AgentsWorldDispatchObligationsEffectiveDisplayV1 {
     approval_allowed: bool,
+    approval_response_allowed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -684,6 +685,8 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
                 },
                 obligations: AgentsWorldDispatchObligationsEffectiveDisplayV1 {
                     approval_allowed: policy.agents_world_dispatch_obligations_approval_allowed,
+                    approval_response_allowed: policy
+                        .agents_world_dispatch_obligations_approval_response_allowed,
                 },
             },
         },
