@@ -22,6 +22,7 @@ use std::env;
 use std::io;
 use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
+use substrate_common::WorldRootMode;
 #[cfg(unix)]
 use tokio::net::UnixStream;
 #[cfg(target_os = "linux")]
@@ -1168,7 +1169,7 @@ fn build_agent_client_and_request_impl(
         &mut env_map,
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
-    preserve_world_project_dir_override(&mut env_map);
+    preserve_world_project_dir_override(&mut env_map, &cwd_path);
     inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
     let request = build_execute_request(ExecuteRequestInput {
@@ -1216,7 +1217,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         &mut env_map,
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
-    preserve_world_project_dir_override(&mut env_map);
+    preserve_world_project_dir_override(&mut env_map, &cwd_path);
     let request = build_execute_request(ExecuteRequestInput {
         profile: current_world_request_profile(),
         cmd: String::new(),
@@ -1233,8 +1234,26 @@ fn build_agent_client_and_member_dispatch_request_impl(
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn preserve_world_project_dir_override(env_map: &mut std::collections::HashMap<String, String>) {
-    let project_dir = crate::execution::settings::world_root_from_env().path;
+fn preserve_world_project_dir_override(
+    env_map: &mut std::collections::HashMap<String, String>,
+    cwd_path: &std::path::Path,
+) {
+    let anchor_mode = env_map
+        .get("SUBSTRATE_ANCHOR_MODE")
+        .and_then(|value| WorldRootMode::parse(value));
+    let anchor_path = env_map
+        .get("SUBSTRATE_ANCHOR_PATH")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from);
+
+    let fallback_root = crate::execution::settings::world_root_from_env().anchor_root(cwd_path);
+    let project_dir = match anchor_mode {
+        Some(WorldRootMode::Project) => anchor_path.unwrap_or_else(|| cwd_path.to_path_buf()),
+        Some(WorldRootMode::FollowCwd) => cwd_path.to_path_buf(),
+        Some(WorldRootMode::Custom) => anchor_path.unwrap_or(fallback_root),
+        None => fallback_root,
+    };
     env_map.insert(
         WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
         project_dir.display().to_string(),
@@ -2312,6 +2331,7 @@ mod tests {
 
     #[test]
     fn preserve_world_project_dir_override_records_logical_root() {
+        let _env_guard = crate::execution::world_env_guard();
         let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
         let prev_path = std::env::var("SUBSTRATE_ANCHOR_PATH").ok();
         let prev_caged = std::env::var("SUBSTRATE_CAGED").ok();
@@ -2321,7 +2341,12 @@ mod tests {
         std::env::set_var("SUBSTRATE_CAGED", "1");
 
         let mut env_map = std::collections::HashMap::<String, String>::new();
-        preserve_world_project_dir_override(&mut env_map);
+        env_map.insert("SUBSTRATE_ANCHOR_MODE".to_string(), "custom".to_string());
+        env_map.insert(
+            "SUBSTRATE_ANCHOR_PATH".to_string(),
+            "/tmp/substrate-world-root".to_string(),
+        );
+        preserve_world_project_dir_override(&mut env_map, std::path::Path::new("/tmp/ignored"));
 
         assert_eq!(
             env_map
@@ -2341,6 +2366,47 @@ mod tests {
         match prev_caged {
             Some(value) => std::env::set_var("SUBSTRATE_CAGED", value),
             None => std::env::remove_var("SUBSTRATE_CAGED"),
+        }
+    }
+
+    #[test]
+    fn preserve_world_project_dir_override_uses_dispatch_cwd_for_follow_cwd() {
+        let _env_guard = crate::execution::world_env_guard();
+        let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
+        let prev_path = std::env::var("SUBSTRATE_ANCHOR_PATH").ok();
+
+        std::env::set_var("SUBSTRATE_ANCHOR_MODE", "custom");
+        std::env::set_var("SUBSTRATE_ANCHOR_PATH", "/tmp/process-anchor");
+
+        let mut env_map = std::collections::HashMap::<String, String>::new();
+        env_map.insert(
+            "SUBSTRATE_ANCHOR_MODE".to_string(),
+            "follow-cwd".to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_ANCHOR_PATH".to_string(),
+            "/tmp/should-not-win".to_string(),
+        );
+
+        preserve_world_project_dir_override(
+            &mut env_map,
+            std::path::Path::new("/tmp/member-dispatch-cwd"),
+        );
+
+        assert_eq!(
+            env_map
+                .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+                .map(String::as_str),
+            Some("/tmp/member-dispatch-cwd")
+        );
+
+        match prev_mode {
+            Some(value) => std::env::set_var("SUBSTRATE_ANCHOR_MODE", value),
+            None => std::env::remove_var("SUBSTRATE_ANCHOR_MODE"),
+        }
+        match prev_path {
+            Some(value) => std::env::set_var("SUBSTRATE_ANCHOR_PATH", value),
+            None => std::env::remove_var("SUBSTRATE_ANCHOR_PATH"),
         }
     }
 
