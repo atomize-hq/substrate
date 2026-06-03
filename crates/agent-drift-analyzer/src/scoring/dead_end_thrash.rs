@@ -91,23 +91,24 @@ fn repeated_verification_evidence(
         .collect()
 }
 
-fn repeated_failure_evidence(
-    loops: &[RepeatedFailureLoop],
-    historical: bool,
-) -> Vec<EvidenceRef> {
-    loops.iter()
+fn repeated_failure_evidence(loops: &[RepeatedFailureLoop], historical: bool) -> Vec<EvidenceRef> {
+    loops
+        .iter()
         .flat_map(|failure_loop| {
-            failure_loop.evidence.iter().map(move |evidence| EvidenceRef {
-                row: evidence.row.clone(),
-                reason: if historical {
-                    format!(
-                        "{HISTORICAL_REPEATED_FAILURE_REASON_PREFIX} {}",
-                        evidence.reason
-                    )
-                } else {
-                    evidence.reason.clone()
-                },
-            })
+            failure_loop
+                .evidence
+                .iter()
+                .map(move |evidence| EvidenceRef {
+                    row: evidence.row.clone(),
+                    reason: if historical {
+                        format!(
+                            "{HISTORICAL_REPEATED_FAILURE_REASON_PREFIX} {}",
+                            evidence.reason
+                        )
+                    } else {
+                        evidence.reason.clone()
+                    },
+                })
         })
         .collect()
 }

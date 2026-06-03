@@ -81,12 +81,9 @@ fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_act
 
     assert!(first.flagged);
     assert!(!second.flagged);
-    assert!(second
-        .evidence
-        .iter()
-        .any(|evidence| evidence
-            .reason
-            .starts_with("historical truth-grounding gap:")));
+    assert!(second.evidence.iter().any(|evidence| evidence
+        .reason
+        .starts_with("historical truth-grounding gap:")));
 }
 
 #[test]
@@ -147,18 +144,12 @@ fn truth_grounding_gap_does_not_turn_clean_grounding_into_historical_gap_evidenc
 
     assert!(!first.flagged);
     assert!(!second.flagged);
-    assert!(first
-        .evidence
-        .iter()
-        .any(|evidence| !evidence
-            .reason
-            .starts_with("historical truth-grounding gap:")));
-    assert!(!second
-        .evidence
-        .iter()
-        .any(|evidence| evidence
-            .reason
-            .starts_with("historical truth-grounding gap:")));
+    assert!(first.evidence.iter().any(|evidence| !evidence
+        .reason
+        .starts_with("historical truth-grounding gap:")));
+    assert!(!second.evidence.iter().any(|evidence| evidence
+        .reason
+        .starts_with("historical truth-grounding gap:")));
 }
 
 fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
@@ -182,9 +173,7 @@ fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
 }
 
 fn tool_row(event_index: usize, command: &str) -> CompactionRow {
-    let payload = format!(
-        "{{\"command\":{command:?},\"workdir\":\"/repo\"}}",
-    );
+    let payload = format!("{{\"command\":{command:?},\"workdir\":\"/repo\"}}",);
     let mut row = row(event_index, CompactionKind::ToolCall, &payload);
     row.dedupe_identity = Some(
         "{\"call_id\":\"call-1\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"

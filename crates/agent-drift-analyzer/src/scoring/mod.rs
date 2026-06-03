@@ -5,9 +5,7 @@ mod wrong_plan_branch;
 use crate::checkpoint::{CheckpointAnalysis, DriftClass, DriftScore};
 
 pub(crate) use dead_end_thrash::score_dead_end_thrash;
-pub(crate) use truth_grounding_gap::{
-    score_truth_grounding_gap, truth_grounding_gap_has_history,
-};
+pub(crate) use truth_grounding_gap::{score_truth_grounding_gap, truth_grounding_gap_has_history};
 pub(crate) use wrong_plan_branch::score_wrong_plan_branch;
 
 pub(crate) fn score_session(

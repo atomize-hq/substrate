@@ -87,8 +87,7 @@ fn replay_input_accepts_legacy_ignoring_repo_truth_rows_while_mapping_to_truth_g
         format!("{legacy_line}\n"),
     )
     .expect("write checkpoints");
-    fs::write(checkpoint_dir.join("summary.md"), support::sample_summary())
-        .expect("write summary");
+    fs::write(checkpoint_dir.join("summary.md"), support::sample_summary()).expect("write summary");
 
     let bundle = load_replay_bundle(&checkpoint_dir).expect("load replay bundle");
 

@@ -533,6 +533,10 @@ Packet 18 note:
   - `v0.5A.1`: posture contract plus replay presentation
   - `v0.5A.2`: sink event wiring, replay/live parity, and real-session regression refresh
   - `v0.5B`: real-session progress module and restart continuity hardening
+- `2026-06-03`: the `v0.5B` coordinator follow-up is also intentionally split for focused
+  sessions:
+  - `v0.5B.1`: extract and persist the live-progress seam
+  - `v0.5B.2`: restart behavior hardening, regression coverage, and continuity-doc refresh
 
 ## If You Want Fewer Packets
 

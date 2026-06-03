@@ -3,8 +3,7 @@ use anyhow::Result;
 use crate::input::CheckpointCursor;
 use crate::live_runtime::LiveObservation;
 use crate::operator_surface::{
-    CheckpointDiagnosticsSummary, CheckpointPosture, CheckpointPresentation,
-    WarningDisposition,
+    CheckpointDiagnosticsSummary, CheckpointPosture, CheckpointPresentation, WarningDisposition,
 };
 use crate::scheduler::{DecisionReason, TriggerClass};
 

@@ -4,9 +4,7 @@ mod support;
 
 use agent_drift_analyzer::{DriftClass, EvidenceRef};
 use agent_drift_sentinel::{
-    operator_surface::{
-        present_checkpoint, present_checkpoint_with_previous, CheckpointPosture,
-    },
+    operator_surface::{present_checkpoint, present_checkpoint_with_previous, CheckpointPosture},
     scheduler::ReplayScheduler,
     verify_live_checkpoint_compatibility, DecisionReason, LiveInputError, SchedulerPolicy,
     TriggerClass, WarningDisposition, WarningPolicy,

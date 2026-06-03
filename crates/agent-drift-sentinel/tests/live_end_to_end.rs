@@ -6,8 +6,8 @@ use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
 use camino::Utf8PathBuf;
 
 use agent_drift_sentinel::{
-    emit_operator_events, execute, AdjudicationConfig, FixtureLiveCheckpointSource,
-    operator_surface::CheckpointPosture, LiveCheckpointEvent, LiveRuntime, OperatorEvent,
+    emit_operator_events, execute, operator_surface::CheckpointPosture, AdjudicationConfig,
+    FixtureLiveCheckpointSource, LiveCheckpointEvent, LiveRuntime, OperatorEvent,
     RecordingOperatorSink, SchedulerPolicy, SentinelMode, SentinelRequest, WarningPolicy,
 };
 
@@ -180,10 +180,8 @@ fn live_end_to_end_replay_and_live_surfaces_share_posture_for_transition_sequenc
             &["historical truth-grounding gap: flagged score for session-posture:1"],
         ),
     ];
-    let replay_fixture = support::ReplayFixture::from_checkpoints(
-        checkpoints.clone(),
-        support::sample_summary(),
-    );
+    let replay_fixture =
+        support::ReplayFixture::from_checkpoints(checkpoints.clone(), support::sample_summary());
     let replay = execute(&SentinelRequest {
         checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
         mode: SentinelMode::Replay,
@@ -288,10 +286,8 @@ fn live_end_to_end_replay_and_live_keep_posture_session_local_at_session_boundar
             &["historical truth-grounding gap: flagged score for session-b:0"],
         ),
     ];
-    let replay_fixture = support::ReplayFixture::from_checkpoints(
-        checkpoints.clone(),
-        support::sample_summary(),
-    );
+    let replay_fixture =
+        support::ReplayFixture::from_checkpoints(checkpoints.clone(), support::sample_summary());
     let replay = execute(&SentinelRequest {
         checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
         mode: SentinelMode::Replay,
