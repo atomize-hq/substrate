@@ -509,23 +509,26 @@ Packet 18 note:
   sentinel coordinates the live loop
 - `RT6` must be proven against a session that is actively growing while the sentinel is running;
   archived/static session files are insufficient evidence for this packet
-- `2026-06-01`: bounded live proof passed against active session
-  `019e8491-d694-75c1-8bb6-dc4ebd1082cb`.
+- `2026-06-02`: Packet `v0.4C` continuity proof was refreshed against the landed recovery
+  semantics.
   Exact command:
-  `timeout 8 cargo run -p agent-drift-sentinel -- --mode live --codex-home "/Users/spensermcconnell/.codex" --session-id "019e8491-d694-75c1-8bb6-dc4ebd1082cb" --checkpoint-dir "target/hybrid-drift-live/019e8491-d694-75c1-8bb6-dc4ebd1082cb"`.
+  `timeout 8 cargo run -p agent-drift-sentinel -- --mode live --codex-home "/Users/spensermcconnell/.codex" --session-id "019e8b37-6e09-7001-9657-abab4568546a" --checkpoint-dir "target/hybrid-drift-live/v04c-fix-rerun-019e8b37-6e09-7001-9657-abab4568546a"`.
   Expected exit context: `timeout` stops the intentional infinite live poll loop, so exit status
   `124` is the expected bounded-proof result, not a sentinel failure.
   Portable rerun on stock macOS without GNU `timeout`:
-  `sh -c 'cargo run -p agent-drift-sentinel -- --mode live --codex-home "/Users/spensermcconnell/.codex" --session-id "019e8491-d694-75c1-8bb6-dc4ebd1082cb" --checkpoint-dir "target/hybrid-drift-live/019e8491-d694-75c1-8bb6-dc4ebd1082cb" & pid=$!; sleep 8; kill "$pid" 2>/dev/null || true; wait "$pid"'`.
+  `sh -c 'cargo run -p agent-drift-sentinel -- --mode live --codex-home "/Users/spensermcconnell/.codex" --session-id "019e8b37-6e09-7001-9657-abab4568546a" --checkpoint-dir "target/hybrid-drift-live/v04c-fix-rerun-019e8b37-6e09-7001-9657-abab4568546a" & pid=$!; sleep 8; kill "$pid" 2>/dev/null || true; wait "$pid"'`.
   Expected exit context for the portable rerun: the shell sends `SIGTERM` after eight seconds, so
   `wait` typically returns `143` when the sentinel is still inside the intentional live poll loop.
-  Observed progression: the rollout file
-  `/Users/spensermcconnell/.codex/sessions/2026/06/01/rollout-2026-06-01T15-03-30-019e8491-d694-75c1-8bb6-dc4ebd1082cb.jsonl`
-  was `628620` bytes before the proof, the first live poll observed `632575` bytes and emitted
-  three checkpoints (`019e8491-d694-75c1-8bb6-dc4ebd1082cb:0001` silent low, `...:0002` silent
-  low with scheduler cooldown deferral, `...:0003` visible medium warning with
-  `dead_end_thrash=70`), and the next two observed growth polls (`633117` bytes then `633659`
-  bytes) reran the pipeline while emitting `0` new checkpoints.
+  Continuity artifacts:
+  `target/hybrid-drift-live/019e8b1b-2c93-74c0-9713-33186d965c63/analyzer/checkpoints.jsonl`
+  now records the late parent-session checkpoint as historical-only
+  (`019e8b1b-2c93-74c0-9713-33186d965c63:0003`, `dead_end_thrash.raw_score=20`,
+  `flagged=false`) instead of leaving late-session drift active.
+  The bounded live rerun log
+  `target/hybrid-drift-live/v04c-fix-rerun-019e8b37-6e09-7001-9657-abab4568546a.log`
+  shows the intended recovery shape: `0002` and `0003` still flag repeated-failure drift during
+  the live burst, while `0004` clears back to `no flagged drift classes` after the clean
+  verification interval.
 
 ## If You Want Fewer Packets
 
