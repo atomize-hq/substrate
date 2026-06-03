@@ -61,6 +61,22 @@ pub(crate) enum OrchestrationObligationReviewState {
     Resolved,
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ApprovalObligationCloseoutDisposition {
+    Resolve,
+    Dismiss,
+}
+
+impl ApprovalObligationCloseoutDisposition {
+    fn review_state(self) -> OrchestrationObligationReviewState {
+        match self {
+            Self::Resolve => OrchestrationObligationReviewState::Resolved,
+            Self::Dismiss => OrchestrationObligationReviewState::Dismissed,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum OrchestrationObligationAttachState {
@@ -316,6 +332,21 @@ impl OrchestrationObligationRecord {
         self.attach_completion_reason = Some(attach_completion_reason.into());
         self.updated_at = settled_at;
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn mark_approval_response_closed(
+        &mut self,
+        disposition: ApprovalObligationCloseoutDisposition,
+        resolution_note: Option<String>,
+        resolved_at: DateTime<Utc>,
+    ) {
+        self.state = OrchestrationObligationState::Resolved;
+        self.review_state = disposition.review_state();
+        self.attention_required = false;
+        self.resolution_note = resolution_note;
+        self.resolved_at = Some(resolved_at);
+        self.updated_at = resolved_at;
+    }
 }
 
 #[cfg(test)]
@@ -467,5 +498,67 @@ mod tests {
             obligation.attach_completion_reason.as_deref(),
             Some("session_attach_restored_by_test")
         );
+    }
+
+    #[test]
+    fn approval_response_closeout_marks_resolved_review_state_for_approve() {
+        let resolved_at = Utc::now();
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::ApprovalRequired,
+            "Need host approval",
+        );
+        obligation.attention_required = true;
+
+        obligation.mark_approval_response_closed(
+            ApprovalObligationCloseoutDisposition::Resolve,
+            Some("approved by host".to_string()),
+            resolved_at,
+        );
+
+        assert_eq!(obligation.state, OrchestrationObligationState::Resolved);
+        assert_eq!(
+            obligation.review_state,
+            OrchestrationObligationReviewState::Resolved
+        );
+        assert!(!obligation.attention_required);
+        assert_eq!(
+            obligation.resolution_note.as_deref(),
+            Some("approved by host")
+        );
+        assert_eq!(obligation.resolved_at, Some(resolved_at));
+        assert_eq!(obligation.updated_at, resolved_at);
+    }
+
+    #[test]
+    fn approval_response_closeout_marks_dismissed_review_state_for_deny() {
+        let resolved_at = Utc::now();
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::ApprovalRequired,
+            "Need host approval",
+        );
+        obligation.attention_required = true;
+
+        obligation.mark_approval_response_closed(
+            ApprovalObligationCloseoutDisposition::Dismiss,
+            Some("denied by host".to_string()),
+            resolved_at,
+        );
+
+        assert_eq!(obligation.state, OrchestrationObligationState::Resolved);
+        assert_eq!(
+            obligation.review_state,
+            OrchestrationObligationReviewState::Dismissed
+        );
+        assert!(!obligation.attention_required);
+        assert_eq!(
+            obligation.resolution_note.as_deref(),
+            Some("denied by host")
+        );
+        assert_eq!(obligation.resolved_at, Some(resolved_at));
+        assert_eq!(obligation.updated_at, resolved_at);
     }
 }

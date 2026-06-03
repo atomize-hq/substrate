@@ -15,7 +15,10 @@ use substrate_common::paths as substrate_paths;
 use crate::execution::config_model::AgentExecutionScope;
 
 #[cfg(any(target_os = "linux", test))]
-use super::dispatch_contract::RetainedWorkerInspectSnapshotV1;
+use super::dispatch_contract::{
+    ApprovalResponseDecisionV1, RetainedWorkerInspectSnapshotV1,
+    WorkerContinueApprovalResponsePayloadV1,
+};
 use super::{
     auto_attach::{
         claimed_obligation_id, select_attach_candidate, SessionAutoAttachClaim,
@@ -24,8 +27,9 @@ use super::{
     control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
-        OrchestrationObligationAttachState, OrchestrationObligationKind,
-        OrchestrationObligationRecord, OrchestrationObligationReviewState,
+        ApprovalObligationCloseoutDisposition, OrchestrationObligationAttachState,
+        OrchestrationObligationKind, OrchestrationObligationRecord,
+        OrchestrationObligationReviewState,
     },
     orchestration_session::{
         HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -416,6 +420,19 @@ impl ResolvedInternalContinueWorldDispatchTarget {
     pub(crate) fn orchestration_session_id(&self) -> &str {
         &self.session.orchestration_session_id
     }
+}
+
+#[allow(dead_code)]
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PreparedInternalApprovalResponseObligationCloseout {
+    pub orchestration_session_id: String,
+    pub approval_obligation_id: String,
+    pub target_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub decision: ApprovalResponseDecisionV1,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -1275,6 +1292,74 @@ impl AgentRuntimeStateStore {
             caller_participant: authoritative.participant,
             target_participant,
         })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    pub(crate) fn prepare_internal_continue_approval_response_obligation_closeout(
+        &self,
+        resolved_target: &ResolvedInternalContinueWorldDispatchTarget,
+        payload: &WorkerContinueApprovalResponsePayloadV1,
+    ) -> Result<PreparedInternalApprovalResponseObligationCloseout> {
+        let obligation = self.load_exact_pending_approval_obligation_for_continue_target(
+            resolved_target.orchestration_session_id(),
+            resolved_target.target_participant.participant_id(),
+            &resolved_target.target_participant.handle.backend_id,
+            resolved_target
+                .session
+                .world_id
+                .as_deref()
+                .expect("continue target must keep authoritative world binding"),
+            resolved_target
+                .session
+                .world_generation
+                .expect("continue target must keep authoritative world binding"),
+            &payload.approval_obligation_id,
+        )?;
+
+        Ok(PreparedInternalApprovalResponseObligationCloseout {
+            orchestration_session_id: obligation.orchestration_session_id,
+            approval_obligation_id: obligation.obligation_id,
+            target_participant_id: resolved_target
+                .target_participant
+                .participant_id()
+                .to_string(),
+            target_backend_id: resolved_target.target_participant.handle.backend_id.clone(),
+            world_id: resolved_target
+                .session
+                .world_id
+                .clone()
+                .expect("continue target must keep authoritative world binding"),
+            world_generation: resolved_target
+                .session
+                .world_generation
+                .expect("continue target must keep authoritative world binding"),
+            decision: payload.decision,
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    pub(crate) fn close_prepared_internal_continue_approval_response_obligation(
+        &self,
+        closeout: &PreparedInternalApprovalResponseObligationCloseout,
+        resolution_note: Option<String>,
+    ) -> Result<OrchestrationObligationRecord> {
+        let mut obligation = self.load_exact_pending_approval_obligation_for_continue_target(
+            &closeout.orchestration_session_id,
+            &closeout.target_participant_id,
+            &closeout.target_backend_id,
+            &closeout.world_id,
+            closeout.world_generation,
+            &closeout.approval_obligation_id,
+        )?;
+        let disposition = match closeout.decision {
+            ApprovalResponseDecisionV1::Approve => ApprovalObligationCloseoutDisposition::Resolve,
+            ApprovalResponseDecisionV1::Deny => ApprovalObligationCloseoutDisposition::Dismiss,
+        };
+        obligation.mark_approval_response_closed(disposition, resolution_note, Utc::now());
+        self.persist_obligation(&obligation)?;
+        Ok(obligation)
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -3017,6 +3102,71 @@ impl AgentRuntimeStateStore {
         self.persist_inbox_item(&item)?;
         Ok(item)
     }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    fn load_exact_pending_approval_obligation_for_continue_target(
+        &self,
+        orchestration_session_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+        world_id: &str,
+        world_generation: u64,
+        approval_obligation_id: &str,
+    ) -> Result<OrchestrationObligationRecord> {
+        let obligation = self
+            .load_obligation(orchestration_session_id, approval_obligation_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "approval_obligation_not_found: orchestration session {} has no approval obligation {}",
+                    orchestration_session_id,
+                    approval_obligation_id
+                )
+            })?;
+        if obligation.kind != OrchestrationObligationKind::ApprovalRequired {
+            anyhow::bail!(
+                "approval_obligation_kind_mismatch: orchestration session {} obligation {} is not approval_required",
+                orchestration_session_id,
+                approval_obligation_id
+            );
+        }
+        if !obligation.is_pending() {
+            anyhow::bail!(
+                "approval_obligation_already_resolved: orchestration session {} approval obligation {} is already closed",
+                orchestration_session_id,
+                approval_obligation_id
+            );
+        }
+        if obligation.source_participant_id.as_deref() != Some(target_participant_id) {
+            anyhow::bail!(
+                "approval_obligation_target_mismatch: orchestration session {} approval obligation {} does not bind retained worker {}",
+                orchestration_session_id,
+                approval_obligation_id,
+                target_participant_id
+            );
+        }
+        if obligation.target_backend_id.as_deref() != Some(target_backend_id) {
+            anyhow::bail!(
+                "approval_obligation_backend_mismatch: orchestration session {} approval obligation {} does not bind backend {}",
+                orchestration_session_id,
+                approval_obligation_id,
+                target_backend_id
+            );
+        }
+        if obligation.world_id.as_deref() != Some(world_id)
+            || obligation.world_generation != Some(world_generation)
+        {
+            anyhow::bail!(
+                "approval_obligation_world_binding_mismatch: orchestration session {} approval obligation {} no longer matches authoritative world binding {}/{}",
+                orchestration_session_id,
+                approval_obligation_id,
+                world_id,
+                world_generation
+            );
+        }
+
+        Ok(obligation)
+    }
 }
 
 fn write_atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<()> {
@@ -3942,6 +4092,27 @@ mod tests {
         );
         obligation.attention_required = true;
         obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        obligation
+    }
+
+    fn pending_continue_approval_obligation(
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        source_participant_id: &str,
+    ) -> OrchestrationObligationRecord {
+        let mut obligation = pending_obligation(
+            orchestration_session_id,
+            obligation_id,
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        obligation.source_participant_id = Some(source_participant_id.to_string());
+        obligation.target_backend_id = Some("cli:codex_world".to_string());
+        obligation.world_id = Some("world-17".to_string());
+        obligation.world_generation = Some(2);
+        obligation.payload = Some(json!({
+            "event_class": "approval_request",
+            "request_id": format!("req_{obligation_id}"),
+        }));
         obligation
     }
 
@@ -6758,6 +6929,344 @@ mod tests {
                 err.to_string(),
                 "stale_linkage: orchestration session sess_continue retained worker ash_continue is no longer authoritative-live"
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn prepare_internal_continue_approval_response_obligation_closeout_preserves_pending_state() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_continue", "orch_continue");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                "sess_continue",
+                "ash_continue",
+                "orch_continue",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let obligation = pending_continue_approval_obligation(
+                "sess_continue",
+                "obl_approval",
+                "ash_continue",
+            );
+            store
+                .persist_obligation(&obligation)
+                .expect("persist approval obligation");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue",
+                    "orch_continue",
+                    "ash_continue",
+                    "cli:codex_world",
+                )
+                .expect("resolve continue target");
+            let closeout = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_approval".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect("prepare approval closeout");
+
+            assert_eq!(
+                closeout,
+                PreparedInternalApprovalResponseObligationCloseout {
+                    orchestration_session_id: "sess_continue".to_string(),
+                    approval_obligation_id: "obl_approval".to_string(),
+                    target_participant_id: "ash_continue".to_string(),
+                    target_backend_id: "cli:codex_world".to_string(),
+                    world_id: "world-17".to_string(),
+                    world_generation: 2,
+                    decision: ApprovalResponseDecisionV1::Approve,
+                }
+            );
+
+            let persisted = store
+                .load_obligation("sess_continue", "obl_approval")
+                .expect("load persisted obligation")
+                .expect("persisted obligation exists");
+            assert_eq!(persisted.state, OrchestrationObligationState::Pending);
+            assert_eq!(
+                persisted.review_state,
+                OrchestrationObligationReviewState::Unread
+            );
+            assert!(persisted.resolved_at.is_none());
+            assert!(persisted.attention_required);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn prepare_internal_continue_approval_response_obligation_closeout_fails_closed_for_invalid_bindings(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_continue", "orch_continue");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                "sess_continue",
+                "ash_continue",
+                "orch_continue",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue",
+                    "orch_continue",
+                    "ash_continue",
+                    "cli:codex_world",
+                )
+                .expect("resolve continue target");
+
+            let missing = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_missing".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect_err("missing approval obligation must fail closed");
+            assert_eq!(
+                missing.to_string(),
+                "approval_obligation_not_found: orchestration session sess_continue has no approval obligation obl_missing"
+            );
+
+            let wrong_kind = pending_obligation(
+                "sess_continue",
+                "obl_wrong_kind",
+                OrchestrationObligationKind::Blocked,
+            );
+            store
+                .persist_obligation(&wrong_kind)
+                .expect("persist wrong-kind obligation");
+            let wrong_kind_err = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_wrong_kind".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect_err("wrong-kind obligation must fail closed");
+            assert_eq!(
+                wrong_kind_err.to_string(),
+                "approval_obligation_kind_mismatch: orchestration session sess_continue obligation obl_wrong_kind is not approval_required"
+            );
+
+            let mut resolved = pending_continue_approval_obligation(
+                "sess_continue",
+                "obl_resolved",
+                "ash_continue",
+            );
+            resolved.mark_approval_response_closed(
+                ApprovalObligationCloseoutDisposition::Resolve,
+                Some("already handled".to_string()),
+                Utc::now(),
+            );
+            store
+                .persist_obligation(&resolved)
+                .expect("persist resolved obligation");
+            let resolved_err = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_resolved".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect_err("resolved obligation must fail closed");
+            assert_eq!(
+                resolved_err.to_string(),
+                "approval_obligation_already_resolved: orchestration session sess_continue approval obligation obl_resolved is already closed"
+            );
+
+            let other_session = live_orchestrator("codex", "sess_other", "orch_other");
+            let mut other_parent = active_parent(&other_session);
+            other_parent.set_world_binding("world-17", 2);
+            store
+                .persist_orchestration_session(&other_parent)
+                .expect("persist other session");
+            store
+                .persist_participant(&other_session)
+                .expect("persist other orchestrator");
+            let cross_session = pending_continue_approval_obligation(
+                "sess_other",
+                "obl_cross_session",
+                "ash_continue",
+            );
+            store
+                .persist_obligation(&cross_session)
+                .expect("persist cross-session obligation");
+            let cross_session_err = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_cross_session".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect_err("cross-session obligation must fail closed");
+            assert_eq!(
+                cross_session_err.to_string(),
+                "approval_obligation_not_found: orchestration session sess_continue has no approval obligation obl_cross_session"
+            );
+
+            let wrong_target = pending_continue_approval_obligation(
+                "sess_continue",
+                "obl_wrong_target",
+                "ash_other",
+            );
+            store
+                .persist_obligation(&wrong_target)
+                .expect("persist wrong-target obligation");
+            let wrong_target_err = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_wrong_target".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect_err("wrong-target obligation must fail closed");
+            assert_eq!(
+                wrong_target_err.to_string(),
+                "approval_obligation_target_mismatch: orchestration session sess_continue approval obligation obl_wrong_target does not bind retained worker ash_continue"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn close_prepared_internal_continue_approval_response_obligation_maps_decisions_to_review_state(
+    ) {
+        with_store(|store| {
+            for (suffix, decision, expected_review_state, note) in [
+                (
+                    "approve",
+                    ApprovalResponseDecisionV1::Approve,
+                    OrchestrationObligationReviewState::Resolved,
+                    "approved by host",
+                ),
+                (
+                    "deny",
+                    ApprovalResponseDecisionV1::Deny,
+                    OrchestrationObligationReviewState::Dismissed,
+                    "denied by host",
+                ),
+            ] {
+                let session_id = format!("sess_continue_{suffix}");
+                let orchestrator =
+                    live_orchestrator("codex", &session_id, &format!("orch_{suffix}"));
+                let mut parent = parked_parent(&orchestrator);
+                parent.set_world_binding("world-17", 2);
+                let member = live_member(
+                    "codex_world",
+                    &session_id,
+                    &format!("ash_{suffix}"),
+                    &format!("orch_{suffix}"),
+                );
+
+                store
+                    .persist_orchestration_session(&parent)
+                    .expect("persist session");
+                store
+                    .persist_participant(&orchestrator)
+                    .expect("persist orchestrator");
+                store.persist_participant(&member).expect("persist member");
+
+                let obligation = pending_continue_approval_obligation(
+                    &session_id,
+                    &format!("obl_{suffix}"),
+                    &format!("ash_{suffix}"),
+                );
+                store
+                    .persist_obligation(&obligation)
+                    .expect("persist approval obligation");
+
+                let resolved_target = store
+                    .resolve_internal_continue_world_dispatch_target(
+                        &session_id,
+                        &format!("orch_{suffix}"),
+                        &format!("ash_{suffix}"),
+                        "cli:codex_world",
+                    )
+                    .expect("resolve continue target");
+                let closeout = store
+                    .prepare_internal_continue_approval_response_obligation_closeout(
+                        &resolved_target,
+                        &WorkerContinueApprovalResponsePayloadV1 {
+                            approval_obligation_id: format!("obl_{suffix}"),
+                            decision,
+                            thread_id: None,
+                        },
+                    )
+                    .expect("prepare approval closeout");
+                let closed = store
+                    .close_prepared_internal_continue_approval_response_obligation(
+                        &closeout,
+                        Some(note.to_string()),
+                    )
+                    .expect("close prepared approval obligation");
+
+                assert_eq!(closed.state, OrchestrationObligationState::Resolved);
+                assert_eq!(closed.review_state, expected_review_state);
+                assert!(!closed.attention_required);
+                assert_eq!(closed.resolution_note.as_deref(), Some(note));
+                assert!(closed.resolved_at.is_some());
+                assert_eq!(closed.resolved_at, Some(closed.updated_at));
+
+                let persisted = store
+                    .load_obligation(&session_id, &format!("obl_{suffix}"))
+                    .expect("load persisted obligation")
+                    .expect("persisted obligation exists");
+                assert_eq!(persisted.review_state, expected_review_state);
+                assert_eq!(persisted.resolution_note.as_deref(), Some(note));
+                assert!(persisted.resolved_at.is_some());
+
+                let compat_item = store
+                    .load_inbox_item(&session_id, &format!("obl_{suffix}"))
+                    .expect("load compatibility inbox item")
+                    .expect("compatibility item exists");
+                assert_eq!(compat_item.kind, DurableInboxItemKind::ApprovalRequired);
+                assert_eq!(compat_item.state, DurableInboxItemState::Dismissed);
+                assert_eq!(compat_item.message.as_deref(), Some(note));
+                assert_eq!(compat_item.resolved_at, persisted.resolved_at);
+
+                let settled_session = store
+                    .load_orchestration_session(&session_id)
+                    .expect("load settled session")
+                    .expect("settled session exists");
+                assert_eq!(settled_session.pending_inbox_count, 0);
+            }
         });
     }
 
