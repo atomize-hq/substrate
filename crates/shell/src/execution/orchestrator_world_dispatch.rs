@@ -50,7 +50,8 @@ use crate::execution::agent_runtime::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::{
-    AgentRuntimeSessionState, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
+    AgentRuntimeSessionState, OrchestrationObligationAttachState, OrchestrationObligationKind,
+    OrchestrationObligationRecord, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
     WorkerSpawnPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -646,6 +647,9 @@ async fn continue_world_worker(
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
     let stream_result = execute_continue_world_worker_stream(&submit_request, &base_policy).await?;
+    if let Some(worker_event) = stream_result.surfaced_worker_event.as_ref() {
+        persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
+    }
     let summary = summarize_continue_world_worker_result(&submit_request, stream_result.exit_code);
 
     Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
@@ -664,6 +668,127 @@ async fn continue_world_worker(
             summary,
         },
     ))
+}
+
+#[cfg(target_os = "linux")]
+fn persist_continue_world_worker_obligation(
+    store: &AgentRuntimeStateStore,
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    worker_event: &ContinueWorldWorkerEventV1,
+) -> Result<()> {
+    let Some((obligation_kind, obligation_summary)) =
+        continue_world_worker_obligation_kind_and_summary(worker_event)
+    else {
+        return Ok(());
+    };
+
+    let obligation_id = format!(
+        "obl_continue_{}_{}",
+        request.run_id,
+        continue_world_worker_event_kind_slug(obligation_kind)
+    );
+    let mut obligation = OrchestrationObligationRecord::new(
+        request.orchestration_session_id.clone(),
+        obligation_id,
+        obligation_kind,
+        obligation_summary,
+    );
+    obligation.attention_required = worker_event.attention_required;
+    obligation.attach_state = continue_world_worker_obligation_attach_state(obligation_kind);
+    obligation.source_participant_id = Some(worker_event.source_participant_id.clone());
+    obligation.target_backend_id = Some(request.backend_id.clone());
+    obligation.world_id = Some(request.world_id.clone());
+    obligation.world_generation = Some(request.world_generation);
+    obligation.payload = Some(serde_json::json!({
+        "event_class": continue_world_worker_persisted_event_label(worker_event.event_class),
+        "request_id": request.run_id,
+        "target_participant_id": worker_event.target_participant_id,
+        "source_backend_id": worker_event.source_backend_id,
+        "thread_id": worker_event.thread_id,
+        "stream_channel": worker_event.stream_channel,
+        "payload": worker_event.payload,
+    }));
+    store.persist_obligation(&obligation).with_context(|| {
+        format!(
+            "failed to persist continue_world_worker obligation {} for {}",
+            obligation.obligation_id, request.participant_id
+        )
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_obligation_kind_and_summary(
+    worker_event: &ContinueWorldWorkerEventV1,
+) -> Option<(OrchestrationObligationKind, String)> {
+    let (kind, summary) = match worker_event.event_class {
+        ContinueWorldWorkerEventClassV1::ApprovalRequest => (
+            OrchestrationObligationKind::ApprovalRequired,
+            format!(
+                "retained worker {} requested approval during continue_world_worker",
+                worker_event.source_participant_id
+            ),
+        ),
+        ContinueWorldWorkerEventClassV1::ForkRequest => (
+            OrchestrationObligationKind::ForkRequest,
+            format!(
+                "retained worker {} requested a child worker during continue_world_worker",
+                worker_event.source_participant_id
+            ),
+        ),
+        ContinueWorldWorkerEventClassV1::ForkRecommendation => (
+            OrchestrationObligationKind::ForkRecommendation,
+            format!(
+                "retained worker {} recommended a child worker during continue_world_worker",
+                worker_event.source_participant_id
+            ),
+        ),
+        _ => return None,
+    };
+
+    Some((kind, summary))
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_obligation_attach_state(
+    obligation_kind: OrchestrationObligationKind,
+) -> OrchestrationObligationAttachState {
+    match obligation_kind {
+        OrchestrationObligationKind::ApprovalRequired
+        | OrchestrationObligationKind::ForkRequest => OrchestrationObligationAttachState::Eligible,
+        OrchestrationObligationKind::ForkRecommendation => {
+            OrchestrationObligationAttachState::NotEligible
+        }
+        _ => OrchestrationObligationAttachState::NotEligible,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_event_kind_slug(
+    obligation_kind: OrchestrationObligationKind,
+) -> &'static str {
+    match obligation_kind {
+        OrchestrationObligationKind::ApprovalRequired => "approval_required",
+        OrchestrationObligationKind::ForkRequest => "fork_request",
+        OrchestrationObligationKind::ForkRecommendation => "fork_recommendation",
+        _ => "other",
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_persisted_event_label(
+    event_class: ContinueWorldWorkerEventClassV1,
+) -> &'static str {
+    match event_class {
+        ContinueWorldWorkerEventClassV1::ApprovalRequest => "approval_request",
+        ContinueWorldWorkerEventClassV1::ForkRequest => "fork_request",
+        ContinueWorldWorkerEventClassV1::ForkRecommendation => "fork_recommendation",
+        ContinueWorldWorkerEventClassV1::Reply => "reply",
+        ContinueWorldWorkerEventClassV1::ProgressUpdate => "progress_update",
+        ContinueWorldWorkerEventClassV1::Result => "result",
+        ContinueWorldWorkerEventClassV1::Failure => "failure",
+        ContinueWorldWorkerEventClassV1::FollowUpQuestion => "follow_up_question",
+        ContinueWorldWorkerEventClassV1::Blocked => "blocked",
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -4350,6 +4475,254 @@ mod tests {
                 .and_then(|event| event.payload.get("message"))
                 .and_then(serde_json::Value::as_str),
             Some("requires approval")
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn dispatch_contract_persist_continue_world_worker_obligation_projects_packet_three_events_into_canonical_state(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let cases = [
+            (
+                ContinueWorldWorkerEventClassV1::ApprovalRequest,
+                OrchestrationObligationKind::ApprovalRequired,
+                OrchestrationObligationAttachState::Eligible,
+                true,
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::ForkRequest,
+                OrchestrationObligationKind::ForkRequest,
+                OrchestrationObligationAttachState::Eligible,
+                true,
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::ForkRecommendation,
+                OrchestrationObligationKind::ForkRecommendation,
+                OrchestrationObligationAttachState::NotEligible,
+                false,
+            ),
+        ];
+
+        for (index, (event_class, expected_kind, expected_attach_state, expected_attention)) in
+            cases.into_iter().enumerate()
+        {
+            let run_id = format!("req_continue_packet3_{index}");
+            let submit_request = sample_continue_submit_request_for_run(&run_id, "world-17", 2);
+            let worker_event = ContinueWorldWorkerEventV1 {
+                event_class,
+                source_participant_id: "ash_member".to_string(),
+                target_participant_id: "orch_dispatch".to_string(),
+                source_backend_id: "cli:codex_world".to_string(),
+                attention_required: expected_attention,
+                thread_id: Some(format!("thread_packet3_{index}")),
+                stream_channel: Some("worker.request".to_string()),
+                payload: serde_json::json!({
+                    "message": format!("payload for {}", continue_worker_event_label(event_class)),
+                }),
+            };
+
+            persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
+                .expect("persist continue-world-worker obligation");
+
+            let obligation = store
+                .load_obligation(
+                    &submit_request.orchestration_session_id,
+                    &format!(
+                        "obl_continue_{}_{}",
+                        run_id,
+                        continue_world_worker_event_kind_slug(expected_kind)
+                    ),
+                )
+                .expect("load persisted obligation")
+                .expect("persisted obligation exists");
+            assert_eq!(obligation.kind, expected_kind);
+            assert_eq!(obligation.attach_state, expected_attach_state);
+            assert_eq!(obligation.attention_required, expected_attention);
+            assert_eq!(
+                obligation.source_participant_id.as_deref(),
+                Some("ash_member")
+            );
+            assert_eq!(
+                obligation.target_backend_id.as_deref(),
+                Some("cli:codex_world")
+            );
+            assert_eq!(obligation.world_id.as_deref(), Some("world-17"));
+            assert_eq!(obligation.world_generation, Some(2));
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("event_class"))
+                    .and_then(serde_json::Value::as_str),
+                Some(continue_worker_event_label(event_class))
+            );
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("request_id"))
+                    .and_then(serde_json::Value::as_str),
+                Some(run_id.as_str())
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_persists_fork_request_without_allocating_child_worker(
+    ) {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("persist-fork-request.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(serde_json::json!({
+                                "event_class": "fork_request",
+                                "payload": {
+                                    "message": "please allocate a child later"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        fs::write(
+            substrate_home.path().join("policy.yaml"),
+            r#"id: test-global-policy
+name: Test Global Policy
+agents:
+  allowed_backends:
+    - "cli:codex_world"
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - "cli:codex_world"
+    allowed_actions:
+      - "continue_world_worker"
+    allowed_modes:
+      - "retained"
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 4
+    max_concurrent_ephemeral: 4
+    fork:
+      requests_allowed: true
+"#,
+        )
+        .expect("write fork-request policy");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, socket_home.path(), "world-17", 2);
+
+        let live_before = store
+            .list_live_participants_for_session("sess_dispatch")
+            .expect("list live participants before continue");
+        let outcome = dispatch_real_continue_world_worker_request(
+            &store,
+            "req_continue_fork_request",
+            "idem_continue_fork_request",
+            "world-17",
+            2,
+        )
+        .await;
+        let live_after = store
+            .list_live_participants_for_session("sess_dispatch")
+            .expect("list live participants after continue");
+
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome.worker_event.as_ref().map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::ForkRequest)
+        );
+        let obligation = store
+            .load_obligation(
+                "sess_dispatch",
+                "obl_continue_req_continue_fork_request_fork_request",
+            )
+            .expect("load fork-request obligation")
+            .expect("fork-request obligation exists");
+        assert_eq!(obligation.kind, OrchestrationObligationKind::ForkRequest);
+        assert_eq!(
+            obligation
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.pointer("/payload/message"))
+                .and_then(serde_json::Value::as_str),
+            Some("please allocate a child later")
+        );
+        assert_eq!(
+            live_after.len(),
+            live_before.len(),
+            "accepted fork_request must not allocate a child worker"
+        );
+        assert_eq!(
+            live_after
+                .iter()
+                .filter(|participant| participant.handle.role == "member")
+                .count(),
+            1,
+            "accepted fork_request must leave exactly one retained member live"
         );
 
         server.await.expect("stub world server task");
