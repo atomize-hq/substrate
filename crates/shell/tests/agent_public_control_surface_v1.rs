@@ -22,8 +22,9 @@ use support::{
 };
 #[cfg(target_os = "linux")]
 use support::{
-    wait_for_min_member_dispatch_requests, wait_for_min_member_turn_submit_requests,
-    MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior,
+    wait_for_min_execute_cancel_requests, wait_for_min_member_dispatch_requests,
+    wait_for_min_member_turn_submit_requests, MemberDispatchStreamScript, ReplWorldAgentStub,
+    StreamBehavior,
 };
 use tempfile::TempDir;
 
@@ -4713,6 +4714,138 @@ fn public_turn_persists_packet_three_worker_event_obligations_for_world_follow_u
         let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
         terminate_pid(owner_pid);
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_turn_cancels_world_follow_up_when_packet_three_worker_event_is_denied() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_with_member_backend_and_world_dispatch(
+        Some("codex_world"),
+        true,
+        &["spawn_world_worker", "continue_world_worker"],
+        &["retained"],
+        &["cli:codex_world"],
+    );
+
+    let socket_home = tempfile::Builder::new()
+        .prefix("sac-world-packet3-denied-")
+        .tempdir_in("/tmp")
+        .expect("socket tempdir");
+    let socket_path = socket_home.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &socket_path,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-public-packet3-denied".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+    let mut repl = PtyRepl::spawn_with_world_socket(&fixture, &socket_path);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_output("substrate>", Duration::from_secs(2))
+        .expect("prompt");
+
+    let host_runtime_launch_offset = repl_output_len(&repl);
+    repl.send_line("::cli:codex start retained host runtime");
+    let (orchestration_session_id, _owner_participant_id) = wait_for_shell_owned_session_ready(
+        &fixture,
+        &repl,
+        host_runtime_launch_offset,
+        Duration::from_secs(5),
+    );
+
+    let first_world_turn_offset = repl_output_len(&repl);
+    repl.send_line("::cli:codex_world member targeted first turn");
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
+    wait_for_output_after(
+        &repl,
+        "substrate>",
+        first_world_turn_offset,
+        Duration::from_secs(5),
+    )
+    .expect("prompt after initial world turn");
+
+    let owner_pid = fixture.load_orchestration_session(&orchestration_session_id)["shell_owner_pid"]
+        .as_u64()
+        .expect("owner pid") as u32;
+    let live_members = wait_for_live_world_member_count(
+        &fixture,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+
+    let prompt = format!("{PACKET_THREE_MEMBER_TURN_PROMPT_PREFIX}approval_request");
+    let turn_output = fixture
+        .command()
+        .current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
+            "agent",
+            "turn",
+            "--session",
+            &orchestration_session_id,
+            "--backend",
+            "cli:codex_world",
+            "--prompt",
+            &prompt,
+            "--json",
+        ])
+        .output()
+        .expect("run denied public packet three turn");
+    assert!(
+        !turn_output.status.success(),
+        "denied packet three world turn must fail closed: stdout=\n{}\nstderr=\n{}",
+        String::from_utf8_lossy(&turn_output.stdout),
+        String::from_utf8_lossy(&turn_output.stderr),
+    );
+    let surfaced_output = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&turn_output.stdout),
+        String::from_utf8_lossy(&turn_output.stderr),
+    );
+    assert!(
+        surfaced_output.contains("approval_request_not_allowed"),
+        "denied packet three turn must surface the stable policy bucket: {surfaced_output}"
+    );
+
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(5));
+    wait_for_min_execute_cancel_requests(&records, 1, Duration::from_secs(5));
+    let submit_run_id = {
+        let guard = records.lock().expect("lock world-service records");
+        assert_eq!(guard.member_turn_submit_requests.len(), 1);
+        assert_eq!(guard.execute_cancel_requests.len(), 1);
+        let submit_run_id = guard.member_turn_submit_requests[0].run_id.clone();
+        assert_eq!(
+            guard.execute_cancel_requests[0].span_id,
+            format!("member-turn-span-{member_participant_id}")
+        );
+        submit_run_id
+    };
+    let denied_obligation_path = canonical_obligation_path(
+        &fixture.substrate_home,
+        &orchestration_session_id,
+        &format!("obl_continue_{submit_run_id}_approval_required"),
+    );
+    assert!(
+        !denied_obligation_path.exists(),
+        "denied packet three world turn must fail before durable obligation persistence"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    terminate_pid(owner_pid);
 }
 
 #[cfg(target_os = "linux")]
