@@ -4458,6 +4458,105 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn persist_packet_two_worker_request_obligations_preserves_exact_reviewable_fields() {
+        with_store(|store| {
+            let cases = [
+                (
+                    "approval_request",
+                    OrchestrationObligationKind::ApprovalRequired,
+                    true,
+                    OrchestrationObligationAttachState::Eligible,
+                    DurableInboxItemKind::ApprovalRequired,
+                    1_u64,
+                    OrchestrationSessionPosture::AwaitingAttention,
+                ),
+                (
+                    "fork_request",
+                    OrchestrationObligationKind::ForkRequest,
+                    true,
+                    OrchestrationObligationAttachState::Eligible,
+                    DurableInboxItemKind::FollowUpMessage,
+                    1_u64,
+                    OrchestrationSessionPosture::AwaitingAttention,
+                ),
+                (
+                    "fork_recommendation",
+                    OrchestrationObligationKind::ForkRecommendation,
+                    false,
+                    OrchestrationObligationAttachState::NotEligible,
+                    DurableInboxItemKind::FollowUpMessage,
+                    0_u64,
+                    OrchestrationSessionPosture::ParkedResumable,
+                ),
+            ];
+
+            for (
+                event_label,
+                kind,
+                attention_required,
+                attach_state,
+                expected_compat_kind,
+                expected_pending_count,
+                expected_posture,
+            ) in cases
+            {
+                let session_id = format!("sess_packet_two_{event_label}");
+                let participant_id = format!("ash_packet_two_{event_label}");
+                let participant = detached_orchestrator("codex", &session_id, &participant_id);
+                let parent = parked_parent(&participant);
+                store
+                    .persist_orchestration_session(&parent)
+                    .expect("persist packet-two parent");
+
+                let mut obligation = OrchestrationObligationRecord::new(
+                    session_id.clone(),
+                    format!("obl_{event_label}"),
+                    kind,
+                    format!("summary for {event_label}"),
+                );
+                obligation.attention_required = attention_required;
+                obligation.attach_state = attach_state;
+                obligation.source_participant_id = Some(format!("member_{event_label}"));
+                obligation.target_backend_id = Some("cli:codex_world".to_string());
+                obligation.world_id = Some("world-17".to_string());
+                obligation.world_generation = Some(2);
+                obligation.payload = Some(json!({
+                    "event_class": event_label,
+                    "message": format!("payload for {event_label}"),
+                    "request_id": format!("req_{event_label}"),
+                }));
+
+                store
+                    .persist_obligation(&obligation)
+                    .expect("persist packet-two obligation");
+
+                let loaded = store
+                    .load_obligation(&session_id, &format!("obl_{event_label}"))
+                    .expect("load packet-two obligation")
+                    .expect("packet-two obligation exists");
+                assert_eq!(loaded, obligation);
+
+                let projected_session = store
+                    .load_orchestration_session(&session_id)
+                    .expect("load packet-two session")
+                    .expect("packet-two session exists");
+                assert_eq!(
+                    projected_session.pending_inbox_count,
+                    expected_pending_count
+                );
+                assert_eq!(projected_session.posture, expected_posture);
+
+                let compat_item = store
+                    .load_inbox_item(&session_id, &format!("obl_{event_label}"))
+                    .expect("load packet-two compatibility item")
+                    .expect("packet-two compatibility item exists");
+                assert_eq!(compat_item.kind, expected_compat_kind);
+            }
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolving_obligation_updates_detached_projection_and_keeps_compatibility_artifact() {
         with_store(|store| {
             let participant =

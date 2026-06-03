@@ -406,4 +406,66 @@ mod tests {
             "terminal orchestration attach states must include attach_completion_reason"
         ));
     }
+
+    #[test]
+    fn packet_two_obligation_kinds_keep_attach_defaults_explicit() {
+        let cases = [
+            (OrchestrationObligationKind::ApprovalRequired, true),
+            (OrchestrationObligationKind::ForkRequest, true),
+            (OrchestrationObligationKind::ForkRecommendation, false),
+        ];
+
+        for (kind, expected_auto_attach_support) in cases {
+            let mut obligation = OrchestrationObligationRecord::new(
+                "sess_001",
+                format!("obl_{kind:?}").to_lowercase(),
+                kind,
+                format!("summary for {kind:?}"),
+            );
+            obligation.attention_required = true;
+            obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+
+            assert_eq!(
+                kind.supports_router_auto_attach(),
+                expected_auto_attach_support,
+                "{kind:?} must keep its packet-two router auto-attach default",
+            );
+            assert_eq!(
+                obligation.is_auto_attach_eligible(),
+                expected_auto_attach_support,
+                "{kind:?} must keep its packet-two obligation auto-attach projection",
+            );
+        }
+    }
+
+    #[test]
+    fn satisfied_attach_state_does_not_resolve_pending_obligation() {
+        let settled_at = Utc::now();
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::ApprovalRequired,
+            "Need host approval",
+        );
+        obligation.attention_required = true;
+        obligation.attach_state = OrchestrationObligationAttachState::Claimed;
+        obligation.mark_attach_claimed("router::local", settled_at);
+
+        obligation.mark_attach_satisfied("session_attach_restored_by_test", settled_at);
+
+        assert_eq!(obligation.state, OrchestrationObligationState::Pending);
+        assert_eq!(
+            obligation.review_state,
+            OrchestrationObligationReviewState::Unread
+        );
+        assert!(obligation.resolved_at.is_none());
+        assert_eq!(
+            obligation.attach_state,
+            OrchestrationObligationAttachState::Satisfied
+        );
+        assert_eq!(
+            obligation.attach_completion_reason.as_deref(),
+            Some("session_attach_restored_by_test")
+        );
+    }
 }

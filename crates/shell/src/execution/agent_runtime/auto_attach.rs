@@ -362,6 +362,9 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+    use crate::execution::agent_runtime::obligation_ledger::{
+        OrchestrationObligationAttachState, OrchestrationObligationRecord,
+    };
     use crate::execution::agent_runtime::orchestration_session::{
         HostAttachContract, HostAttachExecutionClientStart, HostAttachLaunchKnobs,
         HostAttachModePreference,
@@ -415,6 +418,56 @@ mod tests {
         orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
         orchestration.mark_parked_resumable("owner detached cleanly");
         (orchestration, participant)
+    }
+
+    fn eligible_obligation(
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        kind: OrchestrationObligationKind,
+    ) -> OrchestrationObligationRecord {
+        let mut obligation = OrchestrationObligationRecord::new(
+            orchestration_session_id,
+            obligation_id,
+            kind,
+            format!("summary for {obligation_id}"),
+        );
+        obligation.attention_required = true;
+        obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        obligation
+    }
+
+    #[test]
+    fn select_attach_candidate_preserves_packet_two_attach_eligibility_defaults() {
+        let approval = eligible_obligation(
+            "sess_auto_attach_packet_two",
+            "obl_approval",
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        let fork_request = eligible_obligation(
+            "sess_auto_attach_packet_two",
+            "obl_fork_request",
+            OrchestrationObligationKind::ForkRequest,
+        );
+        let fork_recommendation = eligible_obligation(
+            "sess_auto_attach_packet_two",
+            "obl_fork_recommendation",
+            OrchestrationObligationKind::ForkRecommendation,
+        );
+
+        let obligations = [
+            fork_request.clone(),
+            fork_recommendation.clone(),
+            approval.clone(),
+        ];
+        let candidate = select_attach_candidate(&obligations)
+            .expect("approval and fork request should remain attach-eligible");
+        assert_eq!(candidate.obligation_id, approval.obligation_id);
+
+        let recommendation_only = select_attach_candidate(&[fork_recommendation]).is_none();
+        assert!(
+            recommendation_only,
+            "fork recommendations must remain non-attach-eligible by default"
+        );
     }
 
     #[test]
