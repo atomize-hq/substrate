@@ -3270,10 +3270,14 @@ fn compatibility_inbox_item_from_obligation(
         item.resolved_at = None;
     } else {
         item.state = match obligation.review_state {
-            OrchestrationObligationReviewState::Acknowledged => DurableInboxItemState::Acknowledged,
+            OrchestrationObligationReviewState::Acknowledged
+            | OrchestrationObligationReviewState::Resolved => {
+                DurableInboxItemState::Acknowledged
+            }
             OrchestrationObligationReviewState::Unread
-            | OrchestrationObligationReviewState::Dismissed
-            | OrchestrationObligationReviewState::Resolved => DurableInboxItemState::Dismissed,
+            | OrchestrationObligationReviewState::Dismissed => {
+                DurableInboxItemState::Dismissed
+            }
         };
         item.resolved_at = obligation.resolved_at.or(Some(obligation.updated_at));
     }
@@ -4771,7 +4775,7 @@ mod tests {
                 .expect("load compatibility inbox item")
                 .expect("compatibility item exists");
             assert_eq!(compat_item.kind, DurableInboxItemKind::RuntimeAlert);
-            assert_eq!(compat_item.state, DurableInboxItemState::Dismissed);
+            assert_eq!(compat_item.state, DurableInboxItemState::Acknowledged);
             assert_eq!(
                 compat_item.message.as_deref(),
                 Some("host attach recovered")
@@ -4804,6 +4808,36 @@ mod tests {
             assert!(err
                 .to_string()
                 .contains("resolved orchestration obligations must include resolved_at"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_obligation_rejects_pending_terminal_review_state_at_persistence_boundary() {
+        with_store(|store| {
+            let participant = detached_orchestrator(
+                "codex",
+                "sess_obligation_invalid_review_state",
+                "ash_obligation_invalid_review_state",
+            );
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let mut obligation = pending_obligation(
+                "sess_obligation_invalid_review_state",
+                "obl_invalid_review_state",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            obligation.review_state = OrchestrationObligationReviewState::Dismissed;
+
+            let err = store
+                .persist_obligation(&obligation)
+                .expect_err("pending terminal review state must fail persistence");
+            assert!(err.to_string().contains(
+                "pending orchestration obligations cannot advertise terminal review_state"
+            ));
         });
     }
 
@@ -7166,20 +7200,22 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn close_prepared_internal_continue_approval_response_obligation_maps_decisions_to_review_state(
+    fn close_prepared_internal_continue_approval_response_obligation_preserves_compatibility_closeout_semantics(
     ) {
         with_store(|store| {
-            for (suffix, decision, expected_review_state, note) in [
+            for (suffix, decision, expected_review_state, expected_compat_state, note) in [
                 (
                     "approve",
                     ApprovalResponseDecisionV1::Approve,
                     OrchestrationObligationReviewState::Resolved,
+                    DurableInboxItemState::Acknowledged,
                     "approved by host",
                 ),
                 (
                     "deny",
                     ApprovalResponseDecisionV1::Deny,
                     OrchestrationObligationReviewState::Dismissed,
+                    DurableInboxItemState::Dismissed,
                     "denied by host",
                 ),
             ] {
@@ -7257,7 +7293,7 @@ mod tests {
                     .expect("load compatibility inbox item")
                     .expect("compatibility item exists");
                 assert_eq!(compat_item.kind, DurableInboxItemKind::ApprovalRequired);
-                assert_eq!(compat_item.state, DurableInboxItemState::Dismissed);
+                assert_eq!(compat_item.state, expected_compat_state);
                 assert_eq!(compat_item.message.as_deref(), Some(note));
                 assert_eq!(compat_item.resolved_at, persisted.resolved_at);
 

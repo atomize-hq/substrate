@@ -187,10 +187,14 @@ impl OrchestrationObligationRecord {
             );
         }
         if self.state == OrchestrationObligationState::Pending
-            && self.review_state == OrchestrationObligationReviewState::Resolved
+            && matches!(
+                self.review_state,
+                OrchestrationObligationReviewState::Dismissed
+                    | OrchestrationObligationReviewState::Resolved
+            )
         {
             anyhow::bail!(
-                "pending orchestration obligations cannot advertise resolved review_state"
+                "pending orchestration obligations cannot advertise terminal review_state"
             );
         }
         if self.attach_attempt_count > 0 && self.attach_last_attempt_at.is_none() {
@@ -384,6 +388,24 @@ mod tests {
         assert!(err
             .to_string()
             .contains("resolved orchestration obligations must include resolved_at"));
+    }
+
+    #[test]
+    fn pending_obligation_rejects_terminal_review_state() {
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::ApprovalRequired,
+            "Need host approval",
+        );
+        obligation.review_state = OrchestrationObligationReviewState::Dismissed;
+
+        let err = obligation
+            .validate()
+            .expect_err("pending obligations must not carry terminal review state");
+        assert!(err
+            .to_string()
+            .contains("pending orchestration obligations cannot advertise terminal review_state"));
     }
 
     #[test]
