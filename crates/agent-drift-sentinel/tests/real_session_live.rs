@@ -6,6 +6,7 @@ use agent_drift_sentinel::{
     LiveSessionCoordinator, LiveSessionError, LiveSessionRequest, SchedulerPolicy, WarningPolicy,
 };
 use camino::Utf8Path;
+use serde_json::Value;
 use tempfile::TempDir;
 
 #[test]
@@ -87,7 +88,7 @@ fn real_session_live_coordinator_persists_cursor_across_restarts() {
     let state_dir = Utf8Path::from_path(temp_dir.path())
         .expect("utf8 temp dir")
         .join("state");
-    let first_latest_cursor = {
+    let (first_latest_cursor, first_last_emission_ordinal) = {
         let mut coordinator = LiveSessionCoordinator::new(
             LiveSessionRequest {
                 codex_home: Some(codex_home.clone()),
@@ -102,10 +103,36 @@ fn real_session_live_coordinator_persists_cursor_across_restarts() {
         let first = coordinator.poll_once().expect("first poll");
         assert!(first.reran_pipeline);
         assert!(first.emitted_checkpoints > 0);
-        first
+        let first_latest_cursor = first
             .latest_cursor
             .clone()
-            .expect("first poll should establish a cursor")
+            .expect("first poll should establish a cursor");
+        let first_last_emission_ordinal = first
+            .observations
+            .last()
+            .expect("first poll should emit at least one observation")
+            .event
+            .emission_ordinal;
+        let persisted_state = read_persisted_state(&state_dir);
+        assert_eq!(persisted_state["schema_version"].as_u64(), Some(2));
+        assert_eq!(persisted_state["session_id"].as_str(), Some("session-live"));
+        assert_eq!(
+            persisted_state["progress"]["last_observed_size_bytes"].as_u64(),
+            Some(first.observed_size_bytes)
+        );
+        assert_eq!(
+            persisted_state["progress"]["last_delivered_cursor"]["session_id"].as_str(),
+            Some("session-live")
+        );
+        assert_eq!(
+            persisted_state["progress"]["last_delivered_cursor"]["ordinal"].as_u64(),
+            Some(first_latest_cursor.ordinal as u64)
+        );
+        assert_eq!(
+            persisted_state["progress"]["next_emission_ordinal"].as_u64(),
+            Some((first_last_emission_ordinal + 1) as u64)
+        );
+        (first_latest_cursor, first_last_emission_ordinal)
     };
 
     let mut restarted = LiveSessionCoordinator::new(
@@ -138,6 +165,10 @@ fn real_session_live_coordinator_persists_cursor_across_restarts() {
         .observations
         .iter()
         .all(|observation| observation.event.cursor.ordinal > first_latest_cursor.ordinal));
+    assert!(appended
+        .observations
+        .iter()
+        .all(|observation| observation.event.emission_ordinal > first_last_emission_ordinal));
 }
 
 #[test]
@@ -345,6 +376,14 @@ fn second_rollout_phase() -> &'static str {
         "{\"timestamp\":\"2026-06-01T12:00:13Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Second phase complete\"}]}}\n",
         "{\"timestamp\":\"2026-06-01T12:00:13.001Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Second phase complete\"}]}}\n"
     )
+}
+
+fn read_persisted_state(state_dir: &Utf8Path) -> Value {
+    serde_json::from_str(
+        &fs::read_to_string(state_dir.join("live-session-state.json"))
+            .expect("read persisted state"),
+    )
+    .expect("parse persisted state json")
 }
 
 fn session_meta_only_rollout_phase() -> &'static str {

@@ -18,7 +18,8 @@ use crate::live_runtime::{LiveObservation, LiveRuntime, LiveRuntimeError, LiveRu
 use crate::operator_surface::WarningPolicy;
 use crate::scheduler::SchedulerPolicy;
 
-const LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 1;
+const LEGACY_LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 1;
+const LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveSessionRequest {
@@ -144,9 +145,8 @@ pub struct LiveSessionCoordinator {
     request: LiveSessionRequest,
     rollout_path: Utf8PathBuf,
     runtime: LiveRuntime,
-    last_observed_size_bytes: Option<u64>,
-    last_delivered_cursor: Option<CheckpointCursor>,
-    next_emission_ordinal: usize,
+    last_polled_size_bytes: Option<u64>,
+    progress: LiveSessionProgress,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -158,10 +158,73 @@ struct RolloutStartupReadiness {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct LiveSessionProgress {
+    last_observed_size_bytes: Option<u64>,
+    last_delivered_cursor: Option<CheckpointCursor>,
+    #[serde(default = "default_next_emission_ordinal")]
+    next_emission_ordinal: usize,
+}
+
+impl Default for LiveSessionProgress {
+    fn default() -> Self {
+        Self {
+            last_observed_size_bytes: None,
+            last_delivered_cursor: None,
+            next_emission_ordinal: default_next_emission_ordinal(),
+        }
+    }
+}
+
+impl LiveSessionProgress {
+    fn latest_cursor(&self) -> Option<&CheckpointCursor> {
+        self.last_delivered_cursor.as_ref()
+    }
+
+    fn checkpoint_is_fresh(&self, checkpoint: &Checkpoint) -> bool {
+        self.last_delivered_cursor
+            .as_ref()
+            .is_none_or(|cursor| checkpoint_after_cursor(checkpoint, cursor))
+    }
+
+    fn checkpoint_ready_event(
+        &mut self,
+        checkpoint: Checkpoint,
+        rollout_path: &Utf8Path,
+    ) -> LiveCheckpointEvent {
+        let event = LiveCheckpointEvent::checkpoint_ready(
+            self.next_emission_ordinal,
+            checkpoint,
+            Some(rollout_path.as_str().to_string()),
+        );
+        self.next_emission_ordinal += 1;
+        event
+    }
+
+    fn record_delivery(&mut self, cursor: CheckpointCursor) {
+        self.last_delivered_cursor = Some(cursor);
+    }
+
+    fn record_observed_size(&mut self, observed_size_bytes: u64) {
+        self.last_observed_size_bytes = Some(observed_size_bytes);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct PersistedLiveSessionState {
     schema_version: u32,
     session_id: String,
+    progress: LiveSessionProgress,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct LegacyPersistedLiveSessionState {
+    schema_version: u32,
+    session_id: String,
     last_delivered_cursor: Option<CheckpointCursor>,
+}
+
+fn default_next_emission_ordinal() -> usize {
+    1
 }
 
 impl LiveSessionCoordinator {
@@ -171,14 +234,13 @@ impl LiveSessionCoordinator {
         warning_policy: WarningPolicy,
     ) -> Result<Self, LiveSessionError> {
         let rollout_path = resolve_rollout_path(&request)?;
-        let last_delivered_cursor = load_persisted_cursor(&request)?;
+        let progress = load_persisted_progress(&request)?;
         Ok(Self {
             request,
             rollout_path,
             runtime: LiveRuntime::new(scheduler_policy, warning_policy),
-            last_observed_size_bytes: None,
-            last_delivered_cursor,
-            next_emission_ordinal: 1,
+            last_polled_size_bytes: None,
+            progress,
         })
     }
 
@@ -187,7 +249,7 @@ impl LiveSessionCoordinator {
     }
 
     pub fn latest_cursor(&self) -> Option<&CheckpointCursor> {
-        self.last_delivered_cursor.as_ref()
+        self.progress.latest_cursor()
     }
 
     pub fn runtime_snapshot(&self) -> LiveRuntimeSnapshot {
@@ -196,7 +258,7 @@ impl LiveSessionCoordinator {
 
     pub fn poll_once(&mut self) -> Result<LiveSessionPollResult, LiveSessionError> {
         let observed_size_bytes = file_size_bytes(&self.rollout_path)?;
-        if let Some(previous_size_bytes) = self.last_observed_size_bytes {
+        if let Some(previous_size_bytes) = self.last_polled_size_bytes {
             if observed_size_bytes < previous_size_bytes {
                 return Err(LiveSessionError::RolloutShrank {
                     path: self.rollout_path.clone(),
@@ -208,7 +270,7 @@ impl LiveSessionCoordinator {
                 return Ok(LiveSessionPollResult::idle(
                     self.rollout_path.clone(),
                     observed_size_bytes,
-                    self.last_delivered_cursor.clone(),
+                    self.progress.last_delivered_cursor.clone(),
                 ));
             }
         }
@@ -216,16 +278,18 @@ impl LiveSessionCoordinator {
         let checkpoints = match self.run_pipeline() {
             Ok(checkpoints) => checkpoints,
             Err(error)
-                if self.last_delivered_cursor.is_none()
+                if self.progress.last_delivered_cursor.is_none()
                     && sparse_startup_retry_allowed(&self.rollout_path, &error) =>
             {
-                self.last_observed_size_bytes = Some(observed_size_bytes);
+                self.last_polled_size_bytes = Some(observed_size_bytes);
+                self.progress.record_observed_size(observed_size_bytes);
+                self.persist_state()?;
                 return Ok(LiveSessionPollResult {
                     rollout_path: self.rollout_path.clone(),
                     observed_size_bytes,
                     reran_pipeline: true,
                     emitted_checkpoints: 0,
-                    latest_cursor: None,
+                    latest_cursor: self.progress.last_delivered_cursor.clone(),
                     observations: Vec::new(),
                 });
             }
@@ -233,35 +297,30 @@ impl LiveSessionCoordinator {
         };
         let fresh_checkpoints = checkpoints
             .into_iter()
-            .filter(|checkpoint| {
-                self.last_delivered_cursor
-                    .as_ref()
-                    .is_none_or(|cursor| checkpoint_after_cursor(checkpoint, cursor))
-            })
+            .filter(|checkpoint| self.progress.checkpoint_is_fresh(checkpoint))
             .collect::<Vec<_>>();
 
         let mut observations = Vec::with_capacity(fresh_checkpoints.len());
         for checkpoint in fresh_checkpoints {
-            let event = LiveCheckpointEvent::checkpoint_ready(
-                self.next_emission_ordinal,
-                checkpoint,
-                Some(self.rollout_path.as_str().to_string()),
-            );
-            self.next_emission_ordinal += 1;
+            let event = self
+                .progress
+                .checkpoint_ready_event(checkpoint, &self.rollout_path);
             let observation = self.runtime.observe(event)?;
-            self.last_delivered_cursor = Some(observation.event.cursor.clone());
+            self.progress.record_delivery(observation.event.cursor.clone());
             self.persist_state()?;
             observations.push(observation);
         }
 
-        self.last_observed_size_bytes = Some(observed_size_bytes);
+        self.last_polled_size_bytes = Some(observed_size_bytes);
+        self.progress.record_observed_size(observed_size_bytes);
+        self.persist_state()?;
 
         Ok(LiveSessionPollResult {
             rollout_path: self.rollout_path.clone(),
             observed_size_bytes,
             reran_pipeline: true,
             emitted_checkpoints: observations.len(),
-            latest_cursor: self.last_delivered_cursor.clone(),
+            latest_cursor: self.progress.last_delivered_cursor.clone(),
             observations,
         })
     }
@@ -325,7 +384,7 @@ impl LiveSessionCoordinator {
         let state = PersistedLiveSessionState {
             schema_version: LIVE_SESSION_STATE_SCHEMA_VERSION,
             session_id: self.request.session_id.clone(),
-            last_delivered_cursor: self.last_delivered_cursor.clone(),
+            progress: self.progress.clone(),
         };
         let encoded = serde_json::to_vec_pretty(&state).map_err(|source| {
             LiveSessionError::ParsePersistedState {
@@ -351,12 +410,12 @@ fn persisted_state_path(request: &LiveSessionRequest) -> Utf8PathBuf {
     request.state_dir.join("live-session-state.json")
 }
 
-fn load_persisted_cursor(
+fn load_persisted_progress(
     request: &LiveSessionRequest,
-) -> Result<Option<CheckpointCursor>, LiveSessionError> {
+) -> Result<LiveSessionProgress, LiveSessionError> {
     let state_path = persisted_state_path(request);
     if !state_path.exists() {
-        return Ok(None);
+        return Ok(LiveSessionProgress::default());
     }
 
     let raw =
@@ -364,39 +423,96 @@ fn load_persisted_cursor(
             path: state_path.clone(),
             source,
         })?;
-    let state: PersistedLiveSessionState =
-        serde_json::from_str(&raw).map_err(|source| LiveSessionError::ParsePersistedState {
-            path: state_path.clone(),
+    let schema_version = parse_schema_version(&raw, &state_path)?;
+
+    match schema_version {
+        LEGACY_LIVE_SESSION_STATE_SCHEMA_VERSION => {
+            let state: LegacyPersistedLiveSessionState = serde_json::from_str(&raw).map_err(
+                |source| LiveSessionError::ParsePersistedState {
+                    path: state_path.clone(),
+                    source,
+                },
+            )?;
+            validate_persisted_state_session(&state_path, request, &state.session_id)?;
+            validate_cursor_session(
+                &state_path,
+                &request.session_id,
+                state.last_delivered_cursor.as_ref(),
+            )?;
+            Ok(LiveSessionProgress {
+                last_observed_size_bytes: None,
+                last_delivered_cursor: state.last_delivered_cursor,
+                next_emission_ordinal: default_next_emission_ordinal(),
+            })
+        }
+        LIVE_SESSION_STATE_SCHEMA_VERSION => {
+            let state: PersistedLiveSessionState = serde_json::from_str(&raw).map_err(|source| {
+                LiveSessionError::ParsePersistedState {
+                    path: state_path.clone(),
+                    source,
+                }
+            })?;
+            validate_persisted_state_session(&state_path, request, &state.session_id)?;
+            validate_cursor_session(
+                &state_path,
+                &request.session_id,
+                state.progress.last_delivered_cursor.as_ref(),
+            )?;
+            Ok(state.progress)
+        }
+        actual => Err(LiveSessionError::UnsupportedPersistedStateSchema {
+            path: state_path,
+            actual,
+            expected: LIVE_SESSION_STATE_SCHEMA_VERSION,
+        }),
+    }
+}
+
+fn parse_schema_version(raw: &str, path: &Utf8Path) -> Result<u32, LiveSessionError> {
+    #[derive(Deserialize)]
+    struct SchemaVersionProbe {
+        schema_version: u32,
+    }
+
+    let probe: SchemaVersionProbe =
+        serde_json::from_str(raw).map_err(|source| LiveSessionError::ParsePersistedState {
+            path: path.to_owned(),
             source,
         })?;
+    Ok(probe.schema_version)
+}
 
-    if state.schema_version != LIVE_SESSION_STATE_SCHEMA_VERSION {
-        return Err(LiveSessionError::UnsupportedPersistedStateSchema {
-            path: state_path,
-            actual: state.schema_version,
-            expected: LIVE_SESSION_STATE_SCHEMA_VERSION,
-        });
-    }
-    if state.session_id != request.session_id {
+fn validate_persisted_state_session(
+    path: &Utf8Path,
+    request: &LiveSessionRequest,
+    actual_session_id: &str,
+) -> Result<(), LiveSessionError> {
+    if actual_session_id != request.session_id {
         return Err(LiveSessionError::PersistedStateSessionMismatch {
-            path: state_path,
+            path: path.to_owned(),
             expected_session_id: request.session_id.clone(),
-            actual_session_id: state.session_id,
+            actual_session_id: actual_session_id.to_string(),
         });
     }
-    if let Some(cursor) = state.last_delivered_cursor {
-        if cursor.session_id != request.session_id {
+    Ok(())
+}
+
+fn validate_cursor_session(
+    path: &Utf8Path,
+    expected_session_id: &str,
+    cursor: Option<&CheckpointCursor>,
+) -> Result<(), LiveSessionError> {
+    if let Some(cursor) = cursor {
+        if cursor.session_id != expected_session_id {
             return Err(LiveSessionError::PersistedCursorSessionMismatch {
-                path: state_path,
-                expected_session_id: request.session_id.clone(),
-                actual_session_id: cursor.session_id,
+                path: path.to_owned(),
+                expected_session_id: expected_session_id.to_string(),
+                actual_session_id: cursor.session_id.clone(),
                 actual_ordinal: cursor.ordinal,
             });
         }
-        return Ok(Some(cursor));
     }
-
-    Ok(None)
+    Ok(())
 }
 
 fn resolve_rollout_path(request: &LiveSessionRequest) -> Result<Utf8PathBuf, LiveSessionError> {
