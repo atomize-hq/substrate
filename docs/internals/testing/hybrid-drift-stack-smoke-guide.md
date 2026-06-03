@@ -257,6 +257,8 @@ The replay sentinel:
 - loads analyzer checkpoint bundles
 - applies scheduler cooldown, heartbeat, debounce, and repeated-failure rules
 - separates visible warnings from silent checkpoints
+- classifies checkpoint posture independently from visibility as `active`, `recovered`, or
+  `historical-only` when analyzer evidence supports it
 - renders a console-oriented replay report
 - optionally shapes bounded adjudication requests, disabled by default
 
@@ -306,9 +308,12 @@ The replay command prints a console report. Inspect these fields first:
 - `Visible warnings`
 - `Silent checkpoints`
 - `Next cursor`
-- the warning block with `Objective`, `Drift`, `Expected next step`, and `Evidence`
+- the warning or checkpoint block with `Objective`, `Drift`, optional `Posture`,
+  `Expected next step`, and `Evidence`
 
-Success means the replay report is internally consistent with the analyzer bundle you just built.
+Success means the replay report is internally consistent with the analyzer bundle you just built,
+and that visibility (`Visible` versus `Silent`) is not being used as a proxy for posture
+(`active`, `recovered`, `historical-only`).
 
 ### Optional adjudication-shaping smoke
 
@@ -337,7 +342,8 @@ The current live slice is real-session, bounded, and library-first:
 - it keeps polling when the session is still in a legitimate sparse startup state
 - it surfaces real compactor/analyzer contract failures instead of broadly hiding them
 - it emits only checkpoints strictly after the last delivered cursor within one live process
-- it prints live console blocks using the shared scheduler and presentation surfaces
+- it prints live console blocks using the shared scheduler and presentation surfaces, including
+  posture when the checkpoint carries active or historical drift evidence
 
 It does **not** integrate with `shell`, `world`, `shim`, or any broader host-runtime wiring.
 
@@ -391,6 +397,8 @@ Then interpret progress by phase:
      directive text, path hints, or parseable tool-call arguments.
 2. Once the session becomes analyzable and the rollout grows, the live command should emit one or
    more checkpoints.
+   - Those emitted checkpoint blocks may stay silent while still showing posture such as
+     `recovered` or `historical-only`.
 3. Later growth polls may rerun the pipeline and emit `0` new checkpoints, which is the expected
    proof that already delivered checkpoints are not replayed within the same live process.
 
@@ -417,6 +425,8 @@ Success means:
 - the state dir contains `compactor/` and `analyzer/` artifacts
 - the analyzer artifacts are scoped to the target session
 - the live console output reflects real rollout growth rather than static replay only
+- checkpoint blocks can distinguish visibility from posture instead of describing drift state only
+  as `Visible` versus `Silent`
 
 ## 5. Full Chained Smoke
 

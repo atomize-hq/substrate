@@ -2,8 +2,12 @@
 
 mod support;
 
+use agent_drift_analyzer::{DriftClass, EvidenceRef};
 use agent_drift_sentinel::{
-    operator_surface::present_checkpoint, scheduler::ReplayScheduler,
+    operator_surface::{
+        present_checkpoint, present_checkpoint_with_previous, CheckpointPosture,
+    },
+    scheduler::ReplayScheduler,
     verify_live_checkpoint_compatibility, DecisionReason, LiveInputError, SchedulerPolicy,
     TriggerClass, WarningDisposition, WarningPolicy,
 };
@@ -81,4 +85,81 @@ fn live_checkpoint_compatibility_surfaces_analyzer_contract_gaps_explicitly() {
             ..
         }
     ));
+}
+
+#[test]
+fn live_checkpoint_compatibility_supports_recovered_posture_without_schema_widening() {
+    let previous = checkpoint_with_drift(
+        "session-posture",
+        1,
+        DriftClass::TruthGroundingGap,
+        82,
+        true,
+        "align plan to repo truth",
+        &["flagged score for session-posture:1"],
+    );
+    let current = checkpoint_with_drift(
+        "session-posture",
+        2,
+        DriftClass::TruthGroundingGap,
+        20,
+        false,
+        "continue on the current task frame",
+        &["historical truth-grounding gap: flagged score for session-posture:1"],
+    );
+
+    let previous_compatibility =
+        verify_live_checkpoint_compatibility(&previous).expect("previous checkpoint compatible");
+    let current_compatibility =
+        verify_live_checkpoint_compatibility(&current).expect("current checkpoint compatible");
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        current_compatibility.cursor.clone(),
+        TriggerClass::CheckpointReady,
+        current_compatibility.flagged,
+        Some(&current_compatibility.warning_fingerprint),
+    );
+    let presentation = present_checkpoint_with_previous(
+        &current,
+        Some(&previous),
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+
+    assert_eq!(previous_compatibility.cursor.ordinal, 1);
+    assert_eq!(current_compatibility.cursor.ordinal, 2);
+    assert_eq!(presentation.posture, Some(CheckpointPosture::Recovered));
+    assert!(presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line
+            .contains("historical truth-grounding gap: flagged score for session-posture:1")));
+}
+
+fn checkpoint_with_drift(
+    session_id: &str,
+    ordinal: usize,
+    class: DriftClass,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+    evidence_reasons: &[&str],
+) -> agent_drift_analyzer::Checkpoint {
+    let mut checkpoint =
+        support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.schema_version = "v0.2".to_string();
+    checkpoint.flagged = flagged;
+    checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].raw_score = raw_score;
+    checkpoint.drift_scores[0].flagged = flagged;
+    checkpoint.drift_scores[0].evidence = evidence_reasons
+        .iter()
+        .map(|reason| EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: (*reason).to_string(),
+        })
+        .collect();
+    checkpoint.diagnostics.evidence_item_count = checkpoint.drift_scores[0].evidence.len();
+    checkpoint
 }

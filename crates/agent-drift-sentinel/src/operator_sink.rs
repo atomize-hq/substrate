@@ -3,7 +3,8 @@ use anyhow::Result;
 use crate::input::CheckpointCursor;
 use crate::live_runtime::LiveObservation;
 use crate::operator_surface::{
-    CheckpointDiagnosticsSummary, CheckpointPresentation, WarningDisposition,
+    CheckpointDiagnosticsSummary, CheckpointPosture, CheckpointPresentation,
+    WarningDisposition,
 };
 use crate::scheduler::{DecisionReason, TriggerClass};
 
@@ -19,6 +20,7 @@ pub enum OperatorEvent {
 pub struct VisibleWarningEvent {
     pub cursor: CheckpointCursor,
     pub source_label: Option<String>,
+    pub posture: Option<CheckpointPosture>,
     pub presentation: CheckpointPresentation,
     pub diagnostics_summary: CheckpointDiagnosticsSummary,
 }
@@ -27,6 +29,7 @@ pub struct VisibleWarningEvent {
 pub struct SilentCheckpointEvent {
     pub cursor: CheckpointCursor,
     pub source_label: Option<String>,
+    pub posture: Option<CheckpointPosture>,
     pub checkpoint_id: String,
     pub trigger: TriggerClass,
     pub reason: String,
@@ -81,6 +84,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
     let mut events = Vec::new();
     let cursor = observation.event.cursor.clone();
     let source_label = observation.event.source_label.clone();
+    let posture = observation.presentation.posture;
     let diagnostics_summary = observation.presentation.diagnostics_summary.clone();
 
     match &observation.presentation.disposition {
@@ -88,6 +92,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
             events.push(OperatorEvent::VisibleWarning(VisibleWarningEvent {
                 cursor: cursor.clone(),
                 source_label: source_label.clone(),
+                posture,
                 presentation: observation.presentation.clone(),
                 diagnostics_summary: diagnostics_summary.clone(),
             }));
@@ -98,6 +103,7 @@ pub fn build_operator_events(observation: &LiveObservation) -> Vec<OperatorEvent
             events.push(OperatorEvent::SilentCheckpoint(SilentCheckpointEvent {
                 cursor: cursor.clone(),
                 source_label: source_label.clone(),
+                posture,
                 checkpoint_id: observation.presentation.checkpoint.checkpoint_id.clone(),
                 trigger: observation.event.trigger,
                 reason: reason.clone(),

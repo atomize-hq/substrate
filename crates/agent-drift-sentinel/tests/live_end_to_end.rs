@@ -2,12 +2,13 @@
 
 mod support;
 
+use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
 use camino::Utf8PathBuf;
 
 use agent_drift_sentinel::{
     emit_operator_events, execute, AdjudicationConfig, FixtureLiveCheckpointSource,
-    LiveCheckpointEvent, LiveRuntime, OperatorEvent, RecordingOperatorSink, SchedulerPolicy,
-    SentinelMode, SentinelRequest, WarningPolicy,
+    operator_surface::CheckpointPosture, LiveCheckpointEvent, LiveRuntime, OperatorEvent,
+    RecordingOperatorSink, SchedulerPolicy, SentinelMode, SentinelRequest, WarningPolicy,
 };
 
 #[test]
@@ -148,6 +149,123 @@ fn live_end_to_end_replay_and_live_surfaces_share_the_same_diagnostics_summary_f
     );
 }
 
+#[test]
+fn live_end_to_end_replay_and_live_surfaces_share_posture_for_transition_sequences() {
+    let checkpoints = vec![
+        checkpoint_with_drift(
+            "session-posture",
+            1,
+            DriftClass::TruthGroundingGap,
+            82,
+            true,
+            "align plan to repo truth",
+            &["flagged score for session-posture:1"],
+        ),
+        checkpoint_with_drift(
+            "session-posture",
+            2,
+            DriftClass::TruthGroundingGap,
+            20,
+            false,
+            "continue on the current task frame",
+            &["historical truth-grounding gap: flagged score for session-posture:1"],
+        ),
+        checkpoint_with_drift(
+            "session-posture",
+            3,
+            DriftClass::TruthGroundingGap,
+            20,
+            false,
+            "continue on the current task frame",
+            &["historical truth-grounding gap: flagged score for session-posture:1"],
+        ),
+    ];
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        checkpoints.clone(),
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live_active = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live active checkpoint");
+    let live_recovered = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live recovered checkpoint");
+    let live_historical_only = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            3,
+            checkpoints[2].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live historical-only checkpoint");
+
+    let replay_active = &replay.report.visible_warnings[0];
+    let replay_recovered = replay
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-posture:0002")
+        .expect("recovered replay checkpoint");
+    let replay_historical_only = replay
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-posture:0003")
+        .expect("historical-only replay checkpoint");
+
+    let live_active_event = match build_single_event(&live_active) {
+        OperatorEvent::VisibleWarning(event) => event,
+        other => panic!("expected visible warning event, got {other:?}"),
+    };
+    let live_recovered_event = match build_single_event(&live_recovered) {
+        OperatorEvent::SilentCheckpoint(event) => event,
+        other => panic!("expected silent checkpoint event, got {other:?}"),
+    };
+    let live_historical_only_event = match build_single_event(&live_historical_only) {
+        OperatorEvent::SilentCheckpoint(event) => event,
+        other => panic!("expected silent checkpoint event, got {other:?}"),
+    };
+
+    assert_eq!(replay_active.posture, Some(CheckpointPosture::Active));
+    assert_eq!(replay_recovered.posture, Some(CheckpointPosture::Recovered));
+    assert_eq!(
+        replay_historical_only.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+    assert_eq!(live_active_event.posture, replay_active.posture);
+    assert_eq!(live_recovered_event.posture, replay_recovered.posture);
+    assert_eq!(
+        live_historical_only_event.posture,
+        replay_historical_only.posture
+    );
+    assert!(live_recovered
+        .presentation
+        .render_console_block(None)
+        .contains("- Posture: recovered"));
+    assert!(live_historical_only
+        .presentation
+        .render_console_block(None)
+        .contains("- Posture: historical-only"));
+}
+
 fn fixture_path(name: &str) -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -161,4 +279,30 @@ fn build_single_event(observation: &agent_drift_sentinel::LiveObservation) -> Op
         .expect("emit operator events");
     assert_eq!(events.len(), 1);
     events.into_iter().next().expect("single event")
+}
+
+fn checkpoint_with_drift(
+    session_id: &str,
+    ordinal: usize,
+    class: DriftClass,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+    evidence_reasons: &[&str],
+) -> Checkpoint {
+    let mut checkpoint =
+        support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.flagged = flagged;
+    checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].raw_score = raw_score;
+    checkpoint.drift_scores[0].flagged = flagged;
+    checkpoint.drift_scores[0].evidence = evidence_reasons
+        .iter()
+        .map(|reason| EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: (*reason).to_string(),
+        })
+        .collect();
+    checkpoint.diagnostics.evidence_item_count = checkpoint.drift_scores[0].evidence.len();
+    checkpoint
 }

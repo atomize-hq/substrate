@@ -5,7 +5,9 @@ use crate::live_input::{
     verify_live_checkpoint_compatibility, LiveCheckpointCompatibility, LiveCheckpointEvent,
     LiveCheckpointSource, LiveInputError,
 };
-use crate::operator_surface::{present_checkpoint, CheckpointPresentation, WarningPolicy};
+use crate::operator_surface::{
+    present_checkpoint_with_previous, CheckpointPresentation, WarningPolicy,
+};
 use crate::scheduler::{
     EvaluationDecision, ReplayScheduler, SchedulerPolicy, SchedulerState, TriggerClass,
 };
@@ -56,6 +58,7 @@ pub enum LiveRuntimeError {
 pub struct LiveRuntime {
     scheduler: ReplayScheduler,
     warning_policy: WarningPolicy,
+    previous_checkpoint: Option<Checkpoint>,
     latest_checkpoint: Option<Checkpoint>,
     latest_compatibility: Option<LiveCheckpointCompatibility>,
     processed_events: usize,
@@ -67,6 +70,7 @@ impl LiveRuntime {
         Self {
             scheduler: ReplayScheduler::new(policy),
             warning_policy,
+            previous_checkpoint: None,
             latest_checkpoint: None,
             latest_compatibility: None,
             processed_events: 0,
@@ -94,7 +98,10 @@ impl LiveRuntime {
         &mut self,
         event: LiveCheckpointEvent,
     ) -> Result<LiveObservation, LiveRuntimeError> {
-        let (checkpoint, compatibility) = if let Some(checkpoint) = event.checkpoint.as_ref() {
+        let (checkpoint, previous_checkpoint, compatibility) = if let Some(checkpoint) =
+            event.checkpoint.as_ref()
+        {
+            let previous_checkpoint = self.latest_checkpoint.clone();
             let compatibility = verify_live_checkpoint_compatibility(checkpoint)?;
             if compatibility.cursor != event.cursor {
                 return Err(LiveRuntimeError::CursorMismatch {
@@ -105,9 +112,10 @@ impl LiveRuntime {
                     actual_ordinal: event.cursor.ordinal,
                 });
             }
+            self.previous_checkpoint = previous_checkpoint.clone();
             self.latest_checkpoint = Some(checkpoint.clone());
             self.latest_compatibility = Some(compatibility.clone());
-            (checkpoint.clone(), compatibility)
+            (checkpoint.clone(), previous_checkpoint, compatibility)
         } else {
             let checkpoint = self.latest_checkpoint.as_ref().cloned().ok_or_else(|| {
                 LiveRuntimeError::MissingCheckpoint {
@@ -130,7 +138,7 @@ impl LiveRuntime {
                     actual_ordinal: event.cursor.ordinal,
                 });
             }
-            (checkpoint, compatibility)
+            (checkpoint, self.previous_checkpoint.clone(), compatibility)
         };
 
         let decision = self.scheduler.observe(
@@ -139,8 +147,13 @@ impl LiveRuntime {
             checkpoint.flagged,
             Some(&compatibility.warning_fingerprint),
         );
-        let presentation =
-            present_checkpoint(&checkpoint, event.trigger, &decision, &self.warning_policy);
+        let presentation = present_checkpoint_with_previous(
+            &checkpoint,
+            previous_checkpoint.as_ref(),
+            event.trigger,
+            &decision,
+            &self.warning_policy,
+        );
 
         self.processed_events += 1;
         self.last_trigger = Some(event.trigger);

@@ -206,6 +206,44 @@ fn real_session_live_coordinator_keeps_polling_through_sparse_startup_until_anal
 }
 
 #[test]
+fn real_session_live_coordinator_surfaces_posture_in_live_presentations() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    let rollout_path = rollout_dir.join("rollout-session-live.jsonl");
+    fs::write(&rollout_path, first_rollout_phase()).expect("write first phase");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir,
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create coordinator");
+
+    let first_poll = coordinator.poll_once().expect("first poll");
+    let posture_observation = first_poll
+        .observations
+        .iter()
+        .find(|observation| observation.presentation.posture.is_some())
+        .expect("real-session live seam should surface posture-bearing presentations");
+
+    assert!(posture_observation
+        .presentation
+        .render_console_block(None)
+        .contains("- Posture: "));
+}
+
+#[test]
 fn real_session_live_coordinator_rejects_invalid_persisted_cursor_state() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
