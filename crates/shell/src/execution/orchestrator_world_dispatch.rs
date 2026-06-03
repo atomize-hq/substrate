@@ -1807,6 +1807,37 @@ fn classify_continue_world_worker_event(
         );
     }
 
+    if continue_world_worker_event_requires_exact_session_world_binding(event_class) {
+        let surfaced_orchestration_session_id = event.orchestration_session_id.trim();
+        if surfaced_orchestration_session_id != request.orchestration_session_id {
+            anyhow::bail!(
+                "protocol error: continue_world_worker surfaced worker event orchestration_session_id {} did not match targeted orchestration session {}",
+                surfaced_orchestration_session_id,
+                request.orchestration_session_id,
+            );
+        }
+
+        if let Some(surfaced_world_id) = event.world_id.as_deref().map(str::trim) {
+            if surfaced_world_id != request.world_id {
+                anyhow::bail!(
+                    "protocol error: continue_world_worker surfaced worker event world_id {} did not match targeted world {}",
+                    surfaced_world_id,
+                    request.world_id,
+                );
+            }
+        }
+
+        if let Some(surfaced_world_generation) = event.world_generation {
+            if surfaced_world_generation != request.world_generation {
+                anyhow::bail!(
+                    "protocol error: continue_world_worker surfaced worker event world_generation {} did not match targeted world generation {}",
+                    surfaced_world_generation,
+                    request.world_generation,
+                );
+            }
+        }
+    }
+
     let attention_required = event_class.attention_required_by_default()
         || continue_world_worker_attention_required(event).unwrap_or(false);
 
@@ -1820,6 +1851,18 @@ fn classify_continue_world_worker_event(
         stream_channel: event.channel.clone(),
         payload: continue_world_worker_event_payload(event),
     }))
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_event_requires_exact_session_world_binding(
+    event_class: ContinueWorldWorkerEventClassV1,
+) -> bool {
+    matches!(
+        event_class,
+        ContinueWorldWorkerEventClassV1::ApprovalRequest
+            | ContinueWorldWorkerEventClassV1::ForkRequest
+            | ContinueWorldWorkerEventClassV1::ForkRecommendation
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -3668,6 +3711,63 @@ mod tests {
             ),
             "unexpected error: {err}"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_rejects_packet_one_worker_event_session_or_world_binding_drift(
+    ) {
+        let submit = sample_continue_submit_request();
+        let cases = [
+            (
+                "approval_request",
+                substrate_common::agent_events::AgentEvent {
+                    orchestration_session_id: "sess_other".to_string(),
+                    ..sample_continue_stream_event(json!({
+                        "event_class": "approval_request",
+                        "payload": {
+                            "message": "requires approval"
+                        }
+                    }))
+                },
+                "orchestration_session_id sess_other did not match targeted orchestration session sess_dispatch",
+            ),
+            (
+                "fork_request",
+                substrate_common::agent_events::AgentEvent {
+                    world_id: Some("world-other".to_string()),
+                    ..sample_continue_stream_event(json!({
+                        "event_class": "fork_request",
+                        "payload": {
+                            "message": "please fork"
+                        }
+                    }))
+                },
+                "world_id world-other did not match targeted world world-17",
+            ),
+            (
+                "fork_recommendation",
+                substrate_common::agent_events::AgentEvent {
+                    world_generation: Some(9),
+                    ..sample_continue_stream_event(json!({
+                        "event_class": "fork_recommendation",
+                        "payload": {
+                            "message": "consider a child worker"
+                        }
+                    }))
+                },
+                "world_generation 9 did not match targeted world generation 2",
+            ),
+        ];
+
+        for (event_label, drifted, expected_error) in cases {
+            let err = classify_continue_world_worker_event(&submit, &drifted)
+                .expect_err("packet one worker-event session/world drift must fail closed");
+            assert!(
+                err.to_string().contains(expected_error),
+                "unexpected error for {event_label}: {err}"
+            );
+        }
     }
 
     #[cfg(target_os = "linux")]
