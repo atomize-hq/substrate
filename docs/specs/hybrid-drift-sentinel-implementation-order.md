@@ -529,6 +529,10 @@ Packet 18 note:
   shows the intended recovery shape: `0002` and `0003` still flag repeated-failure drift during
   the live burst, while `0004` clears back to `no flagged drift classes` after the clean
   verification interval.
+- `2026-06-03`: the next sentinel posture slice is intentionally split for focused sessions:
+  - `v0.5A.1`: posture contract plus replay presentation
+  - `v0.5A.2`: sink event wiring, replay/live parity, and real-session regression refresh
+  - `v0.5B`: real-session progress module and restart continuity hardening
 
 ## If You Want Fewer Packets
 
