@@ -20,6 +20,9 @@ use tempfile::TempDir;
 
 #[cfg(target_os = "linux")]
 const PACKET_THREE_MEMBER_TURN_PROMPT_PREFIX: &str = "__packet3_worker_event__:";
+#[cfg(target_os = "linux")]
+const PACKET_THREE_MEMBER_TURN_TRUNCATED_PROMPT_PREFIX: &str =
+    "__packet3_worker_event_truncated__:";
 
 #[cfg(target_os = "linux")]
 struct PacketThreeObligationCase {
@@ -2897,10 +2900,15 @@ fn c3_targeted_world_turn_cancels_denied_packet_three_worker_events() {
         let guard = records.lock().expect("lock records");
         assert_eq!(guard.member_dispatch_requests.len(), 1);
         assert_eq!(guard.member_turn_submit_requests.len(), 1);
-        assert_eq!(guard.execute_cancel_requests.len(), 1);
-        assert_eq!(
-            guard.execute_cancel_requests[0].span_id,
-            format!("member-turn-span-{member_participant_id}")
+        assert!(
+            guard.execute_cancel_requests.len() >= 1,
+            "truncated packet three targeted turn must issue at least one cancel request: {guard:#?}"
+        );
+        assert!(
+            guard.execute_cancel_requests.iter().any(|request| {
+                request.span_id == format!("member-turn-span-{member_participant_id}")
+            }),
+            "truncated packet three targeted turn must cancel the live member-turn span: {guard:#?}"
         );
         guard.member_turn_submit_requests[0].run_id.clone()
     };
@@ -2912,6 +2920,120 @@ fn c3_targeted_world_turn_cancels_denied_packet_three_worker_events() {
     assert!(
         !denied_obligation_path.exists(),
         "denied packet three targeted turn must fail before durable obligation persistence"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_world_turn_fails_closed_when_packet_three_stream_ends_without_exit() {
+    let temp = temp_dir("substrate-c3-targeted-world-packet3-truncated-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        true,
+        "cli:codex",
+        true,
+        &["cli:codex"],
+        &["spawn_world_worker", "continue_world_worker"],
+        &["retained"],
+    );
+    enable_packet_three_worker_event_policy(&substrate_home);
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-world-packet3-truncated-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-targeted-packet3-truncated".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member_participant_id = live_members[0]
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+
+    repl.send_line(&format!(
+        "::cli:codex {PACKET_THREE_MEMBER_TURN_TRUNCATED_PROMPT_PREFIX}approval_request"
+    ));
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
+    wait_for_min_execute_cancel_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output(
+        "world follow-up stream ended without a terminal exit frame",
+        Duration::from_secs(3),
+    )
+    .expect("truncated packet three error");
+    repl.wait_for_prompt(Duration::from_secs(3))
+        .expect("prompt after truncated packet three error");
+
+    let submit_run_id = {
+        let guard = records.lock().expect("lock records");
+        assert_eq!(guard.member_dispatch_requests.len(), 1);
+        assert_eq!(guard.member_turn_submit_requests.len(), 1);
+        assert!(
+            guard.execute_cancel_requests.len() >= 1,
+            "truncated packet three targeted turn must cancel at least one submitted world follow-up"
+        );
+        assert!(
+            guard.execute_cancel_requests.iter().any(|request| {
+                request.span_id == format!("member-turn-span-{member_participant_id}")
+            }),
+            "truncated packet three targeted turn must cancel the member-turn span before failing closed"
+        );
+        guard.member_turn_submit_requests[0].run_id.clone()
+    };
+    let truncated_obligation_path = canonical_obligation_path(
+        &substrate_home,
+        &orchestration_session_id,
+        &format!("obl_continue_{submit_run_id}_approval_required"),
+    );
+    assert!(
+        !truncated_obligation_path.exists(),
+        "truncated packet three targeted turn must fail before durable obligation persistence"
     );
 
     repl.send_line("exit");

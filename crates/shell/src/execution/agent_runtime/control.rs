@@ -25,8 +25,10 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use transport_api_types::ExecuteCancelRequestV1;
 #[cfg(target_os = "linux")]
-use transport_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame, MemberTurnSubmitRequestV1};
+use transport_api_types::{ExecuteStreamFrame, MemberTurnSubmitRequestV1};
 use uuid::Uuid;
 
 #[cfg(unix)]
@@ -179,7 +181,6 @@ pub(crate) struct SubmittedPromptCompletion {
     pub warning: Option<String>,
 }
 
-#[cfg(target_os = "linux")]
 pub(crate) async fn cancel_submitted_world_turn(
     client: &transport_api_client::AgentClient,
     span_id: Option<&str>,
@@ -187,12 +188,22 @@ pub(crate) async fn cancel_submitted_world_turn(
     let Some(span_id) = span_id.map(str::trim).filter(|span_id| !span_id.is_empty()) else {
         return;
     };
-    let _ = client
-        .cancel_execute(ExecuteCancelRequestV1 {
-            span_id: span_id.to_string(),
-            sig: "INT".to_string(),
-        })
-        .await;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        let _ = client
+            .cancel_execute(ExecuteCancelRequestV1 {
+                span_id: span_id.to_string(),
+                sig: "INT".to_string(),
+            })
+            .await;
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = client;
+        let _ = span_id;
+    }
 }
 
 #[allow(dead_code)]
@@ -2078,11 +2089,19 @@ where
         }
     }
 
+    let exit_code = observed_exit.ok_or_else(|| {
+        anyhow::anyhow!(
+            "substrate: error: world follow-up stream ended without a terminal exit frame"
+        )
+    });
+    if exit_code.is_err() {
+        cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
+    }
+    let exit_code = exit_code?;
     if let Some(worker_event) = surfaced_worker_event.as_ref() {
         persist_continue_world_worker_obligation(&runtime.store, &request, worker_event)
             .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
     }
-    let exit_code = observed_exit.unwrap_or(0);
     Ok(SubmittedPromptCompletion {
         exit_code,
         warning: warning_for_exit_code(exit_code),

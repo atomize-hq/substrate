@@ -108,6 +108,8 @@ pub struct ReplWorldAgentStub {
 }
 
 const PACKET_THREE_MEMBER_TURN_PROMPT_PREFIX: &str = "__packet3_worker_event__:";
+const PACKET_THREE_MEMBER_TURN_TRUNCATED_PROMPT_PREFIX: &str =
+    "__packet3_worker_event_truncated__:";
 
 fn assert_member_dispatch_capture(dispatch: &transport_api_types::MemberDispatchRequestV1) {
     assert!(
@@ -385,6 +387,13 @@ impl ReplWorldAgentStub {
                 fn packet_three_member_turn_event_class(prompt: &str) -> Option<&str> {
                     prompt
                         .strip_prefix(PACKET_THREE_MEMBER_TURN_PROMPT_PREFIX)
+                        .map(str::trim)
+                        .filter(|event_class| !event_class.is_empty())
+                }
+
+                fn packet_three_member_turn_truncated_event_class(prompt: &str) -> Option<&str> {
+                    prompt
+                        .strip_prefix(PACKET_THREE_MEMBER_TURN_TRUNCATED_PROMPT_PREFIX)
                         .map(str::trim)
                         .filter(|event_class| !event_class.is_empty())
                 }
@@ -724,6 +733,21 @@ impl ReplWorldAgentStub {
                             },
                         )
                         .await;
+                        if let Some(event_class) =
+                            packet_three_member_turn_truncated_event_class(parsed.prompt.as_str())
+                        {
+                            write_chunked_frame(
+                                &mut stream,
+                                &build_member_turn_packet_three_event(
+                                    &parsed,
+                                    event_class,
+                                    &span_id,
+                                ),
+                            )
+                            .await;
+                            finish_chunked_stream(&mut stream).await;
+                            continue;
+                        }
                         if let Some(event_class) =
                             packet_three_member_turn_event_class(parsed.prompt.as_str())
                         {

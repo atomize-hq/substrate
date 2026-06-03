@@ -6673,7 +6673,7 @@ async fn submit_world_targeted_turn(
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut active_span_id = None::<String>;
-    let mut exit_code = 0;
+    let mut exit_code = None::<i32>;
     let mut surfaced_worker_event = None;
     while let Some(frame) = body.as_mut().frame().await {
         let frame = match frame {
@@ -6733,7 +6733,7 @@ async fn submit_world_targeted_turn(
                     agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
-                    exit_code = exit;
+                    exit_code = Some(exit);
                 }
                 ExecuteStreamFrame::Error { message } => {
                     cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
@@ -6742,6 +6742,13 @@ async fn submit_world_targeted_turn(
             }
         }
     }
+    let exit_code = exit_code.ok_or_else(|| {
+        anyhow!("substrate: error: world follow-up stream ended without a terminal exit frame")
+    });
+    if exit_code.is_err() {
+        cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
+    }
+    let exit_code = exit_code?;
     if let Some(worker_event) = surfaced_worker_event.as_ref() {
         persist_continue_world_worker_obligation(&runtime.store, &request, worker_event)
             .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
