@@ -588,6 +588,51 @@ fn export_bundle_dedupes_duplicate_evidence_items_in_checkpoint_diagnostics() {
     assert!(summary.contains("Average evidence items per checkpoint: `2.00`"));
 }
 
+#[test]
+fn build_session_checkpoint_preserves_requested_ordinal_when_out_of_range() {
+    let session = fixture_session(
+        "session-out-of-range",
+        vec![
+            fixture_row(
+                "session-out-of-range",
+                0,
+                CompactionKind::UserMessage,
+                "/goal Out of range",
+                Some(UserMessageRole::Prompt),
+            ),
+            fixture_row(
+                "session-out-of-range",
+                1,
+                CompactionKind::ToolCall,
+                "{\"command\":\"cargo test\"}",
+                None,
+            ),
+        ],
+    );
+    let task_frame = TaskFrame {
+        objective: "Preserve helper behavior".to_string(),
+        confidence: Confidence::Medium,
+        truth_artifacts: vec!["docs/spec.md".to_string()],
+        working_set_paths: vec!["src/lib.rs".to_string()],
+        tools: vec!["functions.shell_command".to_string()],
+        command_families: vec!["cargo".to_string()],
+        verification_commands: vec!["cargo test".to_string()],
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    };
+
+    let checkpoint = build_session_checkpoint(&session, 99, &task_frame, Vec::new());
+
+    assert_eq!(checkpoint.ordinal, 99);
+    assert_eq!(checkpoint.checkpoint_id, "session-out-of-range:0099");
+    assert_eq!(checkpoint.boundary.end.event_index, 1);
+    assert_eq!(checkpoint.diagnostics.interval_command_count, 1);
+    assert_eq!(
+        checkpoint.diagnostics.interval_verification_command_count,
+        1
+    );
+}
+
 fn assert_optional_metric_eq(actual: Option<f64>, expected: f64) {
     let actual = actual.expect("metric should be available");
     assert!(

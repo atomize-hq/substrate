@@ -223,7 +223,8 @@ Must be true:
 
 - `CheckpointAnalysis` exists
 - diagnostics consume it
-- no scorer-facing time semantics live only in ad hoc helper logic anymore
+- checkpoint-diagnostics time semantics now live in `CheckpointAnalysis`, while scorer-semantic
+  changes remain deferred to `v0.4B` and `v0.4C`
 
 Verify:
 

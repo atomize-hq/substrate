@@ -102,14 +102,28 @@ pub(crate) fn build_session_checkpoint_from_analysis(
     task_frame: &TaskFrame,
     drift_scores: Vec<DriftScore>,
 ) -> Checkpoint {
+    build_session_checkpoint_from_analysis_with_ordinal(
+        analysis,
+        analysis.ordinal,
+        task_frame,
+        drift_scores,
+    )
+}
+
+fn build_session_checkpoint_from_analysis_with_ordinal(
+    analysis: &CheckpointAnalysis,
+    ordinal: usize,
+    task_frame: &TaskFrame,
+    drift_scores: Vec<DriftScore>,
+) -> Checkpoint {
     let boundary = checkpoint_boundary(&analysis.current.window);
     let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
     Checkpoint {
         schema_version: "v0.2".to_string(),
         session_id: analysis.session_id.clone(),
-        checkpoint_id: format!("{}:{:04}", analysis.session_id, analysis.ordinal),
-        ordinal: analysis.ordinal,
+        checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
+        ordinal,
         boundary,
         diagnostics,
         task_frame: task_frame.clone(),
@@ -125,16 +139,17 @@ pub fn build_session_checkpoint(
     task_frame: &TaskFrame,
     drift_scores: Vec<DriftScore>,
 ) -> Checkpoint {
-    let analysis = checkpoint_analyses(session)
-        .into_iter()
-        .nth(ordinal.saturating_sub(1))
+    let analyses = checkpoint_analyses(session);
+    let analysis = analyses
+        .get(ordinal.checked_sub(1).unwrap_or(usize::MAX))
+        .or_else(|| analyses.last())
         .unwrap_or_else(|| {
             panic!(
-                "checkpoint ordinal {ordinal} is out of range for session {}",
+                "session {} must contain at least one checkpoint window",
                 session.session_id
             )
         });
-    build_session_checkpoint_from_analysis(&analysis, task_frame, drift_scores)
+    build_session_checkpoint_from_analysis_with_ordinal(analysis, ordinal, task_frame, drift_scores)
 }
 
 fn checkpoint_diagnostics_from_analysis(
