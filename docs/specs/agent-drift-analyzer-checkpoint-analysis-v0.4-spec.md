@@ -81,9 +81,9 @@ Targeted analyzer validation:
 ```bash
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 cargo test -p agent-drift-analyzer wrong_plan_branch -- --nocapture
-cargo test -p agent-drift-analyzer ignoring_repo_truth -- --nocapture
 cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
 cargo test -p agent-drift-analyzer export_bundle -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
 Focused sentinel compatibility validation:
@@ -139,6 +139,35 @@ crates/agent-drift-analyzer/src/checkpoint/export.rs
 crates/agent-drift-analyzer/tests/
   Regression coverage for checkpoint semantics, class behavior, and export compatibility.
 ```
+
+## Code Style
+
+Keep the analyzer library-first and make time semantics explicit in types instead of reconstructing
+them ad hoc inside scorers.
+
+```rust
+pub struct CheckpointAnalysis {
+    pub session_id: String,
+    pub ordinal: usize,
+    pub current: CheckpointSlice,
+    pub previous: Option<CheckpointSlice>,
+    pub interval: IntervalSlice,
+    pub repetition: RepetitionSlice,
+    pub task_frame_delta: TaskFrameDelta,
+    pub recovery: RecoveryState,
+}
+```
+
+Conventions:
+
+- prefer explicit structs over tuple-like helper return values when carrying checkpoint semantics
+- keep scorer interfaces narrow and semantic; pass `CheckpointAnalysis` or its dedicated slices
+  instead of raw `BundleSession` plus loosely related helpers
+- keep exported checkpoint changes additive or deferred; deepen the internal module before widening
+  the external contract
+- name drift classes after what the analyzer can actually prove, not stronger intent claims
+- keep historical versus current evidence explicit in reason strings when both must coexist in the
+  exported payload
 
 ## Design Summary
 
@@ -490,6 +519,51 @@ Required test layers:
 6. bounded real-session proof
    - the known sticky late-session case no longer reports active `WrongPlanBranch` after recovery
 
+Framework and coverage expectations:
+
+- keep unit-style helpers beside the checkpoint-analysis module where the semantics are easiest to
+  isolate
+- keep integration coverage in `crates/agent-drift-analyzer/tests/`
+- rerun sentinel reader/regression surfaces whenever checkpoint semantics or class names change
+- require one bounded real-session proof for the sticky late-session scenario before calling the
+  slice complete
+
+## Boundaries
+
+- Always:
+  - keep the spec, plan, and tasks docs aligned before implementation starts
+  - preserve deterministic checkpoint ordering and session ordering
+  - route checkpoint diagnostics and drift scoring through the same `CheckpointAnalysis` time
+    semantics
+  - preserve explicit historical evidence when active flags clear
+  - rerun analyzer and sentinel validation before closing the slice
+- Ask first:
+  - widening the external `Checkpoint` schema beyond additive/internal-first changes
+  - adding new drift classes beyond `WrongPlanBranch`, `TruthGroundingGap`, and `DeadEndThrash`
+  - changing checkpoint segmentation rules instead of only changing checkpoint analysis semantics
+  - changing sentinel scheduler/debounce policy as part of this analyzer slice
+- Never:
+  - reintroduce cumulative-prefix semantics into current-state drift classes after this slice lands
+  - claim intent-based `ignored known truth` behavior from the current heuristic evidence
+  - hide historical incidents by deleting evidence instead of marking it historical
+  - broaden into shell/world/shim integration in this slice
+
+## Success Criteria
+
+- `CheckpointAnalysis` exists as the internal source of truth for checkpoint time semantics.
+- `WrongPlanBranch` reads interval-local scope evidence and clears when the latest interval is back
+  in scope.
+- `IgnoringRepoTruth` is renamed to `TruthGroundingGap` and the renamed class reflects grounding
+  heuristics rather than intent claims.
+- `TruthGroundingGap` becomes hybrid: active from the latest interval, historical evidence
+  preserved explicitly.
+- `DeadEndThrash` uses repetition history plus explicit recovery semantics and clears after one
+  clean verification interval.
+- The external `Checkpoint` contract remains readable by sentinel consumers in the first
+  implementation pass.
+- The known sticky late-session real-session proof no longer reports active late checkpoints solely
+  because of earlier prefix behavior.
+
 ## Non-Goals
 
 This slice does not:
@@ -510,3 +584,16 @@ This slice does not:
 - make `DeadEndThrash` a historical class with explicit recovery semantics
 - clear active `TruthGroundingGap` and `DeadEndThrash` after one clean verification interval
 - preserve historical evidence with explicit historical reasons instead of hiding it
+
+## Open Questions
+
+- Should the renamed class land in one packet with the internal `CheckpointAnalysis` seam, or after
+  the seam is first proven with no behavior change?
+  - Current recommendation: allow the docs to lock both now, but implement the seam first.
+- Should exported drift-score evidence preserve current-first ordering when historical reasons are
+  appended?
+  - Current recommendation: yes, current evidence first and historical evidence second.
+- Does the bounded sticky-session proof need a dedicated analyzer fixture in addition to the real
+  session artifact already cited in the handoff chain?
+  - Current recommendation: yes for regression stability, but it is not required to validate the
+    spec itself.
