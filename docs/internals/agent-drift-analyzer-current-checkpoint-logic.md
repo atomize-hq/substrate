@@ -275,7 +275,9 @@ flowchart TD
 
 Current behavior: this scorer still reads repetition-preserving archival history from the current
 checkpoint prefix, but active flagging is gated by explicit recovery state from the latest
-interval.
+interval. A latest interval only counts as clean recovery when it includes verification-like work,
+does not add new repeated-loop evidence, and does not keep issuing out-of-scope write or
+verification commands.
 
 ```mermaid
 flowchart TD

@@ -328,8 +328,8 @@ Packet 10A note:
   session block still reports `Distinct task frames: 15`, `Truth artifacts referenced: 4`, and
   `Verification commands observed: 0`.
 - after the `v0.4` checkpoint-analysis follow-up, late checkpoints should clear active
-  `dead_end_thrash` after one clean verification interval while preserving the earlier loop
-  evidence as explicitly historical reasons in `checkpoints.jsonl`
+  `dead_end_thrash` only after one clean in-scope verification interval while preserving the
+  earlier loop evidence as explicitly historical reasons in `checkpoints.jsonl`
 
 ### Packet 10B: Compactor bundle contract v0.2
 

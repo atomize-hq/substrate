@@ -246,7 +246,7 @@ Expected success signatures:
 - each checkpoint includes `schema_version`, `checkpoint_id`, `boundary`, `diagnostics`,
   `task_frame`, `drift_scores`, and `expected_next_step`
 - recovered late checkpoints may keep explicit historical drift evidence while clearing the active
-  `dead_end_thrash` flag after one clean verification interval
+  `dead_end_thrash` flag only after one clean in-scope verification interval
 
 ## 3. Agent Drift Sentinel Replay
 

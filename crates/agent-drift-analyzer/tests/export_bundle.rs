@@ -216,8 +216,31 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
 }
 
 #[test]
-fn export_bundle_preserves_historical_dead_end_thrash_evidence_after_recovery() {
+fn export_bundle_keeps_dead_end_thrash_active_when_recovery_interval_stays_out_of_scope() {
     let fixture = BundleFixture::sample();
+    let result = agent_drift_analyzer::analyze_bundle(&agent_drift_analyzer::AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze sample bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let recovered = checkpoints[1]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::DeadEndThrash)
+        .expect("recovered dead end thrash score");
+
+    assert!(recovered.flagged);
+    assert!(recovered.raw_score >= 60);
+    assert!(recovered
+        .evidence
+        .iter()
+        .any(|item| item.reason == "repeated failure evidence"));
+}
+
+#[test]
+fn export_bundle_preserves_historical_dead_end_thrash_evidence_after_clean_recovery() {
+    let fixture = BundleFixture::clean_recovery();
     let result = agent_drift_analyzer::analyze_bundle(&agent_drift_analyzer::AnalyzeRequest {
         input_dir: fixture.input_dir.clone(),
         output_dir: fixture.output_dir.clone(),

@@ -94,7 +94,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
         let interval = interval_slice(previous.as_ref(), &current);
         let repetition = repetition_slice(&current);
         let task_frame_delta = task_frame_delta(previous.as_ref(), &current);
-        let recovery = recovery_state(&interval, &repetition);
+        let recovery = recovery_state(&current, &interval, &repetition);
 
         analyses.push(CheckpointAnalysis {
             session_id: current.window.session_id.clone(),
@@ -207,7 +207,12 @@ fn repetition_slice(current: &CheckpointSlice) -> RepetitionSlice {
     }
 
     let mut repeated_failures = BTreeMap::<String, Vec<EvidenceRef>>::new();
-    for row in current.window.archival_rows.iter().filter(|row| is_failure_row(row)) {
+    for row in current
+        .window
+        .archival_rows
+        .iter()
+        .filter(|row| is_failure_row(row))
+    {
         repeated_failures
             .entry(row.text_hash_hex.clone())
             .or_default()
@@ -256,13 +261,18 @@ fn task_frame_delta(
     }
 }
 
-fn recovery_state(interval: &IntervalSlice, repetition: &RepetitionSlice) -> RecoveryState {
+fn recovery_state(
+    current: &CheckpointSlice,
+    interval: &IntervalSlice,
+    repetition: &RepetitionSlice,
+) -> RecoveryState {
     let interval_verification_command_count = interval
         .command_observations
         .iter()
         .filter(|command| command.verification_like)
         .count();
     let clean_verification_interval = interval_verification_command_count > 0
+        && !preserves_out_of_scope_thrash(current, interval)
         && !verification_loops_touch_interval(&repetition.repeated_verification_loops, interval)
         && !failure_loops_touch_interval(&repetition.repeated_failure_loops, interval);
 
@@ -273,6 +283,34 @@ fn recovery_state(interval: &IntervalSlice, repetition: &RepetitionSlice) -> Rec
             && (!repetition.repeated_verification_loops.is_empty()
                 || !repetition.repeated_failure_loops.is_empty()),
     }
+}
+
+fn preserves_out_of_scope_thrash(current: &CheckpointSlice, interval: &IntervalSlice) -> bool {
+    let mut expected = current.task_frame.truth_artifacts.clone();
+    expected.extend(
+        current
+            .context
+            .working_set_paths
+            .iter()
+            .filter(|path| path.source != "observed_command")
+            .map(|path| path.path.clone()),
+    );
+    expected.sort();
+    expected.dedup();
+
+    interval.command_observations.iter().any(|command| {
+        if command.paths.is_empty() || (!command.write_like && !command.verification_like) {
+            return false;
+        }
+
+        !command.paths.iter().all(|path| {
+            expected.iter().any(|expected_path| {
+                path == expected_path
+                    || path.starts_with(expected_path)
+                    || expected_path.starts_with(path)
+            })
+        })
+    })
 }
 
 fn verification_loops_touch_interval(

@@ -26,6 +26,14 @@ impl BundleFixture {
         )
     }
 
+    pub fn clean_recovery() -> Self {
+        Self::from_rows(
+            sample_clean_recovery_archival_rows(),
+            sample_clean_recovery_compact_rows(),
+            sample_dedupe_groups(),
+        )
+    }
+
     pub fn from_rows(
         archival_rows: Vec<CompactionRow>,
         compact_rows: Vec<CompactionRow>,
@@ -85,6 +93,15 @@ pub fn analyze_sample_bundle() -> agent_drift_analyzer::AnalyzeResult {
         output_dir: fixture.output_dir.clone(),
     })
     .expect("analyze sample bundle")
+}
+
+pub fn analyze_clean_recovery_bundle() -> agent_drift_analyzer::AnalyzeResult {
+    let fixture = BundleFixture::clean_recovery();
+    analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze clean recovery bundle")
 }
 
 pub fn load_sample_bundle() -> InputBundle {
@@ -337,6 +354,22 @@ fn sample_archival_rows() -> Vec<CompactionRow> {
 
 fn sample_compact_rows() -> Vec<CompactionRow> {
     sample_archival_rows()
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| !matches!(index, 4 | 7))
+        .map(|(_, row)| row)
+        .collect()
+}
+
+fn sample_clean_recovery_archival_rows() -> Vec<CompactionRow> {
+    sample_archival_rows()
+        .into_iter()
+        .filter(|row| row.event_index != 12)
+        .collect()
+}
+
+fn sample_clean_recovery_compact_rows() -> Vec<CompactionRow> {
+    sample_clean_recovery_archival_rows()
         .into_iter()
         .enumerate()
         .filter(|(index, _)| !matches!(index, 4 | 7))
