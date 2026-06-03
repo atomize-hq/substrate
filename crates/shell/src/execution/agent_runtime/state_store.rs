@@ -1366,7 +1366,7 @@ impl AgentRuntimeStateStore {
         Ok(obligation)
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
     pub(crate) fn prepare_internal_continue_approval_response_closeout_for_delivery(
         &self,
         orchestration_session_id: &str,
@@ -1387,7 +1387,7 @@ impl AgentRuntimeStateStore {
         )
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
     pub(crate) fn close_internal_continue_approval_response_after_delivery(
         &self,
         closeout: &PreparedInternalApprovalResponseObligationCloseout,
