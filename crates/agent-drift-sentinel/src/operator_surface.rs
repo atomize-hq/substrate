@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
@@ -213,11 +213,20 @@ pub fn render_replay_report(
     let mut previous_by_session = HashMap::new();
     let mut visible_warnings = Vec::new();
     let mut silent_checkpoints = Vec::new();
+    let included_checkpoint_ids = checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.checkpoint_id.as_str())
+        .collect::<HashSet<_>>();
 
-    for checkpoint in checkpoints {
+    for checkpoint in &bundle.checkpoints {
         let previous_checkpoint = previous_by_session
             .get(checkpoint.session_id.as_str())
             .copied();
+        previous_by_session.insert(checkpoint.session_id.as_str(), checkpoint);
+        if !included_checkpoint_ids.contains(checkpoint.checkpoint_id.as_str()) {
+            continue;
+        }
+
         let cursor = CheckpointCursor::from(checkpoint);
         let fingerprint = warning_fingerprint(checkpoint);
         let trigger = if checkpoint.flagged {
@@ -237,7 +246,6 @@ pub fn render_replay_report(
             WarningDisposition::Visible => visible_warnings.push(presentation),
             WarningDisposition::Silent { .. } => silent_checkpoints.push(presentation),
         }
-        previous_by_session.insert(checkpoint.session_id.as_str(), checkpoint);
     }
 
     let next_cursor = checkpoints.last().map(CheckpointCursor::from);

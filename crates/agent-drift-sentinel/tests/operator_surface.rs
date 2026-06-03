@@ -5,9 +5,7 @@ mod support;
 use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
 use agent_drift_sentinel::{
     execute,
-    operator_surface::{
-        present_checkpoint_with_previous, warning_fingerprint, CheckpointPosture,
-    },
+    operator_surface::{present_checkpoint_with_previous, warning_fingerprint, CheckpointPosture},
     scheduler::ReplayScheduler,
     AdjudicationConfig, SchedulerPolicy, SentinelMode, SentinelRequest, TriggerClass,
     WarningPolicy,
@@ -141,8 +139,11 @@ fn operator_surface_classifies_active_recovered_and_historical_only_posture() {
         .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-posture:0002")
         .expect("recovered checkpoint");
     assert_eq!(recovered.posture, Some(CheckpointPosture::Recovered));
-    assert!(recovered.evidence_lines.iter().any(|line| line
-        .contains("historical truth-grounding gap: flagged score for session-posture:1")));
+    assert!(recovered
+        .evidence_lines
+        .iter()
+        .any(|line| line
+            .contains("historical truth-grounding gap: flagged score for session-posture:1")));
     let historical_only = result
         .report
         .silent_checkpoints
@@ -153,15 +154,87 @@ fn operator_surface_classifies_active_recovered_and_historical_only_posture() {
         historical_only.posture,
         Some(CheckpointPosture::HistoricalOnly)
     );
-    assert!(historical_only.evidence_lines.iter().any(|line| line
-        .contains("historical truth-grounding gap: flagged score for session-posture:1")));
+    assert!(historical_only
+        .evidence_lines
+        .iter()
+        .any(|line| line
+            .contains("historical truth-grounding gap: flagged score for session-posture:1")));
 
     let rendered = result.report.to_console_text();
     assert!(rendered.contains("- Posture: active"));
     assert!(rendered.contains("- Posture: recovered"));
     assert!(rendered.contains("- Posture: historical-only"));
-    assert!(rendered
-        .contains("historical truth-grounding gap: flagged score for session-posture:1"));
+    assert!(
+        rendered.contains("historical truth-grounding gap: flagged score for session-posture:1")
+    );
+}
+
+#[test]
+fn operator_surface_preserves_recovered_posture_when_replay_resumes_after_cursor() {
+    let fixture = support::ReplayFixture::from_checkpoints(
+        vec![
+            checkpoint_with_drift(
+                "session-posture",
+                1,
+                DriftClass::TruthGroundingGap,
+                82,
+                true,
+                "align plan to repo truth",
+                &["flagged score for session-posture:1"],
+            ),
+            checkpoint_with_drift(
+                "session-posture",
+                2,
+                DriftClass::TruthGroundingGap,
+                20,
+                false,
+                "continue on the current task frame",
+                &["historical truth-grounding gap: flagged score for session-posture:1"],
+            ),
+            checkpoint_with_drift(
+                "session-posture",
+                3,
+                DriftClass::TruthGroundingGap,
+                20,
+                false,
+                "continue on the current task frame",
+                &["historical truth-grounding gap: flagged score for session-posture:1"],
+            ),
+        ],
+        support::sample_summary(),
+    );
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: Some(agent_drift_sentinel::CheckpointCursor {
+            session_id: "session-posture".to_string(),
+            ordinal: 1,
+        }),
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    assert_eq!(result.report.visible_warnings.len(), 0);
+    let recovered = result
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-posture:0002")
+        .expect("recovered checkpoint after cursor");
+    assert_eq!(recovered.posture, Some(CheckpointPosture::Recovered));
+
+    let historical_only = result
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-posture:0003")
+        .expect("historical-only checkpoint after cursor");
+    assert_eq!(
+        historical_only.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
 }
 
 #[test]
@@ -237,8 +310,11 @@ fn operator_surface_public_previous_aware_presenter_can_render_recovered_posture
     );
 
     assert_eq!(presentation.posture, Some(CheckpointPosture::Recovered));
-    assert!(presentation.evidence_lines.iter().any(|line| line
-        .contains("historical truth-grounding gap: flagged score for session-public:1")));
+    assert!(presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line
+            .contains("historical truth-grounding gap: flagged score for session-public:1")));
 }
 
 fn checkpoint_with_drift(
