@@ -1786,9 +1786,18 @@ fn classify_continue_world_worker_event(
         event_class
     };
 
-    let source_participant_id =
-        continue_world_worker_identity_field(event.participant_id.as_deref())
-            .unwrap_or(&request.participant_id);
+    let requires_exact_session_world_binding =
+        continue_world_worker_event_requires_exact_session_world_binding(event_class);
+
+    let source_participant_id = continue_world_worker_identity_field(event.participant_id.as_deref())
+        .or_else(|| {
+            (!requires_exact_session_world_binding).then_some(request.participant_id.as_str())
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "protocol error: continue_world_worker surfaced packet one worker request without participant_id"
+            )
+        })?;
     if source_participant_id != request.participant_id {
         anyhow::bail!(
             "protocol error: continue_world_worker surfaced worker event participant_id {} did not match targeted retained worker {}",
@@ -1798,7 +1807,12 @@ fn classify_continue_world_worker_event(
     }
 
     let source_backend_id = continue_world_worker_identity_field(event.backend_id.as_deref())
-        .unwrap_or(&request.backend_id);
+        .or_else(|| (!requires_exact_session_world_binding).then_some(request.backend_id.as_str()))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "protocol error: continue_world_worker surfaced packet one worker request without backend_id"
+            )
+        })?;
     if source_backend_id != request.backend_id {
         anyhow::bail!(
             "protocol error: continue_world_worker surfaced worker event backend_id {} did not match targeted backend {}",
@@ -1807,7 +1821,7 @@ fn classify_continue_world_worker_event(
         );
     }
 
-    if continue_world_worker_event_requires_exact_session_world_binding(event_class) {
+    if requires_exact_session_world_binding {
         let surfaced_orchestration_session_id = event.orchestration_session_id.trim();
         if surfaced_orchestration_session_id != request.orchestration_session_id {
             anyhow::bail!(
@@ -1817,24 +1831,35 @@ fn classify_continue_world_worker_event(
             );
         }
 
-        if let Some(surfaced_world_id) = event.world_id.as_deref().map(str::trim) {
-            if surfaced_world_id != request.world_id {
-                anyhow::bail!(
-                    "protocol error: continue_world_worker surfaced worker event world_id {} did not match targeted world {}",
-                    surfaced_world_id,
-                    request.world_id,
-                );
-            }
+        let surfaced_world_id = event
+            .world_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "protocol error: continue_world_worker surfaced packet one worker request without world_id"
+                )
+            })?;
+        if surfaced_world_id != request.world_id {
+            anyhow::bail!(
+                "protocol error: continue_world_worker surfaced worker event world_id {} did not match targeted world {}",
+                surfaced_world_id,
+                request.world_id,
+            );
         }
 
-        if let Some(surfaced_world_generation) = event.world_generation {
-            if surfaced_world_generation != request.world_generation {
-                anyhow::bail!(
-                    "protocol error: continue_world_worker surfaced worker event world_generation {} did not match targeted world generation {}",
-                    surfaced_world_generation,
-                    request.world_generation,
-                );
-            }
+        let surfaced_world_generation = event.world_generation.ok_or_else(|| {
+            anyhow::anyhow!(
+                "protocol error: continue_world_worker surfaced packet one worker request without world_generation"
+            )
+        })?;
+        if surfaced_world_generation != request.world_generation {
+            anyhow::bail!(
+                "protocol error: continue_world_worker surfaced worker event world_generation {} did not match targeted world generation {}",
+                surfaced_world_generation,
+                request.world_generation,
+            );
         }
     }
 
@@ -3767,6 +3792,62 @@ mod tests {
                 err.to_string().contains(expected_error),
                 "unexpected error for {event_label}: {err}"
             );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_rejects_packet_one_worker_events_missing_explicit_identity_or_world_binding(
+    ) {
+        let submit = sample_continue_submit_request();
+
+        for event_label in ["approval_request", "fork_request", "fork_recommendation"] {
+            let base = sample_continue_stream_event(json!({
+                "event_class": event_label,
+                "payload": {
+                    "message": "packet one request"
+                }
+            }));
+            let cases = [
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        participant_id: None,
+                        ..base.clone()
+                    },
+                    "without participant_id",
+                ),
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        backend_id: None,
+                        ..base.clone()
+                    },
+                    "without backend_id",
+                ),
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        world_id: None,
+                        ..base.clone()
+                    },
+                    "without world_id",
+                ),
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        world_generation: None,
+                        ..base.clone()
+                    },
+                    "without world_generation",
+                ),
+            ];
+
+            for (event, expected_error) in cases {
+                let err = classify_continue_world_worker_event(&submit, &event).expect_err(
+                    "packet one worker events must fail closed when fields are omitted",
+                );
+                assert!(
+                    err.to_string().contains(expected_error),
+                    "unexpected error for {event_label}: {err}"
+                );
+            }
         }
     }
 
