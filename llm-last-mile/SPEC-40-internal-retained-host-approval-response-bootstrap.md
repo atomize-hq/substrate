@@ -11,7 +11,9 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-durable-orchestration-obligation-ledger.md](./DESIGN-durable-orchestration-obligation-ledger.md)  
 Phase: `SPECIFY`  
-Status: proposed on `2026-06-03`
+Status: implemented on `2026-06-03`
+Landed posture note: typed host `approval_response` delivery over the existing `continue_world_worker` seam, deny-by-default approval-response policy gating, and exact post-delivery approval-obligation closeout are landed in the repo, but broader host control/fork directives, active-ephemeral exact task-identity widening, public approval UX, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and no broader host-response/control, active-ephemeral identity, transport redesign, or Family-2 work was reopened.
 
 ## Assumptions
 
@@ -51,10 +53,10 @@ Primary runtime story:
 
 Current landed runtime note:
 
-1. the live `continue_world_worker` request payload still carries only prompt text plus optional `thread_id`,
-2. the live worker-event classifier still treats `approval_response`, `fork_command`, `control_directive`, and `control_ack` as deferred wire labels,
-3. the live transport submit seam still carries a single prompt string rather than a typed host-message envelope,
-4. the live obligation ledger already supports explicit review states and resolved timestamps,
+1. the live `continue_world_worker` request payload now accepts either free-form prompt text plus optional `thread_id` or a typed `approval_response` payload bound to exact approval causation,
+2. the live retained-worker event classifier still treats worker-originated `approval_response`, `fork_command`, `control_directive`, and `control_ack` as deferred wire labels,
+3. the live transport submit seam still carries a single prompt string rather than a typed host-message envelope, so typed host approval responses compile onto that prompt seam through a canonical renderer,
+4. the live policy model now exposes a dedicated deny-by-default host approval-response gate at `agents.world_dispatch.obligations.approval_response_allowed`, and the live obligation ledger closes matching `ApprovalRequired` records only after successful delivery,
 5. the live repo still has no typed active-ephemeral `task_run_id`, so active-ephemeral inspect/cancel widening remains separate later work.
 
 ## Tech Stack

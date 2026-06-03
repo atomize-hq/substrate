@@ -3,7 +3,9 @@
 Source spec: [SPEC-40-internal-retained-host-approval-response-bootstrap.md](./SPEC-40-internal-retained-host-approval-response-bootstrap.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: first post-Slice-39 host-response widening slice  
-Status: proposed on `2026-06-03`
+Status: implemented on `2026-06-03`
+Landed posture note: typed host `approval_response` delivery over `continue_world_worker`, deny-by-default approval-response policy gating, exact approval-obligation binding, and deterministic post-delivery closeout are landed repo-wide, but broader host control/fork directives, active-ephemeral exact task-identity widening, public approval UX, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and the landed slice stayed bounded to typed host approval-response bootstrap over the existing prompt seam.
 
 ## Objective
 
@@ -37,14 +39,14 @@ What the repo already has:
 4. exact retained-worker targeting and world-binding validation through `continue_world_worker`,
 5. a live member-turn submit seam that already delivers exact retained follow-up prompts.
 
-What the repo still lacks after Slice `39`:
+What the repo lacked before Packets `1` through `3` landed was:
 
 1. a typed host-side approval-response contract at the dispatch boundary,
 2. explicit deny-by-default policy truth for that typed host response,
 3. sanctioned approval-obligation consumer behavior on the live host control-plane path,
 4. regression coverage proving delivery ordering and obligation closeout semantics.
 
-The narrowest honest implementation order is:
+The narrowest honest implementation order was:
 
 1. freeze the typed approval-response contract and policy surface first,
 2. freeze approval-obligation consumer semantics second,

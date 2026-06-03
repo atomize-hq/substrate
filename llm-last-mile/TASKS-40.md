@@ -5,7 +5,9 @@ Source plan: [PLAN-40.md](./PLAN-40.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: proposed on `2026-06-03`
+Status: Packet 4 complete on `2026-06-03`; docs truth is aligned and the final validation wall is green
+Landed posture note: typed host `approval_response` delivery over `continue_world_worker`, deny-by-default approval-response policy gating, exact approval-obligation binding, and deterministic post-delivery closeout are landed repo-wide, but broader host control/fork directives, active-ephemeral exact task-identity widening, public approval UX, and Family-2 router/attach execution remain deferred.
+Validation note: final validation did not expose any in-scope stabilization follow-up, and no broader runtime feature work, transport redesign, or deferred later surfaces were reopened.
 
 ## Execution Packets
 
@@ -28,14 +30,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Widen the `continue_world_worker` payload contract for typed approval responses
+- [x] Task 1.1: Widen the `continue_world_worker` payload contract for typed approval responses
   - Acceptance: internal `continue_world_worker` requests can carry a typed `approval_response` payload bound to exact approval causation; generic prompt-based continue remains valid; `clarification_response`, `progress_ack`, `control_directive`, `control_ack`, and `fork_command` remain deferred.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Add minimal deny-by-default policy parsing and denial coverage for typed host approval responses
+- [x] Task 1.2: Add minimal deny-by-default policy parsing and denial coverage for typed host approval responses
   - Acceptance: policy/config truth can explicitly allow or deny typed `approval_response` delivery; denied responses fail with stable explanation-ready errors; existing `agents.world_dispatch` action/mode/backend/boundary checks remain intact.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -66,7 +68,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Freeze exact approval-obligation lookup and closeout semantics
+- [x] Task 2.1: Freeze exact approval-obligation lookup and closeout semantics
   - Acceptance: typed approval responses must bind to exact unresolved `ApprovalRequired` obligations; cross-session, wrong-kind, already-resolved, or missing obligations fail closed; no obligation is mutated before delivery succeeds.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -74,7 +76,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs) if validation helpers need widening
 
-- [ ] Task 2.2: Freeze approval response disposition to review-state mapping
+- [x] Task 2.2: Freeze approval response disposition to review-state mapping
   - Acceptance: approve-style responses resolve the matching approval obligation; deny-style responses dismiss it; resolved timestamps and compatibility projections stay deterministic and reviewable.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -102,7 +104,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Render typed approval responses deterministically onto the existing retained member-turn seam
+- [x] Task 3.1: Render typed approval responses deterministically onto the existing retained member-turn seam
   - Acceptance: typed approval responses generate canonical prompt text from the typed payload rather than caller-authored ad hoc prompt assembly; live `continue_world_worker` submits that rendered prompt to the exact retained worker.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -111,7 +113,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 3.2: Prove delivery ordering and approval-obligation closeout semantics
+- [x] Task 3.2: Prove delivery ordering and approval-obligation closeout semantics
   - Acceptance: successful typed approval-response delivery resolves or dismisses the matching obligation exactly once; delivery failure leaves the obligation unresolved; public status/control regressions stay green.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -142,7 +144,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
+- [x] Task 4.1: Align planning/config truth without widening the slice
   - Acceptance: repo-local docs describe Slice `40` as typed host approval-response bootstrap over the existing `continue_world_worker` seam, not transport redesign, generic control-directive delivery, or Family-2 router execution.
   - Verify:
     - manual diff review
@@ -152,7 +154,7 @@ Session goal:
     - [`llm-last-mile/PLAN-40.md`](./PLAN-40.md)
     - [`llm-last-mile/TASKS-40.md`](./TASKS-40.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker tests, and full workspace tests are green; no unintended widening into generic control directives, transport-schema redesign, active-ephemeral identity, or Family-2 execution appears.
   - Verify:
     - `cargo fmt --all -- --check`
