@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, EvidenceRef};
 use crate::context::CommandObservation;
 
+const HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX: &str = "historical truth-grounding gap:";
+
 pub(crate) fn score_truth_grounding_gap(
     analysis: &CheckpointAnalysis,
     previous_truth_grounding_gap: Option<&DriftScore>,
@@ -85,20 +87,32 @@ pub(crate) fn score_truth_grounding_gap(
     }
 }
 
+pub(crate) fn truth_grounding_gap_has_history(score: &DriftScore) -> bool {
+    score.flagged
+        || score
+            .evidence
+            .iter()
+            .any(|evidence| is_historical_truth_grounding_gap_reason(&evidence.reason))
+}
+
 fn historical_truth_grounding_gap_evidence(previous: &DriftScore) -> Vec<EvidenceRef> {
     previous
         .evidence
         .iter()
-        .map(|evidence| EvidenceRef {
-            row: evidence.row.clone(),
-            reason: if evidence
-                .reason
-                .starts_with("historical truth-grounding gap:")
-            {
-                evidence.reason.clone()
+        .filter_map(|evidence| {
+            if is_historical_truth_grounding_gap_reason(&evidence.reason) {
+                Some(evidence.clone())
+            } else if previous.flagged {
+                Some(EvidenceRef {
+                    row: evidence.row.clone(),
+                    reason: format!(
+                        "{HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX} {}",
+                        evidence.reason
+                    ),
+                })
             } else {
-                format!("historical truth-grounding gap: {}", evidence.reason)
-            },
+                None
+            }
         })
         .collect()
 }
@@ -120,4 +134,8 @@ fn first_event_index(command: &CommandObservation) -> Option<usize> {
         .evidence
         .first()
         .map(|evidence| evidence.row.event_index)
+}
+
+fn is_historical_truth_grounding_gap_reason(reason: &str) -> bool {
+    reason.starts_with(HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX)
 }
