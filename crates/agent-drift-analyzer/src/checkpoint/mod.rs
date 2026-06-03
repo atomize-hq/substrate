@@ -43,6 +43,7 @@ pub(crate) struct CheckpointSlice {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct IntervalSlice {
+    pub archival_rows: Vec<CompactionRow>,
     pub compact_rows: Vec<CompactionRow>,
     pub command_observations: Vec<CommandObservation>,
 }
@@ -183,11 +184,14 @@ fn checkpoint_diagnostics_from_analysis(
 }
 
 fn interval_slice(previous: Option<&CheckpointSlice>, current: &CheckpointSlice) -> IntervalSlice {
+    let archival_start = previous.map_or(0, |slice| slice.window.archival_rows.len());
     let interval_start = previous.map_or(0, |slice| slice.window.compact_rows.len());
+    let archival_rows = current.window.archival_rows[archival_start..].to_vec();
     let compact_rows = current.window.compact_rows[interval_start..].to_vec();
     let command_observations = collect_command_observations(&compact_rows);
 
     IntervalSlice {
+        archival_rows,
         compact_rows,
         command_observations,
     }
@@ -336,7 +340,7 @@ fn failure_loops_touch_interval(loops: &[RepeatedFailureLoop], interval: &Interv
 
 fn interval_contains_evidence(interval: &IntervalSlice, evidence: &EvidenceRef) -> bool {
     let interval_row_keys = interval
-        .compact_rows
+        .archival_rows
         .iter()
         .map(row_key)
         .collect::<BTreeSet<_>>();
