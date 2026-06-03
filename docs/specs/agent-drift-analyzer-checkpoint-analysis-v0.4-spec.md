@@ -37,6 +37,15 @@ Success means:
   prefix stickiness
 - the external `Checkpoint` contract can remain unchanged in the first implementation pass
 
+Packet `v0.4A` lock:
+
+- `CheckpointAnalysis` is the only new internal seam in this packet
+- the packet must expose four explicit time surfaces: `current`, `previous`, `interval`, and
+  `repetition`
+- checkpoint diagnostics must route through that seam in this packet
+- scorer semantics stay unchanged in this packet; `WrongPlanBranch`, `TruthGroundingGap`, and
+  `DeadEndThrash` contract changes remain deferred to `v0.4B` and `v0.4C`
+
 ## Problem Statement
 
 The current analyzer mixes three different time models inside one checkpoint:
@@ -196,6 +205,10 @@ The analyzer flow becomes:
 
 The deepening is not “remove cumulative windows.” The deepening is “make one module own how a
 checkpoint relates to the prior checkpoint and to repetition-preserving history.”
+
+For `v0.4A`, steps 3 and 5 stay behaviorally stable. The only intended routing change is that the
+exported diagnostics now come from the internal checkpoint-analysis seam instead of a separate ad
+hoc path.
 
 ## Internal CheckpointAnalysis Module
 

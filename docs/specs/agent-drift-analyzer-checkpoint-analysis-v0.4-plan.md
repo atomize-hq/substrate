@@ -54,6 +54,13 @@ Build `v0.4` from the inside out:
 This keeps the risky semantic changes behind one new internal module instead of spreading them
 incrementally across unrelated helpers.
 
+Packet `v0.4A` execution lock:
+
+- land only the docs lock, the internal `CheckpointAnalysis` seam, and diagnostics routing
+- preserve the exported checkpoint schema and current scorer outputs
+- defer `WrongPlanBranch`, `TruthGroundingGap`, and `DeadEndThrash` semantic changes to later
+  packets exactly as listed below
+
 ## Major Components
 
 ### 1. Internal CheckpointAnalysis Seam

@@ -5,7 +5,8 @@ use std::collections::BTreeSet;
 
 use crate::input::BundleSession;
 use crate::{
-    context::assemble_context, context::collect_command_observations, inference::infer_task_frame,
+    context::assemble_context, context::collect_command_observations, context::CommandObservation,
+    context::ContextPack, inference::infer_task_frame,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef};
 use camino::Utf8PathBuf;
@@ -20,6 +21,103 @@ pub use schema::{
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CheckpointAnalysis {
+    pub session_id: String,
+    pub ordinal: usize,
+    pub current: CheckpointSlice,
+    pub previous: Option<CheckpointSlice>,
+    pub interval: IntervalSlice,
+    pub repetition: RepetitionSlice,
+    pub task_frame_delta: TaskFrameDelta,
+    pub recovery: RecoveryState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CheckpointSlice {
+    pub window: BundleSession,
+    pub context: ContextPack,
+    pub task_frame: TaskFrame,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct IntervalSlice {
+    pub compact_rows: Vec<CompactionRow>,
+    pub command_observations: Vec<CommandObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RepetitionSlice {
+    pub compact_rows: Vec<CompactionRow>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct TaskFrameDelta {
+    pub task_frame_transitioned: bool,
+    pub working_set_changed: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct RecoveryState {
+    pub interval_verification_command_count: usize,
+}
+
+pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnalysis> {
+    let mut analyses = Vec::new();
+    let mut previous = None;
+
+    for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
+        let context = assemble_context(&window);
+        let task_frame = infer_task_frame(&context);
+        let current = CheckpointSlice {
+            window,
+            context,
+            task_frame,
+        };
+        let interval = interval_slice(previous.as_ref(), &current);
+        let repetition = repetition_slice(&current);
+        let task_frame_delta = task_frame_delta(previous.as_ref(), &current);
+        let recovery = recovery_state(&interval);
+
+        analyses.push(CheckpointAnalysis {
+            session_id: current.window.session_id.clone(),
+            ordinal: index + 1,
+            current: current.clone(),
+            previous: previous.clone(),
+            interval,
+            repetition,
+            task_frame_delta,
+            recovery,
+        });
+
+        previous = Some(current);
+    }
+
+    analyses
+}
+
+pub(crate) fn build_session_checkpoint_from_analysis(
+    analysis: &CheckpointAnalysis,
+    task_frame: &TaskFrame,
+    drift_scores: Vec<DriftScore>,
+) -> Checkpoint {
+    let boundary = checkpoint_boundary(&analysis.current.window);
+    let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
+    let expected_next_step = expected_next_step(task_frame);
+    Checkpoint {
+        schema_version: "v0.2".to_string(),
+        session_id: analysis.session_id.clone(),
+        checkpoint_id: format!("{}:{:04}", analysis.session_id, analysis.ordinal),
+        ordinal: analysis.ordinal,
+        boundary,
+        diagnostics,
+        task_frame: task_frame.clone(),
+        flagged: drift_scores.iter().any(|score| score.flagged),
+        drift_scores,
+        expected_next_step,
+    }
+}
 
 pub fn build_session_checkpoint(
     session: &BundleSession,
@@ -41,6 +139,20 @@ pub fn build_session_checkpoint(
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
+    }
+}
+
+fn checkpoint_diagnostics_from_analysis(
+    analysis: &CheckpointAnalysis,
+    task_frame: &TaskFrame,
+    drift_scores: &[DriftScore],
+) -> CheckpointDiagnostics {
+    CheckpointDiagnostics {
+        task_frame_transitioned: analysis.task_frame_delta.task_frame_transitioned,
+        working_set_changed: analysis.task_frame_delta.working_set_changed,
+        interval_command_count: analysis.interval.command_observations.len(),
+        interval_verification_command_count: analysis.recovery.interval_verification_command_count,
+        evidence_item_count: evidence_item_count(task_frame, drift_scores),
     }
 }
 
@@ -75,6 +187,49 @@ fn checkpoint_diagnostics(
             .filter(|command| command.verification_like)
             .count(),
         evidence_item_count: evidence_item_count(task_frame, drift_scores),
+    }
+}
+
+fn interval_slice(previous: Option<&CheckpointSlice>, current: &CheckpointSlice) -> IntervalSlice {
+    let interval_start = previous.map_or(0, |slice| slice.window.compact_rows.len());
+    let compact_rows = current.window.compact_rows[interval_start..].to_vec();
+    let command_observations = collect_command_observations(&compact_rows);
+
+    IntervalSlice {
+        compact_rows,
+        command_observations,
+    }
+}
+
+fn repetition_slice(current: &CheckpointSlice) -> RepetitionSlice {
+    RepetitionSlice {
+        compact_rows: current.window.compact_rows.clone(),
+    }
+}
+
+fn task_frame_delta(
+    previous: Option<&CheckpointSlice>,
+    current: &CheckpointSlice,
+) -> TaskFrameDelta {
+    let Some(previous) = previous else {
+        return TaskFrameDelta::default();
+    };
+
+    TaskFrameDelta {
+        task_frame_transitioned: task_frame_identity(&current.task_frame)
+            != task_frame_identity(&previous.task_frame),
+        working_set_changed: working_set_identity(&current.task_frame)
+            != working_set_identity(&previous.task_frame),
+    }
+}
+
+fn recovery_state(interval: &IntervalSlice) -> RecoveryState {
+    RecoveryState {
+        interval_verification_command_count: interval
+            .command_observations
+            .iter()
+            .filter(|command| command.verification_like)
+            .count(),
     }
 }
 

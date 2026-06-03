@@ -71,14 +71,19 @@ pub fn analyze_loaded_bundle(
     for session in &bundle.sessions {
         let context = assemble_context(session);
         let task_frame = infer_task_frame(&context);
-        let checkpoints = checkpoint::checkpoint_windows(session)
+        let checkpoints = checkpoint::checkpoint_analyses(session)
             .into_iter()
-            .enumerate()
-            .map(|(index, window)| {
-                let window_context = assemble_context(&window);
-                let window_task_frame = infer_task_frame(&window_context);
-                let scores = score_session(&window, &window_context, &window_task_frame);
-                checkpoint::build_session_checkpoint(&window, index + 1, &window_task_frame, scores)
+            .map(|analysis| {
+                let scores = score_session(
+                    &analysis.current.window,
+                    &analysis.current.context,
+                    &analysis.current.task_frame,
+                );
+                checkpoint::build_session_checkpoint_from_analysis(
+                    &analysis,
+                    &analysis.current.task_frame,
+                    scores,
+                )
             })
             .collect::<Vec<_>>();
         exported_checkpoints.extend(checkpoints.iter().cloned());

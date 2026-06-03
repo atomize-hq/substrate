@@ -9,7 +9,7 @@ This task list implements:
 
 ## Packet v0.4A: Internal CheckpointAnalysis Seam
 
-- [ ] Task: Lock the `v0.4` checkpoint-analysis contract in repo docs
+- [x] Task: Lock the `v0.4` checkpoint-analysis contract in repo docs
   - Acceptance: the spec/plan/tasks chain explicitly locks:
     - the new internal `CheckpointAnalysis` seam
     - the four time surfaces: current, previous, interval, repetition
@@ -23,7 +23,7 @@ This task list implements:
     - `docs/specs/agent-drift-analyzer-checkpoint-analysis-v0.4-plan.md`
     - `docs/specs/agent-drift-analyzer-checkpoint-analysis-v0.4-tasks.md`
 
-- [ ] Task: Add the internal `CheckpointAnalysis` seam with no intended behavior change
+- [x] Task: Add the internal `CheckpointAnalysis` seam with no intended behavior change
   - Acceptance: the analyzer constructs `CheckpointAnalysis` for each checkpoint ordinal, the seam
     includes explicit current/previous/interval/repetition slices plus task-frame delta and
     recovery state scaffolding, and the first pass preserves current exported checkpoint behavior.
@@ -36,7 +36,7 @@ This task list implements:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
     - `crates/agent-drift-analyzer/tests/export_bundle.rs`
 
-- [ ] Task: Route checkpoint diagnostics through `CheckpointAnalysis`
+- [x] Task: Route checkpoint diagnostics through `CheckpointAnalysis`
   - Acceptance: `CheckpointDiagnostics` fields are derived from the explicit checkpoint-analysis
     time surfaces rather than a separate ad hoc path, and no exported diagnostics field changes in
     this packet.
