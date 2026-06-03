@@ -6,7 +6,7 @@ use agent_drift_sentinel::{
     LiveSessionCoordinator, LiveSessionError, LiveSessionRequest, SchedulerPolicy, WarningPolicy,
 };
 use camino::Utf8Path;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tempfile::TempDir;
 
 #[test]
@@ -121,6 +121,7 @@ fn real_session_live_coordinator_restores_progress_for_restart_idle_decision() {
             persisted_state["progress"]["last_observed_size_bytes"].as_u64(),
             Some(first.observed_size_bytes)
         );
+        assert!(persisted_state["progress"]["pending_observed_size_bytes"].is_null());
         assert_eq!(
             persisted_state["progress"]["last_delivered_cursor"]["session_id"].as_str(),
             Some("session-live")
@@ -159,6 +160,129 @@ fn real_session_live_coordinator_restores_progress_for_restart_idle_decision() {
         resumed_idle.latest_cursor.as_ref(),
         Some(&first_latest_cursor)
     );
+}
+
+#[test]
+fn real_session_live_coordinator_replays_pending_growth_after_interrupted_poll_restart() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    let rollout_path = rollout_dir.join("rollout-session-live.jsonl");
+    fs::write(&rollout_path, first_rollout_phase()).expect("write first phase");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let first_phase = {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create coordinator");
+
+        coordinator.poll_once().expect("first poll")
+    };
+
+    let helper_state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("helper-state");
+    fs::create_dir_all(&helper_state_dir).expect("create helper state dir");
+    fs::copy(
+        state_dir.join("live-session-state.json").as_std_path(),
+        helper_state_dir
+            .join("live-session-state.json")
+            .as_std_path(),
+    )
+    .expect("copy first persisted state");
+
+    let full_rollout = format!(
+        "{}{}{}",
+        first_rollout_phase(),
+        second_rollout_phase(),
+        third_rollout_phase()
+    );
+    fs::write(&rollout_path, &full_rollout).expect("write full rollout");
+
+    let growth_poll = {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: helper_state_dir,
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create helper coordinator");
+
+        coordinator.poll_once().expect("growth poll")
+    };
+    assert!(
+        growth_poll.observations.len() >= 2,
+        "fixture should create multiple fresh observations for interrupted-poll recovery"
+    );
+
+    let partially_delivered = growth_poll
+        .observations
+        .first()
+        .expect("growth poll should emit observations");
+    let interrupted_state = json!({
+        "schema_version": 2,
+        "session_id": "session-live",
+        "progress": {
+            "last_observed_size_bytes": first_phase.observed_size_bytes,
+            "pending_observed_size_bytes": full_rollout.len(),
+            "last_delivered_cursor": {
+                "session_id": partially_delivered.event.cursor.session_id,
+                "ordinal": partially_delivered.event.cursor.ordinal,
+            },
+            "next_emission_ordinal": partially_delivered.event.emission_ordinal + 1,
+        }
+    });
+    write_persisted_state(&state_dir, &interrupted_state);
+
+    let mut restarted = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create restarted coordinator");
+
+    let resumed = restarted.poll_once().expect("resumed poll");
+    assert!(resumed.reran_pipeline);
+    assert_eq!(
+        resumed.emitted_checkpoints,
+        growth_poll.observations.len() - 1
+    );
+    assert_eq!(
+        resumed
+            .observations
+            .first()
+            .expect("resumed poll should emit remaining observations")
+            .event
+            .emission_ordinal,
+        partially_delivered.event.emission_ordinal + 1
+    );
+    assert_eq!(resumed.latest_cursor, growth_poll.latest_cursor);
+
+    let persisted_state = read_persisted_state(&state_dir);
+    assert_eq!(
+        persisted_state["progress"]["last_observed_size_bytes"].as_u64(),
+        Some(full_rollout.len() as u64)
+    );
+    assert!(persisted_state["progress"]["pending_observed_size_bytes"].is_null());
 }
 
 #[test]
@@ -265,6 +389,88 @@ fn real_session_live_coordinator_surfaces_posture_in_live_presentations() {
 }
 
 #[test]
+fn real_session_live_coordinator_upgrades_valid_legacy_schema_v1_state_to_v2_progress() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    let rollout_path = rollout_dir.join("rollout-session-live.jsonl");
+    fs::write(&rollout_path, first_rollout_phase()).expect("write first phase");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let first_latest_cursor = {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create coordinator");
+
+        coordinator
+            .poll_once()
+            .expect("first poll")
+            .latest_cursor
+            .expect("first poll should establish a cursor")
+    };
+
+    let legacy_state = json!({
+        "schema_version": 1,
+        "session_id": "session-live",
+        "last_delivered_cursor": {
+            "session_id": first_latest_cursor.session_id,
+            "ordinal": first_latest_cursor.ordinal,
+        }
+    });
+    write_persisted_state(&state_dir, &legacy_state);
+
+    let mut restarted = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create restarted coordinator");
+    assert_eq!(restarted.latest_cursor(), Some(&first_latest_cursor));
+
+    let restored = restarted.poll_once().expect("legacy restored poll");
+    assert!(restored.reran_pipeline);
+    assert_eq!(restored.emitted_checkpoints, 0);
+    assert!(restored.observations.is_empty());
+    assert_eq!(restored.latest_cursor.as_ref(), Some(&first_latest_cursor));
+
+    let upgraded_state = read_persisted_state(&state_dir);
+    assert_eq!(upgraded_state["schema_version"].as_u64(), Some(2));
+    assert_eq!(
+        upgraded_state["progress"]["last_observed_size_bytes"].as_u64(),
+        Some(first_rollout_phase().len() as u64)
+    );
+    assert!(upgraded_state["progress"]["pending_observed_size_bytes"].is_null());
+    assert_eq!(
+        upgraded_state["progress"]["last_delivered_cursor"]["session_id"].as_str(),
+        Some("session-live")
+    );
+    assert_eq!(
+        upgraded_state["progress"]["last_delivered_cursor"]["ordinal"].as_u64(),
+        Some(first_latest_cursor.ordinal as u64)
+    );
+    assert_eq!(
+        upgraded_state["progress"]["next_emission_ordinal"].as_u64(),
+        Some(1)
+    );
+}
+
+#[test]
 fn real_session_live_coordinator_rejects_invalid_persisted_cursor_state() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
@@ -368,12 +574,35 @@ fn second_rollout_phase() -> &'static str {
     )
 }
 
+fn third_rollout_phase() -> &'static str {
+    concat!(
+        "{\"timestamp\":\"2026-06-01T12:00:14Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-2\",\"last_agent_message\":\"Second phase complete\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:15Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-3\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:16Z\",\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-3\",\"user_instructions\":\"Keep the restart continuity seam bounded to real_session_live.rs\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:17Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"only fix the flagged review issue in real_session_live.rs and preserve the packet boundary\"}]}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:17.001Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"turn_id\":\"turn-3\",\"message\":\"only fix the flagged review issue in real_session_live.rs and preserve the packet boundary\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:18Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"functions.shell_command\",\"arguments\":\"{\\\"command\\\":\\\"cargo test -p agent-drift-sentinel real_session_live -- --nocapture\\\",\\\"workdir\\\":\\\"/repo\\\"}\",\"call_id\":\"call-3\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:19Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"call-3\",\"output\":\"ok\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:20Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Third phase complete\"}]}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:20.001Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Third phase complete\"}]}}\n"
+    )
+}
+
 fn read_persisted_state(state_dir: &Utf8Path) -> Value {
     serde_json::from_str(
         &fs::read_to_string(state_dir.join("live-session-state.json"))
             .expect("read persisted state"),
     )
     .expect("parse persisted state json")
+}
+
+fn write_persisted_state(state_dir: &Utf8Path, state: &Value) {
+    fs::create_dir_all(state_dir).expect("create state dir");
+    fs::write(
+        state_dir.join("live-session-state.json"),
+        serde_json::to_vec_pretty(state).expect("encode persisted state"),
+    )
+    .expect("write persisted state");
 }
 
 fn session_meta_only_rollout_phase() -> &'static str {

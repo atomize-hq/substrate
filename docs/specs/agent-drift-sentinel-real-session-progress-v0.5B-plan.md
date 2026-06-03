@@ -47,9 +47,10 @@ That makes `v0.5B` the clean follow-up packet after posture.
 Build `v0.5B` in two focused sub-packets:
 
 1. `v0.5B.1`: define one internal live-progress contract and persisted-state shape, then route
-   coordinator persistence through that seam
-2. `v0.5B.2`: move restart-progress decisions behind that seam, preserve monotonic delivery
-   ordering across restart, and lock regressions plus continuity-proof guidance
+   coordinator persistence through that seam, including the unchanged-rollout restore decision
+   that depends on persisted source progress
+2. `v0.5B.2`: preserve monotonic delivery ordering across appended restart and lock the broader
+   regressions plus continuity-proof guidance
 
 ## Major Components
 
@@ -71,6 +72,8 @@ Why first:
 Deliver second:
 
 - use persisted source progress to decide whether an unchanged rollout needs a rerun
+- keep interrupted-poll state explicit so unchanged restart cannot skip still-undelivered
+  checkpoints from previously observed growth
 - keep shrink detection and sparse-startup handling intact
 
 Why second:
@@ -109,11 +112,12 @@ Sub-packet `v0.5B.1`:
 
 1. add the progress/state contract
 2. route persisted-state loading/saving through that seam
+3. use restored source progress for unchanged-rollout idle decisions without treating partially
+   drained growth as idle
 
 Sub-packet `v0.5B.2`:
 
-3. route restart-aware poll decisions through that seam
-4. route checkpoint delta and emission-order continuity through that seam
+4. route checkpoint delta and appended-restart emission-order continuity through that seam
 5. land restart regressions and refresh docs
 
 Parallel-safe work after the contract is locked:

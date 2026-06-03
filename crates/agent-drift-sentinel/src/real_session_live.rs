@@ -158,7 +158,13 @@ struct RolloutStartupReadiness {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct LiveSessionProgress {
+    // This is the last rollout size that the coordinator fully drained and can safely treat as
+    // idle on restart.
     last_observed_size_bytes: Option<u64>,
+    // This records the rollout size currently being drained so an interrupted poll will rerun
+    // against that unchanged size instead of skipping still-undelivered checkpoints.
+    #[serde(default)]
+    pending_observed_size_bytes: Option<u64>,
     last_delivered_cursor: Option<CheckpointCursor>,
     #[serde(default = "default_next_emission_ordinal")]
     next_emission_ordinal: usize,
@@ -168,6 +174,7 @@ impl Default for LiveSessionProgress {
     fn default() -> Self {
         Self {
             last_observed_size_bytes: None,
+            pending_observed_size_bytes: None,
             last_delivered_cursor: None,
             next_emission_ordinal: default_next_emission_ordinal(),
         }
@@ -181,6 +188,18 @@ impl LiveSessionProgress {
 
     fn last_observed_size_bytes(&self) -> Option<u64> {
         self.last_observed_size_bytes
+    }
+
+    fn largest_observed_size_bytes(&self) -> Option<u64> {
+        match (
+            self.last_observed_size_bytes,
+            self.pending_observed_size_bytes,
+        ) {
+            (Some(last_completed), Some(pending)) => Some(last_completed.max(pending)),
+            (Some(last_completed), None) => Some(last_completed),
+            (None, Some(pending)) => Some(pending),
+            (None, None) => None,
+        }
     }
 
     fn checkpoint_is_fresh(&self, checkpoint: &Checkpoint) -> bool {
@@ -207,8 +226,15 @@ impl LiveSessionProgress {
         self.last_delivered_cursor = Some(cursor);
     }
 
-    fn record_observed_size(&mut self, observed_size_bytes: u64) {
+    fn begin_poll(&mut self, observed_size_bytes: u64) {
+        if self.last_observed_size_bytes != Some(observed_size_bytes) {
+            self.pending_observed_size_bytes = Some(observed_size_bytes);
+        }
+    }
+
+    fn complete_poll(&mut self, observed_size_bytes: u64) {
         self.last_observed_size_bytes = Some(observed_size_bytes);
+        self.pending_observed_size_bytes = None;
     }
 }
 
@@ -260,7 +286,7 @@ impl LiveSessionCoordinator {
 
     pub fn poll_once(&mut self) -> Result<LiveSessionPollResult, LiveSessionError> {
         let observed_size_bytes = file_size_bytes(&self.rollout_path)?;
-        if let Some(previous_size_bytes) = self.progress.last_observed_size_bytes() {
+        if let Some(previous_size_bytes) = self.progress.largest_observed_size_bytes() {
             if observed_size_bytes < previous_size_bytes {
                 return Err(LiveSessionError::RolloutShrank {
                     path: self.rollout_path.clone(),
@@ -268,6 +294,8 @@ impl LiveSessionCoordinator {
                     current_size_bytes: observed_size_bytes,
                 });
             }
+        }
+        if let Some(previous_size_bytes) = self.progress.last_observed_size_bytes() {
             if observed_size_bytes == previous_size_bytes {
                 return Ok(LiveSessionPollResult::idle(
                     self.rollout_path.clone(),
@@ -283,7 +311,7 @@ impl LiveSessionCoordinator {
                 if self.progress.last_delivered_cursor.is_none()
                     && sparse_startup_retry_allowed(&self.rollout_path, &error) =>
             {
-                self.progress.record_observed_size(observed_size_bytes);
+                self.progress.complete_poll(observed_size_bytes);
                 self.persist_state()?;
                 return Ok(LiveSessionPollResult {
                     rollout_path: self.rollout_path.clone(),
@@ -296,6 +324,7 @@ impl LiveSessionCoordinator {
             }
             Err(error) => return Err(error),
         };
+        self.progress.begin_poll(observed_size_bytes);
         let fresh_checkpoints = checkpoints
             .into_iter()
             .filter(|checkpoint| self.progress.checkpoint_is_fresh(checkpoint))
@@ -313,7 +342,7 @@ impl LiveSessionCoordinator {
             observations.push(observation);
         }
 
-        self.progress.record_observed_size(observed_size_bytes);
+        self.progress.complete_poll(observed_size_bytes);
         self.persist_state()?;
 
         Ok(LiveSessionPollResult {
@@ -443,6 +472,7 @@ fn load_persisted_progress(
             )?;
             Ok(LiveSessionProgress {
                 last_observed_size_bytes: None,
+                pending_observed_size_bytes: None,
                 last_delivered_cursor: state.last_delivered_cursor,
                 next_emission_ordinal: default_next_emission_ordinal(),
             })

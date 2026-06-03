@@ -26,6 +26,8 @@ This task list implements:
 - [x] Task: Add a shared live-progress seam for coordinator continuity
   - Acceptance: sentinel code has one internal progress/state seam that owns:
     - persisted source progress
+    - any bounded partial-poll source-progress fact needed to avoid skipping undelivered
+      checkpoints on restart
     - persisted delivery progress
     - restart restoration for the target session
     and `LiveSessionCoordinator` stops storing those rules only as loosely related fields.
@@ -38,14 +40,15 @@ Packet `v0.5B.1` exit condition:
 
 - the shared live-progress seam exists
 - persisted continuity restores more than only `last_delivered_cursor`
+- unchanged-rollout restore can use persisted source progress without treating partially drained
+  growth as idle
 - `real_session_live` coverage proves the new seam is wired without broadening scope
 
 ## Packet v0.5B.2: Restart Hardening And Regression Proof
 
 - [ ] Task: Preserve deterministic restart behavior for unchanged and appended sources
-  - Acceptance: restart against an unchanged rollout does not emit already-delivered checkpoints,
-    and appended growth after restart emits only newer checkpoints while preserving monotonic
-    emission ordering.
+  - Acceptance: appended growth after restart emits only newer checkpoints while preserving
+    monotonic emission ordering, and the broader restart regression wall remains explicit.
   - Verify: `cargo test -p agent-drift-sentinel real_session_live -- --nocapture`
   - Files:
     - `crates/agent-drift-sentinel/src/real_session_live.rs`

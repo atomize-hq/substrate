@@ -48,8 +48,11 @@ This packet is **real-session progress ownership and restart continuity hardenin
 
 Execution split:
 
-- `v0.5B.1`: lock the shared progress/state contract and route persistence through it
-- `v0.5B.2`: harden unchanged/appended restart behavior and complete regression/proof refresh
+- `v0.5B.1`: lock the shared progress/state contract, route persistence through it, and restore
+  unchanged-rollout source progress without skipping partially drained growth after an interrupted
+  poll
+- `v0.5B.2`: harden appended-growth/emission-order restart behavior and complete
+  regression/proof refresh
 
 In scope:
 
@@ -174,6 +177,7 @@ Keep progress ownership explicit and separate from pipeline orchestration.
 ```rust
 pub struct LiveSessionProgress {
     pub last_observed_size_bytes: Option<u64>,
+    pub pending_observed_size_bytes: Option<u64>,
     pub last_delivered_cursor: Option<CheckpointCursor>,
     pub next_emission_ordinal: usize,
 }
@@ -210,6 +214,7 @@ Add one internal live-progress seam that owns restart continuity:
 ```rust
 pub struct LiveSessionProgress {
     pub last_observed_size_bytes: Option<u64>,
+    pub pending_observed_size_bytes: Option<u64>,
     pub last_delivered_cursor: Option<CheckpointCursor>,
     pub next_emission_ordinal: usize,
 }
@@ -225,7 +230,8 @@ The coordinator flow becomes:
 
 1. resolve the target rollout artifact
 2. load persisted progress for the session
-3. decide from progress plus current source size whether a rerun is needed
+3. decide from progress plus current source size whether a rerun is needed, treating an
+   interrupted poll as pending until that observed size is fully drained
 4. rerun compactor/analyzer only when required
 5. filter checkpoints through the progress seam
 6. emit observations using persisted `next_emission_ordinal` continuity
