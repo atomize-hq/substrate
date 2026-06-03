@@ -267,11 +267,13 @@ impl AgentsWorldDispatchForkPatch {
 pub struct AgentsWorldDispatchObligationsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_response_allowed: Option<bool>,
 }
 
 impl AgentsWorldDispatchObligationsPatch {
     fn is_empty(&self) -> bool {
-        self.approval_allowed.is_none()
+        self.approval_allowed.is_none() && self.approval_response_allowed.is_none()
     }
 }
 
@@ -1580,6 +1582,40 @@ pub fn resolve_effective_policy_with_explain(
         );
     }
 
+    let (
+        agents_world_dispatch_obligations_approval_response_allowed,
+        agents_world_dispatch_obligations_approval_response_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_obligations_approval_response_allowed,
+        global_patch
+            .agents
+            .world_dispatch
+            .obligations
+            .approval_response_allowed,
+        workspace_patch.and_then(|p| {
+            p.agents
+                .world_dispatch
+                .obligations
+                .approval_response_allowed
+        }),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_obligations_approval_response_allowed =
+        agents_world_dispatch_obligations_approval_response_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.obligations.approval_response_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_obligations_approval_response_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     let (workflow_router_enabled, workflow_router_enabled_src) = resolve_replace(
         effective.workflow_router_enabled,
         global_patch.workflow.router.enabled,
@@ -2028,6 +2064,14 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     }
     if let Some(v) = patch.agents.world_dispatch.obligations.approval_allowed {
         target.agents_world_dispatch_obligations_approval_allowed = v;
+    }
+    if let Some(v) = patch
+        .agents
+        .world_dispatch
+        .obligations
+        .approval_response_allowed
+    {
+        target.agents_world_dispatch_obligations_approval_response_allowed = v;
     }
     if let Some(v) = patch.workflow.router.enabled {
         target.workflow_router_enabled = v;

@@ -262,11 +262,13 @@ impl AgentsWorldDispatchForkPatch {
 pub(crate) struct AgentsWorldDispatchObligationsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_response_allowed: Option<bool>,
 }
 
 impl AgentsWorldDispatchObligationsPatch {
     fn is_empty(&self) -> bool {
-        self.approval_allowed.is_none()
+        self.approval_allowed.is_none() && self.approval_response_allowed.is_none()
     }
 }
 
@@ -1367,6 +1369,14 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = patch.agents.world_dispatch.obligations.approval_allowed {
         target.agents_world_dispatch_obligations_approval_allowed = v;
     }
+    if let Some(v) = patch
+        .agents
+        .world_dispatch
+        .obligations
+        .approval_response_allowed
+    {
+        target.agents_world_dispatch_obligations_approval_response_allowed = v;
+    }
     if let Some(v) = patch.workflow.router.enabled {
         target.workflow_router_enabled = v;
     }
@@ -1532,6 +1542,13 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
             .world_dispatch
             .obligations
             .approval_allowed
+            .take()
+            .is_some()),
+        "agents.world_dispatch.obligations.approval_response_allowed" => Ok(patch
+            .agents
+            .world_dispatch
+            .obligations
+            .approval_response_allowed
             .take()
             .is_some()),
 
@@ -1707,6 +1724,15 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
         ),
         "agents.world_dispatch.obligations.approval_allowed" => apply_bool_opt(
             &mut patch.agents.world_dispatch.obligations.approval_allowed,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.obligations.approval_response_allowed" => apply_bool_opt(
+            &mut patch
+                .agents
+                .world_dispatch
+                .obligations
+                .approval_response_allowed,
             &update.op,
             &update.value,
         ),
@@ -2123,6 +2149,11 @@ mod tests {
                 op: UpdateOp::Set,
                 value: "true".to_string(),
             },
+            ConfigUpdate {
+                key: "agents.world_dispatch.obligations.approval_response_allowed".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
         ];
 
         let changed = apply_updates_to_policy_patch(&mut patch, &updates).unwrap();
@@ -2169,6 +2200,10 @@ mod tests {
             patch.agents.world_dispatch.obligations.approval_allowed,
             Some(true)
         );
+        assert_eq!(
+            patch.agents.world_dispatch.obligations.approval_response_allowed,
+            Some(true)
+        );
     }
 
     #[test]
@@ -2203,6 +2238,7 @@ agents:
       recommendations_allowed: true
     obligations:
       approval_allowed: true
+      approval_response_allowed: true
 "#,
         )
         .expect("world dispatch keys should parse under agents");
@@ -2238,6 +2274,10 @@ agents:
             patch.agents.world_dispatch.obligations.approval_allowed,
             Some(true)
         );
+        assert_eq!(
+            patch.agents.world_dispatch.obligations.approval_response_allowed,
+            Some(true)
+        );
     }
 
     #[test]
@@ -2257,6 +2297,7 @@ agents:
         assert!(!effective.agents_world_dispatch_fork_requests_allowed);
         assert!(!effective.agents_world_dispatch_fork_recommendations_allowed);
         assert!(!effective.agents_world_dispatch_obligations_approval_allowed);
+        assert!(!effective.agents_world_dispatch_obligations_approval_response_allowed);
     }
 
     #[test]

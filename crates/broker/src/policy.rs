@@ -329,6 +329,7 @@ pub struct WorldDispatchPolicy {
     pub fork_requests_allowed: bool,
     pub fork_recommendations_allowed: bool,
     pub approval_requests_allowed: bool,
+    pub approval_responses_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -416,6 +417,7 @@ struct AgentsWorldDispatchForkPolicyFileV1 {
 #[serde(deny_unknown_fields)]
 struct AgentsWorldDispatchObligationsPolicyFileV1 {
     approval_allowed: bool,
+    approval_response_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -531,6 +533,7 @@ struct RawAgentsWorldDispatchForkPolicyV1 {
 #[serde(default, deny_unknown_fields)]
 struct RawAgentsWorldDispatchObligationsPolicyV1 {
     approval_allowed: bool,
+    approval_response_allowed: bool,
 }
 
 impl Default for RawAgentsWorldDispatchPolicyV1 {
@@ -614,6 +617,7 @@ pub struct Policy {
     pub agents_world_dispatch_fork_requests_allowed: bool, // agents.world_dispatch.fork.requests_allowed
     pub agents_world_dispatch_fork_recommendations_allowed: bool, // agents.world_dispatch.fork.recommendations_allowed
     pub agents_world_dispatch_obligations_approval_allowed: bool, // agents.world_dispatch.obligations.approval_allowed
+    pub agents_world_dispatch_obligations_approval_response_allowed: bool, // agents.world_dispatch.obligations.approval_response_allowed
 
     // Workflow router
     pub workflow_router_enabled: bool, // workflow.router.enabled
@@ -683,6 +687,7 @@ impl Default for Policy {
             agents_world_dispatch_fork_requests_allowed: false,
             agents_world_dispatch_fork_recommendations_allowed: false,
             agents_world_dispatch_obligations_approval_allowed: false,
+            agents_world_dispatch_obligations_approval_response_allowed: false,
             workflow_router_enabled: false,
             workflow_router_allow_cross_workspace: false,
             workflow_router_allowed_rule_ids: Vec::new(),
@@ -882,6 +887,8 @@ impl Policy {
             fork_requests_allowed: self.agents_world_dispatch_fork_requests_allowed,
             fork_recommendations_allowed: self.agents_world_dispatch_fork_recommendations_allowed,
             approval_requests_allowed: self.agents_world_dispatch_obligations_approval_allowed,
+            approval_responses_allowed: self
+                .agents_world_dispatch_obligations_approval_response_allowed,
         }
     }
 
@@ -895,6 +902,10 @@ impl Policy {
 
     pub fn world_dispatch_approval_requests_allowed(&self) -> bool {
         self.agents_world_dispatch_obligations_approval_allowed
+    }
+
+    pub fn world_dispatch_approval_responses_allowed(&self) -> bool {
+        self.agents_world_dispatch_obligations_approval_response_allowed
     }
 
     pub fn requires_world(&self) -> bool {
@@ -1043,6 +1054,9 @@ impl Policy {
         self.agents_world_dispatch_obligations_approval_allowed = self
             .agents_world_dispatch_obligations_approval_allowed
             && other.agents_world_dispatch_obligations_approval_allowed;
+        self.agents_world_dispatch_obligations_approval_response_allowed = self
+            .agents_world_dispatch_obligations_approval_response_allowed
+            && other.agents_world_dispatch_obligations_approval_response_allowed;
         self.workflow_router_enabled =
             self.workflow_router_enabled && other.workflow_router_enabled;
         self.workflow_router_allow_cross_workspace = self.workflow_router_allow_cross_workspace
@@ -1229,6 +1243,11 @@ impl<'de> Deserialize<'de> for Policy {
                 .world_dispatch
                 .obligations
                 .approval_allowed,
+            agents_world_dispatch_obligations_approval_response_allowed: raw
+                .agents
+                .world_dispatch
+                .obligations
+                .approval_response_allowed,
             workflow_router_enabled: raw.workflow.router.enabled,
             workflow_router_allow_cross_workspace: raw.workflow.router.allow_cross_workspace,
             workflow_router_allowed_rule_ids: raw.workflow.router.allowed_rule_ids,
@@ -1373,6 +1392,8 @@ impl Serialize for Policy {
                     },
                     obligations: AgentsWorldDispatchObligationsPolicyFileV1 {
                         approval_allowed: self.agents_world_dispatch_obligations_approval_allowed,
+                        approval_response_allowed: self
+                            .agents_world_dispatch_obligations_approval_response_allowed,
                     },
                 },
             },
