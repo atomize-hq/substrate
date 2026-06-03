@@ -74,6 +74,73 @@ fn real_session_live_coordinator_emits_only_checkpoint_deltas_for_append_only_gr
 }
 
 #[test]
+fn real_session_live_coordinator_persists_cursor_across_restarts() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    let rollout_path = rollout_dir.join("rollout-session-live.jsonl");
+    fs::write(&rollout_path, first_rollout_phase()).expect("write first phase");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let first_latest_cursor = {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create first coordinator");
+
+        let first = coordinator.poll_once().expect("first poll");
+        assert!(first.reran_pipeline);
+        assert!(first.emitted_checkpoints > 0);
+        first
+            .latest_cursor
+            .clone()
+            .expect("first poll should establish a cursor")
+    };
+
+    let mut restarted = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home.clone()),
+            session_id: "session-live".to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create restarted coordinator");
+
+    let replayed = restarted.poll_once().expect("restart poll");
+    assert!(replayed.reran_pipeline);
+    assert_eq!(replayed.emitted_checkpoints, 0);
+    assert!(replayed.observations.is_empty());
+    assert_eq!(replayed.latest_cursor.as_ref(), Some(&first_latest_cursor));
+
+    fs::write(
+        &rollout_path,
+        format!("{}{}", first_rollout_phase(), second_rollout_phase()),
+    )
+    .expect("append second phase");
+
+    let appended = restarted.poll_once().expect("appended poll after restart");
+    assert!(appended.reran_pipeline);
+    assert!(appended.emitted_checkpoints > 0);
+    assert!(appended
+        .observations
+        .iter()
+        .all(|observation| observation.event.cursor.ordinal > first_latest_cursor.ordinal));
+}
+
+#[test]
 fn real_session_live_coordinator_keeps_polling_through_sparse_startup_until_analyzable() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
@@ -98,7 +165,9 @@ fn real_session_live_coordinator_keeps_polling_through_sparse_startup_until_anal
     )
     .expect("create coordinator");
 
-    let empty_poll = coordinator.poll_once().expect("empty rollout should stay pending");
+    let empty_poll = coordinator
+        .poll_once()
+        .expect("empty rollout should stay pending");
     assert!(empty_poll.reran_pipeline);
     assert_eq!(empty_poll.emitted_checkpoints, 0);
     assert!(empty_poll.observations.is_empty());
@@ -134,6 +203,44 @@ fn real_session_live_coordinator_keeps_polling_through_sparse_startup_until_anal
         .latest_cursor
         .as_ref()
         .is_some_and(|cursor| cursor.session_id == "session-live"));
+}
+
+#[test]
+fn real_session_live_coordinator_rejects_invalid_persisted_cursor_state() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    fs::write(
+        rollout_dir.join("rollout-session-live.jsonl"),
+        first_rollout_phase(),
+    )
+    .expect("write rollout");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    fs::create_dir_all(&state_dir).expect("create state dir");
+    fs::write(
+        state_dir.join("live-session-state.json"),
+        "{\"schema_version\":1,\"session_id\":\"other-session\",\"last_delivered_cursor\":{\"session_id\":\"other-session\",\"ordinal\":6}}\n",
+    )
+    .expect("write invalid state");
+
+    let error = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir,
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect_err("mismatched persisted state should fail");
+
+    assert!(error.to_string().contains("persisted live session state"));
 }
 
 #[test]

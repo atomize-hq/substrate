@@ -9,6 +9,7 @@ use agent_session_compactor::{
     DiscoveryError, RunConfig,
 };
 use camino::{Utf8Path, Utf8PathBuf};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::input::{load_replay_bundle, CheckpointCursor, InputError};
@@ -16,6 +17,8 @@ use crate::live_input::LiveCheckpointEvent;
 use crate::live_runtime::{LiveObservation, LiveRuntime, LiveRuntimeError, LiveRuntimeSnapshot};
 use crate::operator_surface::WarningPolicy;
 use crate::scheduler::SchedulerPolicy;
+
+const LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveSessionRequest {
@@ -97,6 +100,43 @@ pub enum LiveSessionError {
         expected_session_id: String,
         found_session_ids: Vec<String>,
     },
+    #[error("failed to read persisted live session state {path}: {source}")]
+    ReadPersistedState {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to parse persisted live session state {path}: {source}")]
+    ParsePersistedState {
+        path: Utf8PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error(
+        "persisted live session state {path} uses unsupported schema version {actual}; expected {expected}"
+    )]
+    UnsupportedPersistedStateSchema {
+        path: Utf8PathBuf,
+        actual: u32,
+        expected: u32,
+    },
+    #[error(
+        "persisted live session state {path} belongs to session {actual_session_id}, expected {expected_session_id}"
+    )]
+    PersistedStateSessionMismatch {
+        path: Utf8PathBuf,
+        expected_session_id: String,
+        actual_session_id: String,
+    },
+    #[error(
+        "persisted live session state {path} stored cursor {actual_session_id}:{actual_ordinal}, expected session {expected_session_id}"
+    )]
+    PersistedCursorSessionMismatch {
+        path: Utf8PathBuf,
+        expected_session_id: String,
+        actual_session_id: String,
+        actual_ordinal: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +157,13 @@ struct RolloutStartupReadiness {
     has_parseable_tool_call_arguments: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PersistedLiveSessionState {
+    schema_version: u32,
+    session_id: String,
+    last_delivered_cursor: Option<CheckpointCursor>,
+}
+
 impl LiveSessionCoordinator {
     pub fn new(
         request: LiveSessionRequest,
@@ -124,12 +171,13 @@ impl LiveSessionCoordinator {
         warning_policy: WarningPolicy,
     ) -> Result<Self, LiveSessionError> {
         let rollout_path = resolve_rollout_path(&request)?;
+        let last_delivered_cursor = load_persisted_cursor(&request)?;
         Ok(Self {
             request,
             rollout_path,
             runtime: LiveRuntime::new(scheduler_policy, warning_policy),
             last_observed_size_bytes: None,
-            last_delivered_cursor: None,
+            last_delivered_cursor,
             next_emission_ordinal: 1,
         })
     }
@@ -202,6 +250,7 @@ impl LiveSessionCoordinator {
             self.next_emission_ordinal += 1;
             let observation = self.runtime.observe(event)?;
             self.last_delivered_cursor = Some(observation.event.cursor.clone());
+            self.persist_state()?;
             observations.push(observation);
         }
 
@@ -262,6 +311,92 @@ impl LiveSessionCoordinator {
     fn analyzer_output_dir(&self) -> Utf8PathBuf {
         self.request.state_dir.join("analyzer")
     }
+
+    fn persist_state(&self) -> Result<(), LiveSessionError> {
+        fs::create_dir_all(&self.request.state_dir).map_err(|source| {
+            LiveSessionError::ReadPersistedState {
+                path: self.request.state_dir.clone(),
+                source,
+            }
+        })?;
+
+        let state_path = persisted_state_path(&self.request);
+        let temp_path = self.request.state_dir.join("live-session-state.json.tmp");
+        let state = PersistedLiveSessionState {
+            schema_version: LIVE_SESSION_STATE_SCHEMA_VERSION,
+            session_id: self.request.session_id.clone(),
+            last_delivered_cursor: self.last_delivered_cursor.clone(),
+        };
+        let encoded = serde_json::to_vec_pretty(&state).map_err(|source| {
+            LiveSessionError::ParsePersistedState {
+                path: state_path.clone(),
+                source,
+            }
+        })?;
+        fs::write(&temp_path, encoded).map_err(|source| LiveSessionError::ReadPersistedState {
+            path: temp_path.clone(),
+            source,
+        })?;
+        fs::rename(&temp_path, &state_path).map_err(|source| {
+            LiveSessionError::ReadPersistedState {
+                path: state_path,
+                source,
+            }
+        })?;
+        Ok(())
+    }
+}
+
+fn persisted_state_path(request: &LiveSessionRequest) -> Utf8PathBuf {
+    request.state_dir.join("live-session-state.json")
+}
+
+fn load_persisted_cursor(
+    request: &LiveSessionRequest,
+) -> Result<Option<CheckpointCursor>, LiveSessionError> {
+    let state_path = persisted_state_path(request);
+    if !state_path.exists() {
+        return Ok(None);
+    }
+
+    let raw =
+        fs::read_to_string(&state_path).map_err(|source| LiveSessionError::ReadPersistedState {
+            path: state_path.clone(),
+            source,
+        })?;
+    let state: PersistedLiveSessionState =
+        serde_json::from_str(&raw).map_err(|source| LiveSessionError::ParsePersistedState {
+            path: state_path.clone(),
+            source,
+        })?;
+
+    if state.schema_version != LIVE_SESSION_STATE_SCHEMA_VERSION {
+        return Err(LiveSessionError::UnsupportedPersistedStateSchema {
+            path: state_path,
+            actual: state.schema_version,
+            expected: LIVE_SESSION_STATE_SCHEMA_VERSION,
+        });
+    }
+    if state.session_id != request.session_id {
+        return Err(LiveSessionError::PersistedStateSessionMismatch {
+            path: state_path,
+            expected_session_id: request.session_id.clone(),
+            actual_session_id: state.session_id,
+        });
+    }
+    if let Some(cursor) = state.last_delivered_cursor {
+        if cursor.session_id != request.session_id {
+            return Err(LiveSessionError::PersistedCursorSessionMismatch {
+                path: state_path,
+                expected_session_id: request.session_id.clone(),
+                actual_session_id: cursor.session_id,
+                actual_ordinal: cursor.ordinal,
+            });
+        }
+        return Ok(Some(cursor));
+    }
+
+    Ok(None)
 }
 
 fn resolve_rollout_path(request: &LiveSessionRequest) -> Result<Utf8PathBuf, LiveSessionError> {
