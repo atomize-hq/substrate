@@ -2201,7 +2201,11 @@ mod tests {
             Some(true)
         );
         assert_eq!(
-            patch.agents.world_dispatch.obligations.approval_response_allowed,
+            patch
+                .agents
+                .world_dispatch
+                .obligations
+                .approval_response_allowed,
             Some(true)
         );
     }
@@ -2275,7 +2279,11 @@ agents:
             Some(true)
         );
         assert_eq!(
-            patch.agents.world_dispatch.obligations.approval_response_allowed,
+            patch
+                .agents
+                .world_dispatch
+                .obligations
+                .approval_response_allowed,
             Some(true)
         );
     }

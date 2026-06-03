@@ -1606,10 +1606,9 @@ mod tests {
         ForkWorldWorkerOutcomeV1, HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
         RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
         RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
-        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
-        WorkerContinuePayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
-        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
-        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1, WorkerContinuePayloadV1,
+        WorkerForkPayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
         WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
@@ -3242,7 +3241,8 @@ mod tests {
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_deferred_host_response_payload_kinds_during_deserialization() {
+    fn world_dispatch_contract_rejects_deferred_host_response_payload_kinds_during_deserialization()
+    {
         let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
             "request_id": "req-40",
             "idempotency_key": "idem-40",

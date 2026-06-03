@@ -19,6 +19,8 @@ use super::dispatch_contract::{
     ApprovalResponseDecisionV1, RetainedWorkerInspectSnapshotV1,
     WorkerContinueApprovalResponsePayloadV1,
 };
+#[cfg(any(target_os = "linux", test))]
+use super::obligation_ledger::ApprovalObligationCloseoutDisposition;
 use super::{
     auto_attach::{
         claimed_obligation_id, select_attach_candidate, SessionAutoAttachClaim,
@@ -36,8 +38,6 @@ use super::{
     },
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
-#[cfg(any(target_os = "linux", test))]
-use super::obligation_ledger::ApprovalObligationCloseoutDisposition;
 
 #[derive(Clone, Debug)]
 pub(crate) struct AgentRuntimeSessionRecord {
@@ -3274,9 +3274,7 @@ fn compatibility_inbox_item_from_obligation(
         item.resolved_at = None;
     } else {
         item.state = match obligation.review_state {
-            OrchestrationObligationReviewState::Acknowledged => {
-                DurableInboxItemState::Acknowledged
-            }
+            OrchestrationObligationReviewState::Acknowledged => DurableInboxItemState::Acknowledged,
             OrchestrationObligationReviewState::Resolved
                 if obligation.kind == OrchestrationObligationKind::ApprovalRequired =>
             {
@@ -3284,9 +3282,7 @@ fn compatibility_inbox_item_from_obligation(
             }
             OrchestrationObligationReviewState::Unread
             | OrchestrationObligationReviewState::Resolved
-            | OrchestrationObligationReviewState::Dismissed => {
-                DurableInboxItemState::Dismissed
-            }
+            | OrchestrationObligationReviewState::Dismissed => DurableInboxItemState::Dismissed,
         };
         item.resolved_at = obligation.resolved_at.or(Some(obligation.updated_at));
     }
@@ -7212,13 +7208,7 @@ mod tests {
     fn close_prepared_internal_continue_approval_response_obligation_durably_closes_after_delivery_proof(
     ) {
         with_store(|store| {
-            for (
-                suffix,
-                decision,
-                note,
-                expected_review_state,
-                expected_compat_state,
-            ) in [
+            for (suffix, decision, note, expected_review_state, expected_compat_state) in [
                 (
                     "approve",
                     ApprovalResponseDecisionV1::Approve,
@@ -7295,16 +7285,12 @@ mod tests {
                 assert!(!closed.attention_required);
                 assert_eq!(closed.resolution_note.as_deref(), Some(note));
                 assert!(
-                    closed
-                        .resolved_at
-                        .is_some_and(|resolved_at| {
-                            resolved_at >= closeout_started_at
-                                && resolved_at <= closeout_finished_at
-                        }),
+                    closed.resolved_at.is_some_and(|resolved_at| {
+                        resolved_at >= closeout_started_at && resolved_at <= closeout_finished_at
+                    }),
                     "resolved_at must be minted by state-store closeout"
                 );
-                let closed_resolved_at =
-                    closed.resolved_at.clone().expect("resolved_at set");
+                let closed_resolved_at = closed.resolved_at.expect("resolved_at set");
                 assert_eq!(closed.updated_at, closed_resolved_at);
 
                 let persisted = store
@@ -7359,8 +7345,11 @@ mod tests {
                 .expect("persist orchestrator");
             store.persist_participant(&member).expect("persist member");
 
-            let obligation =
-                pending_continue_approval_obligation("sess_continue_stale", "obl_stale", "ash_stale");
+            let obligation = pending_continue_approval_obligation(
+                "sess_continue_stale",
+                "obl_stale",
+                "ash_stale",
+            );
             store
                 .persist_obligation(&obligation)
                 .expect("persist approval obligation");
@@ -7412,8 +7401,8 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolved_approval_required_obligations_keep_compatibility_ack_vs_dismiss_scoped_to_closeout(
-    ) {
+    fn resolved_approval_required_obligations_keep_compatibility_ack_vs_dismiss_scoped_to_closeout()
+    {
         with_store(|store| {
             for (suffix, disposition, expected_review_state, expected_compat_state, note) in [
                 (
