@@ -671,7 +671,7 @@ async fn continue_world_worker(
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn persist_continue_world_worker_obligation(
+fn persist_continue_world_worker_obligation(
     store: &AgentRuntimeStateStore,
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     worker_event: &ContinueWorldWorkerEventV1,
@@ -714,45 +714,6 @@ pub(crate) fn persist_continue_world_worker_obligation(
             obligation.obligation_id, request.participant_id
         )
     })
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn capture_continue_world_worker_stream_event(
-    request: &transport_api_types::MemberTurnSubmitRequestV1,
-    policy: &Policy,
-    event: &substrate_common::agent_events::AgentEvent,
-    surfaced_worker_event: &mut Option<ContinueWorldWorkerEventV1>,
-) -> Result<()> {
-    let Some(classified_event) = classify_continue_world_worker_event(request, event)? else {
-        return Ok(());
-    };
-
-    enforce_continue_world_worker_event_policy(policy, classified_event.event_class)?;
-
-    let preserve_existing_obligation_request =
-        surfaced_worker_event.as_ref().is_some_and(|existing| {
-            continue_world_worker_event_is_obligation_request(existing.event_class)
-                && !continue_world_worker_event_is_obligation_request(classified_event.event_class)
-        });
-    if !preserve_existing_obligation_request {
-        // Preserve the surfaced Packet 3 worker request even if later ordinary stream events
-        // arrive before exit.
-        *surfaced_worker_event = Some(classified_event);
-    }
-
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn continue_world_worker_event_is_obligation_request(
-    event_class: ContinueWorldWorkerEventClassV1,
-) -> bool {
-    matches!(
-        event_class,
-        ContinueWorldWorkerEventClassV1::ApprovalRequest
-            | ContinueWorldWorkerEventClassV1::ForkRequest
-            | ContinueWorldWorkerEventClassV1::ForkRecommendation
-    )
 }
 
 #[cfg(target_os = "linux")]
@@ -1783,14 +1744,46 @@ async fn execute_continue_world_worker_stream(
                     if surfaced_thread_id.is_none() {
                         surfaced_thread_id = surfaced_thread_id_from_event(&event);
                     }
-                    if let Err(err) = capture_continue_world_worker_stream_event(
-                        request,
-                        policy,
-                        &event,
-                        &mut surfaced_worker_event,
-                    ) {
-                        cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
-                        return Err(err);
+                    let classified_event =
+                        match classify_continue_world_worker_event(request, &event) {
+                            Ok(classified_event) => classified_event,
+                            Err(err) => {
+                                cancel_continue_world_worker_turn(
+                                    &client,
+                                    active_span_id.as_deref(),
+                                )
+                                .await;
+                                return Err(err);
+                            }
+                        };
+                    if let Some(classified_event) = classified_event {
+                        if let Err(err) = enforce_continue_world_worker_event_policy(
+                            policy,
+                            classified_event.event_class,
+                        ) {
+                            cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
+                                .await;
+                            return Err(err);
+                        }
+                        let preserve_existing_packet_one_request =
+                            surfaced_worker_event.as_ref().is_some_and(|existing| {
+                                matches!(
+                                    existing.event_class,
+                                    ContinueWorldWorkerEventClassV1::ApprovalRequest
+                                        | ContinueWorldWorkerEventClassV1::ForkRequest
+                                        | ContinueWorldWorkerEventClassV1::ForkRecommendation
+                                ) && !matches!(
+                                    classified_event.event_class,
+                                    ContinueWorldWorkerEventClassV1::ApprovalRequest
+                                        | ContinueWorldWorkerEventClassV1::ForkRequest
+                                        | ContinueWorldWorkerEventClassV1::ForkRecommendation
+                                )
+                            });
+                        if !preserve_existing_packet_one_request {
+                            // Preserve the surfaced Packet 1 worker request even if later
+                            // ordinary stream events arrive before exit.
+                            surfaced_worker_event = Some(classified_event);
+                        }
                     }
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
@@ -1826,7 +1819,7 @@ async fn execute_continue_world_worker_stream(
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn enforce_continue_world_worker_event_policy(
+fn enforce_continue_world_worker_event_policy(
     policy: &Policy,
     event_class: ContinueWorldWorkerEventClassV1,
 ) -> Result<()> {
@@ -1909,7 +1902,7 @@ fn surfaced_thread_id_from_event(
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn classify_continue_world_worker_event(
+fn classify_continue_world_worker_event(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     event: &substrate_common::agent_events::AgentEvent,
 ) -> Result<Option<ContinueWorldWorkerEventV1>> {

@@ -25,8 +25,6 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use transport_api_types::ExecuteCancelRequestV1;
 #[cfg(target_os = "linux")]
 use transport_api_types::{ExecuteStreamFrame, MemberTurnSubmitRequestV1};
 use uuid::Uuid;
@@ -40,10 +38,6 @@ use crate::execution::agent_runtime::orchestration_session::{
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
-#[cfg(target_os = "linux")]
-use crate::execution::orchestrator_world_dispatch::{
-    capture_continue_world_worker_stream_event, persist_continue_world_worker_obligation,
-};
 use crate::execution::prompt_fulfillment::PromptFulfillmentCancelHandle;
 
 use super::{
@@ -179,31 +173,6 @@ pub(crate) enum SubmittedPromptStreamEvent {
 pub(crate) struct SubmittedPromptCompletion {
     pub exit_code: i32,
     pub warning: Option<String>,
-}
-
-pub(crate) async fn cancel_submitted_world_turn(
-    client: &transport_api_client::AgentClient,
-    span_id: Option<&str>,
-) {
-    let Some(span_id) = span_id.map(str::trim).filter(|span_id| !span_id.is_empty()) else {
-        return;
-    };
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    {
-        let _ = client
-            .cancel_execute(ExecuteCancelRequestV1 {
-                span_id: span_id.to_string(),
-                sig: "INT".to_string(),
-            })
-            .await;
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        let _ = client;
-        let _ = span_id;
-    }
 }
 
 #[allow(dead_code)]
@@ -1998,33 +1967,15 @@ where
 
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
     let response = client
-        .submit_member_turn_stream(request.clone())
+        .submit_member_turn_stream(request)
         .await
         .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
 
-    let workspace_root = {
-        let orchestration_guard = runtime
-            .orchestration_session
-            .lock()
-            .expect("orchestration session mutex poisoned");
-        PathBuf::from(orchestration_guard.workspace_root.clone())
-    };
-    let (packet_three_policy, _) =
-        substrate_broker::resolve_effective_policy_with_explain(&workspace_root, false)
-            .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
-    let mut active_span_id = None::<String>;
     let mut observed_exit: Option<i32> = None;
-    let mut surfaced_worker_event = None;
     while let Some(frame) = body.as_mut().frame().await {
-        let frame = match frame {
-            Ok(frame) => frame,
-            Err(err) => {
-                cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-                return Err(anyhow::anyhow!("substrate: error: {err:#}"));
-            }
-        };
+        let frame = frame.map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
         let Some(data) = frame.data_ref() else {
             continue;
         };
@@ -2039,27 +1990,11 @@ where
             if payload.is_empty() {
                 continue;
             }
-            let frame = match serde_json::from_slice::<ExecuteStreamFrame>(payload) {
-                Ok(frame) => frame,
-                Err(err) => {
-                    cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-                    return Err(anyhow::anyhow!("substrate: error: {err:#}"));
-                }
-            };
+            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
+                .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
             match frame {
-                ExecuteStreamFrame::Start { span_id } => {
-                    active_span_id = Some(span_id);
-                }
+                ExecuteStreamFrame::Start { .. } => {}
                 ExecuteStreamFrame::Event { event } => {
-                    if let Err(err) = capture_continue_world_worker_stream_event(
-                        &request,
-                        &packet_three_policy,
-                        &event,
-                        &mut surfaced_worker_event,
-                    ) {
-                        cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-                        return Err(anyhow::anyhow!("substrate: error: {err:#}"));
-                    }
                     on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
                 }
                 ExecuteStreamFrame::Stdout { chunk_b64 } => {
@@ -2082,26 +2017,13 @@ where
                     observed_exit = Some(exit);
                 }
                 ExecuteStreamFrame::Error { message } => {
-                    cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
                     return Err(anyhow::anyhow!("substrate: error: {message}"));
                 }
             }
         }
     }
 
-    let exit_code = observed_exit.ok_or_else(|| {
-        anyhow::anyhow!(
-            "substrate: error: world follow-up stream ended without a terminal exit frame"
-        )
-    });
-    if exit_code.is_err() {
-        cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-    }
-    let exit_code = exit_code?;
-    if let Some(worker_event) = surfaced_worker_event.as_ref() {
-        persist_continue_world_worker_obligation(&runtime.store, &request, worker_event)
-            .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
-    }
+    let exit_code = observed_exit.unwrap_or(0);
     Ok(SubmittedPromptCompletion {
         exit_code,
         warning: warning_for_exit_code(exit_code),

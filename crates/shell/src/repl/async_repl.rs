@@ -35,9 +35,9 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
     apply_runtime_cancel_closeout, apply_runtime_stop_closeout, build_session_resume_extension,
-    cancel_submitted_world_turn, invalidate_stale_world_members_after_binding,
-    mark_orchestration_session_failed, mark_runtime_startup_failed, note_runtime_stop_requested,
-    persist_runtime_snapshots, persist_world_binding_authority, private_cancel_request_channel,
+    invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
+    mark_runtime_startup_failed, note_runtime_stop_requested, persist_runtime_snapshots,
+    persist_world_binding_authority, private_cancel_request_channel,
     private_prompt_request_channel, private_stop_request_channel, prompt_runtime_from_parts,
     register_private_cancel_transport, register_private_prompt_transport,
     register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
@@ -83,9 +83,6 @@ use crate::execution::agent_runtime::{
 use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
-use crate::execution::orchestrator_world_dispatch::{
-    capture_continue_world_worker_stream_event, persist_continue_world_worker_obligation,
-};
 use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
     prepare_spawn_world_worker_bootstrap,
@@ -1692,8 +1689,6 @@ enum TargetedTurnDispatchStatus {
     Submitted,
     Rejected(RuntimeBootstrapFailure),
 }
-
-const TARGETED_WORLD_FOLLOW_UP_REJECTED_PREFIX: &str = "targeted_world_follow_up_rejected: ";
 
 struct TargetedTurnDispatchContext<'a> {
     startup_context: &'a mut Option<RuntimeOrchestrationContext>,
@@ -4710,30 +4705,12 @@ async fn dispatch_targeted_follow_up_turn(
                         targeted_turn.backend_id
                     )
                 })?;
-            if let Err(err) =
-                submit_world_targeted_turn(runtime, targeted_turn.prompt, agent_printer, telemetry)
-                    .await
-            {
-                if let Some(message) = targeted_world_follow_up_rejection_message(&err) {
-                    return Ok(TargetedTurnDispatchStatus::Rejected(
-                        RuntimeBootstrapFailure {
-                            exit_code: 1,
-                            message,
-                        },
-                    ));
-                }
-                return Err(err);
-            }
+            submit_world_targeted_turn(runtime, targeted_turn.prompt, agent_printer, telemetry)
+                .await?;
         }
     }
 
     Ok(TargetedTurnDispatchStatus::Submitted)
-}
-
-fn targeted_world_follow_up_rejection_message(err: &anyhow::Error) -> Option<String> {
-    err.to_string()
-        .strip_prefix(TARGETED_WORLD_FOLLOW_UP_REJECTED_PREFIX)
-        .map(str::to_string)
 }
 
 fn internal_toolbox_surface_enabled(
@@ -6656,33 +6633,15 @@ async fn submit_world_targeted_turn(
     };
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
     let response = client
-        .submit_member_turn_stream(request.clone())
+        .submit_member_turn_stream(request)
         .await
         .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
 
-    let workspace_root = {
-        let orchestration_guard = runtime
-            .orchestration_session
-            .lock()
-            .expect("orchestration session mutex poisoned");
-        PathBuf::from(orchestration_guard.workspace_root.clone())
-    };
-    let (packet_three_policy, _) =
-        substrate_broker::resolve_effective_policy_with_explain(&workspace_root, false)
-            .map_err(|err| anyhow!("substrate: error: {}", err))?;
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
-    let mut active_span_id = None::<String>;
-    let mut exit_code = None::<i32>;
-    let mut surfaced_worker_event = None;
+    let mut exit_code = 0;
     while let Some(frame) = body.as_mut().frame().await {
-        let frame = match frame {
-            Ok(frame) => frame,
-            Err(err) => {
-                cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-                return Err(anyhow!("substrate: error: {err:#}"));
-            }
-        };
+        let frame = frame.map_err(|err| anyhow!("substrate: error: {err:#}"))?;
         let Some(data) = frame.data_ref() else {
             continue;
         };
@@ -6697,27 +6656,11 @@ async fn submit_world_targeted_turn(
             if payload.is_empty() {
                 continue;
             }
-            let frame = match serde_json::from_slice::<ExecuteStreamFrame>(payload) {
-                Ok(frame) => frame,
-                Err(err) => {
-                    cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-                    return Err(anyhow!("substrate: error: {err:#}"));
-                }
-            };
+            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
+                .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
             match frame {
-                ExecuteStreamFrame::Start { span_id } => {
-                    active_span_id = Some(span_id);
-                }
+                ExecuteStreamFrame::Start { .. } => {}
                 ExecuteStreamFrame::Event { event } => {
-                    if let Err(err) = capture_continue_world_worker_stream_event(
-                        &request,
-                        &packet_three_policy,
-                        &event,
-                        &mut surfaced_worker_event,
-                    ) {
-                        cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-                        return Err(anyhow!("{TARGETED_WORLD_FOLLOW_UP_REJECTED_PREFIX}{err:#}"));
-                    }
                     handle_agent_event(event, telemetry, agent_printer);
                 }
                 ExecuteStreamFrame::Stdout { chunk_b64 } => {
@@ -6733,25 +6676,13 @@ async fn submit_world_targeted_turn(
                     agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
-                    exit_code = Some(exit);
+                    exit_code = exit;
                 }
                 ExecuteStreamFrame::Error { message } => {
-                    cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
                     return Err(anyhow!("substrate: error: {message}"));
                 }
             }
         }
-    }
-    let exit_code = exit_code.ok_or_else(|| {
-        anyhow!("substrate: error: world follow-up stream ended without a terminal exit frame")
-    });
-    if exit_code.is_err() {
-        cancel_submitted_world_turn(&client, active_span_id.as_deref()).await;
-    }
-    let exit_code = exit_code?;
-    if let Some(worker_event) = surfaced_worker_event.as_ref() {
-        persist_continue_world_worker_obligation(&runtime.store, &request, worker_event)
-            .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
     }
     if exit_code != 0 {
         write_best_effort_stderr_line(&format!("Command failed with status: {exit_code}"));
