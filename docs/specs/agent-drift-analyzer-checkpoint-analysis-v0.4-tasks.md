@@ -104,7 +104,7 @@ Packet `v0.4B` exit condition:
 
 ## Packet v0.4C: Historical Thrash Recovery And Proof
 
-- [ ] Task: Move `DeadEndThrash` onto explicit repetition plus recovery inputs
+- [x] Task: Move `DeadEndThrash` onto explicit repetition plus recovery inputs
   - Acceptance: `DeadEndThrash` reads repeated loop evidence from the repetition slice, computes
     recovery from the explicit recovery state, and clears the active flag after one clean
     verification interval while preserving historical evidence.
@@ -117,7 +117,7 @@ Packet `v0.4B` exit condition:
     - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
     - `crates/agent-drift-analyzer/tests/export_bundle.rs`
 
-- [ ] Task: Revalidate exported checkpoints against sentinel consumers
+- [x] Task: Revalidate exported checkpoints against sentinel consumers
   - Acceptance: replay/live sentinel readers continue to consume exported checkpoints successfully
     after the analyzer semantic changes and renamed drift class.
   - Verify:
@@ -131,7 +131,7 @@ Packet `v0.4B` exit condition:
     - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
     - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
 
-- [ ] Task: Re-run the bounded sticky-session proof and refresh continuity docs
+- [x] Task: Re-run the bounded sticky-session proof and refresh continuity docs
   - Acceptance: the known sticky late-session scenario no longer leaves late checkpoints active
     solely because of earlier prefix behavior, and any continuity docs that still describe the old
     cumulative-prefix semantics are updated.

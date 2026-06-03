@@ -1,8 +1,8 @@
 # Agent Drift Analyzer Current Checkpoint Logic
 
 This document explains how the current `agent-drift-analyzer` checkpoint pipeline works today,
-including where the analyzer is interval-aware, where it is still cumulative, and how its output
-feeds the sentinel.
+including the `v0.4` checkpoint-analysis seam, which parts still depend on cumulative checkpoint
+windows, and how analyzer output feeds the sentinel.
 
 It is a code-reading aid for the current implementation, not a target-state design doc.
 
@@ -15,7 +15,7 @@ It is a code-reading aid for the current implementation, not a target-state desi
 - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
 - `crates/agent-drift-analyzer/src/checkpoint/export.rs`
 - `crates/agent-drift-analyzer/src/scoring/wrong_plan_branch.rs`
-- `crates/agent-drift-analyzer/src/scoring/ignoring_repo_truth.rs`
+- `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs`
 - `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`
 - `crates/agent-drift-sentinel/src/operator_surface.rs`
 
@@ -25,44 +25,46 @@ It is a code-reading aid for the current implementation, not a target-state desi
 flowchart TD
     A["Compactor bundle input"] --> B["Analyzer loads InputBundle"]
     B --> C["For each BundleSession"]
-    C --> D["Assemble full-session ContextPack"]
-    D --> E["Infer full-session TaskFrame"]
-    C --> F["Build checkpoint windows"]
-    F --> G["For each checkpoint window"]
-    G --> H["Assemble window ContextPack"]
-    H --> I["Infer window TaskFrame"]
-    I --> J["Score drift classes"]
-    J --> K["Build Checkpoint"]
-    K --> L["Export checkpoints.jsonl"]
-    K --> M["Aggregate summary.md metrics"]
-    L --> N["Sentinel replay or live ingestion"]
-    M --> N
+    C --> D["Build checkpoint windows"]
+    D --> E["Build CheckpointAnalysis values"]
+    E --> F["For each checkpoint analysis"]
+    F --> G["Score drift classes"]
+    G --> H["Build Checkpoint"]
+    H --> I["Export checkpoints.jsonl"]
+    H --> J["Aggregate summary.md metrics"]
+    I --> K["Sentinel replay or live ingestion"]
+    J --> K
 ```
 
 ## Resolution 2: Per-Session Analyzer Flow
 
 ```mermaid
 flowchart TD
-    A["BundleSession"] --> B["assemble_context(session)"]
-    B --> C["ContextPack"]
-    C --> D["infer_task_frame(context)"]
-    D --> E["Session-level TaskFrame"]
-    A --> F["checkpoint_windows(session)"]
-    F --> G["Window 1"]
-    F --> H["Window 2"]
-    F --> I["Window N"]
-    G --> J["assemble_context(window)"]
-    H --> K["assemble_context(window)"]
-    I --> L["assemble_context(window)"]
-    J --> M["infer_task_frame(window_context)"]
-    K --> N["infer_task_frame(window_context)"]
-    L --> O["infer_task_frame(window_context)"]
-    M --> P["score_session(window, window_context, window_task_frame)"]
-    N --> Q["score_session(window, window_context, window_task_frame)"]
-    O --> R["score_session(window, window_context, window_task_frame)"]
-    P --> S["build_session_checkpoint(window, ordinal, window_task_frame, scores)"]
-    Q --> T["build_session_checkpoint(window, ordinal, window_task_frame, scores)"]
-    R --> U["build_session_checkpoint(window, ordinal, window_task_frame, scores)"]
+    A["BundleSession"] --> B["checkpoint_windows(session)"]
+    B --> C["Window 1"]
+    B --> D["Window 2"]
+    B --> E["Window N"]
+    C --> F["assemble_context(window)"]
+    D --> G["assemble_context(window)"]
+    E --> H["assemble_context(window)"]
+    F --> I["infer_task_frame(window_context)"]
+    G --> J["infer_task_frame(window_context)"]
+    H --> K["infer_task_frame(window_context)"]
+    I --> L["CheckpointSlice"]
+    J --> M["CheckpointSlice"]
+    K --> N["CheckpointSlice"]
+    L --> O["interval_slice + repetition_slice + task_frame_delta + recovery_state"]
+    M --> P["interval_slice + repetition_slice + task_frame_delta + recovery_state"]
+    N --> Q["interval_slice + repetition_slice + task_frame_delta + recovery_state"]
+    O --> R["CheckpointAnalysis 1"]
+    P --> S["CheckpointAnalysis 2"]
+    Q --> T["CheckpointAnalysis N"]
+    R --> U["score_session(analysis, prior_truth_grounding_gap)"]
+    S --> V["score_session(analysis, prior_truth_grounding_gap)"]
+    T --> W["score_session(analysis, prior_truth_grounding_gap)"]
+    U --> X["build_session_checkpoint_from_analysis(...)"]
+    V --> Y["build_session_checkpoint_from_analysis(...)"]
+    W --> Z["build_session_checkpoint_from_analysis(...)"]
 ```
 
 ## Resolution 3: Bundle And Context Surfaces
@@ -139,35 +141,28 @@ flowchart TD
     K --> L
 ```
 
-## Resolution 6: Diagnostics Are Interval-Aware
+## Resolution 6: Diagnostics Now Route Through `CheckpointAnalysis`
 
-The checkpoint diagnostics are the one part of the current checkpoint builder that already compares
-the current prefix window against the previous checkpoint window.
+The exported diagnostics are now computed from the checkpoint-analysis seam. The windowing model is
+still cumulative, but diagnostics read explicit interval and recovery fields rather than
+recomputing a prior window ad hoc inside the checkpoint builder.
 
 ```mermaid
 flowchart TD
-    A["build_session_checkpoint(window, ordinal, ...)"] --> B["checkpoint_diagnostics(window, ordinal, ...)"]
-    B --> C{"ordinal > 1"}
-    C -->|No| D["Use all compact_rows in this window as interval_rows"]
-    C -->|Yes| E["previous_checkpoint_window(window, ordinal)"]
-    E --> F["Recompute checkpoint_windows on the current prefix"]
-    F --> G["Pick prior prefix window"]
-    G --> H["previous_context = assemble_context(previous_window)"]
-    H --> I["previous_task_frame = infer_task_frame(previous_context)"]
-    I --> J["interval_start = previous_window.compact_rows.len()"]
-    J --> K["interval_rows = current_window.compact_rows[interval_start..]"]
-    D --> L["collect_command_observations(interval_rows)"]
+    A["CheckpointAnalysis"] --> B["analysis.interval.command_observations"]
+    A --> C["analysis.recovery.interval_verification_command_count"]
+    A --> D["analysis.task_frame_delta.task_frame_transitioned"]
+    A --> E["analysis.task_frame_delta.working_set_changed"]
+    F["drift_scores"] --> G["evidence_item_count"]
+    B --> H["interval_command_count"]
+    C --> I["interval_verification_command_count"]
+    D --> J["task_frame_transitioned"]
+    E --> K["working_set_changed"]
+    G --> L["CheckpointDiagnostics"]
+    H --> L
+    I --> L
+    J --> L
     K --> L
-    L --> M["interval_command_count"]
-    L --> N["interval_verification_command_count"]
-    I --> O["task_frame_transitioned"]
-    I --> P["working_set_changed"]
-    Q["drift_scores"] --> R["evidence_item_count"]
-    M --> S["CheckpointDiagnostics"]
-    N --> S
-    O --> S
-    P --> S
-    R --> S
 ```
 
 ## Resolution 7: Task-Frame Assembly
@@ -208,11 +203,11 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["score_session(window, context, task_frame)"] --> B["score_wrong_plan_branch"]
-    A --> C["score_ignoring_repo_truth"]
+    A["score_session(analysis, previous_truth_grounding_gap)"] --> B["score_wrong_plan_branch"]
+    A --> C["score_truth_grounding_gap"]
     A --> D["score_dead_end_thrash"]
     B --> E["DriftScore wrong_plan_branch"]
-    C --> F["DriftScore ignoring_repo_truth"]
+    C --> F["DriftScore truth_grounding_gap"]
     D --> G["DriftScore dead_end_thrash"]
     E --> H["Sort by drift class order"]
     F --> H
@@ -222,16 +217,16 @@ flowchart TD
 
 ## Resolution 9: `wrong_plan_branch`
 
-Current behavior: this scorer reads the current window context, but that context was assembled from
-the cumulative prefix window.
+Current behavior: expected scope still comes from the current checkpoint task frame, but the
+scorer only inspects command observations from the explicit interval slice.
 
 ```mermaid
 flowchart TD
-    A["window ContextPack"] --> B["Start expected scope from task_frame.truth_artifacts"]
-    A --> C["Add context.working_set_paths where source is not observed_command"]
+    A["analysis.current.task_frame"] --> B["Start expected scope from task_frame.truth_artifacts"]
+    A --> C["Add current.context.working_set_paths where source is not observed_command"]
     B --> D["Dedup expected scope paths"]
     C --> D
-    A --> E["Iterate context.command_observations"]
+    A --> E["Iterate analysis.interval.command_observations"]
     E --> F{"command has paths and is write_like or verification_like"}
     F -->|No| G["Skip command"]
     F -->|Yes| H["Check whether all command paths match expected scope"]
@@ -248,56 +243,52 @@ flowchart TD
     O --> P
 ```
 
-## Resolution 10: `ignoring_repo_truth`
+## Resolution 10: `truth_grounding_gap`
 
-Current behavior: this scorer also reads the cumulative prefix command stream and asks whether the
-session acted before reading likely truth artifacts.
+Current behavior: this scorer treats truth-grounding as a hybrid signal. It computes active state
+from the latest interval and carries forward prior flagged evidence as explicit historical context.
 
 ```mermaid
 flowchart TD
-    A["window ContextPack"] --> B["truth_paths = task_frame.truth_artifacts"]
-    A --> C["Find first action index from write_like or verification_like commands"]
-    A --> D["Iterate command_observations"]
+    A["CheckpointAnalysis"] --> B["truth_paths = current.task_frame.truth_artifacts"]
+    A --> C["Find first action index from interval write_like or verification_like commands"]
+    A --> D["Iterate interval.command_observations"]
     D --> E["Does command touch a truth path"]
     E -->|Yes| F["Was it a read before first action"]
     F -->|Yes| G["Collect truth_reads evidence"]
     F -->|No| H["No special evidence added"]
     E -->|No| I["If write_like or verification_like, collect acting_without_truth evidence"]
-    B --> J["Compute raw score"]
+    A --> J["Import historical evidence from prior TruthGroundingGap score"]
     G --> J
     I --> J
     J --> K["No truth paths -> 0"]
-    J --> L["No truth_reads and actions_without_truth -> 80"]
-    J --> M["No truth_reads only -> 60"]
-    J --> N["Otherwise -> 20"]
+    J --> L["Active gap -> 80 and flagged"]
+    J --> M["Historical or grounded current interval -> 20"]
+    J --> N["Otherwise -> 0"]
     K --> O["Flagged if raw_score >= 60"]
     L --> O
-    M --> O
-    N --> O
+    M --> P["Not flagged"]
+    N --> P
 ```
 
 ## Resolution 11: `dead_end_thrash`
 
-Current behavior: this scorer intentionally reads the repetition-preserving archival surface, but it
-does so from the cumulative archival prefix associated with the current checkpoint.
+Current behavior: this scorer still reads repetition-preserving archival history from the current
+checkpoint prefix, but active flagging is gated by explicit recovery state from the latest
+interval.
 
 ```mermaid
 flowchart TD
-    A["window BundleSession"] --> B["collect_command_observations(window.archival_rows)"]
-    B --> C["Filter verification_like commands"]
-    C --> D["Group evidence by raw_command"]
-    A --> E["Iterate archival error and tool-output rows"]
-    E --> F["Filter non-empty rows"]
-    F --> G["Group evidence by text_hash_hex"]
-    D --> H["command_loops = groups with count >= 3"]
-    G --> I["failure_loops = groups with count >= 2"]
-    H --> J["Raw score contribution: 40 per command loop"]
-    I --> K["Raw score contribution: 30 per failure loop"]
-    J --> L["raw_score = min 100"]
-    K --> L
-    L --> M["Flagged if raw_score >= 60"]
-    H --> N["Evidence is all loop evidence"]
-    I --> N
+    A["analysis.repetition"] --> B["repeated_verification_loops"]
+    A --> C["repeated_failure_loops"]
+    A --> D["analysis.recovery.recovered_from_thrash"]
+    B --> E["Raw score contribution: 40 per command loop"]
+    C --> F["Raw score contribution: 30 per failure loop"]
+    E --> G["active_raw_score = min 100"]
+    F --> G
+    D --> H{"Recovered from thrash?"}
+    H -->|No| I["Use active raw score and current loop evidence"]
+    H -->|Yes| J["Downgrade to historical score 20 and historical evidence"]
 ```
 
 ## Resolution 12: Exported Summary Metrics
@@ -350,13 +341,16 @@ flowchart TD
 
 ## Current Semantics To Keep In Mind
 
-- Checkpoint windows are cumulative prefixes.
-- Checkpoint diagnostics compare the current prefix against the previous checkpoint and are
-  interval-aware.
-- `wrong_plan_branch` and `ignoring_repo_truth` currently score against cumulative command
-  observations because their input context is built from the cumulative prefix.
-- `dead_end_thrash` currently scores against cumulative archival history because it scans the
-  checkpoint's archival prefix.
+- Checkpoint windows are still cumulative prefixes.
+- `CheckpointAnalysis` is now the internal seam that carries current, previous, interval,
+  repetition, task-frame-delta, and recovery semantics for each checkpoint.
+- Checkpoint diagnostics come from that seam's interval and recovery fields.
+- `wrong_plan_branch` scores only the latest interval, while expected scope still comes from the
+  current checkpoint task frame.
+- `truth_grounding_gap` is a hybrid signal: the active flag comes from the latest interval, while
+  earlier grounding gaps are preserved as historical evidence.
+- `dead_end_thrash` still derives loop history from repetition-preserving archival evidence, but
+  the active flag clears after a clean verification interval via explicit recovery semantics.
 - `summary.md` is a rollup of emitted checkpoint state, not an independently recomputed notion of
   current recovery.
 - The sentinel currently exposes only `Visible` versus `Silent`; it does not have a first-class
