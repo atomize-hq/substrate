@@ -1,7 +1,7 @@
 mod export;
 mod schema;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::input::BundleSession;
 use crate::{
@@ -50,6 +50,20 @@ pub(crate) struct IntervalSlice {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RepetitionSlice {
     pub compact_rows: Vec<CompactionRow>,
+    pub repeated_verification_loops: Vec<RepeatedCommandLoop>,
+    pub repeated_failure_loops: Vec<RepeatedFailureLoop>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RepeatedCommandLoop {
+    pub raw_command: String,
+    pub evidence: Vec<EvidenceRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RepeatedFailureLoop {
+    pub text_hash_hex: String,
+    pub evidence: Vec<EvidenceRef>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -61,6 +75,8 @@ pub(crate) struct TaskFrameDelta {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct RecoveryState {
     pub interval_verification_command_count: usize,
+    pub clean_verification_interval: bool,
+    pub recovered_from_thrash: bool,
 }
 
 pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnalysis> {
@@ -78,7 +94,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
         let interval = interval_slice(previous.as_ref(), &current);
         let repetition = repetition_slice(&current);
         let task_frame_delta = task_frame_delta(previous.as_ref(), &current);
-        let recovery = recovery_state(&interval);
+        let recovery = recovery_state(&interval, &repetition);
 
         analyses.push(CheckpointAnalysis {
             session_id: current.window.session_id.clone(),
@@ -178,8 +194,49 @@ fn interval_slice(previous: Option<&CheckpointSlice>, current: &CheckpointSlice)
 }
 
 fn repetition_slice(current: &CheckpointSlice) -> RepetitionSlice {
+    let mut repeated_commands = BTreeMap::<String, Vec<EvidenceRef>>::new();
+    let archival_commands = collect_command_observations(&current.window.archival_rows);
+    for command in archival_commands
+        .iter()
+        .filter(|command| command.verification_like)
+    {
+        repeated_commands
+            .entry(command.raw_command.clone())
+            .or_default()
+            .extend(command.evidence.clone());
+    }
+
+    let mut repeated_failures = BTreeMap::<String, Vec<EvidenceRef>>::new();
+    for row in current.window.archival_rows.iter().filter(|row| is_failure_row(row)) {
+        repeated_failures
+            .entry(row.text_hash_hex.clone())
+            .or_default()
+            .push(EvidenceRef {
+                row: RowRef::from_row(row),
+                reason: "repeated failure evidence".to_string(),
+            });
+    }
+
     RepetitionSlice {
         compact_rows: current.window.compact_rows.clone(),
+        repeated_verification_loops: repeated_commands
+            .into_iter()
+            .filter_map(|(raw_command, evidence)| {
+                (evidence.len() >= 3).then_some(RepeatedCommandLoop {
+                    raw_command,
+                    evidence,
+                })
+            })
+            .collect(),
+        repeated_failure_loops: repeated_failures
+            .into_iter()
+            .filter_map(|(text_hash_hex, evidence)| {
+                (evidence.len() >= 2).then_some(RepeatedFailureLoop {
+                    text_hash_hex,
+                    evidence,
+                })
+            })
+            .collect(),
     }
 }
 
@@ -199,14 +256,53 @@ fn task_frame_delta(
     }
 }
 
-fn recovery_state(interval: &IntervalSlice) -> RecoveryState {
+fn recovery_state(interval: &IntervalSlice, repetition: &RepetitionSlice) -> RecoveryState {
+    let interval_verification_command_count = interval
+        .command_observations
+        .iter()
+        .filter(|command| command.verification_like)
+        .count();
+    let clean_verification_interval = interval_verification_command_count > 0
+        && !verification_loops_touch_interval(&repetition.repeated_verification_loops, interval)
+        && !failure_loops_touch_interval(&repetition.repeated_failure_loops, interval);
+
     RecoveryState {
-        interval_verification_command_count: interval
-            .command_observations
-            .iter()
-            .filter(|command| command.verification_like)
-            .count(),
+        interval_verification_command_count,
+        clean_verification_interval,
+        recovered_from_thrash: clean_verification_interval
+            && (!repetition.repeated_verification_loops.is_empty()
+                || !repetition.repeated_failure_loops.is_empty()),
     }
+}
+
+fn verification_loops_touch_interval(
+    loops: &[RepeatedCommandLoop],
+    interval: &IntervalSlice,
+) -> bool {
+    loops.iter().any(|command_loop| {
+        command_loop
+            .evidence
+            .iter()
+            .any(|evidence| interval_contains_evidence(interval, evidence))
+    })
+}
+
+fn failure_loops_touch_interval(loops: &[RepeatedFailureLoop], interval: &IntervalSlice) -> bool {
+    loops.iter().any(|failure_loop| {
+        failure_loop
+            .evidence
+            .iter()
+            .any(|evidence| interval_contains_evidence(interval, evidence))
+    })
+}
+
+fn interval_contains_evidence(interval: &IntervalSlice, evidence: &EvidenceRef) -> bool {
+    let interval_row_keys = interval
+        .compact_rows
+        .iter()
+        .map(row_key)
+        .collect::<BTreeSet<_>>();
+    interval_row_keys.contains(&row_ref_key(&evidence.row))
 }
 
 pub fn checkpoint_windows(session: &BundleSession) -> Vec<BundleSession> {
@@ -391,4 +487,13 @@ fn row_text_is_focusable(row: &CompactionRow) -> bool {
 
 fn row_key(row: &CompactionRow) -> (Utf8PathBuf, usize, usize) {
     (row.source_file.clone(), row.event_index, row.row_ordinal)
+}
+
+fn row_ref_key(row: &RowRef) -> (Utf8PathBuf, usize, usize) {
+    (row.source_file.clone(), row.event_index, row.row_ordinal)
+}
+
+fn is_failure_row(row: &CompactionRow) -> bool {
+    matches!(row.kind, CompactionKind::Error | CompactionKind::ToolOutput)
+        && !row.text.trim().is_empty()
 }

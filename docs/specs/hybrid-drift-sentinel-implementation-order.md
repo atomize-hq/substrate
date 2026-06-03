@@ -36,7 +36,7 @@ Primary sources:
 - `A4` implement deterministic context assembly
 - `A5` implement task-frame inference and confidence shaping
 - `A6` implement `wrong_plan_branch` scoring
-- `A7` implement `ignoring_repo_truth` scoring
+- `A7` implement `truth_grounding_gap` scoring
 - `A8` implement `dead_end_thrash` scoring
 - `A9` implement checkpoint segmentation and checkpoint contract
 - `A10` implement summary and output bundle export
@@ -321,12 +321,15 @@ Packet 10A note:
   `Checkpoints per turn: 16.00`, `Checkpoints per user prompt: 16.00`,
   `Avg rows between checkpoints: 17.33`, `Avg seconds between checkpoints: 45.40`,
   `Flagged checkpoints: 8`, `Longest flagged streak: 7`, `Flagged checkpoint rate: 0.50`,
-  `Drift-class flagged frequency: wrong_plan_branch=0.44, ignoring_repo_truth=0.06,
+  `Drift-class flagged frequency: wrong_plan_branch=0.44, truth_grounding_gap=0.06,
   dead_end_thrash=0.00`, `Task-frame transition count: 14`,
   `Task-frame confidence distribution: low=1, medium=15, high=0`, `Working-set churn: 0.93`,
   `Verification density: 0.02`, and `Average evidence items per checkpoint: 174.31`, while the
   session block still reports `Distinct task frames: 15`, `Truth artifacts referenced: 4`, and
   `Verification commands observed: 0`.
+- after the `v0.4` checkpoint-analysis follow-up, late checkpoints should clear active
+  `dead_end_thrash` after one clean verification interval while preserving the earlier loop
+  evidence as explicitly historical reasons in `checkpoints.jsonl`
 
 ### Packet 10B: Compactor bundle contract v0.2
 

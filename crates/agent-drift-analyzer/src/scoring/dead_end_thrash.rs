@@ -1,68 +1,125 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
-use agent_session_compactor::{CompactionKind, RowRef};
+use crate::checkpoint::{
+    CheckpointAnalysis, Confidence, DriftClass, DriftScore, EvidenceRef, RepeatedCommandLoop,
+    RepeatedFailureLoop,
+};
 
-use crate::checkpoint::{Confidence, DriftClass, DriftScore, EvidenceRef};
-use crate::context::{collect_command_observations, ContextPack};
-use crate::input::BundleSession;
+const HISTORICAL_REPEATED_VERIFICATION_REASON_PREFIX: &str =
+    "historical repeated verification evidence:";
+const HISTORICAL_REPEATED_FAILURE_REASON_PREFIX: &str = "historical repeated failure evidence:";
 
-pub(crate) fn score_dead_end_thrash(session: &BundleSession, context: &ContextPack) -> DriftScore {
-    let mut repeated_commands = BTreeMap::<String, Vec<EvidenceRef>>::new();
-    let mut repeated_failures = BTreeMap::<String, Vec<EvidenceRef>>::new();
-
-    let archival_commands = collect_command_observations(&session.archival_rows);
-    for command in archival_commands
-        .iter()
-        .filter(|command| command.verification_like)
-    {
-        repeated_commands
-            .entry(command.raw_command.clone())
-            .or_default()
-            .extend(command.evidence.clone());
-    }
-
-    for row in session.archival_rows.iter().filter(|row| {
-        matches!(row.kind, CompactionKind::Error | CompactionKind::ToolOutput)
-            && !row.text.trim().is_empty()
-    }) {
-        repeated_failures
-            .entry(row.text_hash_hex.clone())
-            .or_default()
-            .push(EvidenceRef {
-                row: RowRef::from_row(row),
-                reason: "repeated failure evidence".to_string(),
-            });
-    }
-
-    let command_loops = repeated_commands
-        .into_values()
-        .filter(|evidence| evidence.len() >= 3)
-        .collect::<Vec<_>>();
-    let failure_loops = repeated_failures
-        .into_values()
-        .filter(|evidence| evidence.len() >= 2)
-        .collect::<Vec<_>>();
-
-    let raw_score = ((command_loops.len() * 40) + (failure_loops.len() * 30)).min(100) as u8;
-    let mut evidence = Vec::new();
-    for loop_evidence in &command_loops {
-        evidence.extend(loop_evidence.clone());
-    }
-    for loop_evidence in &failure_loops {
-        evidence.extend(loop_evidence.clone());
-    }
+pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> DriftScore {
+    let has_history = !analysis.repetition.repeated_verification_loops.is_empty()
+        || !analysis.repetition.repeated_failure_loops.is_empty();
+    let flagged = has_history && !analysis.recovery.recovered_from_thrash;
+    let raw_score = if flagged {
+        active_raw_score(analysis)
+    } else if has_history {
+        20
+    } else {
+        0
+    };
+    let mut evidence = if flagged {
+        current_thrashing_evidence(analysis)
+    } else {
+        historical_thrash_evidence(analysis)
+    };
+    dedupe_evidence(&mut evidence);
 
     DriftScore {
         class: DriftClass::DeadEndThrash,
         raw_score,
-        confidence: if !command_loops.is_empty() {
+        confidence: if !analysis.repetition.repeated_verification_loops.is_empty() {
             Confidence::High
-        } else if !failure_loops.is_empty() || !context.command_observations.is_empty() {
+        } else if !analysis.repetition.repeated_failure_loops.is_empty()
+            || !analysis.current.context.command_observations.is_empty()
+        {
             Confidence::Medium
         } else {
             Confidence::Low
         },
-        flagged: raw_score >= 60,
+        flagged,
         evidence,
     }
+}
+
+fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {
+    ((analysis.repetition.repeated_verification_loops.len() * 40)
+        + (analysis.repetition.repeated_failure_loops.len() * 30))
+        .min(100) as u8
+}
+
+fn current_thrashing_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
+    let mut evidence =
+        repeated_verification_evidence(&analysis.repetition.repeated_verification_loops, false);
+    evidence.extend(repeated_failure_evidence(
+        &analysis.repetition.repeated_failure_loops,
+        false,
+    ));
+    evidence
+}
+
+fn historical_thrash_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
+    let mut evidence =
+        repeated_verification_evidence(&analysis.repetition.repeated_verification_loops, true);
+    evidence.extend(repeated_failure_evidence(
+        &analysis.repetition.repeated_failure_loops,
+        true,
+    ));
+    evidence
+}
+
+fn repeated_verification_evidence(
+    loops: &[RepeatedCommandLoop],
+    historical: bool,
+) -> Vec<EvidenceRef> {
+    loops.iter()
+        .flat_map(|command_loop| {
+            command_loop.evidence.iter().map(move |evidence| EvidenceRef {
+                row: evidence.row.clone(),
+                reason: if historical {
+                    format!(
+                        "{HISTORICAL_REPEATED_VERIFICATION_REASON_PREFIX} repeated verification command: {}",
+                        command_loop.raw_command
+                    )
+                } else {
+                    format!("repeated verification command: {}", command_loop.raw_command)
+                },
+            })
+        })
+        .collect()
+}
+
+fn repeated_failure_evidence(
+    loops: &[RepeatedFailureLoop],
+    historical: bool,
+) -> Vec<EvidenceRef> {
+    loops.iter()
+        .flat_map(|failure_loop| {
+            failure_loop.evidence.iter().map(move |evidence| EvidenceRef {
+                row: evidence.row.clone(),
+                reason: if historical {
+                    format!(
+                        "{HISTORICAL_REPEATED_FAILURE_REASON_PREFIX} {}",
+                        evidence.reason
+                    )
+                } else {
+                    evidence.reason.clone()
+                },
+            })
+        })
+        .collect()
+}
+
+fn dedupe_evidence(evidence: &mut Vec<EvidenceRef>) {
+    let mut seen = BTreeSet::new();
+    evidence.retain(|item| {
+        seen.insert((
+            item.row.source_file.clone(),
+            item.row.event_index,
+            item.row.row_ordinal,
+            item.reason.clone(),
+        ))
+    });
 }

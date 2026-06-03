@@ -17,7 +17,7 @@ pub(crate) fn score_session(
     let mut scores = vec![
         score_wrong_plan_branch(analysis),
         score_truth_grounding_gap(analysis, previous_truth_grounding_gap),
-        score_dead_end_thrash(&analysis.current.window, &analysis.current.context),
+        score_dead_end_thrash(analysis),
     ];
     scores.sort_by_key(|score| match score.class {
         DriftClass::WrongPlanBranch => 0,

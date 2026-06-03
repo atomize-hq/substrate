@@ -206,7 +206,7 @@ If you want the broader analyzer ladder:
 cargo test -p agent-drift-analyzer context_assembly -- --nocapture
 cargo test -p agent-drift-analyzer task_frame -- --nocapture
 cargo test -p agent-drift-analyzer wrong_plan_branch -- --nocapture
-cargo test -p agent-drift-analyzer ignoring_repo_truth -- --nocapture
+cargo test -p agent-drift-analyzer truth_grounding_gap -- --nocapture
 cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 cargo test -p agent-drift-analyzer export_bundle -- --nocapture
@@ -245,6 +245,8 @@ Expected success signatures:
 - `checkpoints.jsonl` contains one or more progressive checkpoint objects for that session
 - each checkpoint includes `schema_version`, `checkpoint_id`, `boundary`, `diagnostics`,
   `task_frame`, `drift_scores`, and `expected_next_step`
+- recovered late checkpoints may keep explicit historical drift evidence while clearing the active
+  `dead_end_thrash` flag after one clean verification interval
 
 ## 3. Agent Drift Sentinel Replay
 
