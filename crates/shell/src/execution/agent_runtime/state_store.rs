@@ -36,7 +36,7 @@ use super::{
     },
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
-#[cfg(test)]
+#[cfg(any(target_os = "linux", test))]
 use super::obligation_ledger::ApprovalObligationCloseoutDisposition;
 
 #[derive(Clone, Debug)]
@@ -434,6 +434,14 @@ pub(crate) struct PreparedInternalApprovalResponseObligationCloseout {
     pub world_id: String,
     pub world_generation: u64,
     pub decision: ApprovalResponseDecisionV1,
+}
+
+#[allow(dead_code)]
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct InternalApprovalResponseDeliveryProof {
+    pub closeout: PreparedInternalApprovalResponseObligationCloseout,
+    pub delivered_at: DateTime<Utc>,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -1343,19 +1351,31 @@ impl AgentRuntimeStateStore {
     #[allow(dead_code)]
     pub(crate) fn close_prepared_internal_continue_approval_response_obligation(
         &self,
-        closeout: &PreparedInternalApprovalResponseObligationCloseout,
-        _resolution_note: Option<String>,
+        delivery_proof: &InternalApprovalResponseDeliveryProof,
+        resolution_note: Option<String>,
     ) -> Result<OrchestrationObligationRecord> {
-        // Packet 2 only proves exact-causation against a still-pending approval obligation.
-        // The durable resolve/dismiss transition must wait for the later delivery proof path.
-        self.load_exact_pending_approval_obligation_for_continue_target(
+        let closeout = &delivery_proof.closeout;
+        let mut obligation = self.load_exact_pending_approval_obligation_for_continue_target(
             &closeout.orchestration_session_id,
             &closeout.target_participant_id,
             &closeout.target_backend_id,
             &closeout.world_id,
             closeout.world_generation,
             &closeout.approval_obligation_id,
-        )
+        )?;
+        let disposition = match closeout.decision {
+            ApprovalResponseDecisionV1::Approve => ApprovalObligationCloseoutDisposition::Resolve,
+            ApprovalResponseDecisionV1::Deny => ApprovalObligationCloseoutDisposition::Dismiss,
+        };
+
+        obligation.mark_approval_response_closed(
+            disposition,
+            resolution_note,
+            delivery_proof.delivered_at,
+        );
+        self.persist_obligation(&obligation)?;
+
+        Ok(obligation)
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -7201,19 +7221,29 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn close_prepared_internal_continue_approval_response_obligation_keeps_pending_obligation_until_delivery_proof(
+    fn close_prepared_internal_continue_approval_response_obligation_durably_closes_after_delivery_proof(
     ) {
         with_store(|store| {
-            for (suffix, decision, note) in [
+            for (
+                suffix,
+                decision,
+                note,
+                expected_review_state,
+                expected_compat_state,
+            ) in [
                 (
                     "approve",
                     ApprovalResponseDecisionV1::Approve,
                     "approved by host",
+                    OrchestrationObligationReviewState::Resolved,
+                    DurableInboxItemState::Acknowledged,
                 ),
                 (
                     "deny",
                     ApprovalResponseDecisionV1::Deny,
                     "denied by host",
+                    OrchestrationObligationReviewState::Dismissed,
+                    DurableInboxItemState::Dismissed,
                 ),
             ] {
                 let session_id = format!("sess_continue_{suffix}");
@@ -7263,47 +7293,127 @@ mod tests {
                         },
                     )
                     .expect("prepare approval closeout");
+                let delivered_at = Utc::now();
                 let closed = store
                     .close_prepared_internal_continue_approval_response_obligation(
-                        &closeout,
+                        &InternalApprovalResponseDeliveryProof {
+                            closeout,
+                            delivered_at,
+                        },
                         Some(note.to_string()),
                     )
                     .expect("close prepared approval obligation");
 
-                assert_eq!(closed.state, OrchestrationObligationState::Pending);
-                assert_eq!(closed.review_state, OrchestrationObligationReviewState::Unread);
-                assert!(closed.attention_required);
-                assert_eq!(closed.resolution_note, None);
-                assert!(closed.resolved_at.is_none());
+                assert_eq!(closed.state, OrchestrationObligationState::Resolved);
+                assert_eq!(closed.review_state, expected_review_state);
+                assert!(!closed.attention_required);
+                assert_eq!(closed.resolution_note.as_deref(), Some(note));
+                assert_eq!(closed.resolved_at, Some(delivered_at));
+                assert_eq!(closed.updated_at, delivered_at);
 
                 let persisted = store
                     .load_obligation(&session_id, &format!("obl_{suffix}"))
                     .expect("load persisted obligation")
                     .expect("persisted obligation exists");
-                assert_eq!(persisted.state, OrchestrationObligationState::Pending);
-                assert_eq!(
-                    persisted.review_state,
-                    OrchestrationObligationReviewState::Unread
-                );
-                assert!(persisted.attention_required);
-                assert_eq!(persisted.resolution_note, None);
-                assert!(persisted.resolved_at.is_none());
+                assert_eq!(persisted.state, OrchestrationObligationState::Resolved);
+                assert_eq!(persisted.review_state, expected_review_state);
+                assert!(!persisted.attention_required);
+                assert_eq!(persisted.resolution_note.as_deref(), Some(note));
+                assert_eq!(persisted.resolved_at, Some(delivered_at));
+                assert_eq!(persisted.updated_at, delivered_at);
 
                 let compat_item = store
                     .load_inbox_item(&session_id, &format!("obl_{suffix}"))
                     .expect("load compatibility inbox item")
                     .expect("compatibility item exists");
                 assert_eq!(compat_item.kind, DurableInboxItemKind::ApprovalRequired);
-                assert_eq!(compat_item.state, DurableInboxItemState::Pending);
-                assert_eq!(compat_item.message, Some(format!("summary for obl_{suffix}")));
-                assert!(compat_item.resolved_at.is_none());
+                assert_eq!(compat_item.state, expected_compat_state);
+                assert_eq!(compat_item.message.as_deref(), Some(note));
+                assert_eq!(compat_item.resolved_at, Some(delivered_at));
 
                 let settled_session = store
                     .load_orchestration_session(&session_id)
                     .expect("load settled session")
                     .expect("settled session exists");
-                assert_eq!(settled_session.pending_inbox_count, 1);
+                assert_eq!(settled_session.pending_inbox_count, 0);
             }
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn close_prepared_internal_continue_approval_response_obligation_fails_closed_for_stale_delivery_proof(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_continue_stale", "orch_stale");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                "sess_continue_stale",
+                "ash_stale",
+                "orch_stale",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let obligation =
+                pending_continue_approval_obligation("sess_continue_stale", "obl_stale", "ash_stale");
+            store
+                .persist_obligation(&obligation)
+                .expect("persist approval obligation");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue_stale",
+                    "orch_stale",
+                    "ash_stale",
+                    "cli:codex_world",
+                )
+                .expect("resolve continue target");
+            let closeout = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_stale".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect("prepare approval closeout");
+
+            let mut resolved = store
+                .load_obligation("sess_continue_stale", "obl_stale")
+                .expect("load persisted obligation")
+                .expect("persisted obligation exists");
+            resolved.mark_approval_response_closed(
+                ApprovalObligationCloseoutDisposition::Resolve,
+                Some("closed elsewhere".to_string()),
+                Utc::now(),
+            );
+            store
+                .persist_obligation(&resolved)
+                .expect("persist resolved obligation");
+
+            let err = store
+                .close_prepared_internal_continue_approval_response_obligation(
+                    &InternalApprovalResponseDeliveryProof {
+                        closeout,
+                        delivered_at: Utc::now(),
+                    },
+                    Some("approved by host".to_string()),
+                )
+                .expect_err("stale delivery proof must fail closed");
+            assert_eq!(
+                err.to_string(),
+                "approval_obligation_already_resolved: orchestration session sess_continue_stale approval obligation obl_stale is already closed"
+            );
         });
     }
 
