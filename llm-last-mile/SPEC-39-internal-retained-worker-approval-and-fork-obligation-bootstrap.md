@@ -11,7 +11,9 @@ Related design stack:
 - [DESIGN-auto-attach-trigger-and-work-queue-contract.md](./DESIGN-auto-attach-trigger-and-work-queue-contract.md)
 - [DESIGN-router-daemon-attach-trigger-integration.md](./DESIGN-router-daemon-attach-trigger-integration.md)  
 Phase: `SPECIFY`  
-Status: proposed on `2026-06-02`
+Status: implemented on `2026-06-03`
+Landed posture note: retained-worker `approval_request`, `fork_request`, and `fork_recommendation` acceptance, deny-by-default worker-event policy gating, and durable local obligation projection are landed in the repo, but typed host approval/control responses, active-ephemeral exact task-identity widening, child auto-allocation, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and no deferred host-response, active-ephemeral identity, or Family-2 work was reopened.
 
 ## Assumptions
 
@@ -49,10 +51,10 @@ Primary runtime story:
 
 Current landed runtime note:
 
-1. `approval_request`, `approval_response`, `fork_request`, `fork_recommendation`, `fork_command`, `control_directive`, `control_ack`, and `attention_required` are still rejected as deferred wire labels in the `continue_world_worker` classifier,
-2. the live local obligation ledger already has canonical kinds for `ApprovalRequired`, `ForkRequest`, and `ForkRecommendation`,
-3. the live attach projection already treats `ApprovalRequired` and `ForkRequest` as router-auto-attach-eligible local kinds by default,
-4. the live policy model still lacks dedicated worker-event permission keys for approval/fork request autonomy, exposing only the generic `agents.world_dispatch` action/mode/backend/boundary gates,
+1. `approval_request`, `fork_request`, and `fork_recommendation` are now accepted retained-worker event classes in the `continue_world_worker` classifier, while `approval_response`, `fork_command`, `control_directive`, `control_ack`, and generic `attention_required` remain deferred and fail closed,
+2. the live local obligation ledger uses canonical durable kinds for `ApprovalRequired`, `ForkRequest`, and `ForkRecommendation`,
+3. the live attach projection treats `ApprovalRequired` and `ForkRequest` as local auto-attach-eligible kinds by default while keeping `ForkRecommendation` reviewable and non-attach-eligible by default,
+4. the live policy model now exposes dedicated deny-by-default worker-event permission keys through `agents.world_dispatch.obligations.approval_allowed`, `agents.world_dispatch.fork.requests_allowed`, and `agents.world_dispatch.fork.recommendations_allowed`,
 5. the live `RunWorldTaskOutcomeV1` still has no typed `task_run_id`, so active-ephemeral inspect/cancel widening remains separate later work.
 
 ## Tech Stack

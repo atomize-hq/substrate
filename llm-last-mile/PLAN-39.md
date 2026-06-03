@@ -3,7 +3,9 @@
 Source spec: [SPEC-39-internal-retained-worker-approval-and-fork-obligation-bootstrap.md](./SPEC-39-internal-retained-worker-approval-and-fork-obligation-bootstrap.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: first post-Slice-38 Family-1 widening slice  
-Status: proposed on `2026-06-02`
+Status: implemented on `2026-06-03`
+Landed posture note: retained-worker `approval_request`, `fork_request`, and `fork_recommendation` acceptance, deny-by-default worker-event policy gating, and durable local obligation projection are landed repo-wide, but typed host approval/control responses, active-ephemeral exact task-identity widening, child auto-allocation, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and the landed slice stayed bounded to retained-worker approval/fork obligation bootstrap.
 
 ## Objective
 
@@ -28,16 +30,16 @@ The repo already has the prerequisites that make worker-requested approval/fork 
 4. the local attach projection already knows that `ApprovalRequired` and `ForkRequest` are attach-eligible obligation kinds,
 5. the retained-worker event classifier already has a narrow typed event floor and an explicit deferred-wire-label fail-closed path.
 
-What the repo still lacks after Slice `38` is:
+What the repo lacked before Packets `1` through `3` landed was:
 
 1. accepted runtime worker event classes for `approval_request`, `fork_request`, and `fork_recommendation`,
 2. minimal deny-by-default worker-event permission keys for approval/fork autonomy,
 3. authoritative persistence of those accepted events as local obligations from the live `continue_world_worker` path,
 4. regression coverage proving accepted worker requests stay distinct from executed host control-plane actions.
 
-That matters because the obligation/router design stack already assumes worker producers such as `approval_request` and `fork_request`, but the live runtime still rejects those labels. The cleanest next move is therefore to freeze the first deferred worker-event subset and its policy/obligation projection before attempting Family-2 router execution or active-ephemeral task-identity widening.
+That mattered because the obligation/router design stack already assumed worker producers such as `approval_request` and `fork_request`, but the live runtime had still rejected those labels. The cleanest next move was therefore to freeze the first deferred worker-event subset and its policy/obligation projection before attempting Family-2 router execution or active-ephemeral task-identity widening.
 
-The narrowest honest implementation order is:
+The narrowest honest implementation order was:
 
 1. freeze the newly accepted worker event classes and their policy surface first,
 2. freeze their durable obligation mapping and projection semantics second,

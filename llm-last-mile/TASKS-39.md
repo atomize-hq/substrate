@@ -5,7 +5,9 @@ Source plan: [PLAN-39.md](./PLAN-39.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: proposed on `2026-06-02`
+Status: Packet 4 complete on `2026-06-03`; docs truth is aligned and the final validation wall is green
+Landed posture note: retained-worker `approval_request`, `fork_request`, and `fork_recommendation` acceptance, deny-by-default worker-event policy gating, and durable local obligation projection are landed repo-wide, but typed host approval/control responses, active-ephemeral exact task-identity widening, child auto-allocation, and Family-2 router/attach execution remain deferred.
+Validation note: final validation did not expose any in-scope stabilization follow-up, and no broader runtime feature work or deferred later surfaces were reopened.
 
 ## Execution Packets
 
@@ -28,14 +30,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Widen the retained-worker event contract for the first approval/fork worker event subset
+- [x] Task 1.1: Widen the retained-worker event contract for the first approval/fork worker event subset
   - Acceptance: `approval_request`, `fork_request`, and `fork_recommendation` are valid retained-worker event classes under exact identity and exact boundary truth; `approval_response`, `fork_command`, `control_directive`, `control_ack`, and generic `attention_required` remain deferred and fail closed.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Add minimal deny-by-default policy parsing and denial coverage for approval/fork worker-event autonomy
+- [x] Task 1.2: Add minimal deny-by-default policy parsing and denial coverage for approval/fork worker-event autonomy
   - Acceptance: policy/config truth can explicitly allow or deny `approval_request`, `fork_request`, and `fork_recommendation` worker events; denied events fail with stable explanation-ready errors; existing `agents.world_dispatch` action/mode/backend/boundary gates remain intact.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -66,7 +68,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Freeze obligation-kind mapping and durable record semantics for accepted approval/fork worker events
+- [x] Task 2.1: Freeze obligation-kind mapping and durable record semantics for accepted approval/fork worker events
   - Acceptance: `approval_request` persists `ApprovalRequired`, `fork_request` persists `ForkRequest`, and `fork_recommendation` persists `ForkRecommendation`; summaries, payloads, source identity, target backend, and world binding remain reviewable and exact.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -75,7 +77,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Keep local attach-projection compatibility explicit for the new obligation producers
+- [x] Task 2.2: Keep local attach-projection compatibility explicit for the new obligation producers
   - Acceptance: `ApprovalRequired` and `ForkRequest` preserve current local auto-attach eligibility semantics; `ForkRecommendation` remains non-attach-eligible by default; attach completion still does not imply obligation resolution.
   - Verify:
     - `cargo test -p shell auto_attach -- --nocapture`
@@ -105,7 +107,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Wire accepted worker approval/fork events through live `continue_world_worker` classification and persistence
+- [x] Task 3.1: Wire accepted worker approval/fork events through live `continue_world_worker` classification and persistence
   - Acceptance: exact retained-worker `continue_world_worker` events can persist `ApprovalRequired`, `ForkRequest`, and `ForkRecommendation` obligations when policy allows them; identity drift, boundary drift, or denied policy states fail closed before persistence.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -114,7 +116,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 3.2: Prove accepted `fork_request` stays distinct from executed `fork_world_worker`
+- [x] Task 3.2: Prove accepted `fork_request` stays distinct from executed `fork_world_worker`
   - Acceptance: accepted `fork_request` creates durable obligation state only; no child worker is allocated until a later explicit host-issued `fork_world_worker` action; public status/control regressions stay green.
   - Verify:
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
@@ -144,7 +146,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
+- [x] Task 4.1: Align planning/config truth without widening the slice
   - Acceptance: repo-local docs describe Slice `39` as retained-worker approval/fork obligation bootstrap, not router execution or auto-fork; wording keeps typed host approval/control responses, active-ephemeral identity widening, and Family-2 router execution explicitly deferred.
   - Verify:
     - manual diff review
@@ -154,7 +156,7 @@ Session goal:
     - [`llm-last-mile/PLAN-39.md`](./PLAN-39.md)
     - [`llm-last-mile/TASKS-39.md`](./TASKS-39.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker tests, and full workspace tests are green; no unintended widening into child auto-allocation, public control-surface changes, or Family-2 execution appears.
   - Verify:
     - `cargo fmt --all -- --check`
@@ -168,7 +170,7 @@ Session goal:
     - `cargo test -p substrate-broker -- --nocapture`
     - `cargo test --workspace -- --nocapture`
   - Expected files touched:
-    - final validation may require bounded follow-up fixes inside already-touched Slice `39` runtime surfaces, but must not reopen deferred host response typing, active-ephemeral identity, or Family-2 router execution
+    - no additional in-scope stabilization follow-up was required during final validation on this branch
 
 ### Packet 4 Checkpoint
 

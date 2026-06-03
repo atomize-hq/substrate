@@ -47,7 +47,8 @@ Config keys:
 Policy keys:
 - `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
 - Existing `agents.allowed_backends` entries stay valid across the successor `substrate agent ...` command surface because the policy token is still the derived `backend_id`, not `client`, `router`, `protocol`, `provider`, or `auth_authority`.
-- `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, and governs the live internal verbs `run_world_task`, `spawn_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
+- `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, and governs the live internal verbs `run_world_task`, `spawn_world_worker`, `fork_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
+- Slice `39` also keeps retained-worker approval/fork obligation bootstrap on that same internal surface through three deny-by-default worker-event autonomy keys: `agents.world_dispatch.obligations.approval_allowed`, `agents.world_dispatch.fork.requests_allowed`, and `agents.world_dispatch.fork.recommendations_allowed`.
 
 Minimal example:
 
@@ -302,12 +303,15 @@ Internal host-to-world steering example:
 
 - This surface is internal-only and deny-by-default. The built-in defaults keep `agents.world_dispatch.enabled=false`, keep the allowlists empty, require exact same-session and same-world-binding truth, disallow capability narrowing, and set both current concurrency caps to `0`.
 - Current action ids accepted by `agents.world_dispatch.allowed_actions` are `run_world_task`, `spawn_world_worker`, `fork_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
+- Slice `39` adds three deny-by-default retained-worker event gates under this same internal patch surface: `agents.world_dispatch.obligations.approval_allowed`, `agents.world_dispatch.fork.requests_allowed`, and `agents.world_dispatch.fork.recommendations_allowed`.
+- All three worker-event gates default to `false`. When `false`, retained-worker `approval_request`, `fork_request`, and `fork_recommendation` events emitted during `continue_world_worker` fail closed even if `continue_world_worker` itself is allowlisted.
+- Enabling these keys admits only durable local obligation production for retained-worker `approval_request`, `fork_request`, and `fork_recommendation`. It does not widen the public control surface, add typed host `approval_response` or broader control-directive/control-ack handling, widen active-ephemeral task identity, or allow child auto-allocation from worker-issued fork events.
 - `fork_world_worker` remains internal, host-initiated, exact-source, and retained-to-retained in Slice `38`. On Linux in v1, an allowlisted exact-source fork request reuses the retained bootstrap seam to allocate one retained child in the same authoritative session and world binding, and returns explicit source-to-child lineage; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `inspect_world_worker` remains internal, retained-worker-only in v1, and returns an authoritative store-backed snapshot instead of invoking world-side execution transport. Routed snapshot delivery is currently supported only on Linux in v1; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `cancel_world_work` remains internal, retained-worker-only in Slice `37`, and distinct from `stop_world_worker`. On Linux in v1, an allowlisted exact-target cancel request uses the dedicated private owner cancel surface to interrupt active retained work in flight and wait for authoritative cancelled closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - `stop_world_worker` remains internal, retained-worker-only in v1, and is a durable closeout action distinct from `cancel_world_work`. On Linux in v1, an allowlisted exact-target stop request reuses the existing private owner stop surface to drive authoritative stopped closeout; non-Linux builds fail closed with `unsupported_platform_or_posture`.
 - Current mode ids are limited to `ephemeral` and `retained`.
-- This patch surface does not imply worker-requested fork, fork recommendations, auto-fork, active-ephemeral inspect, active-ephemeral or dual-target cancel semantics, router-owned attach execution, or broader approval/fork autonomy policy.
+- Outside the three narrow Slice `39` worker-event gates above, this patch surface does not imply typed host approval/control responses, worker-issued `fork_command`, auto-fork, active-ephemeral inspect, active-ephemeral or dual-target cancel semantics, router-owned attach execution, or broader Family-2 autonomy/execution policy.
 
 ```yaml
 agents:
@@ -329,6 +333,11 @@ agents:
     allow_capability_narrowing: false
     max_live_retained_workers: 4
     max_concurrent_ephemeral: 2
+    obligations:
+      approval_allowed: false
+    fork:
+      requests_allowed: false
+      recommendations_allowed: false
 ```
 
 Policy patch management (CLI):
