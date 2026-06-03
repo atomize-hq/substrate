@@ -142,6 +142,13 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
                 "allow_capability_narrowing": policy.agents_world_dispatch_allow_capability_narrowing,
                 "max_live_retained_workers": policy.agents_world_dispatch_max_live_retained_workers,
                 "max_concurrent_ephemeral": policy.agents_world_dispatch_max_concurrent_ephemeral,
+                "fork": {
+                    "requests_allowed": policy.agents_world_dispatch_fork_requests_allowed,
+                    "recommendations_allowed": policy.agents_world_dispatch_fork_recommendations_allowed,
+                },
+                "obligations": {
+                    "approval_allowed": policy.agents_world_dispatch_obligations_approval_allowed,
+                },
             },
         },
         "workflow": {

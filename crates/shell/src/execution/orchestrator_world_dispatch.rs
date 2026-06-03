@@ -3449,6 +3449,42 @@ mod tests {
                 "/message",
                 Some("blocked on input"),
             ),
+            (
+                sample_continue_stream_event(json!({
+                    "event_class": "approval_request",
+                    "payload": {
+                        "message": "requires approval"
+                    }
+                })),
+                "approval_request",
+                true,
+                "/message",
+                Some("requires approval"),
+            ),
+            (
+                sample_continue_stream_event(json!({
+                    "event_class": "fork_request",
+                    "payload": {
+                        "message": "a child worker would help"
+                    }
+                })),
+                "fork_request",
+                true,
+                "/message",
+                Some("a child worker would help"),
+            ),
+            (
+                sample_continue_stream_event(json!({
+                    "event_class": "fork_recommendation",
+                    "payload": {
+                        "message": "consider forking"
+                    }
+                })),
+                "fork_recommendation",
+                false,
+                "/message",
+                Some("consider forking"),
+            ),
         ];
 
         for (event, event_class, attention_required, payload_pointer, payload_value) in cases {
@@ -3507,9 +3543,10 @@ mod tests {
     fn continue_world_worker_dispatch_contract_rejects_deferred_worker_event_classes() {
         let submit = sample_continue_submit_request();
         for deferred in [
-            "approval_request",
-            "fork_request",
+            "approval_response",
+            "fork_command",
             "control_directive",
+            "control_ack",
             "attention_required",
         ] {
             let err = classify_continue_world_worker_event(
@@ -3595,9 +3632,9 @@ mod tests {
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
                             event: sample_continue_stream_event(json!({
-                                "event_class": "approval_request",
+                                "event_class": "control_directive",
                                 "payload": {
-                                    "message": "requires approval"
+                                    "message": "not yet accepted"
                                 }
                             })),
                         },

@@ -651,6 +651,9 @@ pub(crate) enum ContinueWorldWorkerEventClassV1 {
     Failure,
     FollowUpQuestion,
     Blocked,
+    ApprovalRequest,
+    ForkRequest,
+    ForkRecommendation,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -663,21 +666,24 @@ impl ContinueWorldWorkerEventClassV1 {
             "failure" => Some(Self::Failure),
             "follow_up_question" => Some(Self::FollowUpQuestion),
             "blocked" => Some(Self::Blocked),
+            "approval_request" => Some(Self::ApprovalRequest),
+            "fork_request" => Some(Self::ForkRequest),
+            "fork_recommendation" => Some(Self::ForkRecommendation),
             _ => None,
         }
     }
 
     pub(crate) fn attention_required_by_default(self) -> bool {
-        matches!(self, Self::FollowUpQuestion | Self::Blocked)
+        matches!(
+            self,
+            Self::FollowUpQuestion | Self::Blocked | Self::ApprovalRequest | Self::ForkRequest
+        )
     }
 
     pub(crate) fn is_deferred_wire_label(label: &str) -> bool {
         matches!(
             label.trim(),
-            "approval_request"
-                | "approval_response"
-                | "fork_request"
-                | "fork_recommendation"
+            "approval_response"
                 | "fork_command"
                 | "control_directive"
                 | "control_ack"
@@ -3125,7 +3131,7 @@ mod tests {
     }
 
     #[test]
-    fn continue_world_worker_event_class_attention_semantics_stay_packet_three_narrow() {
+    fn continue_world_worker_event_class_attention_semantics_accepts_packet_one_worker_requests() {
         assert!(!ContinueWorldWorkerEventClassV1::Reply.attention_required_by_default());
         assert!(!ContinueWorldWorkerEventClassV1::ProgressUpdate.attention_required_by_default());
         assert!(!ContinueWorldWorkerEventClassV1::Result.attention_required_by_default());
@@ -3134,13 +3140,31 @@ mod tests {
         assert!(ContinueWorldWorkerEventClassV1::Blocked.attention_required_by_default());
         assert_eq!(
             ContinueWorldWorkerEventClassV1::from_wire_label("approval_request"),
-            None
+            Some(ContinueWorldWorkerEventClassV1::ApprovalRequest)
         );
-        assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+        assert_eq!(
+            ContinueWorldWorkerEventClassV1::from_wire_label("fork_request"),
+            Some(ContinueWorldWorkerEventClassV1::ForkRequest)
+        );
+        assert_eq!(
+            ContinueWorldWorkerEventClassV1::from_wire_label("fork_recommendation"),
+            Some(ContinueWorldWorkerEventClassV1::ForkRecommendation)
+        );
+        assert!(ContinueWorldWorkerEventClassV1::ApprovalRequest.attention_required_by_default());
+        assert!(ContinueWorldWorkerEventClassV1::ForkRequest.attention_required_by_default());
+        assert!(!ContinueWorldWorkerEventClassV1::ForkRecommendation
+            .attention_required_by_default());
+        assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "approval_request"
         ));
-        assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+        assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "fork_request"
+        ));
+        assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "fork_recommendation"
+        ));
+        assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "approval_response"
         ));
         assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "control_directive"

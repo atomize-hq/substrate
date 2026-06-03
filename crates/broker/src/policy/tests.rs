@@ -86,6 +86,11 @@ agents:
     allow_capability_narrowing: false
     max_live_retained_workers: 2
     max_concurrent_ephemeral: 1
+    fork:
+      requests_allowed: true
+      recommendations_allowed: true
+    obligations:
+      approval_allowed: true
 
 workflow:
   router:
@@ -250,6 +255,9 @@ fn pcm1_policy_yaml_accepts_llm_agents_and_workflow_router_families() {
     assert!(!policy.agents_world_dispatch_allow_capability_narrowing);
     assert_eq!(policy.agents_world_dispatch_max_live_retained_workers, 2);
     assert_eq!(policy.agents_world_dispatch_max_concurrent_ephemeral, 1);
+    assert!(policy.agents_world_dispatch_fork_requests_allowed);
+    assert!(policy.agents_world_dispatch_fork_recommendations_allowed);
+    assert!(policy.agents_world_dispatch_obligations_approval_allowed);
     assert!(policy.workflow_router_enabled);
     assert!(policy.workflow_router_allow_cross_workspace);
     assert_eq!(
@@ -378,6 +386,17 @@ fn pcm1_policy_yaml_accepts_explicit_inspect_world_worker_action() {
             "stop_world_worker".to_string()
         ]
     );
+}
+
+#[test]
+fn pcm1_world_dispatch_worker_event_autonomy_defaults_stay_fail_closed() {
+    let policy = Policy::default();
+    assert!(!policy.agents_world_dispatch_fork_requests_allowed);
+    assert!(!policy.agents_world_dispatch_fork_recommendations_allowed);
+    assert!(!policy.agents_world_dispatch_obligations_approval_allowed);
+    assert!(!policy.world_dispatch_fork_requests_allowed());
+    assert!(!policy.world_dispatch_fork_recommendations_allowed());
+    assert!(!policy.world_dispatch_approval_requests_allowed());
 }
 
 #[test]

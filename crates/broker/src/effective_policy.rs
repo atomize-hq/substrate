@@ -225,6 +225,10 @@ pub struct AgentsWorldDispatchPatch {
     pub max_live_retained_workers: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_ephemeral: Option<u32>,
+    #[serde(skip_serializing_if = "AgentsWorldDispatchForkPatch::is_empty")]
+    pub fork: AgentsWorldDispatchForkPatch,
+    #[serde(skip_serializing_if = "AgentsWorldDispatchObligationsPatch::is_empty")]
+    pub obligations: AgentsWorldDispatchObligationsPatch,
 }
 
 impl AgentsWorldDispatchPatch {
@@ -238,6 +242,36 @@ impl AgentsWorldDispatchPatch {
             && self.allow_capability_narrowing.is_none()
             && self.max_live_retained_workers.is_none()
             && self.max_concurrent_ephemeral.is_none()
+            && self.fork.is_empty()
+            && self.obligations.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentsWorldDispatchForkPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requests_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommendations_allowed: Option<bool>,
+}
+
+impl AgentsWorldDispatchForkPatch {
+    fn is_empty(&self) -> bool {
+        self.requests_allowed.is_none() && self.recommendations_allowed.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentsWorldDispatchObligationsPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_allowed: Option<bool>,
+}
+
+impl AgentsWorldDispatchObligationsPatch {
+    fn is_empty(&self) -> bool {
+        self.approval_allowed.is_none()
     }
 }
 
@@ -1463,6 +1497,81 @@ pub fn resolve_effective_policy_with_explain(
         );
     }
 
+    let (
+        agents_world_dispatch_fork_requests_allowed,
+        agents_world_dispatch_fork_requests_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_fork_requests_allowed,
+        global_patch.agents.world_dispatch.fork.requests_allowed,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.fork.requests_allowed),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_fork_requests_allowed =
+        agents_world_dispatch_fork_requests_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.fork.requests_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_fork_requests_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
+        agents_world_dispatch_fork_recommendations_allowed,
+        agents_world_dispatch_fork_recommendations_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_fork_recommendations_allowed,
+        global_patch.agents.world_dispatch.fork.recommendations_allowed,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.fork.recommendations_allowed),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_fork_recommendations_allowed =
+        agents_world_dispatch_fork_recommendations_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.fork.recommendations_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_fork_recommendations_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
+        agents_world_dispatch_obligations_approval_allowed,
+        agents_world_dispatch_obligations_approval_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_obligations_approval_allowed,
+        global_patch.agents.world_dispatch.obligations.approval_allowed,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.obligations.approval_allowed),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_obligations_approval_allowed =
+        agents_world_dispatch_obligations_approval_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.obligations.approval_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_obligations_approval_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     let (workflow_router_enabled, workflow_router_enabled_src) = resolve_replace(
         effective.workflow_router_enabled,
         global_patch.workflow.router.enabled,
@@ -1902,6 +2011,15 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     }
     if let Some(v) = patch.agents.world_dispatch.max_concurrent_ephemeral {
         target.agents_world_dispatch_max_concurrent_ephemeral = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.fork.requests_allowed {
+        target.agents_world_dispatch_fork_requests_allowed = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.fork.recommendations_allowed {
+        target.agents_world_dispatch_fork_recommendations_allowed = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.obligations.approval_allowed {
+        target.agents_world_dispatch_obligations_approval_allowed = v;
     }
     if let Some(v) = patch.workflow.router.enabled {
         target.workflow_router_enabled = v;

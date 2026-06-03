@@ -551,6 +551,21 @@ struct AgentsWorldDispatchEffectiveDisplayV1 {
     allow_capability_narrowing: bool,
     max_live_retained_workers: u32,
     max_concurrent_ephemeral: u32,
+    fork: AgentsWorldDispatchForkEffectiveDisplayV1,
+    obligations: AgentsWorldDispatchObligationsEffectiveDisplayV1,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsWorldDispatchForkEffectiveDisplayV1 {
+    requests_allowed: bool,
+    recommendations_allowed: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsWorldDispatchObligationsEffectiveDisplayV1 {
+    approval_allowed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -662,6 +677,15 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
                 allow_capability_narrowing: policy.agents_world_dispatch_allow_capability_narrowing,
                 max_live_retained_workers: policy.agents_world_dispatch_max_live_retained_workers,
                 max_concurrent_ephemeral: policy.agents_world_dispatch_max_concurrent_ephemeral,
+                fork: AgentsWorldDispatchForkEffectiveDisplayV1 {
+                    requests_allowed: policy.agents_world_dispatch_fork_requests_allowed,
+                    recommendations_allowed: policy
+                        .agents_world_dispatch_fork_recommendations_allowed,
+                },
+                obligations: AgentsWorldDispatchObligationsEffectiveDisplayV1 {
+                    approval_allowed: policy
+                        .agents_world_dispatch_obligations_approval_allowed,
+                },
             },
         },
         workflow: WorkflowEffectiveDisplayV1 {

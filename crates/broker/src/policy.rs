@@ -326,6 +326,9 @@ pub struct WorldDispatchPolicy {
     pub allow_capability_narrowing: bool,
     pub max_live_retained_workers: u32,
     pub max_concurrent_ephemeral: u32,
+    pub fork_requests_allowed: bool,
+    pub fork_recommendations_allowed: bool,
+    pub approval_requests_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -398,6 +401,21 @@ struct AgentsWorldDispatchPolicyFileV1 {
     allow_capability_narrowing: bool,
     max_live_retained_workers: u32,
     max_concurrent_ephemeral: u32,
+    fork: AgentsWorldDispatchForkPolicyFileV1,
+    obligations: AgentsWorldDispatchObligationsPolicyFileV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsWorldDispatchForkPolicyFileV1 {
+    requests_allowed: bool,
+    recommendations_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsWorldDispatchObligationsPolicyFileV1 {
+    approval_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -498,6 +516,21 @@ struct RawAgentsWorldDispatchPolicyV1 {
     allow_capability_narrowing: bool,
     max_live_retained_workers: u32,
     max_concurrent_ephemeral: u32,
+    fork: RawAgentsWorldDispatchForkPolicyV1,
+    obligations: RawAgentsWorldDispatchObligationsPolicyV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsWorldDispatchForkPolicyV1 {
+    requests_allowed: bool,
+    recommendations_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsWorldDispatchObligationsPolicyV1 {
+    approval_allowed: bool,
 }
 
 impl Default for RawAgentsWorldDispatchPolicyV1 {
@@ -512,6 +545,8 @@ impl Default for RawAgentsWorldDispatchPolicyV1 {
             allow_capability_narrowing: false,
             max_live_retained_workers: 0,
             max_concurrent_ephemeral: 0,
+            fork: RawAgentsWorldDispatchForkPolicyV1::default(),
+            obligations: RawAgentsWorldDispatchObligationsPolicyV1::default(),
         }
     }
 }
@@ -576,6 +611,9 @@ pub struct Policy {
     pub agents_world_dispatch_allow_capability_narrowing: bool, // agents.world_dispatch.allow_capability_narrowing
     pub agents_world_dispatch_max_live_retained_workers: u32, // agents.world_dispatch.max_live_retained_workers
     pub agents_world_dispatch_max_concurrent_ephemeral: u32, // agents.world_dispatch.max_concurrent_ephemeral
+    pub agents_world_dispatch_fork_requests_allowed: bool, // agents.world_dispatch.fork.requests_allowed
+    pub agents_world_dispatch_fork_recommendations_allowed: bool, // agents.world_dispatch.fork.recommendations_allowed
+    pub agents_world_dispatch_obligations_approval_allowed: bool, // agents.world_dispatch.obligations.approval_allowed
 
     // Workflow router
     pub workflow_router_enabled: bool, // workflow.router.enabled
@@ -642,6 +680,9 @@ impl Default for Policy {
             agents_world_dispatch_allow_capability_narrowing: false,
             agents_world_dispatch_max_live_retained_workers: 0,
             agents_world_dispatch_max_concurrent_ephemeral: 0,
+            agents_world_dispatch_fork_requests_allowed: false,
+            agents_world_dispatch_fork_recommendations_allowed: false,
+            agents_world_dispatch_obligations_approval_allowed: false,
             workflow_router_enabled: false,
             workflow_router_allow_cross_workspace: false,
             workflow_router_allowed_rule_ids: Vec::new(),
@@ -838,7 +879,22 @@ impl Policy {
             allow_capability_narrowing: self.agents_world_dispatch_allow_capability_narrowing,
             max_live_retained_workers: self.agents_world_dispatch_max_live_retained_workers,
             max_concurrent_ephemeral: self.agents_world_dispatch_max_concurrent_ephemeral,
+            fork_requests_allowed: self.agents_world_dispatch_fork_requests_allowed,
+            fork_recommendations_allowed: self.agents_world_dispatch_fork_recommendations_allowed,
+            approval_requests_allowed: self.agents_world_dispatch_obligations_approval_allowed,
         }
+    }
+
+    pub fn world_dispatch_fork_requests_allowed(&self) -> bool {
+        self.agents_world_dispatch_fork_requests_allowed
+    }
+
+    pub fn world_dispatch_fork_recommendations_allowed(&self) -> bool {
+        self.agents_world_dispatch_fork_recommendations_allowed
+    }
+
+    pub fn world_dispatch_approval_requests_allowed(&self) -> bool {
+        self.agents_world_dispatch_obligations_approval_allowed
     }
 
     pub fn requires_world(&self) -> bool {
@@ -978,6 +1034,15 @@ impl Policy {
         self.agents_world_dispatch_max_concurrent_ephemeral = self
             .agents_world_dispatch_max_concurrent_ephemeral
             .min(other.agents_world_dispatch_max_concurrent_ephemeral);
+        self.agents_world_dispatch_fork_requests_allowed = self
+            .agents_world_dispatch_fork_requests_allowed
+            && other.agents_world_dispatch_fork_requests_allowed;
+        self.agents_world_dispatch_fork_recommendations_allowed = self
+            .agents_world_dispatch_fork_recommendations_allowed
+            && other.agents_world_dispatch_fork_recommendations_allowed;
+        self.agents_world_dispatch_obligations_approval_allowed = self
+            .agents_world_dispatch_obligations_approval_allowed
+            && other.agents_world_dispatch_obligations_approval_allowed;
         self.workflow_router_enabled =
             self.workflow_router_enabled && other.workflow_router_enabled;
         self.workflow_router_allow_cross_workspace = self.workflow_router_allow_cross_workspace
@@ -1149,6 +1214,21 @@ impl<'de> Deserialize<'de> for Policy {
                 .agents
                 .world_dispatch
                 .max_concurrent_ephemeral,
+            agents_world_dispatch_fork_requests_allowed: raw
+                .agents
+                .world_dispatch
+                .fork
+                .requests_allowed,
+            agents_world_dispatch_fork_recommendations_allowed: raw
+                .agents
+                .world_dispatch
+                .fork
+                .recommendations_allowed,
+            agents_world_dispatch_obligations_approval_allowed: raw
+                .agents
+                .world_dispatch
+                .obligations
+                .approval_allowed,
             workflow_router_enabled: raw.workflow.router.enabled,
             workflow_router_allow_cross_workspace: raw.workflow.router.allow_cross_workspace,
             workflow_router_allowed_rule_ids: raw.workflow.router.allowed_rule_ids,
@@ -1286,6 +1366,15 @@ impl Serialize for Policy {
                         .agents_world_dispatch_allow_capability_narrowing,
                     max_live_retained_workers: self.agents_world_dispatch_max_live_retained_workers,
                     max_concurrent_ephemeral: self.agents_world_dispatch_max_concurrent_ephemeral,
+                    fork: AgentsWorldDispatchForkPolicyFileV1 {
+                        requests_allowed: self.agents_world_dispatch_fork_requests_allowed,
+                        recommendations_allowed: self
+                            .agents_world_dispatch_fork_recommendations_allowed,
+                    },
+                    obligations: AgentsWorldDispatchObligationsPolicyFileV1 {
+                        approval_allowed: self
+                            .agents_world_dispatch_obligations_approval_allowed,
+                    },
                 },
             },
             workflow: WorkflowPolicyFileV1 {

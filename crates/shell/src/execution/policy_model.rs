@@ -220,6 +220,10 @@ pub(crate) struct AgentsWorldDispatchPatch {
     pub max_live_retained_workers: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_ephemeral: Option<u32>,
+    #[serde(skip_serializing_if = "AgentsWorldDispatchForkPatch::is_empty")]
+    pub fork: AgentsWorldDispatchForkPatch,
+    #[serde(skip_serializing_if = "AgentsWorldDispatchObligationsPatch::is_empty")]
+    pub obligations: AgentsWorldDispatchObligationsPatch,
 }
 
 impl AgentsWorldDispatchPatch {
@@ -233,6 +237,36 @@ impl AgentsWorldDispatchPatch {
             && self.allow_capability_narrowing.is_none()
             && self.max_live_retained_workers.is_none()
             && self.max_concurrent_ephemeral.is_none()
+            && self.fork.is_empty()
+            && self.obligations.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsWorldDispatchForkPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requests_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommendations_allowed: Option<bool>,
+}
+
+impl AgentsWorldDispatchForkPatch {
+    fn is_empty(&self) -> bool {
+        self.requests_allowed.is_none() && self.recommendations_allowed.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsWorldDispatchObligationsPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_allowed: Option<bool>,
+}
+
+impl AgentsWorldDispatchObligationsPatch {
+    fn is_empty(&self) -> bool {
+        self.approval_allowed.is_none()
     }
 }
 
@@ -1324,6 +1358,15 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = patch.agents.world_dispatch.max_concurrent_ephemeral {
         target.agents_world_dispatch_max_concurrent_ephemeral = v;
     }
+    if let Some(v) = patch.agents.world_dispatch.fork.requests_allowed {
+        target.agents_world_dispatch_fork_requests_allowed = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.fork.recommendations_allowed {
+        target.agents_world_dispatch_fork_recommendations_allowed = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.obligations.approval_allowed {
+        target.agents_world_dispatch_obligations_approval_allowed = v;
+    }
     if let Some(v) = patch.workflow.router.enabled {
         target.workflow_router_enabled = v;
     }
@@ -1468,6 +1511,27 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
             .agents
             .world_dispatch
             .max_concurrent_ephemeral
+            .take()
+            .is_some()),
+        "agents.world_dispatch.fork.requests_allowed" => Ok(patch
+            .agents
+            .world_dispatch
+            .fork
+            .requests_allowed
+            .take()
+            .is_some()),
+        "agents.world_dispatch.fork.recommendations_allowed" => Ok(patch
+            .agents
+            .world_dispatch
+            .fork
+            .recommendations_allowed
+            .take()
+            .is_some()),
+        "agents.world_dispatch.obligations.approval_allowed" => Ok(patch
+            .agents
+            .world_dispatch
+            .obligations
+            .approval_allowed
             .take()
             .is_some()),
 
@@ -1628,6 +1692,21 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
         ),
         "agents.world_dispatch.max_concurrent_ephemeral" => apply_u32_opt(
             &mut patch.agents.world_dispatch.max_concurrent_ephemeral,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.fork.requests_allowed" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.fork.requests_allowed,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.fork.recommendations_allowed" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.fork.recommendations_allowed,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.obligations.approval_allowed" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.obligations.approval_allowed,
             &update.op,
             &update.value,
         ),
@@ -2029,6 +2108,21 @@ mod tests {
                 op: UpdateOp::Set,
                 value: "1".to_string(),
             },
+            ConfigUpdate {
+                key: "agents.world_dispatch.fork.requests_allowed".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.fork.recommendations_allowed".to_string(),
+                op: UpdateOp::Set,
+                value: "false".to_string(),
+            },
+            ConfigUpdate {
+                key: "agents.world_dispatch.obligations.approval_allowed".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
         ];
 
         let changed = apply_updates_to_policy_patch(&mut patch, &updates).unwrap();
@@ -2063,6 +2157,18 @@ mod tests {
             patch.agents.world_dispatch.max_concurrent_ephemeral,
             Some(1)
         );
+        assert_eq!(
+            patch.agents.world_dispatch.fork.requests_allowed,
+            Some(true)
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.fork.recommendations_allowed,
+            Some(false)
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.obligations.approval_allowed,
+            Some(true)
+        );
     }
 
     #[test]
@@ -2092,6 +2198,11 @@ agents:
     allow_capability_narrowing: false
     max_live_retained_workers: 2
     max_concurrent_ephemeral: 1
+    fork:
+      requests_allowed: true
+      recommendations_allowed: true
+    obligations:
+      approval_allowed: true
 "#,
         )
         .expect("world dispatch keys should parse under agents");
@@ -2115,6 +2226,34 @@ agents:
             patch.agents.world_dispatch.allowed_modes.as_deref(),
             Some(&["ephemeral".to_string(), "retained".to_string()][..])
         );
+        assert_eq!(patch.agents.world_dispatch.fork.requests_allowed, Some(true));
+        assert_eq!(
+            patch.agents.world_dispatch.fork.recommendations_allowed,
+            Some(true)
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.obligations.approval_allowed,
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn policy_patch_keeps_worker_event_autonomy_denied_by_default_when_absent() {
+        let path = Path::new("policy.yaml");
+        let patch = parse_policy_patch_yaml(
+            path,
+            r#"
+agents:
+  world_dispatch:
+    enabled: true
+"#,
+        )
+        .expect("worker event autonomy keys may be omitted");
+
+        let effective = apply_policy_patch(&Policy::default(), &patch);
+        assert!(!effective.agents_world_dispatch_fork_requests_allowed);
+        assert!(!effective.agents_world_dispatch_fork_recommendations_allowed);
+        assert!(!effective.agents_world_dispatch_obligations_approval_allowed);
     }
 
     #[test]
