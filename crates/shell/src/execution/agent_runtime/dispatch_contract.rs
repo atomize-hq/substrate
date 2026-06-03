@@ -452,6 +452,42 @@ fn validate_approval_response_continue_payload(
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn render_continue_world_worker_transport_prompt(
+    payload: &WorldDispatchPayloadV1,
+) -> anyhow::Result<String> {
+    match payload {
+        WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 { prompt, .. }) => {
+            Ok(prompt.clone())
+        }
+        WorldDispatchPayloadV1::WorkerContinueApprovalResponse(response) => Ok(
+            render_continue_world_worker_approval_response_prompt(response),
+        ),
+        _ => anyhow::bail!(
+            "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
+        ),
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn render_continue_world_worker_approval_response_prompt(
+    response: &WorkerContinueApprovalResponsePayloadV1,
+) -> String {
+    let rendered = serde_json::json!({
+        "kind": "approval_response",
+        "approval_obligation_id": response.approval_obligation_id,
+        "decision": match response.decision {
+            ApprovalResponseDecisionV1::Approve => "approve",
+            ApprovalResponseDecisionV1::Deny => "deny",
+        },
+        "thread_id": response.thread_id,
+    });
+    format!(
+        "SUBSTRATE_INTERNAL_HOST_APPROVAL_RESPONSE_V1\n{}\nTreat this as the host's typed approval_response for the matching pending approval request. Apply decision=approve as permission granted and decision=deny as permission denied.",
+        rendered
+    )
+}
+
 fn validate_world_dispatch_target(
     action: WorldDispatchActionV1,
     value: Option<String>,
@@ -1597,6 +1633,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
+        render_continue_world_worker_transport_prompt,
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
         AgentRuntimeBackendKind, ApprovalResponseDecisionV1, AttachLaunchKnobs,
         AttachModePreference, CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1,
@@ -3192,6 +3229,40 @@ mod tests {
         assert_eq!(payload.approval_obligation_id, "obl-approval-40");
         assert_eq!(payload.decision, ApprovalResponseDecisionV1::Approve);
         assert_eq!(payload.thread_id.as_deref(), Some("thread-approval"));
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn world_dispatch_contract_renders_typed_approval_response_prompt_deterministically() {
+        let prompt = render_continue_world_worker_transport_prompt(
+            &WorldDispatchPayloadV1::WorkerContinueApprovalResponse(
+                WorkerContinueApprovalResponsePayloadV1 {
+                    approval_obligation_id: "obl-approval-40".to_string(),
+                    decision: ApprovalResponseDecisionV1::Deny,
+                    thread_id: Some("thread-approval".to_string()),
+                },
+            ),
+        )
+        .expect("typed approval response should render");
+
+        assert_eq!(
+            prompt,
+            "SUBSTRATE_INTERNAL_HOST_APPROVAL_RESPONSE_V1\n{\"kind\":\"approval_response\",\"approval_obligation_id\":\"obl-approval-40\",\"decision\":\"deny\",\"thread_id\":\"thread-approval\"}\nTreat this as the host's typed approval_response for the matching pending approval request. Apply decision=approve as permission granted and decision=deny as permission denied."
+        );
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn world_dispatch_contract_preserves_prompt_for_normal_continue_transport_rendering() {
+        let prompt = render_continue_world_worker_transport_prompt(
+            &WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "continue with the integration trace".to_string(),
+                thread_id: Some("thread-root".to_string()),
+            }),
+        )
+        .expect("normal continue prompt should render");
+
+        assert_eq!(prompt, "continue with the integration trace");
     }
 
     #[test]

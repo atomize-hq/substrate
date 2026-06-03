@@ -26,13 +26,16 @@ use crate::execution::agent_runtime::control::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
+    render_continue_world_worker_transport_prompt, ApprovalResponseDecisionV1,
     CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1,
     ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1,
     InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1,
-    StopWorldWorkerOutcomeV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
+    StopWorldWorkerOutcomeV1, WorkerForkPayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::state_store::PreparedInternalApprovalResponseObligationCloseout;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
 #[cfg(any(target_os = "linux", test))]
@@ -645,9 +648,11 @@ async fn continue_world_worker(
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
     enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
+    let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
     let stream_result = execute_continue_world_worker_stream(&submit_request, &base_policy).await?;
+    close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
     if let Some(worker_event) = stream_result.surfaced_worker_event.as_ref() {
         persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
     }
@@ -672,6 +677,71 @@ async fn continue_world_worker(
 }
 
 #[cfg(target_os = "linux")]
+fn prepare_continue_world_worker_approval_closeout(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<Option<PreparedInternalApprovalResponseObligationCloseout>> {
+    let WorldDispatchPayloadV1::WorkerContinueApprovalResponse(payload) = &prepared.request.payload
+    else {
+        return Ok(None);
+    };
+    let target_participant_id = prepared
+        .request
+        .target_participant_id
+        .as_deref()
+        .expect("validated continue request must include target_participant_id");
+
+    prepared
+        .store
+        .prepare_internal_continue_approval_response_closeout_for_delivery(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            target_participant_id,
+            &prepared.request.target_backend_id,
+            payload,
+        )
+        .with_context(|| {
+            format!(
+                "failed to bind typed approval response closeout for retained worker {}",
+                target_participant_id
+            )
+        })
+        .map(Some)
+}
+
+#[cfg(target_os = "linux")]
+fn close_continue_world_worker_approval_after_delivery(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    closeout: Option<&PreparedInternalApprovalResponseObligationCloseout>,
+) -> Result<()> {
+    let Some(closeout) = closeout else {
+        return Ok(());
+    };
+
+    let WorldDispatchPayloadV1::WorkerContinueApprovalResponse(payload) = &prepared.request.payload
+    else {
+        return Ok(());
+    };
+    let resolution_note = match payload.decision {
+        ApprovalResponseDecisionV1::Approve => Some("approved by host".to_string()),
+        ApprovalResponseDecisionV1::Deny => Some("denied by host".to_string()),
+    };
+    prepared
+        .store
+        .close_internal_continue_approval_response_after_delivery(closeout, resolution_note)
+        .with_context(|| {
+            format!(
+                "failed to close typed approval response after delivery to retained worker {}",
+                prepared
+                    .request
+                    .target_participant_id
+                    .as_deref()
+                    .expect("validated continue request must include target_participant_id")
+            )
+        })?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 fn enforce_continue_world_worker_payload_policy(
     prepared: &PreparedOrchestratorWorldDispatch,
     base_policy: &Policy,
@@ -684,9 +754,7 @@ fn enforce_continue_world_worker_payload_policy(
                     "effective policy does not allow continue_world_worker approval_response payloads",
                 ));
             }
-            anyhow::bail!(
-                "unsupported_dispatch_payload: continue_world_worker approval_response payloads are policy-gated but not yet transport-routable in packet 1"
-            );
+            Ok(())
         }
         WorldDispatchPayloadV1::WorkerContinue(_) => Ok(()),
         _ => anyhow::bail!(
@@ -1474,13 +1542,7 @@ fn build_continue_world_worker_submit_request(
             "invalid_dispatch_target: continue_world_worker requires an exact retained target participant"
         )
     })?;
-    let WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 { prompt, .. }) =
-        &prepared.request.payload
-    else {
-        anyhow::bail!(
-            "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
-        );
-    };
+    let prompt = render_continue_world_worker_transport_prompt(&prepared.request.payload)?;
     let orchestrator_participant_id = target
         .handle
         .orchestrator_participant_id
@@ -1513,7 +1575,7 @@ fn build_continue_world_worker_submit_request(
         run_id: prepared.request.request_id.clone(),
         world_id,
         world_generation,
-        prompt: prompt.clone(),
+        prompt,
     })
 }
 
@@ -2693,7 +2755,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::dispatch_contract::{
         ApprovalResponseDecisionV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
-        WorkerInspectPayloadV1,
+        WorkerContinuePayloadV1, WorkerInspectPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
@@ -2704,6 +2766,10 @@ mod tests {
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::{AgentRuntimeSessionState, PURE_AGENT_PROTOCOL};
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::{
+        OrchestrationObligationReviewState, OrchestrationObligationState,
+    };
     use crate::execution::agent_runtime::{
         TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
     };
@@ -2919,6 +2985,41 @@ mod tests {
             .join("\n");
         let policy = format!(
             "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n"
+        );
+        fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn write_world_dispatch_policy_with_approval_responses(
+        substrate_home: &Path,
+        enabled: bool,
+        allowed_backends: &[&str],
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        let enabled = if enabled { "true" } else { "false" };
+        let backends = allowed_backends
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let agent_backends = allowed_backends
+            .iter()
+            .map(|value| format!("    - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let actions = allowed_actions
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let modes = allowed_modes
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let policy = format!(
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n    obligations:\n      approval_response_allowed: true\n"
         );
         fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
     }
@@ -3349,6 +3450,30 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn persist_pending_continue_approval_obligation(
+        store: &AgentRuntimeStateStore,
+        obligation_id: &str,
+        world_id: &str,
+        world_generation: u64,
+    ) {
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_dispatch",
+            obligation_id,
+            OrchestrationObligationKind::ApprovalRequired,
+            "retained worker ash_member requested approval during continue_world_worker",
+        );
+        obligation.attention_required = true;
+        obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        obligation.source_participant_id = Some("ash_member".to_string());
+        obligation.target_backend_id = Some("cli:codex_world".to_string());
+        obligation.world_id = Some(world_id.to_string());
+        obligation.world_generation = Some(world_generation);
+        store
+            .persist_obligation(&obligation)
+            .expect("persist pending approval obligation");
+    }
+
+    #[cfg(target_os = "linux")]
     fn persist_stale_continue_dispatch_state(
         store: &AgentRuntimeStateStore,
         workspace_root: &Path,
@@ -3660,6 +3785,29 @@ mod tests {
         assert_eq!(submit.world_id, "world-17");
         assert_eq!(submit.world_generation, 2);
         assert_eq!(submit.prompt, "follow up");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_submit_request_renders_typed_approval_response_deterministically() {
+        let prepared = PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
+            request: sample_continue_approval_response_world_dispatch_request()
+                .validate()
+                .expect("validated approval-response continue request"),
+            session: sample_session(),
+            caller_participant: sample_orchestrator_participant(),
+            target_participant: Some(sample_member_participant()),
+            live_retained_worker_count: 1,
+        };
+
+        let submit =
+            build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
+
+        assert_eq!(
+            submit.prompt,
+            "SUBSTRATE_INTERNAL_HOST_APPROVAL_RESPONSE_V1\n{\"kind\":\"approval_response\",\"approval_obligation_id\":\"obl-approval-40\",\"decision\":\"approve\",\"thread_id\":\"thread-approval-40\"}\nTreat this as the host's typed approval_response for the matching pending approval request. Apply decision=approve as permission granted and decision=deny as permission denied."
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -4965,6 +5113,239 @@ agents:
             ),
             "payload gate must not leak retained-worker topology drift first: {message}"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_approval_response_closes_after_successful_delivery(
+    ) {
+        for (suffix, decision, expected_review_state, expected_note) in [
+            (
+                "approve",
+                ApprovalResponseDecisionV1::Approve,
+                OrchestrationObligationReviewState::Resolved,
+                "approved by host",
+            ),
+            (
+                "deny",
+                ApprovalResponseDecisionV1::Deny,
+                OrchestrationObligationReviewState::Dismissed,
+                "denied by host",
+            ),
+        ] {
+            let _env_guard = world_env_guard();
+            let substrate_home = tempdir().expect("substrate home tempdir");
+            let _substrate_home_guard =
+                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            write_world_dispatch_policy_with_approval_responses(
+                substrate_home.path(),
+                true,
+                &["cli:codex_world"],
+                &["continue_world_worker"],
+                &["retained"],
+            );
+
+            let socket_home = tempdir().expect("socket tempdir");
+            let socket_path = socket_home
+                .path()
+                .join(format!("approval-response-{suffix}.sock"));
+            let recorded_requests = Arc::new(Mutex::new(Vec::<
+                transport_api_types::MemberTurnSubmitRequestV1,
+            >::new()));
+            let recorded_requests_for_server = recorded_requests.clone();
+            let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+            let server = tokio::spawn(async move {
+                while let Ok((mut stream, _addr)) = listener.accept().await {
+                    let Some((header, body)) = read_http_request(&mut stream).await else {
+                        continue;
+                    };
+                    let first_line = header.lines().next().unwrap_or("");
+
+                    if first_line.starts_with("GET /v1/capabilities ") {
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/member_turn/stream ") {
+                        let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                            serde_json::from_slice(&body).expect("member turn submit request");
+                        recorded_requests_for_server
+                            .lock()
+                            .expect("recorded requests mutex poisoned")
+                            .push(parsed);
+                        write_http_stream_start(&mut stream).await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Start {
+                                span_id: "member-turn-span".to_string(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Event {
+                                event: sample_continue_stream_uaa_event(json!({
+                                    "type": "item.completed",
+                                    "thread_id": format!("thread-delivered-{suffix}"),
+                                    "turn_id": format!("turn-{suffix}"),
+                                    "item_id": format!("msg-{suffix}"),
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "approval response delivered"
+                                    }
+                                })),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Exit {
+                                exit: 17,
+                                span_id: "member-turn-span".to_string(),
+                                scopes_used: Vec::new(),
+                                fs_diff: None,
+                                process_telemetry: Default::default(),
+                            },
+                        )
+                        .await;
+                        finish_chunked_stream(&mut stream).await;
+                        break;
+                    }
+
+                    write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+                }
+            });
+
+            let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+            let workspace_root = tempdir().expect("workspace root tempdir");
+            let store = AgentRuntimeStateStore::new().expect("state store");
+            persist_authoritative_continue_dispatch_state(
+                &store,
+                workspace_root.path(),
+                "world-17",
+                2,
+            );
+            let obligation_id = format!("obl_approval_{suffix}");
+            persist_pending_continue_approval_obligation(&store, &obligation_id, "world-17", 2);
+
+            let mut request = sample_continue_approval_response_world_dispatch_request();
+            request.request_id = Some(format!("req_continue_approval_response_{suffix}"));
+            request.idempotency_key = Some(format!("idem_continue_approval_response_{suffix}"));
+            request.payload = WorldDispatchPayloadV1::WorkerContinueApprovalResponse(
+                WorkerContinueApprovalResponsePayloadV1 {
+                    approval_obligation_id: obligation_id.clone(),
+                    decision,
+                    thread_id: Some(format!("thread-approval-{suffix}")),
+                },
+            );
+            let expected_prompt = render_continue_world_worker_transport_prompt(
+                &request
+                    .clone()
+                    .validate()
+                    .expect("validated approval response request")
+                    .payload,
+            )
+            .expect("render approval response prompt");
+
+            let outcome = dispatch_orchestrator_world_request(&store, request)
+                .await
+                .expect("approval response delivery should succeed");
+            let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+                panic!("expected continue_world_worker outcome");
+            };
+            assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+            assert!(
+                outcome.summary.contains("status 17"),
+                "successful delivery should preserve the terminal exit status in the summary: {}",
+                outcome.summary
+            );
+
+            server.await.expect("stub world server task");
+
+            let recorded = recorded_requests
+                .lock()
+                .expect("recorded requests mutex poisoned");
+            assert_eq!(
+                recorded.len(),
+                1,
+                "typed approval response should submit exactly one retained member turn: {recorded:?}"
+            );
+            assert_eq!(recorded[0].prompt, expected_prompt);
+            drop(recorded);
+
+            let persisted = store
+                .load_obligation("sess_dispatch", &obligation_id)
+                .expect("load approval obligation")
+                .expect("approval obligation must persist");
+            assert_eq!(persisted.state, OrchestrationObligationState::Resolved);
+            assert_eq!(persisted.review_state, expected_review_state);
+            assert_eq!(persisted.resolution_note.as_deref(), Some(expected_note));
+            assert!(persisted.resolved_at.is_some());
+            assert!(!persisted.attention_required);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_approval_response_leaves_obligation_pending_when_delivery_fails(
+    ) {
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_approval_responses(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let missing_socket = socket_home.path().join("missing.sock");
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &missing_socket);
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        persist_pending_continue_approval_obligation(&store, "obl_approval_failed", "world-17", 2);
+
+        let mut request = sample_continue_approval_response_world_dispatch_request();
+        request.payload = WorldDispatchPayloadV1::WorkerContinueApprovalResponse(
+            WorkerContinueApprovalResponsePayloadV1 {
+                approval_obligation_id: "obl_approval_failed".to_string(),
+                decision: ApprovalResponseDecisionV1::Approve,
+                thread_id: Some("thread-approval-failed".to_string()),
+            },
+        );
+        let err = dispatch_orchestrator_world_request(&store, request)
+            .await
+            .expect_err("delivery failure must leave approval obligation unresolved");
+        assert!(
+            err.to_string()
+                .contains("failed to build member turn submit client for continue_world_worker"),
+            "unexpected delivery failure error: {err}"
+        );
+
+        let persisted = store
+            .load_obligation("sess_dispatch", "obl_approval_failed")
+            .expect("load approval obligation")
+            .expect("approval obligation must persist");
+        assert_eq!(persisted.state, OrchestrationObligationState::Pending);
+        assert_eq!(
+            persisted.review_state,
+            OrchestrationObligationReviewState::Unread
+        );
+        assert!(persisted.resolution_note.is_none());
+        assert!(persisted.resolved_at.is_none());
+        assert!(persisted.attention_required);
     }
 
     #[cfg(target_os = "linux")]

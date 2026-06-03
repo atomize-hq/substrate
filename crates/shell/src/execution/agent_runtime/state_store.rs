@@ -426,7 +426,7 @@ impl ResolvedInternalContinueWorldDispatchTarget {
 #[allow(dead_code)]
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct PreparedInternalApprovalResponseObligationCloseout {
+pub(crate) struct PreparedInternalApprovalResponseObligationCloseout {
     orchestration_session_id: String,
     approval_obligation_id: String,
     target_participant_id: String,
@@ -1364,6 +1364,39 @@ impl AgentRuntimeStateStore {
         self.persist_obligation(&obligation)?;
 
         Ok(obligation)
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn prepare_internal_continue_approval_response_closeout_for_delivery(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+        payload: &WorkerContinueApprovalResponsePayloadV1,
+    ) -> Result<PreparedInternalApprovalResponseObligationCloseout> {
+        let resolved_target = self.resolve_internal_continue_world_dispatch_target(
+            orchestration_session_id,
+            caller_participant_id,
+            target_participant_id,
+            target_backend_id,
+        )?;
+        self.prepare_internal_continue_approval_response_obligation_closeout(
+            &resolved_target,
+            payload,
+        )
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn close_internal_continue_approval_response_after_delivery(
+        &self,
+        closeout: &PreparedInternalApprovalResponseObligationCloseout,
+        resolution_note: Option<String>,
+    ) -> Result<OrchestrationObligationRecord> {
+        self.close_prepared_internal_continue_approval_response_obligation(
+            closeout,
+            resolution_note,
+        )
     }
 
     #[cfg(any(target_os = "linux", test))]
