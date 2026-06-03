@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Write;
 
 use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
@@ -29,6 +30,23 @@ impl Default for WarningPolicy {
 pub enum WarningDisposition {
     Visible,
     Silent { reason: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckpointPosture {
+    Active,
+    Recovered,
+    HistoricalOnly,
+}
+
+impl CheckpointPosture {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Recovered => "recovered",
+            Self::HistoricalOnly => "historical-only",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +92,7 @@ impl CheckpointDiagnosticsSummary {
 pub struct CheckpointPresentation {
     pub checkpoint: Checkpoint,
     pub trigger: TriggerClass,
+    pub posture: Option<CheckpointPosture>,
     pub disposition: WarningDisposition,
     pub severity: String,
     pub headline: String,
@@ -94,6 +113,9 @@ impl CheckpointPresentation {
         lines.push(format!("[{label}] {} ({})", self.headline, self.severity));
         lines.push(format!("- Objective: {}", self.objective));
         lines.push(format!("- Drift: {}", self.drift_summary));
+        if let Some(posture) = self.posture {
+            lines.push(format!("- Posture: {}", posture.as_str()));
+        }
         lines.push(format!(
             "- Diagnostics: {}",
             self.diagnostics_summary.render_console_summary()
@@ -188,10 +210,14 @@ pub fn render_replay_report(
     warning_policy: &WarningPolicy,
 ) -> ReplayReport {
     let mut scheduler = ReplayScheduler::new(*scheduler_policy);
+    let mut previous_by_session = HashMap::new();
     let mut visible_warnings = Vec::new();
     let mut silent_checkpoints = Vec::new();
 
     for checkpoint in checkpoints {
+        let previous_checkpoint = previous_by_session
+            .get(checkpoint.session_id.as_str())
+            .copied();
         let cursor = CheckpointCursor::from(checkpoint);
         let fingerprint = warning_fingerprint(checkpoint);
         let trigger = if checkpoint.flagged {
@@ -200,11 +226,18 @@ pub fn render_replay_report(
             TriggerClass::CheckpointReady
         };
         let decision = scheduler.observe(cursor, trigger, checkpoint.flagged, Some(&fingerprint));
-        let presentation = present_checkpoint(checkpoint, trigger, &decision, warning_policy);
+        let presentation = present_checkpoint_with_previous(
+            checkpoint,
+            previous_checkpoint,
+            trigger,
+            &decision,
+            warning_policy,
+        );
         match presentation.disposition {
             WarningDisposition::Visible => visible_warnings.push(presentation),
             WarningDisposition::Silent { .. } => silent_checkpoints.push(presentation),
         }
+        previous_by_session.insert(checkpoint.session_id.as_str(), checkpoint);
     }
 
     let next_cursor = checkpoints.last().map(CheckpointCursor::from);
@@ -224,7 +257,18 @@ pub fn present_checkpoint(
     decision: &EvaluationDecision,
     warning_policy: &WarningPolicy,
 ) -> CheckpointPresentation {
+    present_checkpoint_with_previous(checkpoint, None, trigger, decision, warning_policy)
+}
+
+fn present_checkpoint_with_previous(
+    checkpoint: &Checkpoint,
+    previous_checkpoint: Option<&Checkpoint>,
+    trigger: TriggerClass,
+    decision: &EvaluationDecision,
+    warning_policy: &WarningPolicy,
+) -> CheckpointPresentation {
     let disposition = classify_checkpoint(checkpoint, decision, warning_policy);
+    let posture = classify_checkpoint_posture(checkpoint, previous_checkpoint);
     let flagged_scores = checkpoint
         .drift_scores
         .iter()
@@ -244,6 +288,7 @@ pub fn present_checkpoint(
     CheckpointPresentation {
         checkpoint: checkpoint.clone(),
         trigger,
+        posture,
         disposition,
         severity,
         headline: format!("{} @ {}", checkpoint.checkpoint_id, format_trigger(trigger)),
@@ -270,6 +315,65 @@ pub fn present_checkpoint(
         diagnostics_summary: CheckpointDiagnosticsSummary::from_checkpoint(checkpoint),
         expected_next_step: checkpoint.expected_next_step.clone(),
         evidence_lines,
+    }
+}
+
+fn classify_checkpoint_posture(
+    checkpoint: &Checkpoint,
+    previous_checkpoint: Option<&Checkpoint>,
+) -> Option<CheckpointPosture> {
+    if checkpoint.flagged || checkpoint.drift_scores.iter().any(|score| score.flagged) {
+        return Some(CheckpointPosture::Active);
+    }
+
+    let historical_classes = checkpoint
+        .drift_scores
+        .iter()
+        .filter(|score| score_has_historical_evidence(score))
+        .map(|score| score.class)
+        .collect::<Vec<_>>();
+    if historical_classes.is_empty() {
+        return None;
+    }
+
+    if previous_checkpoint.is_some_and(|previous| {
+        historical_classes
+            .iter()
+            .copied()
+            .any(|class| checkpoint_had_active_class(previous, class))
+    }) {
+        return Some(CheckpointPosture::Recovered);
+    }
+
+    Some(CheckpointPosture::HistoricalOnly)
+}
+
+fn checkpoint_had_active_class(checkpoint: &Checkpoint, class: DriftClass) -> bool {
+    checkpoint
+        .drift_scores
+        .iter()
+        .any(|score| score.class == class && score.flagged)
+}
+
+fn score_has_historical_evidence(score: &agent_drift_analyzer::DriftScore) -> bool {
+    historical_reason_prefixes(score.class)
+        .iter()
+        .any(|prefix| {
+            score
+                .evidence
+                .iter()
+                .any(|evidence| evidence.reason.starts_with(prefix))
+        })
+}
+
+fn historical_reason_prefixes(class: DriftClass) -> &'static [&'static str] {
+    match class {
+        DriftClass::TruthGroundingGap => &["historical truth-grounding gap:"],
+        DriftClass::DeadEndThrash => &[
+            "historical repeated failure evidence:",
+            "historical repeated verification evidence:",
+        ],
+        DriftClass::WrongPlanBranch => &[],
     }
 }
 

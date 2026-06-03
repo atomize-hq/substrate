@@ -2,8 +2,10 @@
 
 mod support;
 
+use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
 use agent_drift_sentinel::{
-    execute, AdjudicationConfig, SchedulerPolicy, SentinelMode, SentinelRequest, WarningPolicy,
+    execute, operator_surface::CheckpointPosture, AdjudicationConfig, SchedulerPolicy,
+    SentinelMode, SentinelRequest, WarningPolicy,
 };
 
 #[test]
@@ -77,4 +79,134 @@ fn operator_surface_renders_unavailable_density_for_zero_command_checkpoints() {
     assert!(rendered.contains(
         "Diagnostics: task_frame_transitioned=true, working_set_changed=false, verification=0/0 (unavailable), evidence_items=2"
     ));
+}
+
+#[test]
+fn operator_surface_classifies_active_recovered_and_historical_only_posture() {
+    let fixture = support::ReplayFixture::from_checkpoints(
+        vec![
+            checkpoint_with_drift(
+                "session-posture",
+                1,
+                DriftClass::TruthGroundingGap,
+                82,
+                true,
+                "align plan to repo truth",
+                &["flagged score for session-posture:1"],
+            ),
+            checkpoint_with_drift(
+                "session-posture",
+                2,
+                DriftClass::TruthGroundingGap,
+                20,
+                false,
+                "continue on the current task frame",
+                &["historical truth-grounding gap: flagged score for session-posture:1"],
+            ),
+            checkpoint_with_drift(
+                "session-posture",
+                3,
+                DriftClass::TruthGroundingGap,
+                20,
+                false,
+                "continue on the current task frame",
+                &["historical truth-grounding gap: flagged score for session-posture:1"],
+            ),
+        ],
+        support::sample_summary(),
+    );
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    assert_eq!(
+        result.report.visible_warnings[0].posture,
+        Some(CheckpointPosture::Active)
+    );
+    let recovered = result
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-posture:0002")
+        .expect("recovered checkpoint");
+    assert_eq!(recovered.posture, Some(CheckpointPosture::Recovered));
+    let historical_only = result
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-posture:0003")
+        .expect("historical-only checkpoint");
+    assert_eq!(
+        historical_only.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+
+    let rendered = result.report.to_console_text();
+    assert!(rendered.contains("- Posture: active"));
+    assert!(rendered.contains("- Posture: recovered"));
+    assert!(rendered.contains("- Posture: historical-only"));
+}
+
+#[test]
+fn operator_surface_detects_dead_end_historical_verification_evidence() {
+    let fixture = support::ReplayFixture::from_checkpoints(
+        vec![checkpoint_with_drift(
+            "session-history",
+            1,
+            DriftClass::DeadEndThrash,
+            20,
+            false,
+            "re-run verification deliberately",
+            &["historical repeated verification evidence: repeated verification command: cargo test -p agent-drift-sentinel -- --nocapture"],
+        )],
+        support::sample_summary(),
+    );
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    assert_eq!(result.report.visible_warnings.len(), 0);
+    assert_eq!(result.report.silent_checkpoints.len(), 1);
+    assert_eq!(
+        result.report.silent_checkpoints[0].posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+}
+
+fn checkpoint_with_drift(
+    session_id: &str,
+    ordinal: usize,
+    class: DriftClass,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+    evidence_reasons: &[&str],
+) -> Checkpoint {
+    let mut checkpoint =
+        support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.flagged = flagged;
+    checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].raw_score = raw_score;
+    checkpoint.drift_scores[0].flagged = flagged;
+    checkpoint.drift_scores[0].evidence = evidence_reasons
+        .iter()
+        .map(|reason| EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: (*reason).to_string(),
+        })
+        .collect();
+    checkpoint.diagnostics.evidence_item_count = checkpoint.drift_scores[0].evidence.len();
+    checkpoint
 }
