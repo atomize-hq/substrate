@@ -1859,11 +1859,15 @@ async fn execute_continue_world_worker_stream(
                                     ContinueWorldWorkerEventClassV1::ApprovalRequest
                                         | ContinueWorldWorkerEventClassV1::ForkRequest
                                         | ContinueWorldWorkerEventClassV1::ForkRecommendation
+                                        | ContinueWorldWorkerEventClassV1::FollowUpQuestion
+                                        | ContinueWorldWorkerEventClassV1::Blocked
                                 ) && !matches!(
                                     classified_event.event_class,
                                     ContinueWorldWorkerEventClassV1::ApprovalRequest
                                         | ContinueWorldWorkerEventClassV1::ForkRequest
                                         | ContinueWorldWorkerEventClassV1::ForkRecommendation
+                                        | ContinueWorldWorkerEventClassV1::FollowUpQuestion
+                                        | ContinueWorldWorkerEventClassV1::Blocked
                                 )
                             });
                         if !preserve_existing_packet_one_request {
@@ -4728,6 +4732,235 @@ mod tests {
                 .and_then(|event| event.payload.get("message"))
                 .and_then(serde_json::Value::as_str),
             Some("requires approval")
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_world_worker_stream_preserves_allowed_follow_up_question_when_normal_event_follows(
+    ) {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("preserve-follow-up.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(json!({
+                                "event_class": "follow_up_question",
+                                "payload": {
+                                    "message": "need your answer"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_uaa_event(json!({
+                                "type": "item.completed",
+                                "thread_id": "thread-from-uaa",
+                                "turn_id": "turn-1",
+                                "item_id": "msg-1",
+                                "status": "completed",
+                                "item_type": "agent_message",
+                                "content": {
+                                    "text": "reply from worker"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let outcome = execute_continue_world_worker_stream(
+            &sample_continue_submit_request(),
+            &policy_allowing_continue_worker_event(
+                ContinueWorldWorkerEventClassV1::FollowUpQuestion,
+            ),
+        )
+        .await
+        .expect("follow-up question should stay surfaced");
+
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(outcome.surfaced_thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::FollowUpQuestion)
+        );
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .and_then(|event| event.payload.get("message"))
+                .and_then(serde_json::Value::as_str),
+            Some("need your answer")
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_world_worker_stream_preserves_allowed_blocked_when_normal_event_follows() {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("preserve-blocked.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(json!({
+                                "event_class": "blocked",
+                                "payload": {
+                                    "message": "waiting on host"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_uaa_event(json!({
+                                "type": "item.completed",
+                                "thread_id": "thread-from-uaa",
+                                "turn_id": "turn-1",
+                                "item_id": "msg-1",
+                                "status": "completed",
+                                "item_type": "agent_message",
+                                "content": {
+                                    "text": "reply from worker"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let outcome = execute_continue_world_worker_stream(
+            &sample_continue_submit_request(),
+            &policy_allowing_continue_worker_event(ContinueWorldWorkerEventClassV1::Blocked),
+        )
+        .await
+        .expect("blocked event should stay surfaced");
+
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(outcome.surfaced_thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::Blocked)
+        );
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .and_then(|event| event.payload.get("message"))
+                .and_then(serde_json::Value::as_str),
+            Some("waiting on host")
         );
 
         server.await.expect("stub world server task");
