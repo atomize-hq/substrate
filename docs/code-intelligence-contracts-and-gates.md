@@ -463,7 +463,79 @@ In short:
 
 ---
 
-## 12. Rollout alignment
+## 12. Research-derived patterns
+
+The design above is informed by a handful of durable patterns from the formal-specification, specification-mining, and runtime-monitoring literature.
+
+These patterns do not override the ownership model in this document.
+They explain why some boundaries are shaped the way they are.
+
+### 12.1 Locked contract as executable oracle
+
+The strongest through-line from the literature is:
+
+- the reviewed specification or contract is the authority
+- tests, implementation behavior, traces, and generated artifacts are evidence
+- pass or block decisions should be explained relative to that authority rather than inferred from green tests alone
+
+This directly supports the `ContractV1` -> `EvidenceRecordV1` -> `VerdictV1` -> `GateDecisionV1` shape.
+
+### 12.2 Counterexample-first blocked state
+
+When a claim fails, the most useful runtime artifact is not just a blocked status.
+
+It is:
+
+- the failed claim
+- the concrete counterexample or trace slice
+- the evidence that triggered the failure
+- a remediation-oriented explanation
+
+This is why blocked gates in `exec` should preserve evidence-rich verdicts rather than only a lane-local pass or fail bit.
+
+### 12.3 Candidate claims require falsification before promotion
+
+Trace mining, invariant mining, and codebase inference can suggest useful claims.
+
+They should not be silently promoted to locked truth.
+
+The durable rule is:
+
+- `lift` may mine candidate claims or likely invariants
+- those claims remain provisional until review and active falsification attempts fail to break them
+
+This keeps observed implementation behavior from becoming the source of truth by inertia.
+
+### 12.4 Non-functional claims need first-class evidence
+
+The literature around contract monitoring for side effects, policy, and performance points toward a common rule:
+
+- non-functional concerns should be expressed as machine-checkable claims
+- runtime instrumentation should preserve durable evidence for those claims
+
+For this program, that especially includes:
+
+- filesystem and network side effects
+- policy and authorization decisions
+- ordering or workflow compliance
+- performance and resource ceilings
+
+### 12.5 Adapters remain evidence engines, not authorities
+
+The research literature is strongest when external formats and tools are used to:
+
+- validate one surface of a contract
+- emit evidence
+- detect drift
+- supply counterexamples
+
+It is weakest when generated artifacts silently become the new authority.
+
+That is why OpenAPI, AsyncAPI, Storybook, Playwright, JSON Schema, CUE, OPA, and similar systems stay adapter or evidence roles in this design.
+
+---
+
+## 13. Rollout alignment
 
 This layer should be landed through the existing `A0` to `A6` rollout rather than as a separate independent program.
 
@@ -507,7 +579,7 @@ The key rollout rule is:
 
 ---
 
-## 13. Acceptance criteria
+## 14. Acceptance criteria
 
 The contracts-and-gates layer is on the intended path when all are true:
 
@@ -522,7 +594,7 @@ The contracts-and-gates layer is on the intended path when all are true:
 
 ---
 
-## 14. Falsification questions
+## 15. Falsification questions
 
 If any answer below becomes "yes", this design is drifting.
 
@@ -537,7 +609,7 @@ If any answer below becomes "yes", this design is drifting.
 
 ---
 
-## 15. Appendix: Contract Families, Tooling, And License Posture
+## 16. Appendix: Contract Families, Tooling, And License Posture
 
 This appendix preserves the broader inventory that informed this design.
 
@@ -648,7 +720,22 @@ It means:
 
 ---
 
-## 16. Short version
+## 17. References
+
+These references were selected because they directly informed the patterns retained in this document.
+
+- Hierons RM, Bogdanov K, Bowen JP, et al. "Using formal specifications to support testing." ACM Computing Surveys. 2009. DOI: 10.1145/1459352.1459354
+- Barr ET, Harman M, McMinn P, Shahbaz M, Yoo S. "The Oracle Problem in Software Testing: A Survey." IEEE Transactions on Software Engineering. 2015. DOI: 10.1109/TSE.2014.2372785
+- Veanes M, Campbell C, Schulte W, Tillmann N. "Online testing with model programs." ESEC/FSE. 2005. DOI: 10.1145/1081706.1081751
+- Ghani K, Clark JA. "Strengthening Inferred Specifications using Search Based Testing." ICSTW. 2008. DOI: 10.1109/ICSTW.2008.39
+- Krka I, Brun Y, Popescu D, Garcia J, Medvidovic N. "Using dynamic execution traces and program invariants to enhance behavioral model inference." ICSE. 2010. DOI: 10.1145/1810295.1810324
+- Heidegger P, Bieniusa A, Thiemann P. "Access permission contracts for scripting languages." POPL. 2012. DOI: 10.1145/2103621.2103671
+- Francalanza A, Gauci A, Pace GJ. "Distributed system contract monitoring." The Journal of Logic and Algebraic Programming. 2013. DOI: 10.1016/j.jlap.2013.04.001
+- Chen Z, Wei O, Huang Z, Xi H. "Formal Semantics of Runtime Monitoring, Verification, Enforcement and Control." TASE. 2015. DOI: 10.1109/TASE.2015.11
+
+---
+
+## 18. Short version
 
 - the code-intelligence program should adopt a Substrate-native contract/evidence/verdict/gate layer
 - this layer is a cross-cutting overlay, not a competing replacement for the program architecture

@@ -630,7 +630,60 @@ Future implementations may replace or wrap that approach.
 
 ---
 
-## 12. MVP sequence
+## 12. Research-derived patterns
+
+The workstream design above is informed by a few specific patterns from workflow-validation and hierarchical-plan literature.
+
+These patterns do not replace the artifact model in this document.
+They explain why some of the constraints are intentionally conservative.
+
+### 12.1 Dependency-aware checkpoints beat uniform checkpoints
+
+The literature on workflow verification strongly favors placing checkpoints where dependency and timing pressure concentrates, not at every step equally.
+
+For this design, that means:
+
+- checkpoints should align to source lock, gate boundaries, validation walls, and risky merge points
+- later `exec` implementations may choose checkpoints based on dependency structure rather than fixed intervals
+
+### 12.2 Summary-based validation is valid when conservative
+
+Hierarchical-plan work suggests that not every validation decision requires full re-expansion of every low-level step.
+
+When summaries are conservative and explicit, validation can be driven by:
+
+- lane ownership summaries
+- forbidden-surface summaries
+- dependency summaries
+- merge-order summaries
+
+This supports the idea that merged-tree acceptance can reason over summary artifacts, not just raw lane logs.
+
+### 12.3 Blocked conditions should be explicit artifacts
+
+Blocked conditions are most useful when represented directly rather than inferred ad hoc after failure.
+
+For this design, that means the runtime should preserve blocked-state evidence such as:
+
+- frozen-surface violations
+- cyclic dependency or merge constraints
+- unmet prerequisite gates
+- insufficient ownership separation for a requested parallel window
+
+### 12.4 Final acceptance remains merged-tree truth
+
+The most durable lesson from the workflow literature is that lane-local success is not enough.
+
+The final authority is the integrated plan result after:
+
+- dependency ordering is respected
+- blocked conditions are absent or explicitly resolved
+- validation-wall evidence is complete
+- final merged-tree gates pass
+
+---
+
+## 13. MVP sequence
 
 ### MVP 1: static planner
 
@@ -685,7 +738,7 @@ Only after the two MVPs are stable:
 
 ---
 
-## 13. Relationship to program rollout
+## 14. Relationship to program rollout
 
 This feature spans three code-intelligence program rollout points.
 
@@ -716,7 +769,19 @@ exec runs the graph
 
 ---
 
-## 14. Acceptance criteria
+## 15. Appendix: Research references
+
+These references were selected because they directly informed the validation and orchestration patterns retained in this document.
+
+- Chen J, Yang Y. "Temporal dependency-based checkpoint selection for dynamic verification of temporal constraints in scientific workflow systems." ACM TOSEM. 2011. DOI: 10.1145/2000791.2000793
+- Chen J, Yang Y, Chen TY. "Dynamic Verification of Temporal Constraints on-the-fly for Workflow Systems." APSEC. 2004. DOI: 10.1109/APSEC.2004.47
+- Brahimi S, Maamri R, Sahnoun Z. "Dynamic verification of hierarchical multi-agent plans." Multiagent and Grid Systems. 2017. DOI: 10.3233/MGS-170264
+- Bartak R, Ondrckova S, Maillard A, Behnke G, Bercher P. "A Novel Parsing-based Approach for Verification of Hierarchical Plans." ICTAI. 2020. DOI: 10.1109/ICTAI50040.2020.00029
+- Jablonski S. "A software architecture for workflow management systems." DEXA Workshop. 1998. DOI: 10.1109/DEXA.1998.707490
+
+---
+
+## 16. Acceptance criteria
 
 The feature is on track when all are true:
 
@@ -733,7 +798,7 @@ The feature is on track when all are true:
 
 ---
 
-## 15. Invariants
+## 17. Invariants
 
 1. Planning is static and deterministic.
 2. Planning performs no LLM calls.
@@ -752,7 +817,7 @@ The feature is on track when all are true:
 
 ---
 
-## 16. Falsification questions
+## 18. Falsification questions
 
 If any answer becomes "yes", the design is drifting.
 
@@ -773,7 +838,7 @@ If any answer becomes "yes", the design is drifting.
 
 ---
 
-## 17. Final recommendation
+## 19. Final recommendation
 
 Build this layer, but do not build it as `lift orchestrate`.
 
