@@ -463,7 +463,9 @@ mod tests {
     #[test]
     fn packet_two_obligation_kinds_keep_attach_defaults_explicit() {
         let cases = [
+            (OrchestrationObligationKind::FollowUpRequired, true),
             (OrchestrationObligationKind::ApprovalRequired, true),
+            (OrchestrationObligationKind::Blocked, true),
             (OrchestrationObligationKind::ForkRequest, true),
             (OrchestrationObligationKind::ForkRecommendation, false),
         ];

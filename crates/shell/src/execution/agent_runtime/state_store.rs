@@ -4675,6 +4675,15 @@ mod tests {
         with_store(|store| {
             let cases = [
                 (
+                    "follow_up_question",
+                    OrchestrationObligationKind::FollowUpRequired,
+                    true,
+                    OrchestrationObligationAttachState::Eligible,
+                    DurableInboxItemKind::FollowUpMessage,
+                    1_u64,
+                    OrchestrationSessionPosture::AwaitingAttention,
+                ),
+                (
                     "approval_request",
                     OrchestrationObligationKind::ApprovalRequired,
                     true,
@@ -4700,6 +4709,15 @@ mod tests {
                     DurableInboxItemKind::FollowUpMessage,
                     0_u64,
                     OrchestrationSessionPosture::ParkedResumable,
+                ),
+                (
+                    "blocked",
+                    OrchestrationObligationKind::Blocked,
+                    true,
+                    OrchestrationObligationAttachState::Eligible,
+                    DurableInboxItemKind::RuntimeAlert,
+                    1_u64,
+                    OrchestrationSessionPosture::AwaitingAttention,
                 ),
             ];
 
@@ -4764,6 +4782,10 @@ mod tests {
                     .expect("load packet-two compatibility item")
                     .expect("packet-two compatibility item exists");
                 assert_eq!(compat_item.kind, expected_compat_kind);
+                assert_eq!(
+                    compat_item.message.as_deref(),
+                    Some(obligation.summary.as_str())
+                );
             }
         });
     }

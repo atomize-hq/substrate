@@ -814,6 +814,20 @@ fn continue_world_worker_obligation_kind_and_summary(
     worker_event: &ContinueWorldWorkerEventV1,
 ) -> Option<(OrchestrationObligationKind, String)> {
     let (kind, summary) = match worker_event.event_class {
+        ContinueWorldWorkerEventClassV1::FollowUpQuestion => (
+            OrchestrationObligationKind::FollowUpRequired,
+            format!(
+                "retained worker {} requested host follow-up during continue_world_worker",
+                worker_event.source_participant_id
+            ),
+        ),
+        ContinueWorldWorkerEventClassV1::Blocked => (
+            OrchestrationObligationKind::Blocked,
+            format!(
+                "retained worker {} reported blocked state during continue_world_worker",
+                worker_event.source_participant_id
+            ),
+        ),
         ContinueWorldWorkerEventClassV1::ApprovalRequest => (
             OrchestrationObligationKind::ApprovalRequired,
             format!(
@@ -846,7 +860,9 @@ fn continue_world_worker_obligation_attach_state(
     obligation_kind: OrchestrationObligationKind,
 ) -> OrchestrationObligationAttachState {
     match obligation_kind {
-        OrchestrationObligationKind::ApprovalRequired
+        OrchestrationObligationKind::FollowUpRequired
+        | OrchestrationObligationKind::ApprovalRequired
+        | OrchestrationObligationKind::Blocked
         | OrchestrationObligationKind::ForkRequest => OrchestrationObligationAttachState::Eligible,
         OrchestrationObligationKind::ForkRecommendation => {
             OrchestrationObligationAttachState::NotEligible
@@ -860,7 +876,9 @@ fn continue_world_worker_event_kind_slug(
     obligation_kind: OrchestrationObligationKind,
 ) -> &'static str {
     match obligation_kind {
+        OrchestrationObligationKind::FollowUpRequired => "follow_up_required",
         OrchestrationObligationKind::ApprovalRequired => "approval_required",
+        OrchestrationObligationKind::Blocked => "blocked",
         OrchestrationObligationKind::ForkRequest => "fork_request",
         OrchestrationObligationKind::ForkRecommendation => "fork_recommendation",
         _ => "other",
@@ -4969,7 +4987,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial]
-    fn dispatch_contract_persist_continue_world_worker_obligation_projects_packet_three_events_into_canonical_state(
+    fn dispatch_contract_persist_continue_world_worker_obligation_projects_supported_events_into_canonical_state(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -4979,37 +4997,63 @@ mod tests {
 
         let cases = [
             (
+                ContinueWorldWorkerEventClassV1::FollowUpQuestion,
+                OrchestrationObligationKind::FollowUpRequired,
+                OrchestrationObligationAttachState::Eligible,
+                true,
+                "retained worker ash_member requested host follow-up during continue_world_worker",
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::Blocked,
+                OrchestrationObligationKind::Blocked,
+                OrchestrationObligationAttachState::Eligible,
+                true,
+                "retained worker ash_member reported blocked state during continue_world_worker",
+            ),
+            (
                 ContinueWorldWorkerEventClassV1::ApprovalRequest,
                 OrchestrationObligationKind::ApprovalRequired,
                 OrchestrationObligationAttachState::Eligible,
                 true,
+                "retained worker ash_member requested approval during continue_world_worker",
             ),
             (
                 ContinueWorldWorkerEventClassV1::ForkRequest,
                 OrchestrationObligationKind::ForkRequest,
                 OrchestrationObligationAttachState::Eligible,
                 true,
+                "retained worker ash_member requested a child worker during continue_world_worker",
             ),
             (
                 ContinueWorldWorkerEventClassV1::ForkRecommendation,
                 OrchestrationObligationKind::ForkRecommendation,
                 OrchestrationObligationAttachState::NotEligible,
                 false,
+                "retained worker ash_member recommended a child worker during continue_world_worker",
             ),
         ];
 
-        for (index, (event_class, expected_kind, expected_attach_state, expected_attention)) in
-            cases.into_iter().enumerate()
+        for (
+            index,
+            (
+                event_class,
+                expected_kind,
+                expected_attach_state,
+                expected_attention,
+                expected_summary,
+            ),
+        ) in cases.into_iter().enumerate()
         {
             let run_id = format!("req_continue_packet3_{index}");
             let submit_request = sample_continue_submit_request_for_run(&run_id, "world-17", 2);
+            let thread_id = format!("thread_packet3_{index}");
             let worker_event = ContinueWorldWorkerEventV1 {
                 event_class,
                 source_participant_id: "ash_member".to_string(),
                 target_participant_id: "orch_dispatch".to_string(),
                 source_backend_id: "cli:codex_world".to_string(),
                 attention_required: expected_attention,
-                thread_id: Some(format!("thread_packet3_{index}")),
+                thread_id: Some(thread_id.clone()),
                 stream_channel: Some("worker.request".to_string()),
                 payload: serde_json::json!({
                     "message": format!("payload for {}", continue_worker_event_label(event_class)),
@@ -5031,6 +5075,7 @@ mod tests {
                 .expect("load persisted obligation")
                 .expect("persisted obligation exists");
             assert_eq!(obligation.kind, expected_kind);
+            assert_eq!(obligation.summary, expected_summary);
             assert_eq!(obligation.attach_state, expected_attach_state);
             assert_eq!(obligation.attention_required, expected_attention);
             assert_eq!(
@@ -5058,6 +5103,47 @@ mod tests {
                     .and_then(|payload| payload.get("request_id"))
                     .and_then(serde_json::Value::as_str),
                 Some(run_id.as_str())
+            );
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("target_participant_id"))
+                    .and_then(serde_json::Value::as_str),
+                Some("orch_dispatch")
+            );
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("source_backend_id"))
+                    .and_then(serde_json::Value::as_str),
+                Some("cli:codex_world")
+            );
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("thread_id"))
+                    .and_then(serde_json::Value::as_str),
+                Some(thread_id.as_str())
+            );
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("stream_channel"))
+                    .and_then(serde_json::Value::as_str),
+                Some("worker.request")
+            );
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("payload"))
+                    .and_then(|payload| payload.get("message"))
+                    .and_then(serde_json::Value::as_str),
+                Some(format!("payload for {}", continue_worker_event_label(event_class)).as_str())
             );
         }
     }

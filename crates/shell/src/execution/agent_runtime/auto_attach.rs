@@ -443,10 +443,20 @@ mod tests {
             "obl_approval",
             OrchestrationObligationKind::ApprovalRequired,
         );
+        let blocked = eligible_obligation(
+            "sess_auto_attach_packet_two",
+            "obl_blocked",
+            OrchestrationObligationKind::Blocked,
+        );
         let fork_request = eligible_obligation(
             "sess_auto_attach_packet_two",
             "obl_fork_request",
             OrchestrationObligationKind::ForkRequest,
+        );
+        let follow_up = eligible_obligation(
+            "sess_auto_attach_packet_two",
+            "obl_follow_up",
+            OrchestrationObligationKind::FollowUpRequired,
         );
         let fork_recommendation = eligible_obligation(
             "sess_auto_attach_packet_two",
@@ -455,12 +465,14 @@ mod tests {
         );
 
         let obligations = [
+            follow_up.clone(),
+            blocked.clone(),
             fork_request.clone(),
             fork_recommendation.clone(),
             approval.clone(),
         ];
         let candidate = select_attach_candidate(&obligations)
-            .expect("approval and fork request should remain attach-eligible");
+            .expect("packet-two obligations should keep attach eligibility");
         assert_eq!(candidate.obligation_id, approval.obligation_id);
 
         let recommendation_only = select_attach_candidate(&[fork_recommendation]).is_none();
@@ -468,6 +480,24 @@ mod tests {
             recommendation_only,
             "fork recommendations must remain non-attach-eligible by default"
         );
+
+        let blocked_candidates = [follow_up.clone(), fork_request.clone(), blocked.clone()];
+        let blocked_candidate = select_attach_candidate(&blocked_candidates)
+            .expect("blocked should outrank fork_request and follow_up");
+        assert_eq!(blocked_candidate.obligation_id, blocked.obligation_id);
+
+        let fork_request_candidates = [follow_up.clone(), fork_request.clone()];
+        let fork_request_candidate = select_attach_candidate(&fork_request_candidates)
+            .expect("fork_request should outrank follow_up");
+        assert_eq!(
+            fork_request_candidate.obligation_id,
+            fork_request.obligation_id
+        );
+
+        let follow_up_candidates = [follow_up];
+        let follow_up_candidate = select_attach_candidate(&follow_up_candidates)
+            .expect("follow_up should remain eligible");
+        assert_eq!(follow_up_candidate.obligation_id, "obl_follow_up");
     }
 
     #[test]
