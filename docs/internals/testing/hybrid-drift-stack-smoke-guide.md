@@ -245,6 +245,9 @@ Expected success signatures:
 - `checkpoints.jsonl` contains one or more progressive checkpoint objects for that session
 - each checkpoint includes `schema_version`, `checkpoint_id`, `boundary`, `diagnostics`,
   `task_frame`, `drift_scores`, and `expected_next_step`
+- `v0.3` checkpoints should now carry analyzer-owned `DriftState` on every `DriftScore`, so late
+  recovered or historical-only checkpoints should show explicit state directly instead of relying
+  on sentinel-local historical reason-prefix reconstruction
 - recovered late checkpoints may keep explicit historical drift evidence while clearing the active
   `dead_end_thrash` flag only after one clean in-scope verification interval
 
@@ -258,7 +261,9 @@ The replay sentinel:
 - applies scheduler cooldown, heartbeat, debounce, and repeated-failure rules
 - separates visible warnings from silent checkpoints
 - classifies checkpoint posture independently from visibility as `active`, `recovered`, or
-  `historical-only` when analyzer evidence supports it
+  `historical-only`
+- prefers analyzer-exported `DriftState` on `v0.3` checkpoints and uses the older
+  previous-checkpoint plus historical-reason-prefix fallback only for `v0.2`
 - renders a console-oriented replay report
 - optionally shapes bounded adjudication requests, disabled by default
 
@@ -343,7 +348,8 @@ The current live slice is real-session, bounded, and library-first:
 - it surfaces real compactor/analyzer contract failures instead of broadly hiding them
 - it emits only checkpoints strictly after the last delivered cursor within one live process
 - it prints live console blocks using the shared scheduler and presentation surfaces, including
-  posture when the checkpoint carries active or historical drift evidence
+  posture derived from analyzer-exported `DriftState` for `v0.3` and the isolated compatibility
+  fallback for older `v0.2` bundles
 
 It does **not** integrate with `shell`, `world`, `shim`, or any broader host-runtime wiring.
 

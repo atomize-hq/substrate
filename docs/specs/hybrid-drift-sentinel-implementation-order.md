@@ -556,8 +556,12 @@ Packet 18 note:
   It added exported per-class `DriftState`, one analyzer-owned state builder, and checkpoint
   schema `v0.3` so each `DriftScore` now carries explicit `active`, `recovered`,
   `historical_only`, or `cleared` state.
-  `v0.6B` remains the next packet for sentinel cutover, legacy `v0.2` compatibility, and
-  replay/live proof without mixing typed outcome evidence into the same change set.
+- `2026-06-04`: Packet `v0.6B` landed as the sentinel cutover slice.
+  Replay and live posture now read analyzer-exported `DriftState` directly for `v0.3`
+  checkpoints, while the old previous-checkpoint plus historical-reason-prefix reconstruction
+  remains isolated to the legacy `v0.2` fallback path.
+  Replay/live parity coverage and bounded smoke guidance were refreshed without mixing the
+  separate typed outcome evidence follow-on into the same packet.
 
 ## If You Want Fewer Packets
 

@@ -6,6 +6,7 @@ use std::fs;
 
 use agent_drift_sentinel::input::{load_replay_bundle, InputError};
 use camino::Utf8Path;
+use agent_drift_analyzer::DriftState;
 use support::{checkpoint, ReplayFixture};
 use tempfile::TempDir;
 
@@ -106,6 +107,31 @@ fn replay_input_rejects_v0_3_checkpoints_missing_state() {
         } if schema_version == "v0.3" && field == "drift_scores[0].state"
     ));
     assert!(error.to_string().contains("missing drift_scores[0].state"));
+}
+
+#[test]
+fn replay_input_preserves_explicit_v0_3_drift_state() {
+    let mut checkpoint = schema_checkpoint("v0.3", "session-alpha", 1, 20, false, "continue");
+    checkpoint.drift_scores[0].state = DriftState::HistoricalOnly;
+    checkpoint.drift_scores[0].evidence = vec![agent_drift_analyzer::EvidenceRef {
+        row: checkpoint.boundary.start.clone(),
+        reason: "explicit analyzer historical state".to_string(),
+    }];
+
+    let fixture =
+        ReplayFixture::from_checkpoints(vec![checkpoint.clone()], support::sample_summary());
+
+    let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load replay bundle");
+
+    assert_eq!(bundle.schema_version, "v0.3");
+    assert_eq!(
+        bundle.checkpoints[0].drift_scores[0].state,
+        DriftState::HistoricalOnly
+    );
+    assert_eq!(
+        bundle.checkpoints[0].drift_scores[0].evidence[0].reason,
+        "explicit analyzer historical state"
+    );
 }
 
 #[test]

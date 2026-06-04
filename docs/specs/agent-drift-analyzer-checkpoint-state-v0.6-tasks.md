@@ -61,7 +61,7 @@ Packet `v0.6A` exit condition:
 
 ## Packet v0.6B: Sentinel Cutover, Compatibility, And Proof
 
-- [ ] Task: Cut sentinel posture over to analyzer-exported state with `v0.2` fallback
+- [x] Task: Cut sentinel posture over to analyzer-exported state with `v0.2` fallback
   - Acceptance: sentinel derives checkpoint posture from current-checkpoint `DriftState` values
     when `v0.3` checkpoints are present, while legacy `v0.2` bundles still work through an
     isolated compatibility fallback.
@@ -75,7 +75,7 @@ Packet `v0.6A` exit condition:
     - `crates/agent-drift-sentinel/tests/operator_surface.rs`
     - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
-- [ ] Task: Prove replay/live parity survives the checkpoint-state cutover
+- [x] Task: Prove replay/live parity survives the checkpoint-state cutover
   - Acceptance: replay and live paths assign the same checkpoint posture after the analyzer-state
     cutover, and compatibility tests cover both `v0.2` fallback and `v0.3` preferred behavior.
   - Verify:
@@ -88,7 +88,7 @@ Packet `v0.6A` exit condition:
     - `crates/agent-drift-sentinel/tests/operator_sink.rs`
     - `crates/agent-drift-sentinel/tests/fixtures/live/`
 
-- [ ] Task: Refresh packet authority notes and bounded live proof guidance
+- [x] Task: Refresh packet authority notes and bounded live proof guidance
   - Acceptance: implementation-order notes record `v0.6` as the analyzer follow-up after landed
     `v0.5A` / `v0.5B`, and the smoke/proof guidance reflects analyzer-owned state rather than
     sentinel-owned reason-prefix posture reconstruction.

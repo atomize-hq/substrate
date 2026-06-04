@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
+use agent_drift_analyzer::{Checkpoint, DriftClass, DriftState, EvidenceRef};
 use camino::Utf8PathBuf;
 
 use agent_drift_sentinel::{
@@ -152,32 +152,35 @@ fn live_end_to_end_replay_and_live_surfaces_share_the_same_diagnostics_summary_f
 #[test]
 fn live_end_to_end_replay_and_live_surfaces_share_posture_for_transition_sequences() {
     let checkpoints = vec![
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-posture",
             1,
             DriftClass::TruthGroundingGap,
+            DriftState::Active,
             82,
             true,
             "align plan to repo truth",
             &["flagged score for session-posture:1"],
         ),
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-posture",
             2,
             DriftClass::TruthGroundingGap,
+            DriftState::Recovered,
             20,
             false,
             "continue on the current task frame",
-            &["historical truth-grounding gap: flagged score for session-posture:1"],
+            &["explicit analyzer recovery evidence"],
         ),
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-posture",
             3,
             DriftClass::TruthGroundingGap,
+            DriftState::HistoricalOnly,
             20,
             false,
             "continue on the current task frame",
-            &["historical truth-grounding gap: flagged score for session-posture:1"],
+            &["explicit analyzer historical evidence"],
         ),
     ];
     let replay_fixture =
@@ -267,23 +270,25 @@ fn live_end_to_end_replay_and_live_surfaces_share_posture_for_transition_sequenc
 #[test]
 fn live_end_to_end_replay_and_live_keep_posture_session_local_at_session_boundaries() {
     let checkpoints = vec![
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-a",
             1,
             DriftClass::TruthGroundingGap,
+            DriftState::Active,
             82,
             true,
             "align plan to repo truth",
             &["flagged score for session-a:1"],
         ),
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-b",
             1,
             DriftClass::TruthGroundingGap,
+            DriftState::HistoricalOnly,
             20,
             false,
             "continue on the current task frame",
-            &["historical truth-grounding gap: flagged score for session-b:0"],
+            &["explicit analyzer historical evidence for session-b"],
         ),
     ];
     let replay_fixture =
@@ -354,10 +359,11 @@ fn build_single_event(observation: &agent_drift_sentinel::LiveObservation) -> Op
     events.into_iter().next().expect("single event")
 }
 
-fn checkpoint_with_drift(
+fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
     class: DriftClass,
+    state: DriftState,
     raw_score: u8,
     flagged: bool,
     expected_next_step: &str,
@@ -365,8 +371,10 @@ fn checkpoint_with_drift(
 ) -> Checkpoint {
     let mut checkpoint =
         support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.schema_version = "v0.3".to_string();
     checkpoint.flagged = flagged;
     checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].state = state;
     checkpoint.drift_scores[0].raw_score = raw_score;
     checkpoint.drift_scores[0].flagged = flagged;
     checkpoint.drift_scores[0].evidence = evidence_reasons

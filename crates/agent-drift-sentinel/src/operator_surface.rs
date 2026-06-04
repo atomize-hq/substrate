@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
-use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
+use agent_drift_analyzer::{Checkpoint, DriftClass, DriftState, EvidenceRef};
 use camino::Utf8Path;
 
 use crate::input::{CheckpointCursor, ReplayCheckpointBundle};
@@ -325,6 +325,49 @@ fn classify_checkpoint_posture(
     checkpoint: &Checkpoint,
     previous_checkpoint: Option<&Checkpoint>,
 ) -> Option<CheckpointPosture> {
+    if uses_explicit_analyzer_state(checkpoint) {
+        return classify_checkpoint_posture_from_state(checkpoint);
+    }
+
+    classify_checkpoint_posture_legacy(checkpoint, previous_checkpoint)
+}
+
+fn uses_explicit_analyzer_state(checkpoint: &Checkpoint) -> bool {
+    checkpoint.schema_version == "v0.3"
+}
+
+fn classify_checkpoint_posture_from_state(checkpoint: &Checkpoint) -> Option<CheckpointPosture> {
+    if checkpoint
+        .drift_scores
+        .iter()
+        .any(|score| score.state == DriftState::Active)
+    {
+        return Some(CheckpointPosture::Active);
+    }
+
+    if checkpoint
+        .drift_scores
+        .iter()
+        .any(|score| score.state == DriftState::Recovered)
+    {
+        return Some(CheckpointPosture::Recovered);
+    }
+
+    if checkpoint
+        .drift_scores
+        .iter()
+        .any(|score| score.state == DriftState::HistoricalOnly)
+    {
+        return Some(CheckpointPosture::HistoricalOnly);
+    }
+
+    None
+}
+
+fn classify_checkpoint_posture_legacy(
+    checkpoint: &Checkpoint,
+    previous_checkpoint: Option<&Checkpoint>,
+) -> Option<CheckpointPosture> {
     if checkpoint.flagged || checkpoint.drift_scores.iter().any(|score| score.flagged) {
         return Some(CheckpointPosture::Active);
     }
@@ -381,6 +424,38 @@ fn historical_reason_prefixes(class: DriftClass) -> &'static [&'static str] {
 }
 
 fn collect_evidence_lines(checkpoint: &Checkpoint, max_evidence_lines: usize) -> Vec<String> {
+    if uses_explicit_analyzer_state(checkpoint) {
+        return collect_state_backed_evidence_lines(checkpoint, max_evidence_lines);
+    }
+
+    collect_legacy_evidence_lines(checkpoint, max_evidence_lines)
+}
+
+fn collect_state_backed_evidence_lines(
+    checkpoint: &Checkpoint,
+    max_evidence_lines: usize,
+) -> Vec<String> {
+    let mut evidence_lines = Vec::new();
+    for state in [
+        DriftState::Active,
+        DriftState::Recovered,
+        DriftState::HistoricalOnly,
+    ] {
+        for score in checkpoint
+            .drift_scores
+            .iter()
+            .filter(|score| score.state == state)
+        {
+            push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);
+            if evidence_lines.len() >= max_evidence_lines {
+                return evidence_lines;
+            }
+        }
+    }
+    evidence_lines
+}
+
+fn collect_legacy_evidence_lines(checkpoint: &Checkpoint, max_evidence_lines: usize) -> Vec<String> {
     let mut evidence_lines = Vec::new();
     for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
         push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);

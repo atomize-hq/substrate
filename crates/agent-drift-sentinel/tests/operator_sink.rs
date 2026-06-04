@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::{DriftClass, EvidenceRef};
+use agent_drift_analyzer::{DriftClass, DriftState, EvidenceRef};
 use agent_drift_sentinel::{
     build_operator_events, emit_operator_events, operator_surface::CheckpointPosture,
     LiveCheckpointEvent, LiveRuntime, OperatorEvent, RecordingOperatorSink, SchedulerPolicy,
@@ -57,32 +57,35 @@ fn operator_sink_emits_visible_and_silent_checkpoint_events() {
 #[test]
 fn operator_sink_carries_recovered_and_historical_only_posture_on_silent_checkpoints() {
     let checkpoints = vec![
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-posture",
             1,
             DriftClass::TruthGroundingGap,
+            DriftState::Active,
             82,
             true,
             "align plan to repo truth",
             &["flagged score for session-posture:1"],
         ),
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-posture",
             2,
             DriftClass::TruthGroundingGap,
+            DriftState::Recovered,
             20,
             false,
             "continue on the current task frame",
-            &["historical truth-grounding gap: flagged score for session-posture:1"],
+            &["explicit analyzer recovery evidence"],
         ),
-        checkpoint_with_drift(
+        checkpoint_with_state(
             "session-posture",
             3,
             DriftClass::TruthGroundingGap,
+            DriftState::HistoricalOnly,
             20,
             false,
             "continue on the current task frame",
-            &["historical truth-grounding gap: flagged score for session-posture:1"],
+            &["explicit analyzer historical evidence"],
         ),
     ];
     let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
@@ -200,10 +203,11 @@ fn operator_sink_emits_heartbeat_and_manual_review_status_events() {
     assert_eq!(sink.events().len(), 3);
 }
 
-fn checkpoint_with_drift(
+fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
     class: DriftClass,
+    state: DriftState,
     raw_score: u8,
     flagged: bool,
     expected_next_step: &str,
@@ -211,8 +215,10 @@ fn checkpoint_with_drift(
 ) -> agent_drift_analyzer::Checkpoint {
     let mut checkpoint =
         support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.schema_version = "v0.3".to_string();
     checkpoint.flagged = flagged;
     checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].state = state;
     checkpoint.drift_scores[0].raw_score = raw_score;
     checkpoint.drift_scores[0].flagged = flagged;
     checkpoint.drift_scores[0].evidence = evidence_reasons

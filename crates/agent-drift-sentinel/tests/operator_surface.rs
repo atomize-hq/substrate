@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::{Checkpoint, DriftClass, EvidenceRef};
+use agent_drift_analyzer::{Checkpoint, DriftClass, DriftState, EvidenceRef};
 use agent_drift_sentinel::{
     execute,
     operator_surface::{present_checkpoint_with_previous, warning_fingerprint, CheckpointPosture},
@@ -238,6 +238,76 @@ fn operator_surface_preserves_recovered_posture_when_replay_resumes_after_cursor
 }
 
 #[test]
+fn operator_surface_prefers_explicit_v0_3_state_without_previous_checkpoint() {
+    let recovered = checkpoint_with_state(
+        "session-v03",
+        2,
+        DriftClass::TruthGroundingGap,
+        DriftState::Recovered,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer recovery evidence"],
+    );
+    let historical_only = checkpoint_with_state(
+        "session-v03",
+        3,
+        DriftClass::TruthGroundingGap,
+        DriftState::HistoricalOnly,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer historical evidence"],
+    );
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+
+    let recovered_decision = scheduler.observe(
+        agent_drift_sentinel::CheckpointCursor::from(&recovered),
+        TriggerClass::CheckpointReady,
+        recovered.flagged,
+        Some(&warning_fingerprint(&recovered)),
+    );
+    let recovered_presentation = present_checkpoint_with_previous(
+        &recovered,
+        None,
+        TriggerClass::CheckpointReady,
+        &recovered_decision,
+        &WarningPolicy::default(),
+    );
+
+    let historical_decision = scheduler.observe(
+        agent_drift_sentinel::CheckpointCursor::from(&historical_only),
+        TriggerClass::CheckpointReady,
+        historical_only.flagged,
+        Some(&warning_fingerprint(&historical_only)),
+    );
+    let historical_presentation = present_checkpoint_with_previous(
+        &historical_only,
+        None,
+        TriggerClass::CheckpointReady,
+        &historical_decision,
+        &WarningPolicy::default(),
+    );
+
+    assert_eq!(
+        recovered_presentation.posture,
+        Some(CheckpointPosture::Recovered)
+    );
+    assert_eq!(
+        historical_presentation.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+    assert!(recovered_presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("explicit analyzer recovery evidence")));
+    assert!(historical_presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("explicit analyzer historical evidence")));
+}
+
+#[test]
 fn operator_surface_detects_dead_end_historical_verification_evidence() {
     let fixture = support::ReplayFixture::from_checkpoints(
         vec![checkpoint_with_drift(
@@ -330,6 +400,35 @@ fn checkpoint_with_drift(
         support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
     checkpoint.flagged = flagged;
     checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].raw_score = raw_score;
+    checkpoint.drift_scores[0].flagged = flagged;
+    checkpoint.drift_scores[0].evidence = evidence_reasons
+        .iter()
+        .map(|reason| EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: (*reason).to_string(),
+        })
+        .collect();
+    checkpoint.diagnostics.evidence_item_count = checkpoint.drift_scores[0].evidence.len();
+    checkpoint
+}
+
+fn checkpoint_with_state(
+    session_id: &str,
+    ordinal: usize,
+    class: DriftClass,
+    state: DriftState,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+    evidence_reasons: &[&str],
+) -> Checkpoint {
+    let mut checkpoint =
+        support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.schema_version = "v0.3".to_string();
+    checkpoint.flagged = flagged;
+    checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].state = state;
     checkpoint.drift_scores[0].raw_score = raw_score;
     checkpoint.drift_scores[0].flagged = flagged;
     checkpoint.drift_scores[0].evidence = evidence_reasons

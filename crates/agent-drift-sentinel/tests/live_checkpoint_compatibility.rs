@@ -4,7 +4,7 @@ mod support;
 
 use std::fs;
 
-use agent_drift_analyzer::{DriftClass, EvidenceRef};
+use agent_drift_analyzer::{DriftClass, DriftState, EvidenceRef};
 use agent_drift_sentinel::{
     load_live_fixture,
     operator_surface::{present_checkpoint, present_checkpoint_with_previous, CheckpointPosture},
@@ -202,6 +202,43 @@ fn live_checkpoint_compatibility_surfaces_analyzer_contract_gaps_explicitly() {
 }
 
 #[test]
+fn live_checkpoint_compatibility_prefers_explicit_v0_3_state_without_previous_checkpoint() {
+    let checkpoint = checkpoint_with_state(
+        "session-v03",
+        2,
+        DriftClass::TruthGroundingGap,
+        DriftState::Recovered,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer recovery evidence"],
+    );
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        compatibility.cursor.clone(),
+        TriggerClass::CheckpointReady,
+        compatibility.flagged,
+        Some(&compatibility.warning_fingerprint),
+    );
+    let presentation = present_checkpoint(
+        &checkpoint,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+
+    assert!(!compatibility.flagged);
+    assert_eq!(presentation.posture, Some(CheckpointPosture::Recovered));
+    assert!(presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("explicit analyzer recovery evidence")));
+}
+
+#[test]
 fn live_checkpoint_compatibility_supports_recovered_posture_without_schema_widening() {
     let previous = checkpoint_with_drift(
         "v0.2",
@@ -268,6 +305,35 @@ fn checkpoint_with_drift(
     checkpoint.schema_version = schema_version.to_string();
     checkpoint.flagged = flagged;
     checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].raw_score = raw_score;
+    checkpoint.drift_scores[0].flagged = flagged;
+    checkpoint.drift_scores[0].evidence = evidence_reasons
+        .iter()
+        .map(|reason| EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: (*reason).to_string(),
+        })
+        .collect();
+    checkpoint.diagnostics.evidence_item_count = checkpoint.drift_scores[0].evidence.len();
+    checkpoint
+}
+
+fn checkpoint_with_state(
+    session_id: &str,
+    ordinal: usize,
+    class: DriftClass,
+    state: DriftState,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+    evidence_reasons: &[&str],
+) -> agent_drift_analyzer::Checkpoint {
+    let mut checkpoint =
+        support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
+    checkpoint.schema_version = "v0.3".to_string();
+    checkpoint.flagged = flagged;
+    checkpoint.drift_scores[0].class = class;
+    checkpoint.drift_scores[0].state = state;
     checkpoint.drift_scores[0].raw_score = raw_score;
     checkpoint.drift_scores[0].flagged = flagged;
     checkpoint.drift_scores[0].evidence = evidence_reasons
