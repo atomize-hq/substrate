@@ -3,7 +3,7 @@
 Source spec: [SPEC-43-internal-retained-host-control-directive-bootstrap.md](./SPEC-43-internal-retained-host-control-directive-bootstrap.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: first post-Slice-42 host operational steering slice  
-Status: draft for review on `2026-06-04`
+Status: aligned with landed Slice `43` scope on `2026-06-04`
 
 ## Objective
 
@@ -20,23 +20,23 @@ This slice is complete only when all of the following are true:
 
 ## Plan Summary
 
-After Slice `42`, the repo can now handle the conversational producer-consumer loop for retained follow-up: `follow_up_question` persists durably and typed host `clarification_response` consumes it over the existing `continue_world_worker` seam.
+After Slice `42`, the repo could already handle the conversational producer-consumer loop for retained follow-up: `follow_up_question` persists durably and typed host `clarification_response` consumes it over the existing `continue_world_worker` seam.
 
-The remaining host-side typed classes are now `progress_ack`, `control_directive`, `control_ack`, and `fork_command`. The narrowest honest next widening is `control_directive` because:
+Before Slice `43`, the remaining host-side typed classes were `progress_ack`, `control_directive`, `control_ack`, and `fork_command`. The narrowest honest next widening was `control_directive` because:
 
 1. it is a canonical host-to-worker operational class in the design stack,
 2. it can stand alone without inventing a new durable obligation consumer model,
 3. it is more strategically meaningful than `progress_ack`, which is explicitly optional and still lacks an exact durable causation anchor in live repo truth,
 4. it can stay smaller than a transport redesign by compiling onto the already-landed member-turn prompt submit seam.
 
-What the repo already has:
+What the repo already had at slice start:
 
 1. the seven-verb Family-1 internal dispatch surface,
 2. exact retained-worker targeting and world-binding validation through `continue_world_worker`,
 3. a live member-turn submit seam that already carries free-form continue prompts plus narrow typed `approval_response` and `clarification_response`,
 4. a clear design vocabulary for operational directive kinds such as pause, reduce scope, summarize, checkpoint, and prepare handoff.
 
-What the repo still lacks is:
+What Slice `43` adds and freezes is:
 
 1. a typed host-side control-directive contract at the dispatch boundary,
 2. explicit deny-by-default policy truth for typed host operational steering,
@@ -172,12 +172,12 @@ Primary touch surface:
 What this packet must enforce:
 
 1. docs describe Slice `43` as typed host control-directive bootstrap over the existing `continue_world_worker` seam, not generalized control transport or Family-2 router execution,
-2. docs keep `control_ack`, `fork_command`, and active-ephemeral identity widening explicitly deferred,
-3. docs keep Family-2 router execution downstream.
+2. docs keep `control_ack`, `fork_command`, `progress_ack`, and active-ephemeral identity widening explicitly deferred,
+3. docs keep Family-2 router execution downstream and do not imply generalized control transport or public control-surface widening.
 
 Verification checkpoint:
 
-1. docs remain honest about scope,
+1. docs and config truth remain honest about scope,
 2. validation is green,
 3. the next follow-on slice can sequence `control_ack` or `fork_command` without reopening Slice `43`.
 

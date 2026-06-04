@@ -601,32 +601,38 @@ fn canonicalize_control_directive_detail_fragment(
         );
     }
 
-    let recognized = match (directive.directive_kind, detail_key, detail_value) {
-        (ControlDirectiveKindV1::Pause, "scope", "current_branch" | "current_task")
-        | (ControlDirectiveKindV1::Pause, "timing", "after_current_step")
-        | (
+    let recognized = matches!(
+        (directive.directive_kind, detail_key, detail_value),
+        (
+            ControlDirectiveKindV1::Pause,
+            "scope",
+            "current_branch" | "current_task"
+        ) | (
+            ControlDirectiveKindV1::Pause,
+            "timing",
+            "after_current_step"
+        ) | (
             ControlDirectiveKindV1::ReduceScope,
             "scope",
             "tests_only" | "single_path" | "current_failure",
-        )
-        | (
+        ) | (
             ControlDirectiveKindV1::Summarize,
             "focus",
             "current_state" | "recent_progress" | "next_steps",
-        )
-        | (
+        ) | (
             ControlDirectiveKindV1::Checkpoint,
             "artifact",
             "current_state" | "before_retry" | "before_handoff",
-        )
-        | (
+        ) | (
             ControlDirectiveKindV1::PrepareHandoff,
             "focus",
             "current_state" | "next_steps" | "known_risks",
+        ) | (
+            ControlDirectiveKindV1::PrepareHandoff,
+            "timing",
+            "before_stop"
         )
-        | (ControlDirectiveKindV1::PrepareHandoff, "timing", "before_stop") => true,
-        _ => false,
-    };
+    );
 
     if !recognized {
         anyhow::bail!(

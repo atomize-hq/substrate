@@ -6627,7 +6627,9 @@ agents:
             outcome.worker_event
         );
         assert!(
-            outcome.summary.contains("delivered to retained worker ash_member"),
+            outcome
+                .summary
+                .contains("delivered to retained worker ash_member"),
             "successful delivery should stay explicit about delivery-only truth: {}",
             outcome.summary
         );
@@ -6852,7 +6854,9 @@ agents:
                 outcome.worker_event
             );
             assert!(
-                outcome.summary.contains("downstream acknowledgement remains worker-defined"),
+                outcome
+                    .summary
+                    .contains("downstream acknowledgement remains worker-defined"),
                 "approval-response summary must stay delivery-only: {}",
                 outcome.summary
             );
@@ -7082,7 +7086,9 @@ agents:
             outcome.worker_event
         );
         assert!(
-            outcome.summary.contains("downstream acknowledgement remains worker-defined"),
+            outcome
+                .summary
+                .contains("downstream acknowledgement remains worker-defined"),
             "clarification-response summary must stay delivery-only: {}",
             outcome.summary
         );

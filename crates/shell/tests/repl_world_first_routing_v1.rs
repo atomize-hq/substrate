@@ -516,46 +516,43 @@ fn yaml_quoted_list(items: &[&str], indent: usize) -> String {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+struct WorldDispatchPolicyArgs<'a> {
+    require_world: bool,
+    member_backend_id: &'a str,
+    enabled: bool,
+    allowed_backends: &'a [&'a str],
+    allowed_actions: &'a [&'a str],
+    allowed_modes: &'a [&'a str],
+    control_directives_allowed: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_member_runtime_policy_with_world_dispatch(
     home_substrate: &Path,
-    require_world: bool,
-    member_backend_id: &str,
-    enabled: bool,
-    allowed_backends: &[&str],
-    allowed_actions: &[&str],
-    allowed_modes: &[&str],
+    args: WorldDispatchPolicyArgs<'_>,
 ) {
     write_member_runtime_policy_with_world_dispatch_control_directives(
         home_substrate,
-        require_world,
-        member_backend_id,
-        enabled,
-        allowed_backends,
-        allowed_actions,
-        allowed_modes,
-        false,
+        WorldDispatchPolicyArgs {
+            control_directives_allowed: false,
+            ..args
+        },
     );
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_member_runtime_policy_with_world_dispatch_control_directives(
     home_substrate: &Path,
-    require_world: bool,
-    member_backend_id: &str,
-    enabled: bool,
-    allowed_backends: &[&str],
-    allowed_actions: &[&str],
-    allowed_modes: &[&str],
-    control_directives_allowed: bool,
+    args: WorldDispatchPolicyArgs<'_>,
 ) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
-    let require_world = if require_world { "true" } else { "false" };
-    let enabled = if enabled { "true" } else { "false" };
-    let inventory_backends = yaml_quoted_list(&["cli:claude_code", member_backend_id], 4);
-    let dispatch_backends = yaml_quoted_list(allowed_backends, 6);
-    let dispatch_actions = yaml_quoted_list(allowed_actions, 6);
-    let dispatch_modes = yaml_quoted_list(allowed_modes, 6);
-    let control_block = if control_directives_allowed {
+    let require_world = if args.require_world { "true" } else { "false" };
+    let enabled = if args.enabled { "true" } else { "false" };
+    let inventory_backends = yaml_quoted_list(&["cli:claude_code", args.member_backend_id], 4);
+    let dispatch_backends = yaml_quoted_list(args.allowed_backends, 6);
+    let dispatch_actions = yaml_quoted_list(args.allowed_actions, 6);
+    let dispatch_modes = yaml_quoted_list(args.allowed_modes, 6);
+    let control_block = if args.control_directives_allowed {
         "    control:\n      control_directives_allowed: true\n"
     } else {
         ""
@@ -611,16 +608,19 @@ fn write_member_runtime_policy_with_member_backend(
 ) {
     write_member_runtime_policy_with_world_dispatch(
         home_substrate,
-        require_world,
-        member_backend_id,
-        true,
-        &[member_backend_id],
-        &[
-            "run_world_task",
-            "spawn_world_worker",
-            "continue_world_worker",
-        ],
-        &["ephemeral", "retained"],
+        WorldDispatchPolicyArgs {
+            require_world,
+            member_backend_id,
+            enabled: true,
+            allowed_backends: &[member_backend_id],
+            allowed_actions: &[
+                "run_world_task",
+                "spawn_world_worker",
+                "continue_world_worker",
+            ],
+            allowed_modes: &["ephemeral", "retained"],
+            control_directives_allowed: false,
+        },
     );
 }
 
@@ -2405,12 +2405,15 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     );
     write_member_runtime_policy_with_world_dispatch(
         &substrate_home,
-        true,
-        "cli:codex",
-        true,
-        &["cli:codex"],
-        &["spawn_world_worker", "continue_world_worker"],
-        &["retained"],
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            control_directives_allowed: false,
+        },
     );
 
     let sock_temp = short_socket_dir("sub-c3ws-targeted-world-submit-");
@@ -2642,13 +2645,15 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     );
     write_member_runtime_policy_with_world_dispatch_control_directives(
         &substrate_home,
-        true,
-        "cli:codex",
-        true,
-        &["cli:codex"],
-        &["spawn_world_worker", "continue_world_worker"],
-        &["retained"],
-        true,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            control_directives_allowed: true,
+        },
     );
 
     let sock_temp = short_socket_dir("sub-c3ws-toolbox-control-directive-");

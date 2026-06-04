@@ -5,7 +5,7 @@ Source plan: [PLAN-43.md](./PLAN-43.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: draft for review on `2026-06-04`
+Status: Packet `4` complete on `2026-06-04`
 
 ## Execution Packets
 
@@ -140,7 +140,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
+- [x] Task 4.1: Align planning/config truth without widening the slice
   - Acceptance: repo-local docs describe Slice `43` as typed host control-directive bootstrap over the existing `continue_world_worker` seam, not generalized control transport, public control-surface widening, or Family-2 router execution.
   - Verify:
     - manual diff review
@@ -150,7 +150,7 @@ Session goal:
     - [`llm-last-mile/PLAN-43.md`](./PLAN-43.md)
     - [`llm-last-mile/TASKS-43.md`](./TASKS-43.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker tests, and full workspace tests are green; no unintended widening into `control_ack`, `fork_command`, transport-schema redesign, active-ephemeral identity, or Family-2 execution appears.
   - Verify:
     - `cargo fmt --all -- --check`

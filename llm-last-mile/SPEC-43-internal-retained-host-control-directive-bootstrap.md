@@ -10,7 +10,7 @@ Related design stack:
 - [DESIGN-host-to-world-steering-policy-matrix.md](./DESIGN-host-to-world-steering-policy-matrix.md)
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)  
 Phase: `SPECIFY`  
-Status: draft for review on `2026-06-04`
+Status: aligned with landed Slice `43` scope on `2026-06-04`
 
 ## Assumptions
 
@@ -25,22 +25,22 @@ ASSUMPTIONS I'M MAKING:
    - optional `directive_text` only as a caller-supplied bounded metadata label recognized for the chosen directive kind,
    - optional `thread_id`,
    - no new public control plane or generalized typed control envelope.
-6. The minimum deny-by-default host-control gate for this slice should land as a dedicated policy dimension outside the current obligation-bound keys. I am assuming a narrow key such as `agents.world_dispatch.control.control_directives_allowed`; correct that before implementation if the repo should use a different branch name.
+6. The minimum deny-by-default host-control gate for this slice lands as the dedicated `agents.world_dispatch.control.control_directives_allowed` policy key outside the obligation-bound keys.
 7. `control_ack`, `fork_command`, `progress_ack`, active-ephemeral inspect/cancel widening, public control UX, and Family-2 router/attach execution remain later work and must stay out of scope here.
 
 If any of these are wrong, correct them before implementation.
 
-## Observed Repo Floor
+## Observed Repo Truth
 
 The current repo already provides most of the floor this slice needs:
 
-1. the live `continue_world_worker` request payload already accepts free-form prompt text plus two narrow typed host payloads, `approval_response` and `clarification_response`, on the same retained seam in [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs),
-2. the live runtime already proves the host-response bootstrap pattern: exact retained-worker targeting, deny-by-default typed payload gating, deterministic prompt rendering, and post-delivery side effects only after successful submit in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs),
+1. the live `continue_world_worker` request payload now accepts free-form prompt text plus three narrow typed host payloads, `approval_response`, `clarification_response`, and `control_directive`, on the same retained seam in [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs),
+2. the live runtime now proves the narrow host bootstrap pattern for all three landed typed host payloads: exact retained-worker targeting, deny-by-default typed payload gating, deterministic prompt rendering, and post-delivery side effects only after successful submit in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs),
 3. the retained-worker messaging design already defines `control_directive` as a canonical host-to-worker operational class with examples such as pause, reduce scope, summarize, checkpoint, and prepare handoff,
-4. the live repo still treats `control_directive`, `control_ack`, and `fork_command` as deferred typed surfaces, and the current request contract still rejects typed `worker_continue_control_directive`,
+4. the live repo now lands the narrow typed host `control_directive` bootstrap while still treating `control_ack` and `fork_command` as deferred typed surfaces, and the current request contract still rejects typed `worker_continue_control_directive`,
 5. unlike approvals and follow-up clarification, `control_directive` does not need a durable unresolved-obligation consumer target to be meaningful, which makes it a cleaner next bootstrap than `progress_ack`.
 
-That means the missing work is narrow: add the typed host payload and gate, define the small initial directive-kind surface, and reuse the already-landed retained delivery seam without inventing broader operational transport.
+That means the landed slice stays narrow: a typed host payload and dedicated gate, a small initial directive-kind surface, and reuse of the retained delivery seam without inventing broader operational transport.
 
 ## Objective
 
@@ -57,10 +57,10 @@ Primary runtime story:
 
 ## Current Landed Runtime Note
 
-1. the live `continue_world_worker` request payload now accepts either free-form prompt text plus optional `thread_id`, typed `approval_response`, or typed `clarification_response`,
-2. the live retained-worker event classifier still treats `control_directive`, `control_ack`, and `fork_command` as deferred typed surfaces,
+1. the live `continue_world_worker` request payload now accepts free-form prompt text plus optional `thread_id`, typed `approval_response`, typed `clarification_response`, and typed `control_directive`,
+2. `control_ack` and `fork_command` remain deferred typed surfaces even though the narrow host-side `control_directive` bootstrap is now landed,
 3. the live transport submit seam still carries a single prompt string rather than a typed host-message envelope, so typed host control directives should compile onto that prompt seam through a canonical renderer,
-4. the live repo has no dedicated typed control-directive policy gate and no implementation-owned typed control-directive payload contract,
+4. the live repo now exposes a dedicated deny-by-default `agents.world_dispatch.control.control_directives_allowed` policy gate and an implementation-owned typed control-directive payload contract,
 5. the live repo still has no typed active-ephemeral `task_run_id`, so active-ephemeral inspect/cancel widening remains separate later work.
 
 ## Tech Stack
