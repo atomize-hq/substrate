@@ -15,6 +15,7 @@ use agent_drift_analyzer::{
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
+use serde_json::Value;
 use support::{load_sample_bundle, read_checkpoints, BundleFixture};
 use tempfile::TempDir;
 use time::macros::datetime;
@@ -221,6 +222,46 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
         .drift_scores
         .iter()
         .all(|score| matches!(score.state, DriftState::Active | DriftState::Recovered)));
+}
+
+#[test]
+fn export_bundle_writes_raw_state_fields_for_every_drift_score() {
+    let fixture = BundleFixture::sample();
+    let result = agent_drift_analyzer::analyze_bundle(&agent_drift_analyzer::AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze sample bundle");
+    let raw_checkpoints = fs::read_to_string(&result.checkpoints_path).expect("checkpoints jsonl");
+    let mut saw_cleared_state = false;
+
+    for line in raw_checkpoints.lines() {
+        let checkpoint: Value = serde_json::from_str(line).expect("checkpoint json");
+        let drift_scores = checkpoint["drift_scores"]
+            .as_array()
+            .expect("checkpoint drift_scores array");
+        assert!(
+            !drift_scores.is_empty(),
+            "checkpoint must include drift scores"
+        );
+
+        for score in drift_scores {
+            let state = score
+                .get("state")
+                .and_then(Value::as_str)
+                .expect("serialized drift score state");
+            assert!(matches!(
+                state,
+                "active" | "recovered" | "historical_only" | "cleared"
+            ));
+            saw_cleared_state |= state == "cleared";
+        }
+    }
+
+    assert!(
+        saw_cleared_state,
+        "expected at least one serialized cleared state"
+    );
 }
 
 #[test]

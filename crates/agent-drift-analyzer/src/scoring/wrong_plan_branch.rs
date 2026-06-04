@@ -1,6 +1,7 @@
 use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState};
+use crate::scoring::{DriftStateHint, ScoredDrift};
 
-pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> DriftScore {
+pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDrift {
     let context = &analysis.current.context;
     let task_frame = &analysis.current.task_frame;
     let mut expected = task_frame.truth_artifacts.clone();
@@ -36,18 +37,21 @@ pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> DriftSco
         2 => 80,
         _ => 100,
     };
-    DriftScore {
-        class: DriftClass::WrongPlanBranch,
-        state: DriftState::Cleared,
-        raw_score,
-        confidence: if expected.is_empty() {
-            Confidence::Low
-        } else if out_of_scope.len() >= 2 {
-            Confidence::High
-        } else {
-            Confidence::Medium
+    ScoredDrift::new(
+        DriftScore {
+            class: DriftClass::WrongPlanBranch,
+            state: DriftState::Cleared,
+            raw_score,
+            confidence: if expected.is_empty() {
+                Confidence::Low
+            } else if out_of_scope.len() >= 2 {
+                Confidence::High
+            } else {
+                Confidence::Medium
+            },
+            flagged: raw_score >= 60,
+            evidence: out_of_scope,
         },
-        flagged: raw_score >= 60,
-        evidence: out_of_scope,
-    }
+        DriftStateHint::None,
+    )
 }

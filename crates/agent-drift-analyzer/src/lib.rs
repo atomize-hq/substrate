@@ -9,7 +9,7 @@ use checkpoint::export_checkpoints;
 use context::{assemble_context, ContextPack};
 use inference::infer_task_frame;
 use input::load_bundle;
-use scoring::{score_session, truth_grounding_gap_has_history};
+use scoring::score_session;
 
 pub mod checkpoint;
 pub mod cli;
@@ -82,7 +82,7 @@ pub fn analyze_loaded_bundle(
             previous_truth_grounding_gap = scores
                 .iter()
                 .find(|score| score.class == DriftClass::TruthGroundingGap)
-                .filter(|score| truth_grounding_gap_has_history(score))
+                .filter(|score| score.state != DriftState::Cleared)
                 .cloned();
             previous_checkpoint_scores = Some(scores.clone());
             checkpoints.push(checkpoint::build_session_checkpoint_from_analysis(

@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::input::BundleSession;
 use crate::{
     context::assemble_context, context::collect_command_observations, context::CommandObservation,
-    context::ContextPack, inference::infer_task_frame,
+    context::ContextPack, inference::infer_task_frame, scoring::DriftStateHint,
+    scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef};
 use camino::Utf8PathBuf;
@@ -128,14 +129,14 @@ pub(crate) fn build_session_checkpoint_from_analysis(
 }
 
 pub(crate) fn assign_drift_states(
-    drift_scores: Vec<DriftScore>,
+    drift_scores: Vec<ScoredDrift>,
     previous_drift_scores: Option<&[DriftScore]>,
 ) -> Vec<DriftScore> {
     drift_scores
         .into_iter()
-        .map(|score| DriftScore {
-            state: drift_state_for_score(&score, previous_drift_scores),
-            ..score
+        .map(|scored| DriftScore {
+            state: drift_state_for_score(&scored.score, scored.state_hint, previous_drift_scores),
+            ..scored.score
         })
         .collect()
 }
@@ -165,17 +166,14 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
 
 fn drift_state_for_score(
     score: &DriftScore,
+    state_hint: DriftStateHint,
     previous_drift_scores: Option<&[DriftScore]>,
 ) -> DriftState {
     if score.flagged {
         return DriftState::Active;
     }
 
-    if !supports_historical_state(score.class) {
-        return DriftState::Cleared;
-    }
-
-    if !has_historical_evidence(score) {
+    if !matches!(state_hint, DriftStateHint::HistoricalContext) {
         return DriftState::Cleared;
     }
 
@@ -183,30 +181,6 @@ fn drift_state_for_score(
         Some(DriftState::Active) => DriftState::Recovered,
         _ => DriftState::HistoricalOnly,
     }
-}
-
-fn supports_historical_state(class: DriftClass) -> bool {
-    matches!(
-        class,
-        DriftClass::TruthGroundingGap | DriftClass::DeadEndThrash
-    )
-}
-
-fn has_historical_evidence(score: &DriftScore) -> bool {
-    score.evidence.iter().any(|evidence| match score.class {
-        DriftClass::WrongPlanBranch => false,
-        DriftClass::TruthGroundingGap => evidence
-            .reason
-            .starts_with("historical truth-grounding gap:"),
-        DriftClass::DeadEndThrash => {
-            evidence
-                .reason
-                .starts_with("historical repeated verification evidence:")
-                || evidence
-                    .reason
-                    .starts_with("historical repeated failure evidence:")
-        }
-    })
 }
 
 fn previous_state_for_class(

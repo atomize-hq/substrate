@@ -4,12 +4,13 @@ use crate::checkpoint::{
     CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
     RepeatedCommandLoop, RepeatedFailureLoop,
 };
+use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const HISTORICAL_REPEATED_VERIFICATION_REASON_PREFIX: &str =
     "historical repeated verification evidence:";
 const HISTORICAL_REPEATED_FAILURE_REASON_PREFIX: &str = "historical repeated failure evidence:";
 
-pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> DriftScore {
+pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> ScoredDrift {
     let has_history = !analysis.repetition.repeated_verification_loops.is_empty()
         || !analysis.repetition.repeated_failure_loops.is_empty();
     let flagged = has_history && !analysis.recovery.recovered_from_thrash;
@@ -27,22 +28,29 @@ pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> DriftScore
     };
     dedupe_evidence(&mut evidence);
 
-    DriftScore {
-        class: DriftClass::DeadEndThrash,
-        state: DriftState::Cleared,
-        raw_score,
-        confidence: if !analysis.repetition.repeated_verification_loops.is_empty() {
-            Confidence::High
-        } else if !analysis.repetition.repeated_failure_loops.is_empty()
-            || !analysis.current.context.command_observations.is_empty()
-        {
-            Confidence::Medium
-        } else {
-            Confidence::Low
+    ScoredDrift::new(
+        DriftScore {
+            class: DriftClass::DeadEndThrash,
+            state: DriftState::Cleared,
+            raw_score,
+            confidence: if !analysis.repetition.repeated_verification_loops.is_empty() {
+                Confidence::High
+            } else if !analysis.repetition.repeated_failure_loops.is_empty()
+                || !analysis.current.context.command_observations.is_empty()
+            {
+                Confidence::Medium
+            } else {
+                Confidence::Low
+            },
+            flagged,
+            evidence,
         },
-        flagged,
-        evidence,
-    }
+        if has_history {
+            DriftStateHint::HistoricalContext
+        } else {
+            DriftStateHint::None
+        },
+    )
 }
 
 fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {

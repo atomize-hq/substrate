@@ -4,13 +4,14 @@ use crate::checkpoint::{
     CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
 };
 use crate::context::CommandObservation;
+use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX: &str = "historical truth-grounding gap:";
 
 pub(crate) fn score_truth_grounding_gap(
     analysis: &CheckpointAnalysis,
     previous_truth_grounding_gap: Option<&DriftScore>,
-) -> DriftScore {
+) -> ScoredDrift {
     let truth_paths = analysis
         .current
         .task_frame
@@ -59,6 +60,7 @@ pub(crate) fn score_truth_grounding_gap(
         0
     };
 
+    let historical_context = !historical_evidence.is_empty();
     let mut evidence = analysis
         .current
         .context
@@ -74,28 +76,27 @@ pub(crate) fn score_truth_grounding_gap(
     evidence.extend(historical_evidence);
     dedupe_evidence(&mut evidence);
 
-    DriftScore {
-        class: DriftClass::TruthGroundingGap,
-        state: DriftState::Cleared,
-        raw_score,
-        confidence: if truth_paths.is_empty() {
-            Confidence::Low
-        } else if active_gap {
-            Confidence::High
-        } else {
-            Confidence::Medium
+    ScoredDrift::new(
+        DriftScore {
+            class: DriftClass::TruthGroundingGap,
+            state: DriftState::Cleared,
+            raw_score,
+            confidence: if truth_paths.is_empty() {
+                Confidence::Low
+            } else if active_gap {
+                Confidence::High
+            } else {
+                Confidence::Medium
+            },
+            flagged: active_gap,
+            evidence,
         },
-        flagged: active_gap,
-        evidence,
-    }
-}
-
-pub(crate) fn truth_grounding_gap_has_history(score: &DriftScore) -> bool {
-    score.flagged
-        || score
-            .evidence
-            .iter()
-            .any(|evidence| is_historical_truth_grounding_gap_reason(&evidence.reason))
+        if historical_context {
+            DriftStateHint::HistoricalContext
+        } else {
+            DriftStateHint::None
+        },
+    )
 }
 
 fn historical_truth_grounding_gap_evidence(previous: &DriftScore) -> Vec<EvidenceRef> {
