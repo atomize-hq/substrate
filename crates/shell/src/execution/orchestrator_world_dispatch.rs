@@ -1886,7 +1886,15 @@ async fn execute_continue_world_worker_stream(
                                 .await;
                             return Err(err);
                         }
-                        let preserve_existing_packet_one_request =
+                        let preserve_existing_live_obligation =
+                            surfaced_worker_event.as_ref().is_some_and(|existing| {
+                                continue_world_worker_event_persists_live_obligation(
+                                    existing.event_class,
+                                ) && !continue_world_worker_event_persists_live_obligation(
+                                    classified_event.event_class,
+                                )
+                            });
+                        let preserve_existing_request_like_surface =
                             surfaced_worker_event.as_ref().is_some_and(|existing| {
                                 matches!(
                                     existing.event_class,
@@ -1904,9 +1912,11 @@ async fn execute_continue_world_worker_stream(
                                         | ContinueWorldWorkerEventClassV1::Blocked
                                 )
                             });
-                        if !preserve_existing_packet_one_request {
+                        if !(preserve_existing_live_obligation
+                            || preserve_existing_request_like_surface)
+                        {
                             // Preserve the surfaced Packet 1 worker request even if later
-                            // ordinary stream events arrive before exit.
+                            // non-persistent Packet 2 or ordinary stream events arrive before exit.
                             surfaced_worker_event = Some(classified_event);
                         }
                     }
@@ -5311,6 +5321,173 @@ agents:
                 .count(),
             1,
             "accepted fork_request must leave exactly one retained member live"
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_preserves_fork_request_when_blocked_follows() {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home
+            .path()
+            .join("preserve-fork-request-then-blocked.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(serde_json::json!({
+                                "event_class": "fork_request",
+                                "payload": {
+                                    "message": "please allocate a child later"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(serde_json::json!({
+                                "event_class": "blocked",
+                                "payload": {
+                                    "message": "waiting on host"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        fs::write(
+            substrate_home.path().join("policy.yaml"),
+            r#"id: test-global-policy
+name: Test Global Policy
+agents:
+  allowed_backends:
+    - "cli:codex_world"
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - "cli:codex_world"
+    allowed_actions:
+      - "continue_world_worker"
+    allowed_modes:
+      - "retained"
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 4
+    max_concurrent_ephemeral: 4
+    obligations:
+      blocked_allowed: true
+    fork:
+      requests_allowed: true
+"#,
+        )
+        .expect("write mixed-sequence policy");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, socket_home.path(), "world-17", 2);
+
+        let live_before = store
+            .list_live_participants_for_session("sess_dispatch")
+            .expect("list live participants before continue");
+        let outcome = dispatch_real_continue_world_worker_request(
+            &store,
+            "req_continue_fork_request_then_blocked",
+            "idem_continue_fork_request_then_blocked",
+            "world-17",
+            2,
+        )
+        .await;
+        let live_after = store
+            .list_live_participants_for_session("sess_dispatch")
+            .expect("list live participants after continue");
+
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome.worker_event.as_ref().map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::ForkRequest)
+        );
+        let obligation = store
+            .load_obligation(
+                "sess_dispatch",
+                "obl_continue_req_continue_fork_request_then_blocked_fork_request",
+            )
+            .expect("load fork-request obligation")
+            .expect("fork-request obligation exists");
+        assert_eq!(obligation.kind, OrchestrationObligationKind::ForkRequest);
+        assert_eq!(
+            obligation
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.pointer("/payload/message"))
+                .and_then(serde_json::Value::as_str),
+            Some("please allocate a child later")
+        );
+        assert_eq!(
+            live_after.len(),
+            live_before.len(),
+            "mixed request-like stream must not allocate a child worker"
+        );
+        assert_eq!(
+            live_after
+                .iter()
+                .filter(|participant| participant.handle.role == "member")
+                .count(),
+            1,
+            "mixed request-like stream must leave exactly one retained member live"
         );
 
         server.await.expect("stub world server task");
