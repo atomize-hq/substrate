@@ -11,6 +11,7 @@ Primary sources:
 - [agent-session-compactor-bundle-contract-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-session-compactor-bundle-contract-v0.2-tasks.md:1)
 - [agent-drift-sentinel-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-v0.2-tasks.md:1)
 - [agent-drift-sentinel-live-integration-v0.3-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-tasks.md:1)
+- [agent-drift-analyzer-checkpoint-state-v0.6-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-tasks.md:1)
 
 ## Task IDs
 
@@ -112,6 +113,15 @@ Primary sources:
 - `RT4` emit only newly observed checkpoints into the existing live runtime
 - `RT5` enable the bounded `--mode live` CLI for real-session monitoring
 - `RT6` prove the path on an actually active live session while the source session is growing
+
+### Analyzer Checkpoint State
+
+- `AS1` lock the analyzer-owned checkpoint-state contract and packet boundary
+- `AS2` add exported `DriftState` plus one analyzer-owned state builder
+- `AS3` widen checkpoint export to schema `v0.3`
+- `AS4` cut sentinel posture over to exported analyzer state
+- `AS5` prove replay/live compatibility for `v0.2` fallback and `v0.3` preferred behavior
+- `AS6` refresh packet authority and bounded proof guidance without mixing typed outcome evidence
 
 ## Dependency Chart
 
@@ -537,6 +547,11 @@ Packet 18 note:
   sessions:
   - `v0.5B.1`: extract and persist the live-progress seam
   - `v0.5B.2`: restart behavior hardening, regression coverage, and continuity-doc refresh
+- `2026-06-03`: after landed `v0.5A` / `v0.5B`, the next recommended analyzer follow-up is the
+  checkpoint-state ownership slice:
+  - `v0.6A`: analyzer-owned per-class state contract plus additive checkpoint export
+  - `v0.6B`: sentinel cutover to exported state, compatibility fallback, and replay/live proof
+  - typed outcome evidence remains a separate follow-on after `v0.6`, not part of the same packet
 
 ## If You Want Fewer Packets
 
