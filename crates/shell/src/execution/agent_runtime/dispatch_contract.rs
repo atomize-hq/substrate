@@ -267,7 +267,7 @@ pub(crate) enum ControlDirectiveKindV1 {
 pub(crate) struct WorkerContinueControlDirectivePayloadV1 {
     pub directive_kind: ControlDirectiveKindV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub detail_text: Option<String>,
+    pub directive_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
 }
@@ -518,7 +518,11 @@ fn validate_control_directive_continue_payload(
     action: WorldDispatchActionV1,
     directive: &WorkerContinueControlDirectivePayloadV1,
 ) -> anyhow::Result<()> {
-    validate_optional_world_dispatch_string(action, "detail_text", &directive.detail_text)?;
+    validate_optional_world_dispatch_string(
+        action,
+        "directive_text",
+        &directive.directive_text,
+    )?;
     validate_optional_world_dispatch_string(action, "thread_id", &directive.thread_id)?;
     Ok(())
 }
@@ -3508,7 +3512,7 @@ mod tests {
             WorldDispatchPayloadV1::WorkerContinueControlDirective(
                 WorkerContinueControlDirectivePayloadV1 {
                     directive_kind: ControlDirectiveKindV1::Pause,
-                    detail_text: None,
+                    directive_text: None,
                     thread_id: Some("thread-control".to_string()),
                 },
             ),
@@ -3522,30 +3526,53 @@ mod tests {
             panic!("validated payload should remain typed control directive payload");
         };
         assert_eq!(payload.directive_kind, ControlDirectiveKindV1::Pause);
-        assert_eq!(payload.detail_text, None);
+        assert_eq!(payload.directive_text, None);
         assert_eq!(payload.thread_id.as_deref(), Some("thread-control"));
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_blank_control_directive_detail_text() {
+    fn world_dispatch_contract_rejects_blank_control_directive_directive_text() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchModeV1::Retained,
             WorldDispatchPayloadV1::WorkerContinueControlDirective(
                 WorkerContinueControlDirectivePayloadV1 {
                     directive_kind: ControlDirectiveKindV1::ReduceScope,
-                    detail_text: Some(" ".to_string()),
+                    directive_text: Some(" ".to_string()),
                     thread_id: None,
                 },
             ),
         )
         .with_target_participant_id("ash-worker-43")
         .validate()
-        .expect_err("typed control directives must reject blank detail text when provided");
+        .expect_err("typed control directives must reject blank directive text when provided");
 
         assert_eq!(
             error.to_string(),
-            "invalid_dispatch_payload: action continue_world_worker requires non-empty detail_text when provided"
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty directive_text when provided"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_blank_thread_id_in_typed_control_directive() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueControlDirective(
+                WorkerContinueControlDirectivePayloadV1 {
+                    directive_kind: ControlDirectiveKindV1::Checkpoint,
+                    directive_text: Some("Save a checkpoint before continuing.".to_string()),
+                    thread_id: Some(" ".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-43")
+        .validate()
+        .expect_err("typed control directives must reject blank thread_id when provided");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty thread_id when provided"
         );
     }
 

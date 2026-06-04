@@ -3352,7 +3352,9 @@ mod tests {
             payload: WorldDispatchPayloadV1::WorkerContinueControlDirective(
                 WorkerContinueControlDirectivePayloadV1 {
                     directive_kind: ControlDirectiveKindV1::PrepareHandoff,
-                    detail_text: Some("Prepare a short handoff note before stopping.".to_string()),
+                    directive_text: Some(
+                        "Prepare a short handoff note before stopping.".to_string(),
+                    ),
                     thread_id: Some("thread-control-43".to_string()),
                 },
             ),
