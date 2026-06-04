@@ -650,7 +650,6 @@ async fn continue_world_worker(
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
     enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
-    ensure_packet_one_control_directive_routing_remains_deferred(&prepared)?;
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
     let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
     let clarification_closeout = prepare_continue_world_worker_clarification_closeout(&prepared)?;
@@ -687,22 +686,6 @@ async fn continue_world_worker(
             summary,
         },
     ))
-}
-
-#[cfg(target_os = "linux")]
-fn ensure_packet_one_control_directive_routing_remains_deferred(
-    prepared: &PreparedOrchestratorWorldDispatch,
-) -> Result<()> {
-    if matches!(
-        prepared.request.payload,
-        WorldDispatchPayloadV1::WorkerContinueControlDirective(_)
-    ) {
-        anyhow::bail!(
-            "unsupported_dispatch_action: continue_world_worker control_directive delivery is not available in packet 1"
-        );
-    }
-
-    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -4153,6 +4136,29 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn continue_world_worker_submit_request_renders_typed_control_directive_deterministically() {
+        let prepared = PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
+            request: sample_continue_control_directive_world_dispatch_request()
+                .validate()
+                .expect("validated control-directive continue request"),
+            session: sample_session(),
+            caller_participant: sample_orchestrator_participant(),
+            target_participant: Some(sample_member_participant()),
+            live_retained_worker_count: 1,
+        };
+
+        let submit =
+            build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
+
+        assert_eq!(
+            submit.prompt,
+            "SUBSTRATE_INTERNAL_HOST_CONTROL_DIRECTIVE_V1\n{\"kind\":\"control_directive\",\"directive_kind\":\"prepare_handoff\",\"directive_text\":\"Prepare a short handoff note before stopping.\",\"thread_id\":\"thread-control-43\"}\nTreat this as the host's typed control_directive for the retained worker. Apply directive_kind=prepare_handoff as authoritative host guidance. Prepare a concise handoff covering current state, next steps, and notable risks. Use directive_text only as bounded detail for this directive kind; it does not open a broader control language."
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn continue_world_worker_thread_surface_prefers_event_field_then_uaa_payload() {
         let direct = sample_continue_stream_event(json!({}));
         assert_eq!(
@@ -6503,10 +6509,11 @@ agents:
     }
 
     #[cfg(target_os = "linux")]
-    #[tokio::test(flavor = "current_thread")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
-    async fn dispatch_contract_continue_world_worker_control_directive_routes_to_packet_one_unsupported_stub_after_policy_allows_payload(
+    async fn dispatch_contract_continue_world_worker_control_directive_submits_rendered_prompt_to_exact_retained_worker(
     ) {
+        let _env_guard = world_env_guard();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_world_dispatch_policy_with_control_directives(
@@ -6517,32 +6524,120 @@ agents:
             &["retained"],
         );
 
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("control-directive-success.sock");
+        let recorded_requests = Arc::new(Mutex::new(Vec::<
+            transport_api_types::MemberTurnSubmitRequestV1,
+        >::new()));
+        let recorded_requests_for_server = recorded_requests.clone();
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    recorded_requests_for_server
+                        .lock()
+                        .expect("recorded requests mutex poisoned")
+                        .push(parsed);
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_uaa_event(json!({
+                                "type": "item.completed",
+                                "thread_id": "thread-delivered-control",
+                                "turn_id": "turn-control",
+                                "item_id": "msg-control",
+                                "status": "completed",
+                                "item_type": "agent_message",
+                                "content": {
+                                    "text": "control directive delivered"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 17,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_continue_control_directive_world_dispatch_request(),
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let request = sample_continue_control_directive_world_dispatch_request();
+        let expected_prompt = render_continue_world_worker_transport_prompt(
+            &request
+                .clone()
+                .validate()
+                .expect("validated control-directive request")
+                .payload,
         )
-        .await
-        .expect_err("packet 1 should not route live control-directive delivery");
-        let message = err.to_string();
+        .expect("render control-directive prompt");
 
+        let outcome = dispatch_orchestrator_world_request(&store, request)
+            .await
+            .expect("control-directive delivery should succeed");
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+            panic!("expected continue_world_worker outcome");
+        };
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert!(
+            outcome.summary.contains("status 17"),
+            "successful delivery should preserve the terminal exit status in the summary: {}",
+            outcome.summary
+        );
+
+        server.await.expect("stub world server task");
+
+        let recorded = recorded_requests
+            .lock()
+            .expect("recorded requests mutex poisoned");
         assert_eq!(
-            message,
-            "unsupported_dispatch_action: continue_world_worker control_directive delivery is not available in packet 1"
+            recorded.len(),
+            1,
+            "typed control directive should submit exactly one retained member turn: {recorded:?}"
         );
-        assert!(
-            !message.contains("stale_linkage:"),
-            "packet 1 unsupported stub must preempt retained-worker lifecycle truth: {message}"
-        );
-        assert!(
-            !message.contains(
-                "world_binding_mismatch: orchestration session sess_dispatch retained worker"
-            ),
-            "packet 1 unsupported stub must preempt retained-worker topology drift: {message}"
-        );
+        assert_eq!(recorded[0].participant_id, "ash_member");
+        assert_eq!(recorded[0].prompt, expected_prompt);
     }
 
     #[cfg(target_os = "linux")]

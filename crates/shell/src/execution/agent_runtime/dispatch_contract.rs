@@ -261,6 +261,36 @@ pub(crate) enum ControlDirectiveKindV1 {
     PrepareHandoff,
 }
 
+impl ControlDirectiveKindV1 {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Pause => "pause",
+            Self::ReduceScope => "reduce_scope",
+            Self::Summarize => "summarize",
+            Self::Checkpoint => "checkpoint",
+            Self::PrepareHandoff => "prepare_handoff",
+        }
+    }
+
+    fn canonical_instruction(self) -> &'static str {
+        match self {
+            Self::Pause => "Pause the current line of work and wait for further host guidance.",
+            Self::ReduceScope => {
+                "Narrow the work to the smallest remaining scope that still moves the task forward."
+            }
+            Self::Summarize => {
+                "Produce a concise summary of the current state, recent progress, and immediate next steps."
+            }
+            Self::Checkpoint => {
+                "Capture a concrete checkpoint of the current state before continuing."
+            }
+            Self::PrepareHandoff => {
+                "Prepare a concise handoff covering current state, next steps, and notable risks."
+            }
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -518,11 +548,7 @@ fn validate_control_directive_continue_payload(
     action: WorldDispatchActionV1,
     directive: &WorkerContinueControlDirectivePayloadV1,
 ) -> anyhow::Result<()> {
-    validate_optional_world_dispatch_string(
-        action,
-        "directive_text",
-        &directive.directive_text,
-    )?;
+    validate_optional_world_dispatch_string(action, "directive_text", &directive.directive_text)?;
     validate_optional_world_dispatch_string(action, "thread_id", &directive.thread_id)?;
     Ok(())
 }
@@ -540,6 +566,9 @@ pub(crate) fn render_continue_world_worker_transport_prompt(
         ),
         WorldDispatchPayloadV1::WorkerContinueClarificationResponse(response) => Ok(
             render_continue_world_worker_clarification_response_prompt(response),
+        ),
+        WorldDispatchPayloadV1::WorkerContinueControlDirective(directive) => Ok(
+            render_continue_world_worker_control_directive_prompt(directive),
         ),
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
@@ -579,6 +608,30 @@ fn render_continue_world_worker_clarification_response_prompt(
     format!(
         "SUBSTRATE_INTERNAL_HOST_CLARIFICATION_RESPONSE_V1\n{}\nTreat this as the host's typed clarification_response for the matching pending follow-up obligation. Use clarification_text as authoritative host guidance before continuing work.",
         rendered
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn render_continue_world_worker_control_directive_prompt(
+    directive: &WorkerContinueControlDirectivePayloadV1,
+) -> String {
+    let rendered = serde_json::json!({
+        "kind": "control_directive",
+        "directive_kind": directive.directive_kind.as_str(),
+        "directive_text": directive.directive_text,
+        "thread_id": directive.thread_id,
+    });
+    let detail_guidance = if directive.directive_text.is_some() {
+        "Use directive_text only as bounded detail for this directive kind; it does not open a broader control language."
+    } else {
+        "No directive_text detail was provided beyond the typed directive kind."
+    };
+    format!(
+        "SUBSTRATE_INTERNAL_HOST_CONTROL_DIRECTIVE_V1\n{}\nTreat this as the host's typed control_directive for the retained worker. Apply directive_kind={} as authoritative host guidance. {} {}",
+        rendered,
+        directive.directive_kind.as_str(),
+        directive.directive_kind.canonical_instruction(),
+        detail_guidance,
     )
 }
 
@@ -3530,6 +3583,28 @@ mod tests {
         assert_eq!(payload.thread_id.as_deref(), Some("thread-control"));
     }
 
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn world_dispatch_contract_renders_typed_control_directive_prompt_deterministically() {
+        let prompt = render_continue_world_worker_transport_prompt(
+            &WorldDispatchPayloadV1::WorkerContinueControlDirective(
+                WorkerContinueControlDirectivePayloadV1 {
+                    directive_kind: ControlDirectiveKindV1::PrepareHandoff,
+                    directive_text: Some(
+                        "Prepare a short handoff note before stopping.".to_string(),
+                    ),
+                    thread_id: Some("thread-control".to_string()),
+                },
+            ),
+        )
+        .expect("typed control directive should render");
+
+        assert_eq!(
+            prompt,
+            "SUBSTRATE_INTERNAL_HOST_CONTROL_DIRECTIVE_V1\n{\"kind\":\"control_directive\",\"directive_kind\":\"prepare_handoff\",\"directive_text\":\"Prepare a short handoff note before stopping.\",\"thread_id\":\"thread-control\"}\nTreat this as the host's typed control_directive for the retained worker. Apply directive_kind=prepare_handoff as authoritative host guidance. Prepare a concise handoff covering current state, next steps, and notable risks. Use directive_text only as bounded detail for this directive kind; it does not open a broader control language."
+        );
+    }
+
     #[test]
     fn world_dispatch_contract_rejects_blank_control_directive_directive_text() {
         let error = base_world_dispatch_request(
@@ -3573,6 +3648,35 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid_dispatch_payload: action continue_world_worker requires non-empty thread_id when provided"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_unsupported_typed_control_directive_kind() {
+        let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
+            "request_id": "req-43",
+            "idempotency_key": "idem-43",
+            "orchestration_session_id": "sess-43",
+            "caller_participant_id": "orch-43",
+            "action": "continue_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex_world",
+            "target_participant_id": "ash-worker-43",
+            "world_id": "world-43",
+            "world_generation": 11,
+            "payload": {
+                "payload_kind": "worker_continue_control_directive",
+                "directive_kind": "rewire_transport",
+                "directive_text": "invent a broader control plane"
+            }
+        }))
+        .expect_err("unsupported directive kinds must fail closed");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unknown variant `rewire_transport`"),
+            "unexpected unsupported directive-kind error: {error}"
         );
     }
 
