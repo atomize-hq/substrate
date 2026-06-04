@@ -2751,12 +2751,12 @@ fn summarize_continue_world_worker_result(
 ) -> String {
     if exit_code == 0 {
         format!(
-            "continue_world_worker completed on retained worker {} via the existing member-turn seam",
+            "continue_world_worker delivered to retained worker {} via the existing member-turn seam; downstream acknowledgement remains worker-defined",
             request.participant_id
         )
     } else {
         format!(
-            "continue_world_worker submitted retained worker {} via the existing member-turn seam, but the turn exited with status {}",
+            "continue_world_worker delivered to retained worker {} via the existing member-turn seam, but the turn exited with status {}; downstream acknowledgement remains worker-defined",
             request.participant_id, exit_code
         )
     }
@@ -6619,8 +6619,23 @@ agents:
         };
         assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
         assert!(
+            outcome.worker_event.is_none(),
+            "typed control-directive delivery must not imply a landed control_ack worker event: {:?}",
+            outcome.worker_event
+        );
+        assert!(
+            outcome.summary.contains("delivered to retained worker ash_member"),
+            "successful delivery should stay explicit about delivery-only truth: {}",
+            outcome.summary
+        );
+        assert!(
             outcome.summary.contains("status 17"),
             "successful delivery should preserve the terminal exit status in the summary: {}",
+            outcome.summary
+        );
+        assert!(
+            !outcome.summary.contains("completed on retained worker"),
+            "successful delivery summary must not imply completion or acknowledgement: {}",
             outcome.summary
         );
 
@@ -6636,6 +6651,47 @@ agents:
         );
         assert_eq!(recorded[0].participant_id, "ash_member");
         assert_eq!(recorded[0].prompt, expected_prompt);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_control_directive_returns_explanation_ready_error_when_delivery_fails(
+    ) {
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_control_directives(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let missing_socket = socket_home.path().join("missing.sock");
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &missing_socket);
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_control_directive_world_dispatch_request(),
+        )
+        .await
+        .expect_err("delivery failure must surface an explanation-ready control-directive error");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("failed to build member turn submit client for continue_world_worker"),
+            "unexpected delivery failure error: {message}"
+        );
+        assert!(
+            message.contains("Run 'systemctl status substrate-world-service.socket' for details."),
+            "delivery failure context should stay explanation-ready for operators on the shared submit path: {message}"
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -6784,6 +6840,16 @@ agents:
                 panic!("expected continue_world_worker outcome");
             };
             assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+            assert!(
+                outcome.worker_event.is_none(),
+                "typed approval-response delivery must not imply a landed control_ack worker event: {:?}",
+                outcome.worker_event
+            );
+            assert!(
+                outcome.summary.contains("downstream acknowledgement remains worker-defined"),
+                "approval-response summary must stay delivery-only: {}",
+                outcome.summary
+            );
             assert!(
                 outcome.summary.contains("status 17"),
                 "successful delivery should preserve the terminal exit status in the summary: {}",
@@ -7001,6 +7067,16 @@ agents:
             panic!("expected continue_world_worker outcome");
         };
         assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert!(
+            outcome.worker_event.is_none(),
+            "typed clarification-response delivery must not imply a landed control_ack worker event: {:?}",
+            outcome.worker_event
+        );
+        assert!(
+            outcome.summary.contains("downstream acknowledgement remains worker-defined"),
+            "clarification-response summary must stay delivery-only: {}",
+            outcome.summary
+        );
         assert!(
             outcome.summary.contains("status 17"),
             "successful delivery should preserve the terminal exit status in the summary: {}",
@@ -9167,6 +9243,36 @@ agents:
         assert!(
             summary.contains("without invoking world-side execution transport"),
             "summary must stay explicit about inspect remaining store-backed: {summary}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_summary_stays_delivery_only_without_ack_implication() {
+        let submit = sample_continue_submit_request();
+
+        let success = summarize_continue_world_worker_result(&submit, 0);
+        assert!(
+            success.contains("delivered to retained worker ash_member"),
+            "successful summary must stay explicit about delivery: {success}"
+        );
+        assert!(
+            success.contains("worker-defined"),
+            "successful summary must keep acknowledgement out of the host-delivery guarantee: {success}"
+        );
+        assert!(
+            !success.contains("completed on retained worker"),
+            "successful summary must not imply completion: {success}"
+        );
+
+        let failure = summarize_continue_world_worker_result(&submit, 17);
+        assert!(
+            failure.contains("status 17"),
+            "non-zero summary must preserve terminal status truth: {failure}"
+        );
+        assert!(
+            failure.contains("worker-defined"),
+            "non-zero summary must still avoid ack implication: {failure}"
         );
     }
 }

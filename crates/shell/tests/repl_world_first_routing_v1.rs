@@ -2779,7 +2779,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     drop(guard);
 
     let expected_summary = format!(
-        "continue_world_worker completed on retained worker {} via the existing member-turn seam",
+        "continue_world_worker delivered to retained worker {} via the existing member-turn seam; downstream acknowledgement remains worker-defined",
         member_participant_id
     );
     assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
@@ -2792,6 +2792,10 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     assert_eq!(
         response.pointer("/outcome/summary").and_then(Value::as_str),
         Some(expected_summary.as_str())
+    );
+    assert!(
+        response.pointer("/outcome/worker_event").is_none(),
+        "successful typed control-directive delivery must not imply a landed control_ack worker_event: {response:#?}"
     );
 
     repl.send_line("exit");
