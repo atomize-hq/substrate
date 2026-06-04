@@ -6,7 +6,9 @@ mod support;
 use serde_json::Value;
 use serial_test::serial;
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -358,6 +360,24 @@ fn write_orchestrator_and_world_member_runtime_world_config(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+    home_substrate: &Path,
+    fake_orchestrator: &Path,
+    fake_member: &Path,
+    on_drift: &str,
+) {
+    write_orchestrator_and_exact_world_member_runtime_world_config_with_toolbox(
+        home_substrate,
+        fake_orchestrator,
+        fake_member,
+        "codex",
+        "codex",
+        on_drift,
+        true,
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_orchestrator_and_exact_world_member_runtime_world_config(
     home_substrate: &Path,
     fake_orchestrator: &Path,
@@ -366,7 +386,33 @@ fn write_orchestrator_and_exact_world_member_runtime_world_config(
     member_runtime_family: &str,
     on_drift: &str,
 ) {
+    write_orchestrator_and_exact_world_member_runtime_world_config_with_toolbox(
+        home_substrate,
+        fake_orchestrator,
+        fake_member,
+        member_agent_id,
+        member_runtime_family,
+        on_drift,
+        false,
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_orchestrator_and_exact_world_member_runtime_world_config_with_toolbox(
+    home_substrate: &Path,
+    fake_orchestrator: &Path,
+    fake_member: &Path,
+    member_agent_id: &str,
+    member_runtime_family: &str,
+    on_drift: &str,
+    toolbox_enabled: bool,
+) {
     fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    let toolbox_section = if toolbox_enabled {
+        "  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n"
+    } else {
+        ""
+    };
     let config = format!(
         r#"world:
   enabled: true
@@ -388,6 +434,7 @@ agents:
     orchestrator_agent_id: claude_code
     world_restart:
       on_drift: {on_drift}
+{toolbox_section}
 "#
     );
     fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
@@ -478,6 +525,29 @@ fn write_member_runtime_policy_with_world_dispatch(
     allowed_actions: &[&str],
     allowed_modes: &[&str],
 ) {
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        home_substrate,
+        require_world,
+        member_backend_id,
+        enabled,
+        allowed_backends,
+        allowed_actions,
+        allowed_modes,
+        false,
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_member_runtime_policy_with_world_dispatch_control_directives(
+    home_substrate: &Path,
+    require_world: bool,
+    member_backend_id: &str,
+    enabled: bool,
+    allowed_backends: &[&str],
+    allowed_actions: &[&str],
+    allowed_modes: &[&str],
+    control_directives_allowed: bool,
+) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let require_world = if require_world { "true" } else { "false" };
     let enabled = if enabled { "true" } else { "false" };
@@ -485,6 +555,11 @@ fn write_member_runtime_policy_with_world_dispatch(
     let dispatch_backends = yaml_quoted_list(allowed_backends, 6);
     let dispatch_actions = yaml_quoted_list(allowed_actions, 6);
     let dispatch_modes = yaml_quoted_list(allowed_modes, 6);
+    let control_block = if control_directives_allowed {
+        "    control:\n      control_directives_allowed: true\n"
+    } else {
+        ""
+    };
     let policy = format!(
         r#"id: test-global-policy
 name: Test Global Policy
@@ -522,6 +597,7 @@ agents:
     allow_capability_narrowing: false
     max_live_retained_workers: 8
     max_concurrent_ephemeral: 8
+{control_block}
 "#
     );
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
@@ -709,6 +785,51 @@ fn read_invocation_count(path: &Path) -> usize {
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
         .unwrap_or(0)
+}
+
+#[cfg(unix)]
+fn toolbox_transport_path_for_home(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> PathBuf {
+    const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
+    let preferred = substrate_home
+        .join("run")
+        .join("agent-toolbox")
+        .join(format!("{orchestration_session_id}.sock"));
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-toolbox")
+            .join(format!("{orchestration_session_id}.sock"));
+    }
+    preferred
+}
+
+#[cfg(unix)]
+fn send_internal_toolbox_world_dispatch_request(
+    path: &Path,
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let mut stream = UnixStream::connect(path)
+        .unwrap_or_else(|_| panic!("connect internal toolbox transport {}", path.display()));
+    stream
+        .write_all(
+            serde_json::to_string(request)
+                .expect("serialize internal toolbox request")
+                .as_bytes(),
+        )
+        .expect("write internal toolbox request");
+    stream
+        .write_all(b"\n")
+        .expect("terminate internal toolbox request");
+    stream.flush().expect("flush internal toolbox request");
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .expect("read internal toolbox response");
+    serde_json::from_str(line.trim()).expect("parse internal toolbox response")
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2492,6 +2613,187 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         member_after.get("participant_id").and_then(Value::as_str),
         Some(member_participant_id.as_str()),
         "cli:codex targeted coexistence must reuse the original world member participant"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[serial]
+fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retained_member() {
+    let temp = temp_dir("substrate-c3-toolbox-control-directive-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        &substrate_home,
+        true,
+        "cli:codex",
+        true,
+        &["cli:codex"],
+        &["spawn_world_worker", "continue_world_worker"],
+        &["retained"],
+        true,
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-control-directive-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-control-directive".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let member_orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+    assert_eq!(
+        member_orchestrator_participant_id, orchestrator_participant_id,
+        "control-directive delivery must preserve exact retained-worker ownership"
+    );
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_control_directive",
+            "idempotency_key": "idem_toolbox_control_directive",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "continue_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex",
+            "target_participant_id": member_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_continue_control_directive",
+                "directive_kind": "prepare_handoff",
+                "directive_text": "before stopping",
+                "thread_id": "thread-control-43"
+            }
+        }),
+    );
+
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "toolbox control directives must reuse the existing retained member instead of relaunching it: {guard:#?}"
+    );
+    let submit = guard
+        .member_turn_submit_requests
+        .first()
+        .expect("member turn submit request");
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, member_participant_id);
+    assert_eq!(
+        submit.orchestrator_participant_id,
+        member_orchestrator_participant_id
+    );
+    assert_eq!(submit.backend_id, "cli:codex");
+    assert_eq!(submit.world_id, world_id);
+    assert_eq!(submit.world_generation, world_generation);
+    assert_eq!(
+        submit.prompt,
+        "SUBSTRATE_INTERNAL_HOST_CONTROL_DIRECTIVE_V1\n{\"kind\":\"control_directive\",\"directive_kind\":\"prepare_handoff\",\"directive_text\":\"before stopping\",\"thread_id\":\"thread-control-43\"}\nTreat this as the host's typed control_directive for the retained worker. Apply directive_kind=prepare_handoff as authoritative host guidance. Prepare a concise handoff covering current state, next steps, and notable risks. Treat directive_text as the handoff focus label \"before stopping\", not as a new instruction."
+    );
+    drop(guard);
+
+    let expected_summary = format!(
+        "continue_world_worker completed on retained worker {} via the existing member-turn seam",
+        member_participant_id
+    );
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        response
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("continue_world_worker")
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/summary")
+            .and_then(Value::as_str),
+        Some(expected_summary.as_str())
     );
 
     repl.send_line("exit");
