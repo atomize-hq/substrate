@@ -1932,6 +1932,18 @@ fn enforce_continue_world_worker_event_policy(
                 "fork_recommendation_not_allowed: retained workers may not recommend fork under current policy"
             );
         }
+        ContinueWorldWorkerEventClassV1::FollowUpQuestion
+            if !policy.world_dispatch_follow_up_allowed() =>
+        {
+            anyhow::bail!(
+                "follow_up_question_not_allowed: retained workers may not request host follow-up under current policy"
+            );
+        }
+        ContinueWorldWorkerEventClassV1::Blocked if !policy.world_dispatch_blocked_allowed() => {
+            anyhow::bail!(
+                "blocked_not_allowed: retained workers may not emit blocked obligations under current policy"
+            );
+        }
         _ => {}
     }
 
@@ -3309,6 +3321,12 @@ mod tests {
             ContinueWorldWorkerEventClassV1::ForkRecommendation => {
                 policy.agents_world_dispatch_fork_recommendations_allowed = true;
             }
+            ContinueWorldWorkerEventClassV1::FollowUpQuestion => {
+                policy.agents_world_dispatch_obligations_follow_up_allowed = true;
+            }
+            ContinueWorldWorkerEventClassV1::Blocked => {
+                policy.agents_world_dispatch_obligations_blocked_allowed = true;
+            }
             _ => {}
         }
         policy
@@ -4338,6 +4356,26 @@ mod tests {
                     }
                 })),
             ),
+            (
+                "follow_up_question",
+                "follow_up_question_not_allowed:",
+                sample_continue_stream_event(json!({
+                    "event_class": "follow_up_question",
+                    "payload": {
+                        "question": "need host confirmation"
+                    }
+                })),
+            ),
+            (
+                "blocked",
+                "blocked_not_allowed:",
+                sample_continue_stream_event(json!({
+                    "event_class": "blocked",
+                    "payload": {
+                        "message": "waiting on host input"
+                    }
+                })),
+            ),
         ];
 
         for (event_label, expected_denial, event) in cases {
@@ -4467,6 +4505,24 @@ mod tests {
                     "event_class": "fork_recommendation",
                     "payload": {
                         "message": "consider a child worker"
+                    }
+                })),
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::FollowUpQuestion,
+                sample_continue_stream_event(json!({
+                    "event_class": "follow_up_question",
+                    "payload": {
+                        "question": "need host confirmation"
+                    }
+                })),
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::Blocked,
+                sample_continue_stream_event(json!({
+                    "event_class": "blocked",
+                    "payload": {
+                        "message": "waiting on host input"
                     }
                 })),
             ),

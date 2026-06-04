@@ -92,6 +92,8 @@ agents:
     obligations:
       approval_allowed: true
       approval_response_allowed: true
+      follow_up_allowed: true
+      blocked_allowed: true
 
 workflow:
   router:
@@ -260,6 +262,8 @@ fn pcm1_policy_yaml_accepts_llm_agents_and_workflow_router_families() {
     assert!(policy.agents_world_dispatch_fork_recommendations_allowed);
     assert!(policy.agents_world_dispatch_obligations_approval_allowed);
     assert!(policy.agents_world_dispatch_obligations_approval_response_allowed);
+    assert!(policy.agents_world_dispatch_obligations_follow_up_allowed);
+    assert!(policy.agents_world_dispatch_obligations_blocked_allowed);
     assert!(policy.workflow_router_enabled);
     assert!(policy.workflow_router_allow_cross_workspace);
     assert_eq!(
@@ -397,10 +401,14 @@ fn pcm1_world_dispatch_worker_event_autonomy_defaults_stay_fail_closed() {
     assert!(!policy.agents_world_dispatch_fork_recommendations_allowed);
     assert!(!policy.agents_world_dispatch_obligations_approval_allowed);
     assert!(!policy.agents_world_dispatch_obligations_approval_response_allowed);
+    assert!(!policy.agents_world_dispatch_obligations_follow_up_allowed);
+    assert!(!policy.agents_world_dispatch_obligations_blocked_allowed);
     assert!(!policy.world_dispatch_fork_requests_allowed());
     assert!(!policy.world_dispatch_fork_recommendations_allowed());
     assert!(!policy.world_dispatch_approval_requests_allowed());
     assert!(!policy.world_dispatch_approval_responses_allowed());
+    assert!(!policy.world_dispatch_follow_up_allowed());
+    assert!(!policy.world_dispatch_blocked_allowed());
 }
 
 #[test]

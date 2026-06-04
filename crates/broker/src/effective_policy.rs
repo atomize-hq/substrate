@@ -269,11 +269,18 @@ pub struct AgentsWorldDispatchObligationsPatch {
     pub approval_allowed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_response_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow_up_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_allowed: Option<bool>,
 }
 
 impl AgentsWorldDispatchObligationsPatch {
     fn is_empty(&self) -> bool {
-        self.approval_allowed.is_none() && self.approval_response_allowed.is_none()
+        self.approval_allowed.is_none()
+            && self.approval_response_allowed.is_none()
+            && self.follow_up_allowed.is_none()
+            && self.blocked_allowed.is_none()
     }
 }
 
@@ -1616,6 +1623,64 @@ pub fn resolve_effective_policy_with_explain(
         );
     }
 
+    let (
+        agents_world_dispatch_obligations_follow_up_allowed,
+        agents_world_dispatch_obligations_follow_up_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_obligations_follow_up_allowed,
+        global_patch
+            .agents
+            .world_dispatch
+            .obligations
+            .follow_up_allowed,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.obligations.follow_up_allowed),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_obligations_follow_up_allowed =
+        agents_world_dispatch_obligations_follow_up_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.obligations.follow_up_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_obligations_follow_up_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
+        agents_world_dispatch_obligations_blocked_allowed,
+        agents_world_dispatch_obligations_blocked_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_obligations_blocked_allowed,
+        global_patch
+            .agents
+            .world_dispatch
+            .obligations
+            .blocked_allowed,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.obligations.blocked_allowed),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_obligations_blocked_allowed =
+        agents_world_dispatch_obligations_blocked_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.obligations.blocked_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_obligations_blocked_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     let (workflow_router_enabled, workflow_router_enabled_src) = resolve_replace(
         effective.workflow_router_enabled,
         global_patch.workflow.router.enabled,
@@ -2072,6 +2137,12 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
         .approval_response_allowed
     {
         target.agents_world_dispatch_obligations_approval_response_allowed = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.obligations.follow_up_allowed {
+        target.agents_world_dispatch_obligations_follow_up_allowed = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.obligations.blocked_allowed {
+        target.agents_world_dispatch_obligations_blocked_allowed = v;
     }
     if let Some(v) = patch.workflow.router.enabled {
         target.workflow_router_enabled = v;
