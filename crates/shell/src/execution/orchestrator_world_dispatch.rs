@@ -773,7 +773,9 @@ fn continue_world_worker_event_persists_live_obligation(
 ) -> bool {
     matches!(
         event_class,
-        ContinueWorldWorkerEventClassV1::ApprovalRequest
+        ContinueWorldWorkerEventClassV1::FollowUpQuestion
+            | ContinueWorldWorkerEventClassV1::Blocked
+            | ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
     )
@@ -1890,33 +1892,11 @@ async fn execute_continue_world_worker_stream(
                             surfaced_worker_event.as_ref().is_some_and(|existing| {
                                 continue_world_worker_event_persists_live_obligation(
                                     existing.event_class,
-                                ) && !continue_world_worker_event_persists_live_obligation(
-                                    classified_event.event_class,
                                 )
                             });
-                        let preserve_existing_request_like_surface =
-                            surfaced_worker_event.as_ref().is_some_and(|existing| {
-                                matches!(
-                                    existing.event_class,
-                                    ContinueWorldWorkerEventClassV1::ApprovalRequest
-                                        | ContinueWorldWorkerEventClassV1::ForkRequest
-                                        | ContinueWorldWorkerEventClassV1::ForkRecommendation
-                                        | ContinueWorldWorkerEventClassV1::FollowUpQuestion
-                                        | ContinueWorldWorkerEventClassV1::Blocked
-                                ) && !matches!(
-                                    classified_event.event_class,
-                                    ContinueWorldWorkerEventClassV1::ApprovalRequest
-                                        | ContinueWorldWorkerEventClassV1::ForkRequest
-                                        | ContinueWorldWorkerEventClassV1::ForkRecommendation
-                                        | ContinueWorldWorkerEventClassV1::FollowUpQuestion
-                                        | ContinueWorldWorkerEventClassV1::Blocked
-                                )
-                            });
-                        if !(preserve_existing_live_obligation
-                            || preserve_existing_request_like_surface)
-                        {
-                            // Preserve the surfaced Packet 1 worker request even if later
-                            // non-persistent Packet 2 or ordinary stream events arrive before exit.
+                        if !preserve_existing_live_obligation {
+                            // Preserve the first surfaced durable worker obligation even if
+                            // later obligation-like or ordinary stream events arrive before exit.
                             surfaced_worker_event = Some(classified_event);
                         }
                     }
@@ -5587,7 +5567,7 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
-    async fn dispatch_contract_continue_world_worker_keeps_packet_two_worker_events_ephemeral_on_live_path(
+    async fn dispatch_contract_continue_world_worker_persists_packet_three_worker_obligations_exactly_once_on_live_path(
     ) {
         struct Case {
             event_class: ContinueWorldWorkerEventClassV1,
@@ -5610,7 +5590,7 @@ agents:
             let _env_guard = world_env_guard();
             let socket_home = tempdir().expect("socket tempdir");
             let socket_path = socket_home.path().join(format!(
-                "live-ephemeral-{}.sock",
+                "live-persist-{}.sock",
                 continue_worker_event_label(case.event_class)
             ));
             let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
@@ -5711,7 +5691,7 @@ agents:
                     matches!(case.event_class, ContinueWorldWorkerEventClassV1::Blocked),
                 ),
             )
-            .expect("write packet-two live-path policy");
+            .expect("write packet-three live-path policy");
             let store = AgentRuntimeStateStore::new().expect("state store");
             persist_authoritative_continue_dispatch_state(
                 &store,
@@ -5721,7 +5701,7 @@ agents:
             );
 
             let request_id = format!(
-                "req_continue_ephemeral_{}",
+                "req_continue_packet_three_{}",
                 continue_worker_event_label(case.event_class)
             );
             let outcome = dispatch_real_continue_world_worker_request(
@@ -5756,10 +5736,211 @@ agents:
                         continue_world_worker_event_kind_slug(case.expected_kind)
                     ),
                 )
-                .expect("load packet-two live-path obligation");
+                .expect("load packet-three live-path obligation")
+                .expect("packet-three live-path obligation exists");
+            assert_eq!(obligation.kind, case.expected_kind);
+            assert_eq!(
+                obligation.source_participant_id.as_deref(),
+                Some("ash_member")
+            );
+            assert_eq!(
+                obligation.target_backend_id.as_deref(),
+                Some("cli:codex_world")
+            );
+            assert_eq!(obligation.world_id.as_deref(), Some("world-17"));
+            assert_eq!(obligation.world_generation, Some(2));
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.get("event_class"))
+                    .and_then(serde_json::Value::as_str),
+                Some(continue_worker_event_label(case.event_class))
+            );
+            assert_eq!(
+                obligation
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.pointer("/payload/message"))
+                    .and_then(serde_json::Value::as_str),
+                Some(expected_message)
+            );
+
+            let obligations = store
+                .list_obligations("sess_dispatch")
+                .expect("list packet-three live-path obligations");
+            let matching: Vec<_> = obligations
+                .into_iter()
+                .filter(|obligation| {
+                    obligation.obligation_id
+                        == format!(
+                            "obl_continue_{}_{}",
+                            request_id,
+                            continue_world_worker_event_kind_slug(case.expected_kind)
+                        )
+                })
+                .collect();
+            assert_eq!(
+                matching.len(),
+                1,
+                "accepted {} must persist exactly one durable obligation",
+                continue_worker_event_label(case.event_class)
+            );
+
+            server.await.expect("stub world server task");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_denied_packet_three_events_persist_nothing() {
+        struct Case {
+            event_class: ContinueWorldWorkerEventClassV1,
+            expected_denial: &'static str,
+        }
+
+        for case in [
+            Case {
+                event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
+                expected_denial: "follow_up_question_not_allowed:",
+            },
+            Case {
+                event_class: ContinueWorldWorkerEventClassV1::Blocked,
+                expected_denial: "blocked_not_allowed:",
+            },
+        ] {
+            let _env_guard = world_env_guard();
+            let socket_home = tempdir().expect("socket tempdir");
+            let socket_path = socket_home.path().join(format!(
+                "live-denied-{}.sock",
+                continue_worker_event_label(case.event_class)
+            ));
+            let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+            let event_class = case.event_class;
+            let server = tokio::spawn(async move {
+                while let Ok((mut stream, _addr)) = listener.accept().await {
+                    let Some((header, body)) = read_http_request(&mut stream).await else {
+                        continue;
+                    };
+                    let first_line = header.lines().next().unwrap_or("");
+
+                    if first_line.starts_with("GET /v1/capabilities ") {
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/member_turn/stream ") {
+                        let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                            serde_json::from_slice(&body).expect("member turn submit request");
+                        write_http_stream_start(&mut stream).await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Start {
+                                span_id: "member-turn-span".to_string(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Event {
+                                event: sample_continue_stream_event(json!({
+                                    "event_class": continue_worker_event_label(event_class),
+                                    "payload": {
+                                        "message": "denied packet-three event"
+                                    }
+                                })),
+                            },
+                        )
+                        .await;
+                        finish_chunked_stream(&mut stream).await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/execute/cancel ") {
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"delivered":true}"#,
+                        )
+                        .await;
+                        break;
+                    }
+
+                    write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+                }
+            });
+
+            let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+            let substrate_home = tempdir().expect("substrate home tempdir");
+            let _substrate_home_guard =
+                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            fs::write(
+                substrate_home.path().join("policy.yaml"),
+                r#"id: test-global-policy
+name: Test Global Policy
+agents:
+  allowed_backends:
+    - "cli:codex_world"
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - "cli:codex_world"
+    allowed_actions:
+      - "continue_world_worker"
+    allowed_modes:
+      - "retained"
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 4
+    max_concurrent_ephemeral: 4
+"#,
+            )
+            .expect("write denied packet-three live-path policy");
+            let store = AgentRuntimeStateStore::new().expect("state store");
+            persist_authoritative_continue_dispatch_state(
+                &store,
+                socket_home.path(),
+                "world-17",
+                2,
+            );
+
+            let request_id = format!(
+                "req_continue_denied_{}",
+                continue_worker_event_label(case.event_class)
+            );
+            let err = dispatch_prepared_orchestrator_world_request(
+                prepare_orchestrator_world_dispatch(&store, {
+                    let mut request = sample_continue_world_dispatch_request();
+                    request.request_id = Some(request_id.clone());
+                    request.idempotency_key = Some(format!("idem_{request_id}"));
+                    request.world_id = Some("world-17".to_string());
+                    request.world_generation = Some(2);
+                    request
+                })
+                .expect("prepare denied continue dispatch request"),
+            )
+            .await
+            .expect_err("denied packet-three events must fail closed");
             assert!(
-                obligation.is_none(),
-                "packet-two worker events must stay ephemeral on the live continue_world_worker path",
+                err.to_string().contains(case.expected_denial),
+                "unexpected denial for {}: {err}",
+                continue_worker_event_label(case.event_class)
+            );
+
+            let obligations = store
+                .list_obligations("sess_dispatch")
+                .expect("list denied packet-three live-path obligations");
+            assert!(
+                obligations.is_empty(),
+                "denied {} must not persist durable obligations: {obligations:?}",
+                continue_worker_event_label(case.event_class)
             );
 
             server.await.expect("stub world server task");
