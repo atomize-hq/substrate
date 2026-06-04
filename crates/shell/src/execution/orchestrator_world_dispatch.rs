@@ -104,6 +104,15 @@ struct WorldDispatchConcurrencyGuard {
     kind: WorldDispatchConcurrencyKind,
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ContinueWorldWorkerTurnKind {
+    GenericContinue,
+    ApprovalResponse,
+    ClarificationResponse,
+    ControlDirective,
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl Drop for WorldDispatchConcurrencyGuard {
     fn drop(&mut self) {
@@ -653,9 +662,12 @@ async fn continue_world_worker(
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
     let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
     let clarification_closeout = prepare_continue_world_worker_clarification_closeout(&prepared)?;
+    let turn_kind = continue_world_worker_turn_kind(&prepared.request.payload);
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
-    let stream_result = execute_continue_world_worker_stream(&submit_request, &base_policy).await?;
+    let stream_result =
+        execute_continue_world_worker_stream_for_turn_kind(&submit_request, &base_policy, turn_kind)
+            .await?;
     close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
     close_continue_world_worker_clarification_after_delivery(
         &prepared,
@@ -718,6 +730,25 @@ fn prepare_continue_world_worker_approval_closeout(
             )
         })
         .map(Some)
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_turn_kind(
+    payload: &WorldDispatchPayloadV1,
+) -> ContinueWorldWorkerTurnKind {
+    match payload {
+        WorldDispatchPayloadV1::WorkerContinue(_) => ContinueWorldWorkerTurnKind::GenericContinue,
+        WorldDispatchPayloadV1::WorkerContinueApprovalResponse(_) => {
+            ContinueWorldWorkerTurnKind::ApprovalResponse
+        }
+        WorldDispatchPayloadV1::WorkerContinueClarificationResponse(_) => {
+            ContinueWorldWorkerTurnKind::ClarificationResponse
+        }
+        WorldDispatchPayloadV1::WorkerContinueControlDirective(_) => {
+            ContinueWorldWorkerTurnKind::ControlDirective
+        }
+        _ => ContinueWorldWorkerTurnKind::GenericContinue,
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1002,6 +1033,7 @@ fn continue_world_worker_persisted_event_label(
     event_class: ContinueWorldWorkerEventClassV1,
 ) -> &'static str {
     match event_class {
+        ContinueWorldWorkerEventClassV1::ControlAck => "control_ack",
         ContinueWorldWorkerEventClassV1::ApprovalRequest => "approval_request",
         ContinueWorldWorkerEventClassV1::ForkRequest => "fork_request",
         ContinueWorldWorkerEventClassV1::ForkRecommendation => "fork_recommendation",
@@ -1896,9 +1928,24 @@ async fn execute_spawn_world_worker_stream(
 }
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 async fn execute_continue_world_worker_stream(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     policy: &Policy,
+) -> Result<ContinueWorldWorkerStreamResult> {
+    execute_continue_world_worker_stream_for_turn_kind(
+        request,
+        policy,
+        ContinueWorldWorkerTurnKind::GenericContinue,
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+async fn execute_continue_world_worker_stream_for_turn_kind(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    policy: &Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
 ) -> Result<ContinueWorldWorkerStreamResult> {
     use http_body_util::BodyExt as _;
     use transport_api_types::ExecuteStreamFrame;
@@ -1962,7 +2009,7 @@ async fn execute_continue_world_worker_stream(
                         surfaced_thread_id = surfaced_thread_id_from_event(&event);
                     }
                     let classified_event =
-                        match classify_continue_world_worker_event(request, &event) {
+                        match classify_continue_world_worker_event(request, turn_kind, &event) {
                             Ok(classified_event) => classified_event,
                             Err(err) => {
                                 cancel_continue_world_worker_turn(
@@ -1981,6 +2028,11 @@ async fn execute_continue_world_worker_stream(
                             cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
                                 .await;
                             return Err(err);
+                        }
+                        if classified_event.event_class
+                            == ContinueWorldWorkerEventClassV1::ControlAck
+                        {
+                            continue;
                         }
                         let preserve_existing_live_obligation =
                             surfaced_worker_event.as_ref().is_some_and(|existing| {
@@ -2125,6 +2177,7 @@ fn surfaced_thread_id_from_event(
 #[cfg(target_os = "linux")]
 fn classify_continue_world_worker_event(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
+    turn_kind: ContinueWorldWorkerTurnKind,
     event: &substrate_common::agent_events::AgentEvent,
 ) -> Result<Option<ContinueWorldWorkerEventV1>> {
     let event_class = if let Some(event_class_label) =
@@ -2149,6 +2202,14 @@ fn classify_continue_world_worker_event(
         };
         event_class
     };
+
+    if event_class == ContinueWorldWorkerEventClassV1::ControlAck
+        && turn_kind != ContinueWorldWorkerTurnKind::ControlDirective
+    {
+        anyhow::bail!(
+            "unsupported_worker_event_class: continue_world_worker accepts control_ack only for typed control_directive delivery"
+        );
+    }
 
     let requires_explicit_identity =
         continue_world_worker_event_requires_explicit_identity(event_class);
@@ -2248,7 +2309,8 @@ fn continue_world_worker_event_requires_explicit_identity(
 ) -> bool {
     matches!(
         event_class,
-        ContinueWorldWorkerEventClassV1::ApprovalRequest
+        ContinueWorldWorkerEventClassV1::ControlAck
+            | ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
             | ContinueWorldWorkerEventClassV1::FollowUpQuestion
@@ -2262,7 +2324,8 @@ fn continue_world_worker_event_requires_exact_session_world_binding(
 ) -> bool {
     matches!(
         event_class,
-        ContinueWorldWorkerEventClassV1::ApprovalRequest
+        ContinueWorldWorkerEventClassV1::ControlAck
+            | ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
             | ContinueWorldWorkerEventClassV1::FollowUpQuestion
@@ -3591,6 +3654,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn continue_worker_event_label(event_class: ContinueWorldWorkerEventClassV1) -> &'static str {
         match event_class {
+            ContinueWorldWorkerEventClassV1::ControlAck => "control_ack",
             ContinueWorldWorkerEventClassV1::ApprovalRequest => "approval_request",
             ContinueWorldWorkerEventClassV1::ForkRequest => "fork_request",
             ContinueWorldWorkerEventClassV1::ForkRecommendation => "fork_recommendation",
@@ -4321,7 +4385,11 @@ mod tests {
         ];
 
         for (event, event_class, attention_required, payload_pointer, payload_value) in cases {
-            let classified = classify_continue_world_worker_event(&submit, &event)
+            let classified = classify_continue_world_worker_event(
+                &submit,
+                ContinueWorldWorkerTurnKind::GenericContinue,
+                &event,
+            )
                 .unwrap_or_else(|_| panic!("classification must accept {event_class}"))
                 .unwrap_or_else(|| panic!("classification must surface {event_class}"));
 
@@ -4354,6 +4422,7 @@ mod tests {
         let submit = sample_continue_submit_request();
         let classified = classify_continue_world_worker_event(
             &submit,
+            ContinueWorldWorkerTurnKind::GenericContinue,
             &sample_continue_stream_uaa_event(json!({
                 "type": "turn.completed",
                 "thread_id": "thread-from-uaa",
@@ -4375,15 +4444,10 @@ mod tests {
     #[test]
     fn continue_world_worker_dispatch_contract_rejects_deferred_worker_event_classes() {
         let submit = sample_continue_submit_request();
-        for deferred in [
-            "approval_response",
-            "fork_command",
-            "control_directive",
-            "control_ack",
-            "attention_required",
-        ] {
+        for deferred in ["approval_response", "fork_command", "control_directive", "attention_required"] {
             let err = classify_continue_world_worker_event(
                 &submit,
+                ContinueWorldWorkerTurnKind::GenericContinue,
                 &sample_continue_stream_event(json!({
                     "event_class": deferred,
                     "payload": {
@@ -4395,6 +4459,45 @@ mod tests {
             assert!(
                 err.to_string().contains("unsupported_worker_event_class"),
                 "unexpected error for {deferred}: {err}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_accepts_control_ack_only_for_typed_control_directive_turns(
+    ) {
+        let submit = sample_continue_submit_request();
+        let control_ack = sample_continue_stream_event(json!({
+            "event_class": "control_ack",
+            "payload": {
+                "message": "directive received"
+            }
+        }));
+
+        let classified = classify_continue_world_worker_event(
+            &submit,
+            ContinueWorldWorkerTurnKind::ControlDirective,
+            &control_ack,
+        )
+        .expect("typed control-directive turn should accept control_ack")
+        .expect("control_ack should surface to the classifier");
+        assert_eq!(
+            classified.event_class,
+            ContinueWorldWorkerEventClassV1::ControlAck
+        );
+        assert!(!classified.attention_required);
+
+        for turn_kind in [
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            ContinueWorldWorkerTurnKind::ApprovalResponse,
+            ContinueWorldWorkerTurnKind::ClarificationResponse,
+        ] {
+            let err = classify_continue_world_worker_event(&submit, turn_kind, &control_ack)
+                .expect_err("non-control-directive turns must fail closed for control_ack");
+            assert_eq!(
+                err.to_string(),
+                "unsupported_worker_event_class: continue_world_worker accepts control_ack only for typed control_directive delivery"
             );
         }
     }
@@ -4413,7 +4516,11 @@ mod tests {
             }))
         };
 
-        let err = classify_continue_world_worker_event(&submit, &drifted)
+        let err = classify_continue_world_worker_event(
+            &submit,
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &drifted,
+        )
             .expect_err("participant drift must fail");
         assert!(
             err.to_string().contains(
@@ -4429,6 +4536,19 @@ mod tests {
     ) {
         let submit = sample_continue_submit_request();
         let cases = [
+            (
+                "control_ack",
+                substrate_common::agent_events::AgentEvent {
+                    orchestration_session_id: "sess_other".to_string(),
+                    ..sample_continue_stream_event(json!({
+                        "event_class": "control_ack",
+                        "payload": {
+                            "message": "directive received"
+                        }
+                    }))
+                },
+                "orchestration_session_id sess_other did not match targeted orchestration session sess_dispatch",
+            ),
             (
                 "approval_request",
                 substrate_common::agent_events::AgentEvent {
@@ -4497,7 +4617,12 @@ mod tests {
         ];
 
         for (event_label, drifted, expected_error) in cases {
-            let err = classify_continue_world_worker_event(&submit, &drifted)
+            let turn_kind = if event_label == "control_ack" {
+                ContinueWorldWorkerTurnKind::ControlDirective
+            } else {
+                ContinueWorldWorkerTurnKind::GenericContinue
+            };
+            let err = classify_continue_world_worker_event(&submit, turn_kind, &drifted)
                 .expect_err("packet one worker-event session/world drift must fail closed");
             assert!(
                 err.to_string().contains(expected_error),
@@ -4512,7 +4637,12 @@ mod tests {
     ) {
         let submit = sample_continue_submit_request();
 
-        for event_label in ["approval_request", "fork_request", "fork_recommendation"] {
+        for event_label in [
+            "control_ack",
+            "approval_request",
+            "fork_request",
+            "fork_recommendation",
+        ] {
             let base = sample_continue_stream_event(json!({
                 "event_class": event_label,
                 "payload": {
@@ -4551,9 +4681,13 @@ mod tests {
             ];
 
             for (event, expected_error) in cases {
-                let err = classify_continue_world_worker_event(&submit, &event).expect_err(
-                    "packet one worker events must fail closed when fields are omitted",
-                );
+                let turn_kind = if event_label == "control_ack" {
+                    ContinueWorldWorkerTurnKind::ControlDirective
+                } else {
+                    ContinueWorldWorkerTurnKind::GenericContinue
+                };
+                let err = classify_continue_world_worker_event(&submit, turn_kind, &event)
+                    .expect_err("packet one worker events must fail closed when fields are omitted");
                 assert!(
                     err.to_string().contains(expected_error),
                     "unexpected error for {event_label}: {err}"
@@ -4600,7 +4734,12 @@ mod tests {
             ];
 
             for (event, expected_error) in cases {
-                let err = classify_continue_world_worker_event(&submit, &event).expect_err(
+                let err = classify_continue_world_worker_event(
+                    &submit,
+                    ContinueWorldWorkerTurnKind::GenericContinue,
+                    &event,
+                )
+                .expect_err(
                     "packet two worker events must fail closed when world binding fields are omitted",
                 );
                 assert!(
@@ -5017,6 +5156,93 @@ mod tests {
 
             server.await.expect("stub world server task");
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_world_worker_stream_accepts_control_ack_for_typed_control_directive_without_widening_live_outcome(
+    ) {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("control-ack.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(json!({
+                                "event_class": "control_ack",
+                                "payload": {
+                                    "message": "directive received"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let outcome = execute_continue_world_worker_stream_for_turn_kind(
+            &sample_continue_submit_request(),
+            &Policy::default(),
+            ContinueWorldWorkerTurnKind::ControlDirective,
+        )
+        .await
+        .expect("typed control-directive turns should accept control_ack");
+
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(outcome.surfaced_thread_id.as_deref(), Some("thread-direct"));
+        assert!(
+            outcome.surfaced_worker_event.is_none(),
+            "Packet 1 must not widen live outcome surfacing for control_ack"
+        );
+
+        server.await.expect("stub world server task");
     }
 
     #[cfg(target_os = "linux")]

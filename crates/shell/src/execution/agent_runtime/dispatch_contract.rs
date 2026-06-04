@@ -971,6 +971,7 @@ pub(crate) enum ContinueWorldWorkerEventClassV1 {
     ProgressUpdate,
     Result,
     Failure,
+    ControlAck,
     FollowUpQuestion,
     Blocked,
     ApprovalRequest,
@@ -986,6 +987,7 @@ impl ContinueWorldWorkerEventClassV1 {
             "progress_update" => Some(Self::ProgressUpdate),
             "result" => Some(Self::Result),
             "failure" => Some(Self::Failure),
+            "control_ack" => Some(Self::ControlAck),
             "follow_up_question" => Some(Self::FollowUpQuestion),
             "blocked" => Some(Self::Blocked),
             "approval_request" => Some(Self::ApprovalRequest),
@@ -1008,7 +1010,6 @@ impl ContinueWorldWorkerEventClassV1 {
             "approval_response"
                 | "fork_command"
                 | "control_directive"
-                | "control_ack"
                 | "attention_required"
         )
     }
@@ -3905,8 +3906,13 @@ mod tests {
         assert!(!ContinueWorldWorkerEventClassV1::ProgressUpdate.attention_required_by_default());
         assert!(!ContinueWorldWorkerEventClassV1::Result.attention_required_by_default());
         assert!(!ContinueWorldWorkerEventClassV1::Failure.attention_required_by_default());
+        assert!(!ContinueWorldWorkerEventClassV1::ControlAck.attention_required_by_default());
         assert!(ContinueWorldWorkerEventClassV1::FollowUpQuestion.attention_required_by_default());
         assert!(ContinueWorldWorkerEventClassV1::Blocked.attention_required_by_default());
+        assert_eq!(
+            ContinueWorldWorkerEventClassV1::from_wire_label("control_ack"),
+            Some(ContinueWorldWorkerEventClassV1::ControlAck)
+        );
         assert_eq!(
             ContinueWorldWorkerEventClassV1::from_wire_label("approval_request"),
             Some(ContinueWorldWorkerEventClassV1::ApprovalRequest)
@@ -3932,6 +3938,9 @@ mod tests {
         ));
         assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "fork_recommendation"
+        ));
+        assert!(!ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "control_ack"
         ));
         assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "approval_response"
