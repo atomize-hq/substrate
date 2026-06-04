@@ -2177,6 +2177,8 @@ fn continue_world_worker_event_requires_explicit_identity(
         ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
+            | ContinueWorldWorkerEventClassV1::FollowUpQuestion
+            | ContinueWorldWorkerEventClassV1::Blocked
     )
 }
 
@@ -4304,6 +4306,20 @@ mod tests {
                 }
             }));
             let cases = [
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        participant_id: None,
+                        ..base.clone()
+                    },
+                    "without participant_id",
+                ),
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        backend_id: None,
+                        ..base.clone()
+                    },
+                    "without backend_id",
+                ),
                 (
                     substrate_common::agent_events::AgentEvent {
                         world_id: None,
