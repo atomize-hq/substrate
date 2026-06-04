@@ -4,7 +4,7 @@ use std::fs;
 
 use agent_drift_analyzer::{
     checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftClass,
-    DriftScore, EvidenceRef, TaskFrame,
+    DriftScore, DriftState, EvidenceRef, TaskFrame,
 };
 use agent_session_compactor::RowRef;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -114,6 +114,11 @@ pub(crate) fn checkpoint(
         },
         drift_scores: vec![DriftScore {
             class: DriftClass::WrongPlanBranch,
+            state: if flagged {
+                DriftState::Active
+            } else {
+                DriftState::Cleared
+            },
             raw_score,
             confidence: Confidence::Medium,
             flagged,

@@ -10,7 +10,8 @@ use agent_drift_sentinel::{
     TriggerClass, WarningDisposition, WarningPolicy,
 };
 
-fn current_schema_checkpoint(
+fn schema_checkpoint(
+    schema_version: &str,
     session_id: &str,
     ordinal: usize,
     raw_score: u8,
@@ -19,13 +20,14 @@ fn current_schema_checkpoint(
 ) -> agent_drift_analyzer::Checkpoint {
     let mut checkpoint =
         support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
-    checkpoint.schema_version = "v0.2".to_string();
+    checkpoint.schema_version = schema_version.to_string();
     checkpoint
 }
 
 #[test]
-fn live_checkpoint_compatibility_proves_existing_analyzer_checkpoint_is_sufficient() {
-    let checkpoint = current_schema_checkpoint(
+fn live_checkpoint_compatibility_accepts_v0_3_checkpoint() {
+    let checkpoint = schema_checkpoint(
+        "v0.3",
         "session-alpha",
         1,
         88,
@@ -63,8 +65,28 @@ fn live_checkpoint_compatibility_proves_existing_analyzer_checkpoint_is_sufficie
 }
 
 #[test]
+fn live_checkpoint_compatibility_retains_v0_2_support() {
+    let checkpoint = schema_checkpoint(
+        "v0.2",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");
+
+    assert_eq!(compatibility.cursor.ordinal, 1);
+    assert_eq!(compatibility.max_flagged_score, Some(88));
+    assert!(compatibility.flagged);
+}
+
+#[test]
 fn live_checkpoint_compatibility_surfaces_analyzer_contract_gaps_explicitly() {
-    let mut checkpoint = current_schema_checkpoint(
+    let mut checkpoint = schema_checkpoint(
+        "v0.3",
         "session-alpha",
         1,
         88,
@@ -88,6 +110,7 @@ fn live_checkpoint_compatibility_surfaces_analyzer_contract_gaps_explicitly() {
 #[test]
 fn live_checkpoint_compatibility_supports_recovered_posture_without_schema_widening() {
     let previous = checkpoint_with_drift(
+        "v0.2",
         "session-posture",
         1,
         DriftClass::TruthGroundingGap,
@@ -97,6 +120,7 @@ fn live_checkpoint_compatibility_supports_recovered_posture_without_schema_widen
         &["flagged score for session-posture:1"],
     );
     let current = checkpoint_with_drift(
+        "v0.2",
         "session-posture",
         2,
         DriftClass::TruthGroundingGap,
@@ -136,6 +160,7 @@ fn live_checkpoint_compatibility_supports_recovered_posture_without_schema_widen
 }
 
 fn checkpoint_with_drift(
+    schema_version: &str,
     session_id: &str,
     ordinal: usize,
     class: DriftClass,
@@ -146,7 +171,7 @@ fn checkpoint_with_drift(
 ) -> agent_drift_analyzer::Checkpoint {
     let mut checkpoint =
         support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
-    checkpoint.schema_version = "v0.2".to_string();
+    checkpoint.schema_version = schema_version.to_string();
     checkpoint.flagged = flagged;
     checkpoint.drift_scores[0].class = class;
     checkpoint.drift_scores[0].raw_score = raw_score;

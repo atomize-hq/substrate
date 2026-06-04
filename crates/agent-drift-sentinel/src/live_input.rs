@@ -9,7 +9,8 @@ use crate::input::CheckpointCursor;
 use crate::operator_surface::warning_fingerprint;
 use crate::scheduler::TriggerClass;
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA: &str = "v0.2";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3"];
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2 or v0.3";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCheckpointEvent {
@@ -342,13 +343,13 @@ pub fn validate_live_event_sequence(events: &[LiveCheckpointEvent]) -> Result<()
 pub fn verify_live_checkpoint_compatibility(
     checkpoint: &Checkpoint,
 ) -> Result<LiveCheckpointCompatibility, LiveInputError> {
-    if checkpoint.schema_version != SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA {
+    if !SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS.contains(&checkpoint.schema_version.as_str()) {
         return Err(compatibility_gap(
             checkpoint,
             "schema_version",
             format!(
                 "expected {} but found {}",
-                SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA, checkpoint.schema_version
+                SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION, checkpoint.schema_version
             ),
         ));
     }

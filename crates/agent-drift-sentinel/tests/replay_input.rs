@@ -9,7 +9,8 @@ use camino::Utf8Path;
 use support::{checkpoint, ReplayFixture};
 use tempfile::TempDir;
 
-fn current_schema_checkpoint(
+fn schema_checkpoint(
+    schema_version: &str,
     session_id: &str,
     ordinal: usize,
     raw_score: u8,
@@ -17,28 +18,57 @@ fn current_schema_checkpoint(
     expected_next_step: &str,
 ) -> agent_drift_analyzer::Checkpoint {
     let mut checkpoint = checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
-    checkpoint.schema_version = "v0.2".to_string();
+    checkpoint.schema_version = schema_version.to_string();
     checkpoint
 }
 
 #[test]
-fn replay_input_loads_and_sorts_current_schema_checkpoints() {
+fn replay_input_loads_and_sorts_v0_3_checkpoints() {
     let fixture = ReplayFixture::from_checkpoints(
         vec![
-            current_schema_checkpoint("session-beta", 2, 0, false, "continue"),
-            current_schema_checkpoint("session-alpha", 3, 65, true, "repair"),
-            current_schema_checkpoint("session-alpha", 1, 85, true, "repair"),
+            schema_checkpoint("v0.3", "session-beta", 2, 0, false, "continue"),
+            schema_checkpoint("v0.3", "session-alpha", 3, 65, true, "repair"),
+            schema_checkpoint("v0.3", "session-alpha", 1, 85, true, "repair"),
         ],
         support::sample_summary(),
     );
 
     let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load replay bundle");
 
-    assert_eq!(bundle.schema_version, "v0.2");
+    assert_eq!(bundle.schema_version, "v0.3");
     assert_eq!(bundle.checkpoints.len(), 3);
     assert_eq!(bundle.checkpoints[0].checkpoint_id, "session-alpha:0001");
     assert_eq!(bundle.checkpoints[1].checkpoint_id, "session-alpha:0003");
     assert_eq!(bundle.checkpoints[2].checkpoint_id, "session-beta:0002");
+}
+
+#[test]
+fn replay_input_retains_v0_2_compatibility() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let checkpoint_dir = root.join("checkpoint");
+    fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+
+    let checkpoint = schema_checkpoint("v0.2", "session-alpha", 1, 85, true, "repair");
+    let mut legacy_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    legacy_json["drift_scores"][0]
+        .as_object_mut()
+        .expect("drift score object")
+        .remove("state");
+    let legacy_line = serde_json::to_string(&legacy_json).expect("serialize legacy checkpoint");
+    fs::write(
+        checkpoint_dir.join("checkpoints.jsonl"),
+        format!("{legacy_line}\n"),
+    )
+    .expect("write checkpoints");
+    fs::write(checkpoint_dir.join("summary.md"), support::sample_summary()).expect("write summary");
+
+    let bundle = load_replay_bundle(&checkpoint_dir).expect("load replay bundle");
+
+    assert_eq!(bundle.schema_version, "v0.2");
+    assert_eq!(bundle.checkpoints.len(), 1);
+    assert_eq!(bundle.checkpoints[0].checkpoint_id, "session-alpha:0001");
 }
 
 #[test]
@@ -77,7 +107,7 @@ fn replay_input_accepts_legacy_ignoring_repo_truth_rows_while_mapping_to_truth_g
     fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
 
     let mut checkpoint =
-        current_schema_checkpoint("session-alpha", 1, 65, true, "re-read the task doc");
+        schema_checkpoint("v0.2", "session-alpha", 1, 65, true, "re-read the task doc");
     checkpoint.drift_scores[0].class = agent_drift_analyzer::DriftClass::TruthGroundingGap;
     let legacy_line = serde_json::to_string(&checkpoint)
         .expect("serialize checkpoint")

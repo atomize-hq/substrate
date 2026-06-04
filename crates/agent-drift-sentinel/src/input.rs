@@ -6,7 +6,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA: &str = "v0.2";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3"];
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2 or v0.3";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CheckpointCursor {
@@ -134,11 +135,11 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
     }
 
     let schema_version = versions.pop().expect("versions is not empty");
-    if schema_version != SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA {
+    if !SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS.contains(&schema_version.as_str()) {
         return Err(InputError::UnsupportedSchemaVersion {
             checkpoint_dir: checkpoint_dir.to_owned(),
             schema_version,
-            expected_schema_version: SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA,
+            expected_schema_version: SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION,
         });
     }
 
@@ -147,7 +148,7 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
         checkpoints_path,
         summary_path,
         summary_markdown,
-        schema_version: SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA.to_string(),
+        schema_version,
         checkpoints,
     })
 }
