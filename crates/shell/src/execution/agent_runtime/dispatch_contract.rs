@@ -241,6 +241,16 @@ pub(crate) struct WorkerContinueApprovalResponsePayloadV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkerContinueClarificationResponsePayloadV1 {
+    pub follow_up_obligation_id: String,
+    pub clarification_text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+}
+
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ApprovalResponseDecisionV1 {
@@ -285,6 +295,7 @@ pub(crate) enum WorldDispatchPayloadV1 {
     WorkerFork(WorkerForkPayloadV1),
     WorkerContinue(WorkerContinuePayloadV1),
     WorkerContinueApprovalResponse(WorkerContinueApprovalResponsePayloadV1),
+    WorkerContinueClarificationResponse(WorkerContinueClarificationResponsePayloadV1),
     WorkerInspect(WorkerInspectPayloadV1),
     WorkerCancel(WorkerCancelPayloadV1),
     WorkerStop(WorkerStopPayloadV1),
@@ -424,6 +435,10 @@ fn validate_world_dispatch_payload(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchPayloadV1::WorkerContinueApprovalResponse(response),
         ) => validate_approval_response_continue_payload(action, response),
+        (
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchPayloadV1::WorkerContinueClarificationResponse(response),
+        ) => validate_clarification_response_continue_payload(action, response),
         (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchPayloadV1::WorkerInspect(_)) => {
             Ok(())
         }
@@ -445,6 +460,26 @@ fn validate_approval_response_continue_payload(
     if response.approval_obligation_id.trim().is_empty() {
         anyhow::bail!(
             "invalid_dispatch_payload: action {} requires non-empty approval_obligation_id when payload_kind is worker_continue_approval_response",
+            action.as_str(),
+        );
+    }
+    validate_optional_world_dispatch_string(action, "thread_id", &response.thread_id)?;
+    Ok(())
+}
+
+fn validate_clarification_response_continue_payload(
+    action: WorldDispatchActionV1,
+    response: &WorkerContinueClarificationResponsePayloadV1,
+) -> anyhow::Result<()> {
+    if response.follow_up_obligation_id.trim().is_empty() {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action {} requires non-empty follow_up_obligation_id when payload_kind is worker_continue_clarification_response",
+            action.as_str(),
+        );
+    }
+    if response.clarification_text.trim().is_empty() {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action {} requires non-empty clarification_text when payload_kind is worker_continue_clarification_response",
             action.as_str(),
         );
     }
@@ -1643,9 +1678,10 @@ mod tests {
         ForkWorldWorkerOutcomeV1, HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
         RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
         RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
-        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1, WorkerContinuePayloadV1,
-        WorkerForkPayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
+        WorkerContinueClarificationResponsePayloadV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
+        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
         WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
@@ -3308,6 +3344,83 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid_dispatch_payload: action continue_world_worker requires non-empty thread_id when provided"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_accepts_continue_world_worker_typed_clarification_response_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+                WorkerContinueClarificationResponsePayloadV1 {
+                    follow_up_obligation_id: "obl-follow-up-42".to_string(),
+                    clarification_text: "Use the latest local branch state when continuing."
+                        .to_string(),
+                    thread_id: Some("thread-follow-up".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-42")
+        .validate()
+        .expect("typed clarification response should validate");
+
+        let WorldDispatchPayloadV1::WorkerContinueClarificationResponse(payload) =
+            validated.payload
+        else {
+            panic!("validated payload should remain typed clarification response payload");
+        };
+        assert_eq!(payload.follow_up_obligation_id, "obl-follow-up-42");
+        assert_eq!(
+            payload.clarification_text,
+            "Use the latest local branch state when continuing."
+        );
+        assert_eq!(payload.thread_id.as_deref(), Some("thread-follow-up"));
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_typed_clarification_response_without_exact_causation() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+                WorkerContinueClarificationResponsePayloadV1 {
+                    follow_up_obligation_id: " ".to_string(),
+                    clarification_text: "Please continue with the existing plan.".to_string(),
+                    thread_id: None,
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-42")
+        .validate()
+        .expect_err("typed clarification responses must bind exact follow-up causation");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty follow_up_obligation_id when payload_kind is worker_continue_clarification_response"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_blank_clarification_text() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+                WorkerContinueClarificationResponsePayloadV1 {
+                    follow_up_obligation_id: "obl-follow-up-42".to_string(),
+                    clarification_text: " ".to_string(),
+                    thread_id: None,
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-42")
+        .validate()
+        .expect_err("typed clarification responses must carry non-empty clarification text");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty clarification_text when payload_kind is worker_continue_clarification_response"
         );
     }
 

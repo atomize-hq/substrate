@@ -265,6 +265,8 @@ pub(crate) struct AgentsWorldDispatchObligationsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_response_allowed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub clarification_response_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub follow_up_allowed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_allowed: Option<bool>,
@@ -274,6 +276,7 @@ impl AgentsWorldDispatchObligationsPatch {
     fn is_empty(&self) -> bool {
         self.approval_allowed.is_none()
             && self.approval_response_allowed.is_none()
+            && self.clarification_response_allowed.is_none()
             && self.follow_up_allowed.is_none()
             && self.blocked_allowed.is_none()
     }
@@ -1384,6 +1387,14 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     {
         target.agents_world_dispatch_obligations_approval_response_allowed = v;
     }
+    if let Some(v) = patch
+        .agents
+        .world_dispatch
+        .obligations
+        .clarification_response_allowed
+    {
+        target.agents_world_dispatch_obligations_clarification_response_allowed = v;
+    }
     if let Some(v) = patch.agents.world_dispatch.obligations.follow_up_allowed {
         target.agents_world_dispatch_obligations_follow_up_allowed = v;
     }
@@ -1562,6 +1573,13 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
             .world_dispatch
             .obligations
             .approval_response_allowed
+            .take()
+            .is_some()),
+        "agents.world_dispatch.obligations.clarification_response_allowed" => Ok(patch
+            .agents
+            .world_dispatch
+            .obligations
+            .clarification_response_allowed
             .take()
             .is_some()),
         "agents.world_dispatch.obligations.follow_up_allowed" => Ok(patch
@@ -1760,6 +1778,15 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
                 .world_dispatch
                 .obligations
                 .approval_response_allowed,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.obligations.clarification_response_allowed" => apply_bool_opt(
+            &mut patch
+                .agents
+                .world_dispatch
+                .obligations
+                .clarification_response_allowed,
             &update.op,
             &update.value,
         ),
@@ -2192,6 +2219,11 @@ mod tests {
                 value: "true".to_string(),
             },
             ConfigUpdate {
+                key: "agents.world_dispatch.obligations.clarification_response_allowed".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
+            ConfigUpdate {
                 key: "agents.world_dispatch.obligations.follow_up_allowed".to_string(),
                 op: UpdateOp::Set,
                 value: "true".to_string(),
@@ -2256,6 +2288,14 @@ mod tests {
             Some(true)
         );
         assert_eq!(
+            patch
+                .agents
+                .world_dispatch
+                .obligations
+                .clarification_response_allowed,
+            Some(true)
+        );
+        assert_eq!(
             patch.agents.world_dispatch.obligations.follow_up_allowed,
             Some(true)
         );
@@ -2298,6 +2338,7 @@ agents:
     obligations:
       approval_allowed: true
       approval_response_allowed: true
+      clarification_response_allowed: true
       follow_up_allowed: true
       blocked_allowed: false
 "#,
@@ -2344,6 +2385,14 @@ agents:
             Some(true)
         );
         assert_eq!(
+            patch
+                .agents
+                .world_dispatch
+                .obligations
+                .clarification_response_allowed,
+            Some(true)
+        );
+        assert_eq!(
             patch.agents.world_dispatch.obligations.follow_up_allowed,
             Some(true)
         );
@@ -2371,6 +2420,7 @@ agents:
         assert!(!effective.agents_world_dispatch_fork_recommendations_allowed);
         assert!(!effective.agents_world_dispatch_obligations_approval_allowed);
         assert!(!effective.agents_world_dispatch_obligations_approval_response_allowed);
+        assert!(!effective.agents_world_dispatch_obligations_clarification_response_allowed);
         assert!(!effective.agents_world_dispatch_obligations_follow_up_allowed);
         assert!(!effective.agents_world_dispatch_obligations_blocked_allowed);
     }

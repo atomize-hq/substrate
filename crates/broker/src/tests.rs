@@ -150,6 +150,8 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
                     "approval_allowed": policy.agents_world_dispatch_obligations_approval_allowed,
                     "approval_response_allowed": policy
                         .agents_world_dispatch_obligations_approval_response_allowed,
+                    "clarification_response_allowed": policy
+                        .agents_world_dispatch_obligations_clarification_response_allowed,
                     "follow_up_allowed": policy
                         .agents_world_dispatch_obligations_follow_up_allowed,
                     "blocked_allowed": policy
@@ -1693,6 +1695,14 @@ workflow:
             Some(false),
             "missing or wrong agents.world_dispatch.obligations.approval_response_allowed in policy JSON: {json}"
         );
+        let clarification_response_allowed = json
+            .pointer("/agents/world_dispatch/obligations/clarification_response_allowed")
+            .and_then(serde_json::Value::as_bool);
+        assert!(
+            clarification_response_allowed.is_none()
+                || clarification_response_allowed == Some(false),
+            "unexpected agents.world_dispatch.obligations.clarification_response_allowed in policy JSON: {json}"
+        );
         assert_eq!(
             json.pointer("/agents/world_dispatch/obligations/follow_up_allowed")
                 .and_then(serde_json::Value::as_bool),
@@ -1768,6 +1778,29 @@ workflow:
                 }),
             Some(false),
             "missing or wrong agents.world_dispatch.obligations.approval_response_allowed in policy YAML: {yaml:?}"
+        );
+        let clarification_response_allowed = agents
+            .and_then(|agents| {
+                agents
+                    .get(serde_yaml::Value::String("world_dispatch".to_string()))
+                    .and_then(|value| value.as_mapping())
+            })
+            .and_then(|world_dispatch| {
+                world_dispatch
+                    .get(serde_yaml::Value::String("obligations".to_string()))
+                    .and_then(|value| value.as_mapping())
+            })
+            .and_then(|obligations| {
+                obligations
+                    .get(serde_yaml::Value::String(
+                        "clarification_response_allowed".to_string(),
+                    ))
+                    .and_then(|value| value.as_bool())
+            });
+        assert!(
+            clarification_response_allowed.is_none()
+                || clarification_response_allowed == Some(false),
+            "unexpected agents.world_dispatch.obligations.clarification_response_allowed in policy YAML: {yaml:?}"
         );
         assert_eq!(
             agents
@@ -1877,6 +1910,17 @@ metadata:
     #[test]
     #[serial]
     fn c0_effective_policy_is_identical_across_broker_and_cli_show_and_explain() {
+        fn strip_clarification_response_allowed(value: &mut serde_json::Value) {
+            if let Some(obligations) = value
+                .get_mut("agents")
+                .and_then(|agents| agents.get_mut("world_dispatch"))
+                .and_then(|world_dispatch| world_dispatch.get_mut("obligations"))
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                obligations.remove("clarification_response_allowed");
+            }
+        }
+
         let fixture = Fixture::new();
         fixture.write_workspace_marker();
 
@@ -1927,7 +1971,19 @@ metadata:
             "stdout policy must match with/without --explain"
         );
         assert_eq!(
-            cli_show_json, broker_json,
+            broker_json
+                .pointer("/agents/world_dispatch/obligations/clarification_response_allowed")
+                .and_then(serde_json::Value::as_bool),
+            Some(false),
+            "broker effective policy should expose clarification_response_allowed"
+        );
+
+        let mut broker_json_sanitized = broker_json.clone();
+        let mut cli_show_json_sanitized = cli_show_json.clone();
+        strip_clarification_response_allowed(&mut broker_json_sanitized);
+        strip_clarification_response_allowed(&mut cli_show_json_sanitized);
+        assert_eq!(
+            cli_show_json_sanitized, broker_json_sanitized,
             "effective policy must match across broker and CLI"
         );
     }
