@@ -35,7 +35,10 @@ use crate::execution::agent_runtime::dispatch_contract::{
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 #[cfg(target_os = "linux")]
-use crate::execution::agent_runtime::state_store::PreparedInternalApprovalResponseObligationCloseout;
+use crate::execution::agent_runtime::state_store::{
+    PreparedInternalApprovalResponseObligationCloseout,
+    PreparedInternalClarificationResponseObligationCloseout,
+};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
 #[cfg(any(target_os = "linux", test))]
@@ -649,10 +652,15 @@ async fn continue_world_worker(
     enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
     let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
+    let clarification_closeout = prepare_continue_world_worker_clarification_closeout(&prepared)?;
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
     let stream_result = execute_continue_world_worker_stream(&submit_request, &base_policy).await?;
     close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
+    close_continue_world_worker_clarification_after_delivery(
+        &prepared,
+        clarification_closeout.as_ref(),
+    )?;
     if let Some(worker_event) = stream_result
         .surfaced_worker_event
         .as_ref()
@@ -735,6 +743,74 @@ fn close_continue_world_worker_approval_after_delivery(
         .with_context(|| {
             format!(
                 "failed to close typed approval response after delivery to retained worker {}",
+                prepared
+                    .request
+                    .target_participant_id
+                    .as_deref()
+                    .expect("validated continue request must include target_participant_id")
+            )
+        })?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_continue_world_worker_clarification_closeout(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<Option<PreparedInternalClarificationResponseObligationCloseout>> {
+    let WorldDispatchPayloadV1::WorkerContinueClarificationResponse(payload) =
+        &prepared.request.payload
+    else {
+        return Ok(None);
+    };
+    let target_participant_id = prepared
+        .request
+        .target_participant_id
+        .as_deref()
+        .expect("validated continue request must include target_participant_id");
+
+    prepared
+        .store
+        .prepare_internal_continue_clarification_response_closeout_for_delivery(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            target_participant_id,
+            &prepared.request.target_backend_id,
+            payload,
+        )
+        .with_context(|| {
+            format!(
+                "failed to bind typed clarification response closeout for retained worker {}",
+                target_participant_id
+            )
+        })
+        .map(Some)
+}
+
+#[cfg(target_os = "linux")]
+fn close_continue_world_worker_clarification_after_delivery(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    closeout: Option<&PreparedInternalClarificationResponseObligationCloseout>,
+) -> Result<()> {
+    let Some(closeout) = closeout else {
+        return Ok(());
+    };
+
+    if !matches!(
+        prepared.request.payload,
+        WorldDispatchPayloadV1::WorkerContinueClarificationResponse(_)
+    ) {
+        return Ok(());
+    }
+
+    prepared
+        .store
+        .close_internal_continue_clarification_response_after_delivery(
+            closeout,
+            Some("clarification delivered by host".to_string()),
+        )
+        .with_context(|| {
+            format!(
+                "failed to close typed clarification response after delivery to retained worker {}",
                 prepared
                     .request
                     .target_participant_id
@@ -3091,6 +3167,41 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn write_world_dispatch_policy_with_clarification_responses(
+        substrate_home: &Path,
+        enabled: bool,
+        allowed_backends: &[&str],
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        let enabled = if enabled { "true" } else { "false" };
+        let backends = allowed_backends
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let agent_backends = allowed_backends
+            .iter()
+            .map(|value| format!("    - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let actions = allowed_actions
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let modes = allowed_modes
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let policy = format!(
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n    obligations:\n      clarification_response_allowed: true\n"
+        );
+        fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_continue_world_dispatch_request() -> WorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_continue".to_string()),
@@ -3570,6 +3681,30 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn persist_pending_continue_follow_up_obligation(
+        store: &AgentRuntimeStateStore,
+        obligation_id: &str,
+        world_id: &str,
+        world_generation: u64,
+    ) {
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_dispatch",
+            obligation_id,
+            OrchestrationObligationKind::FollowUpRequired,
+            "retained worker ash_member requested host follow-up during continue_world_worker",
+        );
+        obligation.attention_required = true;
+        obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        obligation.source_participant_id = Some("ash_member".to_string());
+        obligation.target_backend_id = Some("cli:codex_world".to_string());
+        obligation.world_id = Some(world_id.to_string());
+        obligation.world_generation = Some(world_generation);
+        store
+            .persist_obligation(&obligation)
+            .expect("persist pending follow-up obligation");
+    }
+
+    #[cfg(target_os = "linux")]
     fn persist_stale_continue_dispatch_state(
         store: &AgentRuntimeStateStore,
         workspace_root: &Path,
@@ -3903,6 +4038,30 @@ mod tests {
         assert_eq!(
             submit.prompt,
             "SUBSTRATE_INTERNAL_HOST_APPROVAL_RESPONSE_V1\n{\"kind\":\"approval_response\",\"approval_obligation_id\":\"obl-approval-40\",\"decision\":\"approve\",\"thread_id\":\"thread-approval-40\"}\nTreat this as the host's typed approval_response for the matching pending approval request. Apply decision=approve as permission granted and decision=deny as permission denied."
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_submit_request_renders_typed_clarification_response_deterministically()
+    {
+        let prepared = PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
+            request: sample_continue_clarification_response_world_dispatch_request()
+                .validate()
+                .expect("validated clarification-response continue request"),
+            session: sample_session(),
+            caller_participant: sample_orchestrator_participant(),
+            target_participant: Some(sample_member_participant()),
+            live_retained_worker_count: 1,
+        };
+
+        let submit =
+            build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
+
+        assert_eq!(
+            submit.prompt,
+            "SUBSTRATE_INTERNAL_HOST_CLARIFICATION_RESPONSE_V1\n{\"kind\":\"clarification_response\",\"follow_up_obligation_id\":\"obl-follow-up-42\",\"clarification_text\":\"Use the latest local branch state when continuing.\",\"thread_id\":\"thread-follow-up-42\"}\nTreat this as the host's typed clarification_response for the matching pending follow-up obligation. Use clarification_text as authoritative host guidance before continuing work."
         );
     }
 
@@ -6437,6 +6596,252 @@ agents:
             .load_obligation("sess_dispatch", "obl_approval_failed")
             .expect("load approval obligation")
             .expect("approval obligation must persist");
+        assert_eq!(persisted.state, OrchestrationObligationState::Pending);
+        assert_eq!(
+            persisted.review_state,
+            OrchestrationObligationReviewState::Unread
+        );
+        assert!(persisted.resolution_note.is_none());
+        assert!(persisted.resolved_at.is_none());
+        assert!(persisted.attention_required);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_clarification_response_closes_follow_up_exactly_once_after_successful_delivery(
+    ) {
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_clarification_responses(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("clarification-response-success.sock");
+        let recorded_requests = Arc::new(Mutex::new(
+            Vec::<transport_api_types::MemberTurnSubmitRequestV1>::new(),
+        ));
+        let recorded_requests_for_server = recorded_requests.clone();
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    recorded_requests_for_server
+                        .lock()
+                        .expect("recorded requests mutex poisoned")
+                        .push(parsed);
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_uaa_event(json!({
+                                "type": "item.completed",
+                                "thread_id": "thread-delivered-clarification",
+                                "turn_id": "turn-clarification",
+                                "item_id": "msg-clarification",
+                                "status": "completed",
+                                "item_type": "agent_message",
+                                "content": {
+                                    "text": "clarification response delivered"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 17,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        persist_pending_continue_follow_up_obligation(
+            &store,
+            "obl_follow_up_success",
+            "world-17",
+            2,
+        );
+
+        let mut request = sample_continue_clarification_response_world_dispatch_request();
+        request.request_id = Some("req_continue_clarification_response_success".to_string());
+        request.idempotency_key =
+            Some("idem_continue_clarification_response_success".to_string());
+        request.payload = WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+            WorkerContinueClarificationResponsePayloadV1 {
+                follow_up_obligation_id: "obl_follow_up_success".to_string(),
+                clarification_text: "Proceed using the retained world state.".to_string(),
+                thread_id: Some("thread-follow-up-success".to_string()),
+            },
+        );
+        let expected_prompt = render_continue_world_worker_transport_prompt(
+            &request
+                .clone()
+                .validate()
+                .expect("validated clarification response request")
+                .payload,
+        )
+        .expect("render clarification response prompt");
+
+        let outcome = dispatch_orchestrator_world_request(&store, request)
+            .await
+            .expect("clarification response delivery should succeed");
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+            panic!("expected continue_world_worker outcome");
+        };
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert!(
+            outcome.summary.contains("status 17"),
+            "successful delivery should preserve the terminal exit status in the summary: {}",
+            outcome.summary
+        );
+
+        server.await.expect("stub world server task");
+
+        let recorded = recorded_requests
+            .lock()
+            .expect("recorded requests mutex poisoned");
+        assert_eq!(
+            recorded.len(),
+            1,
+            "typed clarification response should submit exactly one retained member turn: {recorded:?}"
+        );
+        assert_eq!(recorded[0].prompt, expected_prompt);
+        drop(recorded);
+
+        let persisted = store
+            .load_obligation("sess_dispatch", "obl_follow_up_success")
+            .expect("load follow-up obligation")
+            .expect("follow-up obligation must persist");
+        assert_eq!(persisted.state, OrchestrationObligationState::Resolved);
+        assert_eq!(
+            persisted.review_state,
+            OrchestrationObligationReviewState::Resolved
+        );
+        assert_eq!(
+            persisted.resolution_note.as_deref(),
+            Some("clarification delivered by host")
+        );
+        assert!(persisted.resolved_at.is_some());
+        assert!(!persisted.attention_required);
+
+        let mut repeat_request = sample_continue_clarification_response_world_dispatch_request();
+        repeat_request.request_id = Some("req_continue_clarification_response_repeat".to_string());
+        repeat_request.idempotency_key =
+            Some("idem_continue_clarification_response_repeat".to_string());
+        repeat_request.payload = WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+            WorkerContinueClarificationResponsePayloadV1 {
+                follow_up_obligation_id: "obl_follow_up_success".to_string(),
+                clarification_text: "Proceed using the retained world state.".to_string(),
+                thread_id: Some("thread-follow-up-success".to_string()),
+            },
+        );
+        let err = dispatch_orchestrator_world_request(&store, repeat_request)
+            .await
+            .expect_err("resolved follow-up must not close twice");
+        assert!(
+            format!("{err:#}").contains("follow_up_obligation_already_resolved:"),
+            "unexpected second-delivery failure: {err:#}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_clarification_response_leaves_follow_up_pending_when_delivery_fails(
+    ) {
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_clarification_responses(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let missing_socket = socket_home.path().join("missing.sock");
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &missing_socket);
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        persist_pending_continue_follow_up_obligation(
+            &store,
+            "obl_follow_up_failed",
+            "world-17",
+            2,
+        );
+
+        let mut request = sample_continue_clarification_response_world_dispatch_request();
+        request.payload = WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+            WorkerContinueClarificationResponsePayloadV1 {
+                follow_up_obligation_id: "obl_follow_up_failed".to_string(),
+                clarification_text: "Wait for a fresh world restart before continuing."
+                    .to_string(),
+                thread_id: Some("thread-follow-up-failed".to_string()),
+            },
+        );
+        let err = dispatch_orchestrator_world_request(&store, request)
+            .await
+            .expect_err("delivery failure must leave follow-up obligation unresolved");
+        assert!(
+            err.to_string()
+                .contains("failed to build member turn submit client for continue_world_worker"),
+            "unexpected delivery failure error: {err}"
+        );
+
+        let persisted = store
+            .load_obligation("sess_dispatch", "obl_follow_up_failed")
+            .expect("load follow-up obligation")
+            .expect("follow-up obligation must persist");
         assert_eq!(persisted.state, OrchestrationObligationState::Pending);
         assert_eq!(
             persisted.review_state,

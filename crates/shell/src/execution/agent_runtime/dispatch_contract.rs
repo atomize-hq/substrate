@@ -498,6 +498,9 @@ pub(crate) fn render_continue_world_worker_transport_prompt(
         WorldDispatchPayloadV1::WorkerContinueApprovalResponse(response) => Ok(
             render_continue_world_worker_approval_response_prompt(response),
         ),
+        WorldDispatchPayloadV1::WorkerContinueClarificationResponse(response) => Ok(
+            render_continue_world_worker_clarification_response_prompt(response),
+        ),
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
         ),
@@ -519,6 +522,22 @@ fn render_continue_world_worker_approval_response_prompt(
     });
     format!(
         "SUBSTRATE_INTERNAL_HOST_APPROVAL_RESPONSE_V1\n{}\nTreat this as the host's typed approval_response for the matching pending approval request. Apply decision=approve as permission granted and decision=deny as permission denied.",
+        rendered
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn render_continue_world_worker_clarification_response_prompt(
+    response: &WorkerContinueClarificationResponsePayloadV1,
+) -> String {
+    let rendered = serde_json::json!({
+        "kind": "clarification_response",
+        "follow_up_obligation_id": response.follow_up_obligation_id,
+        "clarification_text": response.clarification_text,
+        "thread_id": response.thread_id,
+    });
+    format!(
+        "SUBSTRATE_INTERNAL_HOST_CLARIFICATION_RESPONSE_V1\n{}\nTreat this as the host's typed clarification_response for the matching pending follow-up obligation. Use clarification_text as authoritative host guidance before continuing work.",
         rendered
     )
 }
@@ -3376,6 +3395,27 @@ mod tests {
             "Use the latest local branch state when continuing."
         );
         assert_eq!(payload.thread_id.as_deref(), Some("thread-follow-up"));
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn world_dispatch_contract_renders_typed_clarification_response_prompt_deterministically() {
+        let prompt = render_continue_world_worker_transport_prompt(
+            &WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+                WorkerContinueClarificationResponsePayloadV1 {
+                    follow_up_obligation_id: "obl-follow-up-42".to_string(),
+                    clarification_text: "Use the latest local branch state when continuing."
+                        .to_string(),
+                    thread_id: Some("thread-follow-up".to_string()),
+                },
+            ),
+        )
+        .expect("typed clarification response should render");
+
+        assert_eq!(
+            prompt,
+            "SUBSTRATE_INTERNAL_HOST_CLARIFICATION_RESPONSE_V1\n{\"kind\":\"clarification_response\",\"follow_up_obligation_id\":\"obl-follow-up-42\",\"clarification_text\":\"Use the latest local branch state when continuing.\",\"thread_id\":\"thread-follow-up\"}\nTreat this as the host's typed clarification_response for the matching pending follow-up obligation. Use clarification_text as authoritative host guidance before continuing work."
+        );
     }
 
     #[test]
