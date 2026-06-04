@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::AnalyzeRequest;
+use agent_drift_analyzer::{AnalyzeRequest, DriftState};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -86,8 +86,10 @@ fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
 
     assert!(first.flagged);
     assert_eq!(first.raw_score, 60);
+    assert_eq!(first.state, DriftState::Active);
     assert!(!second.flagged);
     assert_eq!(second.raw_score, 0);
+    assert_eq!(second.state, DriftState::Cleared);
 }
 
 fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
