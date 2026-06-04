@@ -17,7 +17,7 @@ use crate::execution::config_model::AgentExecutionScope;
 #[cfg(any(target_os = "linux", test))]
 use super::dispatch_contract::{
     ApprovalResponseDecisionV1, RetainedWorkerInspectSnapshotV1,
-    WorkerContinueApprovalResponsePayloadV1,
+    WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
 };
 #[cfg(any(target_os = "linux", test))]
 use super::obligation_ledger::ApprovalObligationCloseoutDisposition;
@@ -434,6 +434,18 @@ pub(crate) struct PreparedInternalApprovalResponseObligationCloseout {
     world_id: String,
     world_generation: u64,
     decision: ApprovalResponseDecisionV1,
+}
+
+#[allow(dead_code)]
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PreparedInternalClarificationResponseObligationCloseout {
+    orchestration_session_id: String,
+    follow_up_obligation_id: String,
+    target_participant_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -1366,6 +1378,72 @@ impl AgentRuntimeStateStore {
         Ok(obligation)
     }
 
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    fn prepare_internal_continue_clarification_response_obligation_closeout(
+        &self,
+        resolved_target: &ResolvedInternalContinueWorldDispatchTarget,
+        payload: &WorkerContinueClarificationResponsePayloadV1,
+    ) -> Result<PreparedInternalClarificationResponseObligationCloseout> {
+        let obligation = self.load_exact_pending_follow_up_obligation_for_continue_target(
+            resolved_target.orchestration_session_id(),
+            resolved_target.target_participant.participant_id(),
+            &resolved_target.target_participant.handle.backend_id,
+            resolved_target
+                .session
+                .world_id
+                .as_deref()
+                .expect("continue target must keep authoritative world binding"),
+            resolved_target
+                .session
+                .world_generation
+                .expect("continue target must keep authoritative world binding"),
+            &payload.follow_up_obligation_id,
+        )?;
+
+        Ok(PreparedInternalClarificationResponseObligationCloseout {
+            orchestration_session_id: obligation.orchestration_session_id,
+            follow_up_obligation_id: obligation.obligation_id,
+            target_participant_id: resolved_target
+                .target_participant
+                .participant_id()
+                .to_string(),
+            target_backend_id: resolved_target.target_participant.handle.backend_id.clone(),
+            world_id: resolved_target
+                .session
+                .world_id
+                .clone()
+                .expect("continue target must keep authoritative world binding"),
+            world_generation: resolved_target
+                .session
+                .world_generation
+                .expect("continue target must keep authoritative world binding"),
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    fn close_prepared_internal_continue_clarification_response_obligation(
+        &self,
+        closeout: &PreparedInternalClarificationResponseObligationCloseout,
+        resolution_note: Option<String>,
+    ) -> Result<OrchestrationObligationRecord> {
+        let mut obligation = self.load_exact_pending_follow_up_obligation_for_continue_target(
+            &closeout.orchestration_session_id,
+            &closeout.target_participant_id,
+            &closeout.target_backend_id,
+            &closeout.world_id,
+            closeout.world_generation,
+            &closeout.follow_up_obligation_id,
+        )?;
+        let resolved_at = Utc::now();
+
+        obligation.mark_clarification_response_closed(resolution_note, resolved_at);
+        self.persist_obligation(&obligation)?;
+
+        Ok(obligation)
+    }
+
     #[cfg(target_os = "linux")]
     pub(crate) fn prepare_internal_continue_approval_response_closeout_for_delivery(
         &self,
@@ -1394,6 +1472,41 @@ impl AgentRuntimeStateStore {
         resolution_note: Option<String>,
     ) -> Result<OrchestrationObligationRecord> {
         self.close_prepared_internal_continue_approval_response_obligation(
+            closeout,
+            resolution_note,
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    #[allow(dead_code)]
+    pub(crate) fn prepare_internal_continue_clarification_response_closeout_for_delivery(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+        payload: &WorkerContinueClarificationResponsePayloadV1,
+    ) -> Result<PreparedInternalClarificationResponseObligationCloseout> {
+        let resolved_target = self.resolve_internal_continue_world_dispatch_target(
+            orchestration_session_id,
+            caller_participant_id,
+            target_participant_id,
+            target_backend_id,
+        )?;
+        self.prepare_internal_continue_clarification_response_obligation_closeout(
+            &resolved_target,
+            payload,
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    #[allow(dead_code)]
+    pub(crate) fn close_internal_continue_clarification_response_after_delivery(
+        &self,
+        closeout: &PreparedInternalClarificationResponseObligationCloseout,
+        resolution_note: Option<String>,
+    ) -> Result<OrchestrationObligationRecord> {
+        self.close_prepared_internal_continue_clarification_response_obligation(
             closeout,
             resolution_note,
         )
@@ -3204,6 +3317,71 @@ impl AgentRuntimeStateStore {
 
         Ok(obligation)
     }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    fn load_exact_pending_follow_up_obligation_for_continue_target(
+        &self,
+        orchestration_session_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+        world_id: &str,
+        world_generation: u64,
+        follow_up_obligation_id: &str,
+    ) -> Result<OrchestrationObligationRecord> {
+        let obligation = self
+            .load_obligation(orchestration_session_id, follow_up_obligation_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "follow_up_obligation_not_found: orchestration session {} has no follow-up obligation {}",
+                    orchestration_session_id,
+                    follow_up_obligation_id
+                )
+            })?;
+        if obligation.kind != OrchestrationObligationKind::FollowUpRequired {
+            anyhow::bail!(
+                "follow_up_obligation_kind_mismatch: orchestration session {} obligation {} is not follow_up_required",
+                orchestration_session_id,
+                follow_up_obligation_id
+            );
+        }
+        if !obligation.is_pending() {
+            anyhow::bail!(
+                "follow_up_obligation_already_resolved: orchestration session {} follow-up obligation {} is already closed",
+                orchestration_session_id,
+                follow_up_obligation_id
+            );
+        }
+        if obligation.source_participant_id.as_deref() != Some(target_participant_id) {
+            anyhow::bail!(
+                "follow_up_obligation_target_mismatch: orchestration session {} follow-up obligation {} does not bind retained worker {}",
+                orchestration_session_id,
+                follow_up_obligation_id,
+                target_participant_id
+            );
+        }
+        if obligation.target_backend_id.as_deref() != Some(target_backend_id) {
+            anyhow::bail!(
+                "follow_up_obligation_backend_mismatch: orchestration session {} follow-up obligation {} does not bind backend {}",
+                orchestration_session_id,
+                follow_up_obligation_id,
+                target_backend_id
+            );
+        }
+        if obligation.world_id.as_deref() != Some(world_id)
+            || obligation.world_generation != Some(world_generation)
+        {
+            anyhow::bail!(
+                "follow_up_obligation_world_binding_mismatch: orchestration session {} follow-up obligation {} no longer matches authoritative world binding {}/{}",
+                orchestration_session_id,
+                follow_up_obligation_id,
+                world_id,
+                world_generation
+            );
+        }
+
+        Ok(obligation)
+    }
 }
 
 fn write_atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<()> {
@@ -4153,6 +4331,27 @@ mod tests {
         obligation.world_generation = Some(2);
         obligation.payload = Some(json!({
             "event_class": "approval_request",
+            "request_id": format!("req_{obligation_id}"),
+        }));
+        obligation
+    }
+
+    fn pending_continue_follow_up_obligation(
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        source_participant_id: &str,
+    ) -> OrchestrationObligationRecord {
+        let mut obligation = pending_obligation(
+            orchestration_session_id,
+            obligation_id,
+            OrchestrationObligationKind::FollowUpRequired,
+        );
+        obligation.source_participant_id = Some(source_participant_id.to_string());
+        obligation.target_backend_id = Some("cli:codex_world".to_string());
+        obligation.world_id = Some("world-17".to_string());
+        obligation.world_generation = Some(2);
+        obligation.payload = Some(json!({
+            "event_class": "follow_up_question",
             "request_id": format!("req_{obligation_id}"),
         }));
         obligation
@@ -7105,6 +7304,83 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn prepare_internal_continue_clarification_response_obligation_closeout_preserves_pending_state(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_continue", "orch_continue");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                "sess_continue",
+                "ash_continue",
+                "orch_continue",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let obligation = pending_continue_follow_up_obligation(
+                "sess_continue",
+                "obl_follow_up",
+                "ash_continue",
+            );
+            store
+                .persist_obligation(&obligation)
+                .expect("persist follow-up obligation");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue",
+                    "orch_continue",
+                    "ash_continue",
+                    "cli:codex_world",
+                )
+                .expect("resolve continue target");
+            let closeout = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_follow_up".to_string(),
+                        clarification_text: "Here is the missing detail.".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect("prepare clarification closeout");
+
+            assert_eq!(
+                closeout,
+                PreparedInternalClarificationResponseObligationCloseout {
+                    orchestration_session_id: "sess_continue".to_string(),
+                    follow_up_obligation_id: "obl_follow_up".to_string(),
+                    target_participant_id: "ash_continue".to_string(),
+                    target_backend_id: "cli:codex_world".to_string(),
+                    world_id: "world-17".to_string(),
+                    world_generation: 2,
+                }
+            );
+
+            let persisted = store
+                .load_obligation("sess_continue", "obl_follow_up")
+                .expect("load persisted obligation")
+                .expect("persisted obligation exists");
+            assert_eq!(persisted.state, OrchestrationObligationState::Pending);
+            assert_eq!(
+                persisted.review_state,
+                OrchestrationObligationReviewState::Unread
+            );
+            assert!(persisted.resolved_at.is_none());
+            assert!(persisted.attention_required);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn prepare_internal_continue_approval_response_obligation_closeout_fails_closed_for_invalid_bindings(
     ) {
         with_store(|store| {
@@ -7254,6 +7530,160 @@ mod tests {
             assert_eq!(
                 wrong_target_err.to_string(),
                 "approval_obligation_target_mismatch: orchestration session sess_continue approval obligation obl_wrong_target does not bind retained worker ash_continue"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn prepare_internal_continue_clarification_response_obligation_closeout_fails_closed_for_invalid_bindings(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_continue", "orch_continue");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                "sess_continue",
+                "ash_continue",
+                "orch_continue",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue",
+                    "orch_continue",
+                    "ash_continue",
+                    "cli:codex_world",
+                )
+                .expect("resolve continue target");
+
+            let missing = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_missing".to_string(),
+                        clarification_text: "missing".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect_err("missing follow-up obligation must fail closed");
+            assert_eq!(
+                missing.to_string(),
+                "follow_up_obligation_not_found: orchestration session sess_continue has no follow-up obligation obl_missing"
+            );
+
+            let wrong_kind = pending_obligation(
+                "sess_continue",
+                "obl_wrong_kind",
+                OrchestrationObligationKind::Blocked,
+            );
+            store
+                .persist_obligation(&wrong_kind)
+                .expect("persist wrong-kind obligation");
+            let wrong_kind_err = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_wrong_kind".to_string(),
+                        clarification_text: "wrong kind".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect_err("wrong-kind obligation must fail closed");
+            assert_eq!(
+                wrong_kind_err.to_string(),
+                "follow_up_obligation_kind_mismatch: orchestration session sess_continue obligation obl_wrong_kind is not follow_up_required"
+            );
+
+            let mut resolved = pending_continue_follow_up_obligation(
+                "sess_continue",
+                "obl_resolved",
+                "ash_continue",
+            );
+            resolved.mark_clarification_response_closed(
+                Some("already clarified".to_string()),
+                Utc::now(),
+            );
+            store
+                .persist_obligation(&resolved)
+                .expect("persist resolved obligation");
+            let resolved_err = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_resolved".to_string(),
+                        clarification_text: "resolved".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect_err("resolved obligation must fail closed");
+            assert_eq!(
+                resolved_err.to_string(),
+                "follow_up_obligation_already_resolved: orchestration session sess_continue follow-up obligation obl_resolved is already closed"
+            );
+
+            let other_session = live_orchestrator("codex", "sess_other", "orch_other");
+            let mut other_parent = active_parent(&other_session);
+            other_parent.set_world_binding("world-17", 2);
+            store
+                .persist_orchestration_session(&other_parent)
+                .expect("persist other session");
+            store
+                .persist_participant(&other_session)
+                .expect("persist other orchestrator");
+            let cross_session = pending_continue_follow_up_obligation(
+                "sess_other",
+                "obl_cross_session",
+                "ash_continue",
+            );
+            store
+                .persist_obligation(&cross_session)
+                .expect("persist cross-session obligation");
+            let cross_session_err = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_cross_session".to_string(),
+                        clarification_text: "cross session".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect_err("cross-session obligation must fail closed");
+            assert_eq!(
+                cross_session_err.to_string(),
+                "follow_up_obligation_not_found: orchestration session sess_continue has no follow-up obligation obl_cross_session"
+            );
+
+            let wrong_target = pending_continue_follow_up_obligation(
+                "sess_continue",
+                "obl_wrong_target",
+                "ash_other",
+            );
+            store
+                .persist_obligation(&wrong_target)
+                .expect("persist wrong-target obligation");
+            let wrong_target_err = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_wrong_target".to_string(),
+                        clarification_text: "wrong target".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect_err("wrong-target obligation must fail closed");
+            assert_eq!(
+                wrong_target_err.to_string(),
+                "follow_up_obligation_target_mismatch: orchestration session sess_continue follow-up obligation obl_wrong_target does not bind retained worker ash_continue"
             );
         });
     }
@@ -7450,6 +7880,198 @@ mod tests {
             assert_eq!(
                 err.to_string(),
                 "approval_obligation_already_resolved: orchestration session sess_continue_stale approval obligation obl_stale is already closed"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn close_prepared_internal_continue_clarification_response_obligation_durably_closes_after_delivery_proof(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_continue_clarify", "orch_clarify");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                "sess_continue_clarify",
+                "ash_clarify",
+                "orch_clarify",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let obligation = pending_continue_follow_up_obligation(
+                "sess_continue_clarify",
+                "obl_follow_up",
+                "ash_clarify",
+            );
+            store
+                .persist_obligation(&obligation)
+                .expect("persist follow-up obligation");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue_clarify",
+                    "orch_clarify",
+                    "ash_clarify",
+                    "cli:codex_world",
+                )
+                .expect("resolve continue target");
+            let closeout = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_follow_up".to_string(),
+                        clarification_text: "Here are the details you requested.".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect("prepare clarification closeout");
+            let closeout_started_at = Utc::now();
+            let closed = store
+                .close_prepared_internal_continue_clarification_response_obligation(
+                    &closeout,
+                    Some("clarification delivered by host".to_string()),
+                )
+                .expect("close prepared clarification obligation");
+            let closeout_finished_at = Utc::now();
+
+            assert_eq!(closed.state, OrchestrationObligationState::Resolved);
+            assert_eq!(
+                closed.review_state,
+                OrchestrationObligationReviewState::Resolved
+            );
+            assert!(!closed.attention_required);
+            assert_eq!(
+                closed.resolution_note.as_deref(),
+                Some("clarification delivered by host")
+            );
+            assert!(
+                closed.resolved_at.is_some_and(|resolved_at| {
+                    resolved_at >= closeout_started_at && resolved_at <= closeout_finished_at
+                }),
+                "resolved_at must be minted by state-store closeout"
+            );
+            let closed_resolved_at = closed.resolved_at.expect("resolved_at set");
+            assert_eq!(closed.updated_at, closed_resolved_at);
+
+            let persisted = store
+                .load_obligation("sess_continue_clarify", "obl_follow_up")
+                .expect("load persisted obligation")
+                .expect("persisted obligation exists");
+            assert_eq!(persisted.state, OrchestrationObligationState::Resolved);
+            assert_eq!(
+                persisted.review_state,
+                OrchestrationObligationReviewState::Resolved
+            );
+            assert!(!persisted.attention_required);
+            assert_eq!(
+                persisted.resolution_note.as_deref(),
+                Some("clarification delivered by host")
+            );
+            assert_eq!(persisted.resolved_at, Some(closed_resolved_at));
+            assert_eq!(persisted.updated_at, closed.updated_at);
+
+            let compat_item = store
+                .load_inbox_item("sess_continue_clarify", "obl_follow_up")
+                .expect("load compatibility inbox item")
+                .expect("compatibility item exists");
+            assert_eq!(compat_item.kind, DurableInboxItemKind::FollowUpMessage);
+            assert_eq!(compat_item.state, DurableInboxItemState::Dismissed);
+            assert_eq!(
+                compat_item.message.as_deref(),
+                Some("clarification delivered by host")
+            );
+            assert_eq!(compat_item.resolved_at, Some(closed_resolved_at));
+
+            let settled_session = store
+                .load_orchestration_session("sess_continue_clarify")
+                .expect("load settled session")
+                .expect("settled session exists");
+            assert_eq!(settled_session.pending_inbox_count, 0);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn close_prepared_internal_continue_clarification_response_obligation_fails_closed_for_stale_delivery_proof(
+    ) {
+        with_store(|store| {
+            let orchestrator =
+                live_orchestrator("codex", "sess_continue_clarify_stale", "orch_stale");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                "sess_continue_clarify_stale",
+                "ash_stale",
+                "orch_stale",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let obligation = pending_continue_follow_up_obligation(
+                "sess_continue_clarify_stale",
+                "obl_stale",
+                "ash_stale",
+            );
+            store
+                .persist_obligation(&obligation)
+                .expect("persist follow-up obligation");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue_clarify_stale",
+                    "orch_stale",
+                    "ash_stale",
+                    "cli:codex_world",
+                )
+                .expect("resolve continue target");
+            let closeout = store
+                .prepare_internal_continue_clarification_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: "obl_stale".to_string(),
+                        clarification_text: "stale".to_string(),
+                        thread_id: None,
+                    },
+                )
+                .expect("prepare clarification closeout");
+
+            let mut resolved = store
+                .load_obligation("sess_continue_clarify_stale", "obl_stale")
+                .expect("load persisted obligation")
+                .expect("persisted obligation exists");
+            resolved.mark_clarification_response_closed(
+                Some("closed elsewhere".to_string()),
+                Utc::now(),
+            );
+            store
+                .persist_obligation(&resolved)
+                .expect("persist resolved obligation");
+
+            let err = store
+                .close_prepared_internal_continue_clarification_response_obligation(
+                    &closeout,
+                    Some("clarification delivered by host".to_string()),
+                )
+                .expect_err("stale delivery proof must fail closed");
+            assert_eq!(
+                err.to_string(),
+                "follow_up_obligation_already_resolved: orchestration session sess_continue_clarify_stale follow-up obligation obl_stale is already closed"
             );
         });
     }

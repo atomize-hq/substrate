@@ -351,6 +351,20 @@ impl OrchestrationObligationRecord {
         self.resolved_at = Some(resolved_at);
         self.updated_at = resolved_at;
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn mark_clarification_response_closed(
+        &mut self,
+        resolution_note: Option<String>,
+        resolved_at: DateTime<Utc>,
+    ) {
+        self.state = OrchestrationObligationState::Resolved;
+        self.review_state = OrchestrationObligationReviewState::Resolved;
+        self.attention_required = false;
+        self.resolution_note = resolution_note;
+        self.resolved_at = Some(resolved_at);
+        self.updated_at = resolved_at;
+    }
 }
 
 #[cfg(test)]
@@ -581,6 +595,36 @@ mod tests {
         assert_eq!(
             obligation.resolution_note.as_deref(),
             Some("denied by host")
+        );
+        assert_eq!(obligation.resolved_at, Some(resolved_at));
+        assert_eq!(obligation.updated_at, resolved_at);
+    }
+
+    #[test]
+    fn clarification_response_closeout_marks_follow_up_obligation_resolved() {
+        let resolved_at = Utc::now();
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::FollowUpRequired,
+            "Need host follow-up",
+        );
+        obligation.attention_required = true;
+
+        obligation.mark_clarification_response_closed(
+            Some("clarification delivered by host".to_string()),
+            resolved_at,
+        );
+
+        assert_eq!(obligation.state, OrchestrationObligationState::Resolved);
+        assert_eq!(
+            obligation.review_state,
+            OrchestrationObligationReviewState::Resolved
+        );
+        assert!(!obligation.attention_required);
+        assert_eq!(
+            obligation.resolution_note.as_deref(),
+            Some("clarification delivered by host")
         );
         assert_eq!(obligation.resolved_at, Some(resolved_at));
         assert_eq!(obligation.updated_at, resolved_at);
