@@ -4,6 +4,7 @@ use std::io::{BufRead, BufReader};
 use agent_drift_analyzer::Checkpoint;
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::input::CheckpointCursor;
 use crate::operator_surface::warning_fingerprint;
@@ -120,6 +121,16 @@ pub enum LiveInputError {
         line_number: usize,
         #[source]
         source: serde_json::Error,
+    },
+    #[error(
+        "live checkpoint fixture {path} at line {line_number} violates analyzer checkpoint {schema_version} contract: missing {field} ({reason})"
+    )]
+    FixtureContractGap {
+        path: Utf8PathBuf,
+        line_number: usize,
+        schema_version: String,
+        field: String,
+        reason: String,
     },
     #[error("live checkpoint fixture {path} does not contain any events")]
     EmptyFixture { path: Utf8PathBuf },
@@ -244,8 +255,15 @@ pub fn load_live_fixture(path: &Utf8Path) -> Result<Vec<LiveCheckpointEvent>, Li
         if line.trim().is_empty() {
             continue;
         }
-        let record: LiveCheckpointFixtureRecord =
+        let value: Value =
             serde_json::from_str(&line).map_err(|source| LiveInputError::ParseFixtureLine {
+                path: path.to_owned(),
+                line_number,
+                source,
+            })?;
+        validate_live_fixture_contract(path, line_number, &value)?;
+        let record: LiveCheckpointFixtureRecord =
+            serde_json::from_value(value).map_err(|source| LiveInputError::ParseFixtureLine {
                 path: path.to_owned(),
                 line_number,
                 source,
@@ -393,6 +411,43 @@ pub fn verify_live_checkpoint_compatibility(
             .max(),
         flagged: checkpoint.flagged,
     })
+}
+
+fn validate_live_fixture_contract(
+    path: &Utf8Path,
+    line_number: usize,
+    record: &Value,
+) -> Result<(), LiveInputError> {
+    if record.get("event_type").and_then(Value::as_str) != Some("checkpoint_ready") {
+        return Ok(());
+    }
+
+    let Some(checkpoint) = record.get("checkpoint") else {
+        return Ok(());
+    };
+    if checkpoint.get("schema_version").and_then(Value::as_str) != Some("v0.3") {
+        return Ok(());
+    }
+
+    let Some(drift_scores) = checkpoint.get("drift_scores").and_then(Value::as_array) else {
+        return Ok(());
+    };
+
+    for (index, score) in drift_scores.iter().enumerate() {
+        if score.get("state").is_none() {
+            return Err(LiveInputError::FixtureContractGap {
+                path: path.to_owned(),
+                line_number,
+                schema_version: "v0.3".to_string(),
+                field: format!("checkpoint.drift_scores[{index}].state"),
+                reason:
+                    "v0.3 checkpoints must serialize explicit drift state for every drift score"
+                        .to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 fn compatibility_gap(

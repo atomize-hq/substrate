@@ -2,13 +2,18 @@
 
 mod support;
 
+use std::fs;
+
 use agent_drift_analyzer::{DriftClass, EvidenceRef};
 use agent_drift_sentinel::{
+    load_live_fixture,
     operator_surface::{present_checkpoint, present_checkpoint_with_previous, CheckpointPosture},
     scheduler::ReplayScheduler,
     verify_live_checkpoint_compatibility, DecisionReason, LiveInputError, SchedulerPolicy,
     TriggerClass, WarningDisposition, WarningPolicy,
 };
+use camino::Utf8Path;
+use tempfile::TempDir;
 
 fn schema_checkpoint(
     schema_version: &str,
@@ -81,6 +86,95 @@ fn live_checkpoint_compatibility_retains_v0_2_support() {
     assert_eq!(compatibility.cursor.ordinal, 1);
     assert_eq!(compatibility.max_flagged_score, Some(88));
     assert!(compatibility.flagged);
+}
+
+#[test]
+fn live_checkpoint_compatibility_loads_v0_2_fixture_without_state() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let checkpoint = schema_checkpoint(
+        "v0.2",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    let mut checkpoint_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    checkpoint_json["drift_scores"][0]
+        .as_object_mut()
+        .expect("drift score object")
+        .remove("state");
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint_json,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let events = load_live_fixture(&fixture_path).expect("load legacy live fixture");
+
+    assert_eq!(events.len(), 1);
+    let loaded_checkpoint = events[0]
+        .checkpoint
+        .as_ref()
+        .expect("checkpoint-ready payload");
+    assert_eq!(loaded_checkpoint.schema_version, "v0.2");
+    assert_eq!(loaded_checkpoint.checkpoint_id, "session-alpha:0001");
+}
+
+#[test]
+fn live_checkpoint_compatibility_rejects_v0_3_fixture_missing_state() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let checkpoint = schema_checkpoint(
+        "v0.3",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    let mut checkpoint_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    checkpoint_json["drift_scores"][0]
+        .as_object_mut()
+        .expect("drift score object")
+        .remove("state");
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint_json,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let error =
+        load_live_fixture(&fixture_path).expect_err("v0.3 fixtures missing state must fail");
+
+    assert!(matches!(
+        error,
+        LiveInputError::FixtureContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.3" && field == "checkpoint.drift_scores[0].state"
+    ));
+    assert!(error
+        .to_string()
+        .contains("missing checkpoint.drift_scores[0].state"));
 }
 
 #[test]

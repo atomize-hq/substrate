@@ -4,7 +4,7 @@ mod support;
 
 use std::fs;
 
-use agent_drift_sentinel::input::load_replay_bundle;
+use agent_drift_sentinel::input::{load_replay_bundle, InputError};
 use camino::Utf8Path;
 use support::{checkpoint, ReplayFixture};
 use tempfile::TempDir;
@@ -69,6 +69,43 @@ fn replay_input_retains_v0_2_compatibility() {
     assert_eq!(bundle.schema_version, "v0.2");
     assert_eq!(bundle.checkpoints.len(), 1);
     assert_eq!(bundle.checkpoints[0].checkpoint_id, "session-alpha:0001");
+}
+
+#[test]
+fn replay_input_rejects_v0_3_checkpoints_missing_state() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let checkpoint_dir = root.join("checkpoint");
+    fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+
+    let checkpoint = schema_checkpoint("v0.3", "session-alpha", 1, 85, true, "repair");
+    let mut malformed_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    malformed_json["drift_scores"][0]
+        .as_object_mut()
+        .expect("drift score object")
+        .remove("state");
+    let malformed_line =
+        serde_json::to_string(&malformed_json).expect("serialize malformed checkpoint");
+    fs::write(
+        checkpoint_dir.join("checkpoints.jsonl"),
+        format!("{malformed_line}\n"),
+    )
+    .expect("write checkpoints");
+    fs::write(checkpoint_dir.join("summary.md"), support::sample_summary()).expect("write summary");
+
+    let error = load_replay_bundle(&checkpoint_dir)
+        .expect_err("v0.3 checkpoints missing state must fail closed");
+
+    assert!(matches!(
+        error,
+        InputError::ContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.3" && field == "drift_scores[0].state"
+    ));
+    assert!(error.to_string().contains("missing drift_scores[0].state"));
 }
 
 #[test]

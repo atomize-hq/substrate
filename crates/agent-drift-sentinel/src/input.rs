@@ -3,8 +3,8 @@ use std::io::{BufRead, BufReader};
 
 use agent_drift_analyzer::Checkpoint;
 use camino::{Utf8Path, Utf8PathBuf};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3"];
 const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2 or v0.3";
@@ -85,6 +85,16 @@ pub enum InputError {
         #[source]
         source: serde_json::Error,
     },
+    #[error(
+        "analyzer checkpoint artifact {path} at line {line_number} violates the {schema_version} contract: missing {field} ({reason})"
+    )]
+    ContractGap {
+        path: Utf8PathBuf,
+        line_number: usize,
+        schema_version: String,
+        field: String,
+        reason: String,
+    },
     #[error("checkpoint bundle {checkpoint_dir} does not contain any checkpoints")]
     EmptyBundle { checkpoint_dir: Utf8PathBuf },
     #[error("checkpoint bundle {checkpoint_dir} mixes schema versions: {versions:?}")]
@@ -107,7 +117,7 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
     let summary_path = checkpoint_dir.join("summary.md");
 
     let summary_markdown = read_text_file(&summary_path)?;
-    let mut checkpoints: Vec<Checkpoint> = read_jsonl_file(&checkpoints_path)?;
+    let mut checkpoints = read_checkpoint_jsonl_file(&checkpoints_path)?;
     if checkpoints.is_empty() {
         return Err(InputError::EmptyBundle {
             checkpoint_dir: checkpoint_dir.to_owned(),
@@ -165,10 +175,7 @@ fn read_text_file(path: &Utf8Path) -> Result<String, InputError> {
     })
 }
 
-fn read_jsonl_file<T>(path: &Utf8Path) -> Result<Vec<T>, InputError>
-where
-    T: DeserializeOwned,
-{
+fn read_checkpoint_jsonl_file(path: &Utf8Path) -> Result<Vec<Checkpoint>, InputError> {
     if !path.exists() {
         return Err(InputError::MissingArtifact {
             path: path.to_owned(),
@@ -180,7 +187,7 @@ where
         source,
     })?;
     let reader = BufReader::new(file);
-    let mut items = Vec::new();
+    let mut checkpoints = Vec::new();
 
     for (index, line) in reader.lines().enumerate() {
         let line_number = index + 1;
@@ -191,13 +198,53 @@ where
         if line.trim().is_empty() {
             continue;
         }
-        let item = serde_json::from_str(&line).map_err(|source| InputError::ParseArtifactLine {
-            path: path.to_owned(),
-            line_number,
-            source,
-        })?;
-        items.push(item);
+
+        let value: Value =
+            serde_json::from_str(&line).map_err(|source| InputError::ParseArtifactLine {
+                path: path.to_owned(),
+                line_number,
+                source,
+            })?;
+        validate_checkpoint_contract(path, line_number, &value)?;
+
+        let checkpoint =
+            serde_json::from_value(value).map_err(|source| InputError::ParseArtifactLine {
+                path: path.to_owned(),
+                line_number,
+                source,
+            })?;
+        checkpoints.push(checkpoint);
     }
 
-    Ok(items)
+    Ok(checkpoints)
+}
+
+fn validate_checkpoint_contract(
+    path: &Utf8Path,
+    line_number: usize,
+    checkpoint: &Value,
+) -> Result<(), InputError> {
+    if checkpoint.get("schema_version").and_then(Value::as_str) != Some("v0.3") {
+        return Ok(());
+    }
+
+    let Some(drift_scores) = checkpoint.get("drift_scores").and_then(Value::as_array) else {
+        return Ok(());
+    };
+
+    for (index, score) in drift_scores.iter().enumerate() {
+        if score.get("state").is_none() {
+            return Err(InputError::ContractGap {
+                path: path.to_owned(),
+                line_number,
+                schema_version: "v0.3".to_string(),
+                field: format!("drift_scores[{index}].state"),
+                reason:
+                    "v0.3 checkpoints must serialize explicit drift state for every drift score"
+                        .to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
