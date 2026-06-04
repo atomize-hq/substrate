@@ -331,6 +331,7 @@ pub struct WorldDispatchPolicy {
     pub approval_requests_allowed: bool,
     pub approval_responses_allowed: bool,
     pub clarification_responses_allowed: bool,
+    pub control_directives_allowed: bool,
     pub follow_up_allowed: bool,
     pub blocked_allowed: bool,
 }
@@ -406,6 +407,7 @@ struct AgentsWorldDispatchPolicyFileV1 {
     max_live_retained_workers: u32,
     max_concurrent_ephemeral: u32,
     fork: AgentsWorldDispatchForkPolicyFileV1,
+    control: AgentsWorldDispatchControlPolicyFileV1,
     obligations: AgentsWorldDispatchObligationsPolicyFileV1,
 }
 
@@ -414,6 +416,12 @@ struct AgentsWorldDispatchPolicyFileV1 {
 struct AgentsWorldDispatchForkPolicyFileV1 {
     requests_allowed: bool,
     recommendations_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsWorldDispatchControlPolicyFileV1 {
+    control_directives_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -525,6 +533,7 @@ struct RawAgentsWorldDispatchPolicyV1 {
     max_live_retained_workers: u32,
     max_concurrent_ephemeral: u32,
     fork: RawAgentsWorldDispatchForkPolicyV1,
+    control: RawAgentsWorldDispatchControlPolicyV1,
     obligations: RawAgentsWorldDispatchObligationsPolicyV1,
 }
 
@@ -533,6 +542,12 @@ struct RawAgentsWorldDispatchPolicyV1 {
 struct RawAgentsWorldDispatchForkPolicyV1 {
     requests_allowed: bool,
     recommendations_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsWorldDispatchControlPolicyV1 {
+    control_directives_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -558,6 +573,7 @@ impl Default for RawAgentsWorldDispatchPolicyV1 {
             max_live_retained_workers: 0,
             max_concurrent_ephemeral: 0,
             fork: RawAgentsWorldDispatchForkPolicyV1::default(),
+            control: RawAgentsWorldDispatchControlPolicyV1::default(),
             obligations: RawAgentsWorldDispatchObligationsPolicyV1::default(),
         }
     }
@@ -628,6 +644,7 @@ pub struct Policy {
     pub agents_world_dispatch_obligations_approval_allowed: bool, // agents.world_dispatch.obligations.approval_allowed
     pub agents_world_dispatch_obligations_approval_response_allowed: bool, // agents.world_dispatch.obligations.approval_response_allowed
     pub agents_world_dispatch_obligations_clarification_response_allowed: bool, // agents.world_dispatch.obligations.clarification_response_allowed
+    pub agents_world_dispatch_control_directives_allowed: bool, // agents.world_dispatch.control.control_directives_allowed
     pub agents_world_dispatch_obligations_follow_up_allowed: bool, // agents.world_dispatch.obligations.follow_up_allowed
     pub agents_world_dispatch_obligations_blocked_allowed: bool, // agents.world_dispatch.obligations.blocked_allowed
 
@@ -701,6 +718,7 @@ impl Default for Policy {
             agents_world_dispatch_obligations_approval_allowed: false,
             agents_world_dispatch_obligations_approval_response_allowed: false,
             agents_world_dispatch_obligations_clarification_response_allowed: false,
+            agents_world_dispatch_control_directives_allowed: false,
             agents_world_dispatch_obligations_follow_up_allowed: false,
             agents_world_dispatch_obligations_blocked_allowed: false,
             workflow_router_enabled: false,
@@ -906,6 +924,7 @@ impl Policy {
                 .agents_world_dispatch_obligations_approval_response_allowed,
             clarification_responses_allowed: self
                 .agents_world_dispatch_obligations_clarification_response_allowed,
+            control_directives_allowed: self.agents_world_dispatch_control_directives_allowed,
             follow_up_allowed: self.agents_world_dispatch_obligations_follow_up_allowed,
             blocked_allowed: self.agents_world_dispatch_obligations_blocked_allowed,
         }
@@ -929,6 +948,10 @@ impl Policy {
 
     pub fn world_dispatch_clarification_responses_allowed(&self) -> bool {
         self.agents_world_dispatch_obligations_clarification_response_allowed
+    }
+
+    pub fn world_dispatch_control_directives_allowed(&self) -> bool {
+        self.agents_world_dispatch_control_directives_allowed
     }
 
     pub fn world_dispatch_follow_up_allowed(&self) -> bool {
@@ -1091,6 +1114,9 @@ impl Policy {
         self.agents_world_dispatch_obligations_clarification_response_allowed = self
             .agents_world_dispatch_obligations_clarification_response_allowed
             && other.agents_world_dispatch_obligations_clarification_response_allowed;
+        self.agents_world_dispatch_control_directives_allowed = self
+            .agents_world_dispatch_control_directives_allowed
+            && other.agents_world_dispatch_control_directives_allowed;
         self.agents_world_dispatch_obligations_follow_up_allowed = self
             .agents_world_dispatch_obligations_follow_up_allowed
             && other.agents_world_dispatch_obligations_follow_up_allowed;
@@ -1293,6 +1319,11 @@ impl<'de> Deserialize<'de> for Policy {
                 .world_dispatch
                 .obligations
                 .clarification_response_allowed,
+            agents_world_dispatch_control_directives_allowed: raw
+                .agents
+                .world_dispatch
+                .control
+                .control_directives_allowed,
             agents_world_dispatch_obligations_follow_up_allowed: raw
                 .agents
                 .world_dispatch
@@ -1444,6 +1475,10 @@ impl Serialize for Policy {
                         requests_allowed: self.agents_world_dispatch_fork_requests_allowed,
                         recommendations_allowed: self
                             .agents_world_dispatch_fork_recommendations_allowed,
+                    },
+                    control: AgentsWorldDispatchControlPolicyFileV1 {
+                        control_directives_allowed: self
+                            .agents_world_dispatch_control_directives_allowed,
                     },
                     obligations: AgentsWorldDispatchObligationsPolicyFileV1 {
                         approval_allowed: self.agents_world_dispatch_obligations_approval_allowed,

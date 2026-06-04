@@ -146,6 +146,10 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
                     "requests_allowed": policy.agents_world_dispatch_fork_requests_allowed,
                     "recommendations_allowed": policy.agents_world_dispatch_fork_recommendations_allowed,
                 },
+                "control": {
+                    "control_directives_allowed": policy
+                        .agents_world_dispatch_control_directives_allowed,
+                },
                 "obligations": {
                     "approval_allowed": policy.agents_world_dispatch_obligations_approval_allowed,
                     "approval_response_allowed": policy
@@ -1703,6 +1707,13 @@ workflow:
                 || clarification_response_allowed == Some(false),
             "unexpected agents.world_dispatch.obligations.clarification_response_allowed in policy JSON: {json}"
         );
+        let control_directives_allowed = json
+            .pointer("/agents/world_dispatch/control/control_directives_allowed")
+            .and_then(serde_json::Value::as_bool);
+        assert!(
+            control_directives_allowed.is_none() || control_directives_allowed == Some(false),
+            "unexpected agents.world_dispatch.control.control_directives_allowed in policy JSON: {json}"
+        );
         assert_eq!(
             json.pointer("/agents/world_dispatch/obligations/follow_up_allowed")
                 .and_then(serde_json::Value::as_bool),
@@ -1801,6 +1812,28 @@ workflow:
             clarification_response_allowed.is_none()
                 || clarification_response_allowed == Some(false),
             "unexpected agents.world_dispatch.obligations.clarification_response_allowed in policy YAML: {yaml:?}"
+        );
+        let control_directives_allowed = agents
+            .and_then(|agents| {
+                agents
+                    .get(serde_yaml::Value::String("world_dispatch".to_string()))
+                    .and_then(|value| value.as_mapping())
+            })
+            .and_then(|world_dispatch| {
+                world_dispatch
+                    .get(serde_yaml::Value::String("control".to_string()))
+                    .and_then(|value| value.as_mapping())
+            })
+            .and_then(|control| {
+                control
+                    .get(serde_yaml::Value::String(
+                        "control_directives_allowed".to_string(),
+                    ))
+                    .and_then(|value| value.as_bool())
+            });
+        assert!(
+            control_directives_allowed.is_none() || control_directives_allowed == Some(false),
+            "unexpected agents.world_dispatch.control.control_directives_allowed in policy YAML: {yaml:?}"
         );
         assert_eq!(
             agents
@@ -1910,14 +1943,30 @@ metadata:
     #[test]
     #[serial]
     fn c0_effective_policy_is_identical_across_broker_and_cli_show_and_explain() {
-        fn strip_clarification_response_allowed(value: &mut serde_json::Value) {
-            if let Some(obligations) = value
+        fn strip_hidden_control_plane_keys(value: &mut serde_json::Value) {
+            if let Some(world_dispatch) = value
                 .get_mut("agents")
                 .and_then(|agents| agents.get_mut("world_dispatch"))
-                .and_then(|world_dispatch| world_dispatch.get_mut("obligations"))
                 .and_then(serde_json::Value::as_object_mut)
             {
-                obligations.remove("clarification_response_allowed");
+                if let Some(control) = world_dispatch
+                    .get_mut("control")
+                    .and_then(serde_json::Value::as_object_mut)
+                {
+                    control.remove("control_directives_allowed");
+                    if control.is_empty() {
+                        world_dispatch.remove("control");
+                    }
+                }
+                if let Some(obligations) = world_dispatch
+                    .get_mut("obligations")
+                    .and_then(serde_json::Value::as_object_mut)
+                {
+                    obligations.remove("clarification_response_allowed");
+                    if obligations.is_empty() {
+                        world_dispatch.remove("obligations");
+                    }
+                }
             }
         }
 
@@ -1977,11 +2026,18 @@ metadata:
             Some(false),
             "broker effective policy should expose clarification_response_allowed"
         );
+        assert_eq!(
+            broker_json
+                .pointer("/agents/world_dispatch/control/control_directives_allowed")
+                .and_then(serde_json::Value::as_bool),
+            Some(false),
+            "broker effective policy should expose control.control_directives_allowed"
+        );
 
         let mut broker_json_sanitized = broker_json.clone();
         let mut cli_show_json_sanitized = cli_show_json.clone();
-        strip_clarification_response_allowed(&mut broker_json_sanitized);
-        strip_clarification_response_allowed(&mut cli_show_json_sanitized);
+        strip_hidden_control_plane_keys(&mut broker_json_sanitized);
+        strip_hidden_control_plane_keys(&mut cli_show_json_sanitized);
         assert_eq!(
             cli_show_json_sanitized, broker_json_sanitized,
             "effective policy must match across broker and CLI"

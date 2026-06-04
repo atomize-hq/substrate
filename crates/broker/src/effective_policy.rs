@@ -227,6 +227,8 @@ pub struct AgentsWorldDispatchPatch {
     pub max_concurrent_ephemeral: Option<u32>,
     #[serde(skip_serializing_if = "AgentsWorldDispatchForkPatch::is_empty")]
     pub fork: AgentsWorldDispatchForkPatch,
+    #[serde(skip_serializing_if = "AgentsWorldDispatchControlPatch::is_empty")]
+    pub control: AgentsWorldDispatchControlPatch,
     #[serde(skip_serializing_if = "AgentsWorldDispatchObligationsPatch::is_empty")]
     pub obligations: AgentsWorldDispatchObligationsPatch,
 }
@@ -243,6 +245,7 @@ impl AgentsWorldDispatchPatch {
             && self.max_live_retained_workers.is_none()
             && self.max_concurrent_ephemeral.is_none()
             && self.fork.is_empty()
+            && self.control.is_empty()
             && self.obligations.is_empty()
     }
 }
@@ -259,6 +262,19 @@ pub struct AgentsWorldDispatchForkPatch {
 impl AgentsWorldDispatchForkPatch {
     fn is_empty(&self) -> bool {
         self.requests_allowed.is_none() && self.recommendations_allowed.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentsWorldDispatchControlPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_directives_allowed: Option<bool>,
+}
+
+impl AgentsWorldDispatchControlPatch {
+    fn is_empty(&self) -> bool {
+        self.control_directives_allowed.is_none()
     }
 }
 
@@ -1661,6 +1677,35 @@ pub fn resolve_effective_policy_with_explain(
     }
 
     let (
+        agents_world_dispatch_control_directives_allowed,
+        agents_world_dispatch_control_directives_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_control_directives_allowed,
+        global_patch
+            .agents
+            .world_dispatch
+            .control
+            .control_directives_allowed,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.control.control_directives_allowed),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_control_directives_allowed =
+        agents_world_dispatch_control_directives_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.control.control_directives_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_control_directives_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
         agents_world_dispatch_obligations_follow_up_allowed,
         agents_world_dispatch_obligations_follow_up_allowed_src,
     ) = resolve_replace(
@@ -2182,6 +2227,14 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
         .clarification_response_allowed
     {
         target.agents_world_dispatch_obligations_clarification_response_allowed = v;
+    }
+    if let Some(v) = patch
+        .agents
+        .world_dispatch
+        .control
+        .control_directives_allowed
+    {
+        target.agents_world_dispatch_control_directives_allowed = v;
     }
     if let Some(v) = patch.agents.world_dispatch.obligations.follow_up_allowed {
         target.agents_world_dispatch_obligations_follow_up_allowed = v;

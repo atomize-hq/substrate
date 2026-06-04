@@ -253,6 +253,28 @@ pub(crate) struct WorkerContinueClarificationResponsePayloadV1 {
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub(crate) enum ControlDirectiveKindV1 {
+    Pause,
+    ReduceScope,
+    Summarize,
+    Checkpoint,
+    PrepareHandoff,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkerContinueControlDirectivePayloadV1 {
+    pub directive_kind: ControlDirectiveKindV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum ApprovalResponseDecisionV1 {
     Approve,
     Deny,
@@ -296,6 +318,7 @@ pub(crate) enum WorldDispatchPayloadV1 {
     WorkerContinue(WorkerContinuePayloadV1),
     WorkerContinueApprovalResponse(WorkerContinueApprovalResponsePayloadV1),
     WorkerContinueClarificationResponse(WorkerContinueClarificationResponsePayloadV1),
+    WorkerContinueControlDirective(WorkerContinueControlDirectivePayloadV1),
     WorkerInspect(WorkerInspectPayloadV1),
     WorkerCancel(WorkerCancelPayloadV1),
     WorkerStop(WorkerStopPayloadV1),
@@ -439,6 +462,10 @@ fn validate_world_dispatch_payload(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchPayloadV1::WorkerContinueClarificationResponse(response),
         ) => validate_clarification_response_continue_payload(action, response),
+        (
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchPayloadV1::WorkerContinueControlDirective(directive),
+        ) => validate_control_directive_continue_payload(action, directive),
         (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchPayloadV1::WorkerInspect(_)) => {
             Ok(())
         }
@@ -484,6 +511,15 @@ fn validate_clarification_response_continue_payload(
         );
     }
     validate_optional_world_dispatch_string(action, "thread_id", &response.thread_id)?;
+    Ok(())
+}
+
+fn validate_control_directive_continue_payload(
+    action: WorldDispatchActionV1,
+    directive: &WorkerContinueControlDirectivePayloadV1,
+) -> anyhow::Result<()> {
+    validate_optional_world_dispatch_string(action, "detail_text", &directive.detail_text)?;
+    validate_optional_world_dispatch_string(action, "thread_id", &directive.thread_id)?;
     Ok(())
 }
 
@@ -1691,17 +1727,17 @@ mod tests {
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
         AgentRuntimeBackendKind, ApprovalResponseDecisionV1, AttachLaunchKnobs,
         AttachModePreference, CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1,
-        ContinueWorldWorkerEventClassV1, DispatchBaselineKind, DispatchCallerKind,
-        DispatchCapabilityOverrideSet, DispatchRejectingLayer, DispatchRequestEnvelope,
-        DispatchResolutionErrorKind, FieldBaselineOrigin, FieldValueOrigin,
-        ForkWorldWorkerOutcomeV1, HostExecutionClientStart, InspectWorldWorkerOutcomeV1,
-        RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
-        RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1, TaskPayloadV1,
-        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
-        WorkerContinueClarificationResponsePayloadV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
-        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
-        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
+        ContinueWorldWorkerEventClassV1, ControlDirectiveKindV1, DispatchBaselineKind,
+        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
+        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
+        FieldValueOrigin, ForkWorldWorkerOutcomeV1, HostExecutionClientStart,
+        InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
+        TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
+        WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
+        WorkerContinuePayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
+        WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
+        WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -3465,31 +3501,86 @@ mod tests {
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_deferred_host_response_payload_kinds_during_deserialization()
-    {
-        let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
-            "request_id": "req-40",
-            "idempotency_key": "idem-40",
-            "orchestration_session_id": "sess-40",
-            "caller_participant_id": "orch-40",
-            "action": "continue_world_worker",
-            "mode": "retained",
-            "target_backend_id": "cli:codex_world",
-            "target_participant_id": "ash-worker-40",
-            "world_id": "world-40",
-            "world_generation": 10,
-            "payload": {
-                "payload_kind": "worker_continue_control_directive"
-            }
-        }))
-        .expect_err("deferred host response classes must stay out of packet 1");
+    fn world_dispatch_contract_accepts_continue_world_worker_typed_control_directive_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueControlDirective(
+                WorkerContinueControlDirectivePayloadV1 {
+                    directive_kind: ControlDirectiveKindV1::Pause,
+                    detail_text: None,
+                    thread_id: Some("thread-control".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-43")
+        .validate()
+        .expect("typed control directive should validate");
 
-        assert!(
-            error
-                .to_string()
-                .contains("unknown variant `worker_continue_control_directive`"),
-            "unexpected deferred host response serde error: {error}"
+        let WorldDispatchPayloadV1::WorkerContinueControlDirective(payload) = validated.payload
+        else {
+            panic!("validated payload should remain typed control directive payload");
+        };
+        assert_eq!(payload.directive_kind, ControlDirectiveKindV1::Pause);
+        assert_eq!(payload.detail_text, None);
+        assert_eq!(payload.thread_id.as_deref(), Some("thread-control"));
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_blank_control_directive_detail_text() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueControlDirective(
+                WorkerContinueControlDirectivePayloadV1 {
+                    directive_kind: ControlDirectiveKindV1::ReduceScope,
+                    detail_text: Some(" ".to_string()),
+                    thread_id: None,
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-43")
+        .validate()
+        .expect_err("typed control directives must reject blank detail text when provided");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty detail_text when provided"
         );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_still_deferred_host_response_payload_kinds_during_deserialization(
+    ) {
+        for payload_kind in [
+            "worker_continue_progress_ack",
+            "worker_continue_control_ack",
+            "worker_continue_fork_command",
+        ] {
+            let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
+                "request_id": "req-43",
+                "idempotency_key": "idem-43",
+                "orchestration_session_id": "sess-43",
+                "caller_participant_id": "orch-43",
+                "action": "continue_world_worker",
+                "mode": "retained",
+                "target_backend_id": "cli:codex_world",
+                "target_participant_id": "ash-worker-43",
+                "world_id": "world-43",
+                "world_generation": 11,
+                "payload": {
+                    "payload_kind": payload_kind
+                }
+            }))
+            .expect_err("deferred host response classes must stay out of packet 1");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("unknown variant `{payload_kind}`")),
+                "unexpected deferred host response serde error for {payload_kind}: {error}"
+            );
+        }
     }
 
     #[test]

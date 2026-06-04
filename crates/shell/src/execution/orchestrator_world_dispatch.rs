@@ -650,6 +650,7 @@ async fn continue_world_worker(
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
     enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
+    ensure_packet_one_control_directive_routing_remains_deferred(&prepared)?;
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
     let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
     let clarification_closeout = prepare_continue_world_worker_clarification_closeout(&prepared)?;
@@ -686,6 +687,22 @@ async fn continue_world_worker(
             summary,
         },
     ))
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_packet_one_control_directive_routing_remains_deferred(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<()> {
+    if matches!(
+        prepared.request.payload,
+        WorldDispatchPayloadV1::WorkerContinueControlDirective(_)
+    ) {
+        anyhow::bail!(
+            "unsupported_dispatch_action: continue_world_worker control_directive delivery is not available in packet 1"
+        );
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -841,6 +858,15 @@ fn enforce_continue_world_worker_payload_policy(
                 return Err(steering_policy_denial(
                     WorldDispatchSteeringDenialV1::ActionNotAllowed,
                     "effective policy does not allow continue_world_worker clarification_response payloads",
+                ));
+            }
+            Ok(())
+        }
+        WorldDispatchPayloadV1::WorkerContinueControlDirective(_) => {
+            if !base_policy.world_dispatch_control_directives_allowed() {
+                return Err(steering_policy_denial(
+                    WorldDispatchSteeringDenialV1::ActionNotAllowed,
+                    "effective policy does not allow continue_world_worker control_directive payloads",
                 ));
             }
             Ok(())
@@ -2895,9 +2921,9 @@ mod tests {
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::dispatch_contract::{
-        ApprovalResponseDecisionV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
-        WorkerContinueClarificationResponsePayloadV1, WorkerContinuePayloadV1,
-        WorkerInspectPayloadV1,
+        ApprovalResponseDecisionV1, ControlDirectiveKindV1, WorkerCancelPayloadV1,
+        WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
+        WorkerContinueControlDirectivePayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
@@ -3202,6 +3228,41 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn write_world_dispatch_policy_with_control_directives(
+        substrate_home: &Path,
+        enabled: bool,
+        allowed_backends: &[&str],
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        let enabled = if enabled { "true" } else { "false" };
+        let backends = allowed_backends
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let agent_backends = allowed_backends
+            .iter()
+            .map(|value| format!("    - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let actions = allowed_actions
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let modes = allowed_modes
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let policy = format!(
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n    control:\n      control_directives_allowed: true\n"
+        );
+        fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_continue_world_dispatch_request() -> WorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_continue".to_string()),
@@ -3270,6 +3331,29 @@ mod tests {
                     clarification_text: "Use the latest local branch state when continuing."
                         .to_string(),
                     thread_id: Some("thread-follow-up-42".to_string()),
+                },
+            ),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_continue_control_directive_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_continue_control_directive".to_string()),
+            idempotency_key: Some("idem_continue_control_directive".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerContinueControlDirective(
+                WorkerContinueControlDirectivePayloadV1 {
+                    directive_kind: ControlDirectiveKindV1::PrepareHandoff,
+                    detail_text: Some("Prepare a short handoff note before stopping.".to_string()),
+                    thread_id: Some("thread-control-43".to_string()),
                 },
             ),
         }
@@ -6370,6 +6454,92 @@ agents:
                 "world_binding_mismatch: orchestration session sess_dispatch retained worker"
             ),
             "payload gate must not leak retained-worker topology drift first: {message}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_control_directive_denies_by_default_before_target_resolution(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_control_directive_world_dispatch_request(),
+        )
+        .await
+        .expect_err("control-directive payloads must fail closed by default");
+        let message = err.to_string();
+
+        assert_eq!(
+            message,
+            "action_not_allowed: effective policy does not allow continue_world_worker control_directive payloads"
+        );
+        assert!(
+            !message.contains("stale_linkage:"),
+            "payload gate must not leak retained-worker lifecycle truth first: {message}"
+        );
+        assert!(
+            !message.contains(
+                "world_binding_mismatch: orchestration session sess_dispatch retained worker"
+            ),
+            "payload gate must not leak retained-worker topology drift first: {message}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_control_directive_routes_to_packet_one_unsupported_stub_after_policy_allows_payload(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_control_directives(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_control_directive_world_dispatch_request(),
+        )
+        .await
+        .expect_err("packet 1 should not route live control-directive delivery");
+        let message = err.to_string();
+
+        assert_eq!(
+            message,
+            "unsupported_dispatch_action: continue_world_worker control_directive delivery is not available in packet 1"
+        );
+        assert!(
+            !message.contains("stale_linkage:"),
+            "packet 1 unsupported stub must preempt retained-worker lifecycle truth: {message}"
+        );
+        assert!(
+            !message.contains(
+                "world_binding_mismatch: orchestration session sess_dispatch retained worker"
+            ),
+            "packet 1 unsupported stub must preempt retained-worker topology drift: {message}"
         );
     }
 
