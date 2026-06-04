@@ -14,20 +14,22 @@ Related design stack:
 - [DESIGN-durable-orchestration-obligation-ledger.md](./DESIGN-durable-orchestration-obligation-ledger.md)
 - [DESIGN-auto-attach-trigger-and-work-queue-contract.md](./DESIGN-auto-attach-trigger-and-work-queue-contract.md)  
 Phase: `SPECIFY`  
-Status: draft for review on `2026-06-03`
+Status: implemented on `2026-06-03`
+Landed posture note: retained-worker `follow_up_question` and `blocked` now have dedicated deny-by-default policy gates, exact durable `FollowUpRequired`/`Blocked` persistence on the existing `continue_world_worker` seam, and stable compatibility projection/attach semantics, but host `clarification_response`, broader control classes, active-ephemeral exact task identity, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and no broader host-response/control, active-ephemeral identity, transport redesign, or Family-2 work was reopened.
 
 ## Assumptions
 
 ASSUMPTIONS I'M MAKING:
 
 1. Slice `40` is landed on the current tree, so typed host `approval_response` is already the only post-Slice-39 host-to-worker widening that has gone live.
-2. The next honest gap is producer-side, not another host-response slice: retained-worker `follow_up_question` and `blocked` events are already classified and attention-driving, but they are not yet persisted as durable obligations from the live `continue_world_worker` path.
+2. The next honest gap is producer-side, not another host-response slice: retained-worker `follow_up_question` and `blocked` events are already classified and attention-driving, and this slice closes their durable-obligation gap on the live `continue_world_worker` path.
 3. This slice stays internal-only and orchestrator-facing. It does not widen public `substrate agent ...` surfaces, toolbox behavior, or human direct-to-world messaging.
 4. The canonical local obligation ledger remains the source of truth for this slice:
    - `OrchestrationObligationKind::FollowUpRequired` and `OrchestrationObligationKind::Blocked` already exist,
    - local attach-state naming remains the current landed runtime surface,
    - this slice must reuse those kinds rather than inventing a second pending-work shape.
-5. The missing deny-by-default policy dimensions should follow the existing design matrix and land as dedicated keys for `agents.world_dispatch.obligations.follow_up_allowed` and `agents.world_dispatch.obligations.blocked_allowed`.
+5. The deny-by-default policy dimensions for this slice follow the existing design matrix and land as dedicated keys at `agents.world_dispatch.obligations.follow_up_allowed` and `agents.world_dispatch.obligations.blocked_allowed`.
 6. `clarification_response`, `progress_ack`, `control_directive`, `control_ack`, `fork_command`, active-ephemeral inspect/cancel widening, and Family-2 router/daemon execution remain later work and must stay out of scope here.
 
 If any of these are wrong, correct them before implementation.
@@ -38,12 +40,12 @@ The current repo already provides most of the floor this slice needs:
 
 1. retained-worker `follow_up_question` and `blocked` are already accepted typed event classes in [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs), and both are attention-driving by default,
 2. the live `continue_world_worker` event classifier already preserves those event labels and typed payloads in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs),
-3. the current policy surface only gates `approval_request`, `approval_response`, `fork_request`, and `fork_recommendation`, so `follow_up_question` and `blocked` still lack their own deny-by-default worker-event permission keys,
-4. the current `continue_world_worker` obligation projection only persists `ApprovalRequired`, `ForkRequest`, and `ForkRecommendation`, so accepted `follow_up_question` and `blocked` events still stop short of durable local obligation truth,
+3. the live policy surface now gates `approval_request`, `approval_response`, `follow_up_question`, `blocked`, `fork_request`, and `fork_recommendation`, so the retained-worker producer classes in this slice are deny-by-default behind dedicated permission keys,
+4. the live `continue_world_worker` obligation projection now persists `ApprovalRequired`, `ForkRequest`, `ForkRecommendation`, `FollowUpRequired`, and `Blocked`, so accepted `follow_up_question` and `blocked` events now reach durable local obligation truth,
 5. the canonical local obligation ledger already contains `FollowUpRequired` and `Blocked` kinds in [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs),
 6. local compatibility projection and router auto-attach logic already know how to project and prioritize those kinds in [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs) and [`crates/shell/src/execution/agent_runtime/auto_attach.rs`](../crates/shell/src/execution/agent_runtime/auto_attach.rs).
 
-That means the missing work is narrow: add the policy gates and wire the live producer path to reuse the already-landed durable obligation model.
+That means this slice closed a narrow producer gap by adding the missing policy gates and wiring the live producer path to reuse the already-landed durable obligation model.
 
 ## Objective
 
@@ -58,6 +60,13 @@ Primary runtime story:
 5. accepted `blocked` persists a canonical `Blocked` obligation,
 6. those obligations keep exact participant/backend/world binding and compatible attach/review projection semantics,
 7. later host response work such as `clarification_response` remains a separate follow-on slice rather than being coupled into this producer hardening.
+
+Current landed runtime note:
+
+1. the live policy model now exposes dedicated deny-by-default retained-worker gates at `agents.world_dispatch.obligations.follow_up_allowed` and `agents.world_dispatch.obligations.blocked_allowed`,
+2. the live retained-worker event path now persists accepted `follow_up_question` as `FollowUpRequired` and accepted `blocked` as `Blocked` with exact session/participant/backend/world truth,
+3. denied `follow_up_question` and `blocked` events fail closed without leaving durable side effects,
+4. the live repo still does not accept typed host `clarification_response`, broader host control classes, active-ephemeral exact task identity widening, or Family-2 router/attach execution in this slice.
 
 ## Frozen Direction
 

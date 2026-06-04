@@ -5,7 +5,9 @@ Source plan: [PLAN-41.md](./PLAN-41.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: draft for review on `2026-06-03`
+Status: Packet 4 complete on `2026-06-04`; docs truth is aligned and the final validation wall is green
+Landed posture note: retained-worker `follow_up_question` and `blocked` now have deny-by-default policy gating, exact durable `FollowUpRequired`/`Blocked` persistence on `continue_world_worker`, and stable compatibility projection/attach semantics repo-wide, but host `clarification_response`, active-ephemeral exact task-identity widening, broader control classes, and Family-2 router/attach execution remain deferred.
+Validation note: final validation did not expose any in-scope stabilization follow-up, and no broader host response/control work, active-ephemeral identity widening, or Family-2 execution work was reopened.
 
 ## Execution Packets
 
@@ -28,7 +30,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add minimal deny-by-default policy parsing for `follow_up_allowed` and `blocked_allowed`
+- [x] Task 1.1: Add minimal deny-by-default policy parsing for `follow_up_allowed` and `blocked_allowed`
   - Acceptance: policy/config truth can explicitly allow or deny retained-worker `follow_up_question` and `blocked`; both keys default to `false`; merge/explain behavior remains aligned with the existing `agents.world_dispatch` patch surface.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -38,7 +40,7 @@ Session goal:
     - [`crates/broker/src/policy.rs`](../crates/broker/src/policy.rs)
     - [`crates/broker/src/effective_policy.rs`](../crates/broker/src/effective_policy.rs)
 
-- [ ] Task 1.2: Enforce stable deny buckets for disallowed retained-worker `follow_up_question` and `blocked`
+- [x] Task 1.2: Enforce stable deny buckets for disallowed retained-worker `follow_up_question` and `blocked`
   - Acceptance: disallowed events fail with stable explanation-ready errors on the live `continue_world_worker` path; approval/fork gating from Slices `39` and `40` remains intact.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -66,7 +68,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Freeze `follow_up_question` to `FollowUpRequired` durable projection
+- [x] Task 2.1: Freeze `follow_up_question` to `FollowUpRequired` durable projection
   - Acceptance: accepted `follow_up_question` persists canonical `FollowUpRequired` with exact source participant, backend, world, and attention metadata; follow-up projection remains compatible with the existing inbox/attach behavior.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -76,7 +78,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs) if helper/test widening is required
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs) if compatibility projection coverage needs a narrow patch
 
-- [ ] Task 2.2: Freeze `blocked` to `Blocked` durable projection
+- [x] Task 2.2: Freeze `blocked` to `Blocked` durable projection
   - Acceptance: accepted `blocked` persists canonical `Blocked` with exact source participant, backend, world, and attention metadata; blocked projection remains compatible with runtime-alert style inbox projection and existing attach-priority truth.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -108,7 +110,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Prove accepted `follow_up_question` and `blocked` events persist exactly one durable obligation each
+- [x] Task 3.1: Prove accepted `follow_up_question` and `blocked` events persist exactly one durable obligation each
   - Acceptance: the live retained-worker event path writes one canonical `FollowUpRequired` or `Blocked` record per accepted event, with stable event labels and payload projection; no duplicate or wrong-kind obligation is created.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -117,7 +119,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - targeted shell tests adjacent to the touched implementation files
 
-- [ ] Task 3.2: Prove denial and non-regression behavior on the shared producer path
+- [x] Task 3.2: Prove denial and non-regression behavior on the shared producer path
   - Acceptance: denied `follow_up_question` and `blocked` events persist nothing; approval/fork producer behavior from Slices `39` and `40` stays green; public control/status projection remains honest without widening its public contract.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -147,7 +149,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning and configuration docs without widening the slice
+- [x] Task 4.1: Align planning and configuration docs without widening the slice
   - Acceptance: repo-local docs describe Slice `41` as retained-worker follow-up and blocked obligation hardening on the existing `continue_world_worker` seam, not typed host clarification, transport redesign, or Family-2 router execution.
   - Verify:
     - manual diff review
@@ -157,7 +159,7 @@ Session goal:
     - [`llm-last-mile/PLAN-41.md`](./PLAN-41.md)
     - [`llm-last-mile/TASKS-41.md`](./TASKS-41.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker tests, and full workspace tests are green; no unintended widening into typed host clarification, broader control directives, active-ephemeral identity, or Family-2 execution appears.
   - Verify:
     - `cargo fmt --all -- --check`

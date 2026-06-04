@@ -3,7 +3,9 @@
 Source spec: [SPEC-41-internal-retained-follow-up-and-blocked-obligation-hardening.md](./SPEC-41-internal-retained-follow-up-and-blocked-obligation-hardening.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: first post-Slice-40 producer-hardening slice  
-Status: draft for review on `2026-06-03`
+Status: implemented on `2026-06-03`
+Landed posture note: retained-worker `follow_up_question` and `blocked` now have deny-by-default policy gates, exact durable `FollowUpRequired`/`Blocked` persistence on `continue_world_worker`, and stable compatibility projection/attach semantics repo-wide, but host `clarification_response`, broader control classes, active-ephemeral exact task identity, and Family-2 router execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and the landed slice stayed bounded to retained-worker producer hardening over the existing `continue_world_worker` seam.
 
 ## Objective
 
@@ -28,16 +30,16 @@ The repo already has the prerequisites that make this the next honest slice:
 4. the local obligation ledger already contains `FollowUpRequired` and `Blocked`,
 5. compatibility projection and local auto-attach logic already understand those obligation kinds.
 
-What the repo still lacks is narrower than a new host-response slice:
+What the repo lacked before Packets `1` through `3` landed was narrower than a new host-response slice:
 
 1. dedicated deny-by-default policy keys for those two retained-worker producer classes,
 2. live `continue_world_worker` persistence of accepted `follow_up_question` as `FollowUpRequired`,
 3. live `continue_world_worker` persistence of accepted `blocked` as `Blocked`,
 4. regression coverage proving the producer path is durable while approval/fork behavior stays stable.
 
-That matters because the design stack already treats follow-up and blocked as first-class attention-driving obligation kinds, but the live producer path still stops short of durable truth. The cleanest next move is therefore to close this producer gap before attempting typed host `clarification_response` or any downstream Family-2 execution work.
+That mattered because the design stack already treated follow-up and blocked as first-class attention-driving obligation kinds, but the live producer path had stopped short of durable truth. The cleanest move was therefore to close that producer gap before attempting typed host `clarification_response` or any downstream Family-2 execution work.
 
-The narrowest honest implementation order is:
+The narrowest honest implementation order was:
 
 1. freeze the missing policy dimensions and denial buckets first,
 2. freeze the obligation mapping and projection semantics second,
