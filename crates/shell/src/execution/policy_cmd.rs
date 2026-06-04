@@ -567,6 +567,8 @@ struct AgentsWorldDispatchForkEffectiveDisplayV1 {
 struct AgentsWorldDispatchObligationsEffectiveDisplayV1 {
     approval_allowed: bool,
     approval_response_allowed: bool,
+    follow_up_allowed: bool,
+    blocked_allowed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -687,6 +689,8 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
                     approval_allowed: policy.agents_world_dispatch_obligations_approval_allowed,
                     approval_response_allowed: policy
                         .agents_world_dispatch_obligations_approval_response_allowed,
+                    follow_up_allowed: policy.agents_world_dispatch_obligations_follow_up_allowed,
+                    blocked_allowed: policy.agents_world_dispatch_obligations_blocked_allowed,
                 },
             },
         },

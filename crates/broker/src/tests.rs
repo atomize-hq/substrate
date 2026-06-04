@@ -150,6 +150,10 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
                     "approval_allowed": policy.agents_world_dispatch_obligations_approval_allowed,
                     "approval_response_allowed": policy
                         .agents_world_dispatch_obligations_approval_response_allowed,
+                    "follow_up_allowed": policy
+                        .agents_world_dispatch_obligations_follow_up_allowed,
+                    "blocked_allowed": policy
+                        .agents_world_dispatch_obligations_blocked_allowed,
                 },
             },
         },
@@ -1689,6 +1693,18 @@ workflow:
             Some(false),
             "missing or wrong agents.world_dispatch.obligations.approval_response_allowed in policy JSON: {json}"
         );
+        assert_eq!(
+            json.pointer("/agents/world_dispatch/obligations/follow_up_allowed")
+                .and_then(serde_json::Value::as_bool),
+            Some(false),
+            "missing or wrong agents.world_dispatch.obligations.follow_up_allowed in policy JSON: {json}"
+        );
+        assert_eq!(
+            json.pointer("/agents/world_dispatch/obligations/blocked_allowed")
+                .and_then(serde_json::Value::as_bool),
+            Some(false),
+            "missing or wrong agents.world_dispatch.obligations.blocked_allowed in policy JSON: {json}"
+        );
         assert!(
             json.pointer("/workflow/router").is_some(),
             "missing workflow.router in policy JSON: {json}"
@@ -1752,6 +1768,46 @@ workflow:
                 }),
             Some(false),
             "missing or wrong agents.world_dispatch.obligations.approval_response_allowed in policy YAML: {yaml:?}"
+        );
+        assert_eq!(
+            agents
+                .and_then(|agents| {
+                    agents
+                        .get(serde_yaml::Value::String("world_dispatch".to_string()))
+                        .and_then(|value| value.as_mapping())
+                })
+                .and_then(|world_dispatch| {
+                    world_dispatch
+                        .get(serde_yaml::Value::String("obligations".to_string()))
+                        .and_then(|value| value.as_mapping())
+                })
+                .and_then(|obligations| {
+                    obligations
+                        .get(serde_yaml::Value::String("follow_up_allowed".to_string()))
+                        .and_then(|value| value.as_bool())
+                }),
+            Some(false),
+            "missing or wrong agents.world_dispatch.obligations.follow_up_allowed in policy YAML: {yaml:?}"
+        );
+        assert_eq!(
+            agents
+                .and_then(|agents| {
+                    agents
+                        .get(serde_yaml::Value::String("world_dispatch".to_string()))
+                        .and_then(|value| value.as_mapping())
+                })
+                .and_then(|world_dispatch| {
+                    world_dispatch
+                        .get(serde_yaml::Value::String("obligations".to_string()))
+                        .and_then(|value| value.as_mapping())
+                })
+                .and_then(|obligations| {
+                    obligations
+                        .get(serde_yaml::Value::String("blocked_allowed".to_string()))
+                        .and_then(|value| value.as_bool())
+                }),
+            Some(false),
+            "missing or wrong agents.world_dispatch.obligations.blocked_allowed in policy YAML: {yaml:?}"
         );
         assert!(
             workflow_router.is_some(),
