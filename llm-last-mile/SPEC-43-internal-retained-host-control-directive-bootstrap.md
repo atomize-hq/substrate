@@ -22,7 +22,7 @@ ASSUMPTIONS I'M MAKING:
 4. To stay smaller than a transport redesign, typed `control_directive` should compile onto the existing `MemberTurnSubmitRequestV1.prompt` seam through a canonical renderer rather than widening `transport-api-types` in this slice.
 5. The first typed `control_directive` slice should stay narrowly enumerated. The payload should carry:
    - a required `directive_kind`,
-   - optional `directive_text` for caller-supplied detail,
+   - optional `directive_text` only as a caller-supplied bounded metadata label recognized for the chosen directive kind,
    - optional `thread_id`,
    - no new public control plane or generalized typed control envelope.
 6. The minimum deny-by-default host-control gate for this slice should land as a dedicated policy dimension outside the current obligation-bound keys. I am assuming a narrow key such as `agents.world_dispatch.control.control_directives_allowed`; correct that before implementation if the repo should use a different branch name.
@@ -167,7 +167,8 @@ Test levels for this slice:
 
 1. unit tests for the new `continue_world_worker` typed host-control contract:
    - typed `control_directive` payloads validate only with allowed directive kinds,
-   - optional `directive_text` and `thread_id` handling stays fail-closed for blanks,
+   - optional `directive_text` canonicalizes only to recognized bounded metadata labels for the selected directive kind and fails closed for blanks or free-form detail,
+   - optional `thread_id` handling stays fail-closed for blanks,
    - generic prompt-based continue remains valid,
    - deferred host classes such as `control_ack` and `fork_command` still remain out of scope
 2. unit tests for policy parsing and denial buckets:

@@ -12,8 +12,8 @@ Status: draft for review on `2026-06-04`
 This slice should be implemented as four sequential `/incremental-implementation` sessions.
 
 - Packet 1 freezes the typed control-directive contract and minimal policy surface.
-- Packet 2 lands the bounded directive taxonomy and deterministic rendering.
-- Packet 3 lands live delivery and no-ack-implication regression proof.
+- Packet 2 lands the bounded directive taxonomy, fail-closed metadata-label `directive_text` surface, and deterministic rendering on the shared live `continue_world_worker` seam.
+- Packet 3 lands delivery-outcome honesty and no-ack-implication regression proof for that already-landed live path.
 - Packet 4 aligns docs truth and runs the final validation wall.
 
 Do not start a later packet until the prior packet checkpoint is green.
@@ -29,7 +29,7 @@ Session goal:
 ### Tasks
 
 - [ ] Task 1.1: Widen the `continue_world_worker` payload contract for typed control directives
-  - Acceptance: internal `continue_world_worker` requests can carry a typed `control_directive` payload with a bounded directive kind plus optional detail text; generic prompt-based continue remains valid; `control_ack`, `fork_command`, and `progress_ack` remain deferred.
+  - Acceptance: internal `continue_world_worker` requests can carry a typed `control_directive` payload with a bounded directive kind plus optional fail-closed `directive_text` metadata label detail; generic prompt-based continue remains valid; `control_ack`, `fork_command`, and `progress_ack` remain deferred.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
@@ -67,14 +67,14 @@ Session goal:
 ### Tasks
 
 - [ ] Task 2.1: Freeze the bounded first control-directive taxonomy
-  - Acceptance: the initial typed control-directive slice accepts only the explicitly allowed directive kinds; unsupported kinds fail closed; the slice does not invent a broad arbitrary control language.
+  - Acceptance: the initial typed control-directive slice accepts only the explicitly allowed directive kinds; unsupported kinds fail closed; optional `directive_text` accepts only the recognized bounded metadata labels for the selected directive kind; the slice does not invent a broad arbitrary control language.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
 - [ ] Task 2.2: Render typed control directives deterministically onto the existing retained member-turn seam
-  - Acceptance: typed control directives generate canonical prompt text from the typed payload rather than caller-authored ad hoc prompt assembly; live `continue_world_worker` submits that rendered prompt to the exact retained worker.
+  - Acceptance: typed control directives generate canonical prompt text from the typed payload rather than caller-authored ad hoc prompt assembly; the shared live `continue_world_worker` path uses that deterministic renderer when submitting to the exact retained worker.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -88,22 +88,23 @@ Packet 2 is complete only when:
 
 1. the first directive-kind surface is explicitly bounded,
 2. rendered prompt content is deterministic from the typed payload,
-3. normal prompt-based continue remains unchanged.
+3. the shared live `continue_world_worker` path consumes that deterministic renderer for exact retained-worker submission,
+4. normal prompt-based continue remains unchanged.
 
 Do not start Packet 3 until Packet 2 verification is green.
 
-## Packet 3: Live Delivery And No-Ack-Implication Regression Proof
+## Packet 3: Delivery-Outcome Honesty And No-Ack-Implication Regression Proof
 
 Session goal:
 
-1. deliver typed control directives through the live `continue_world_worker` path,
+1. prove the already-landed typed control-directive delivery path through live `continue_world_worker`,
 2. keep delivery outcomes honest about the absence of typed `control_ack`,
 3. prove existing approval and clarification behavior does not regress.
 
 ### Tasks
 
-- [ ] Task 3.1: Prove live `continue_world_worker` delivery for typed control directives
-  - Acceptance: the live retained-worker path submits the typed control-directive prompt to the exact retained worker and reports truthful delivery outcomes.
+- [ ] Task 3.1: Prove the already-landed live `continue_world_worker` delivery path for typed control directives
+  - Acceptance: the already-landed live retained-worker path submits the typed control-directive prompt to the exact retained worker and reports truthful delivery outcomes.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
   - Expected files touched:
@@ -123,7 +124,7 @@ Session goal:
 
 Packet 3 is complete only when:
 
-1. live continue handling can deliver the typed control-directive slice,
+1. the already-landed live continue handling remains able to deliver the typed control-directive slice,
 2. outcome summaries stay honest about delivery versus acknowledgement,
 3. existing approval/clarification and public projection behavior remains green.
 
