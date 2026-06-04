@@ -680,7 +680,11 @@ async fn continue_world_worker(
     {
         persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
     }
-    let summary = summarize_continue_world_worker_result(&submit_request, stream_result.exit_code);
+    let summary = summarize_continue_world_worker_result(
+        &submit_request,
+        stream_result.exit_code,
+        stream_result.surfaced_worker_event.as_ref(),
+    );
 
     Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
         ContinueWorldWorkerOutcomeV1 {
@@ -2029,20 +2033,21 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                                 .await;
                             return Err(err);
                         }
-                        if classified_event.event_class
-                            == ContinueWorldWorkerEventClassV1::ControlAck
-                        {
-                            continue;
-                        }
-                        let preserve_existing_live_obligation =
+                        let preserve_existing_live_event =
                             surfaced_worker_event.as_ref().is_some_and(|existing| {
                                 continue_world_worker_event_persists_live_obligation(
                                     existing.event_class,
-                                )
+                                ) || (existing.event_class
+                                    == ContinueWorldWorkerEventClassV1::ControlAck
+                                    && !continue_world_worker_event_persists_live_obligation(
+                                        classified_event.event_class,
+                                    ))
                             });
-                        if !preserve_existing_live_obligation {
+                        if !preserve_existing_live_event {
                             // Preserve the first surfaced durable worker obligation even if
                             // later obligation-like or ordinary stream events arrive before exit.
+                            // Preserve a surfaced control_ack unless a later durable obligation
+                            // needs to replace the immediate acknowledgement.
                             surfaced_worker_event = Some(classified_event);
                         }
                     }
@@ -2811,7 +2816,25 @@ fn summarize_fork_world_worker_result(
 fn summarize_continue_world_worker_result(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     exit_code: i32,
+    surfaced_worker_event: Option<&ContinueWorldWorkerEventV1>,
 ) -> String {
+    if matches!(
+        surfaced_worker_event.map(|event| event.event_class),
+        Some(ContinueWorldWorkerEventClassV1::ControlAck)
+    ) {
+        if exit_code == 0 {
+            return format!(
+                "continue_world_worker delivered to retained worker {} via the existing member-turn seam; retained worker acknowledged the control_directive, but downstream completion remains worker-defined",
+                request.participant_id
+            );
+        }
+
+        return format!(
+            "continue_world_worker delivered to retained worker {} via the existing member-turn seam, surfaced retained worker acknowledgement of the control_directive, but the turn exited with status {}; downstream completion remains worker-defined",
+            request.participant_id, exit_code
+        );
+    }
+
     if exit_code == 0 {
         format!(
             "continue_world_worker delivered to retained worker {} via the existing member-turn seam; downstream acknowledgement remains worker-defined",
@@ -5161,7 +5184,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
-    async fn continue_world_worker_stream_accepts_control_ack_for_typed_control_directive_without_widening_live_outcome(
+    async fn continue_world_worker_stream_accepts_control_ack_for_typed_control_directive_and_surfaces_it_on_live_outcome(
     ) {
         let _env_guard = world_env_guard();
         let socket_home = tempdir().expect("socket tempdir");
@@ -5237,9 +5260,143 @@ mod tests {
 
         assert_eq!(outcome.exit_code, 0);
         assert_eq!(outcome.surfaced_thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::ControlAck)
+        );
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .and_then(|event| event.payload.get("message"))
+                .and_then(serde_json::Value::as_str),
+            Some("directive received")
+        );
         assert!(
-            outcome.surfaced_worker_event.is_none(),
-            "Packet 1 must not widen live outcome surfacing for control_ack"
+            !outcome
+                .surfaced_worker_event
+                .as_ref()
+                .expect("control_ack should surface")
+                .attention_required,
+            "control_ack must stay non-attention-driving by default"
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_world_worker_stream_preserves_control_ack_when_normal_event_follows_on_control_directive_turn(
+    ) {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("control-ack-preserve.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(json!({
+                                "event_class": "control_ack",
+                                "payload": {
+                                    "message": "directive received"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_uaa_event(json!({
+                                "type": "item.completed",
+                                "thread_id": "thread-from-uaa",
+                                "turn_id": "turn-control",
+                                "item_id": "msg-control",
+                                "status": "completed",
+                                "item_type": "agent_message",
+                                "content": {
+                                    "text": "directive applied"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let outcome = execute_continue_world_worker_stream_for_turn_kind(
+            &sample_continue_submit_request(),
+            &Policy::default(),
+            ContinueWorldWorkerTurnKind::ControlDirective,
+        )
+        .await
+        .expect("typed control-directive turns should preserve surfaced control_ack");
+
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(outcome.surfaced_thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::ControlAck)
+        );
+        assert_eq!(
+            outcome
+                .surfaced_worker_event
+                .as_ref()
+                .and_then(|event| event.payload.get("message"))
+                .and_then(serde_json::Value::as_str),
+            Some("directive received")
         );
 
         server.await.expect("stub world server task");
@@ -6882,6 +7039,141 @@ agents:
         );
         assert_eq!(recorded[0].participant_id, "ash_member");
         assert_eq!(recorded[0].prompt, expected_prompt);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_control_directive_surfaces_control_ack_without_persisting_obligation(
+    ) {
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_control_directives(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("control-directive-control-ack.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(json!({
+                                "event_class": "control_ack",
+                                "payload": {
+                                    "message": "prepare_handoff received"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 17,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let outcome = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_control_directive_world_dispatch_request(),
+        )
+        .await
+        .expect("control-directive delivery should surface control_ack");
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+            panic!("expected continue_world_worker outcome");
+        };
+
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome.worker_event.as_ref().map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::ControlAck)
+        );
+        assert_eq!(
+            outcome
+                .worker_event
+                .as_ref()
+                .and_then(|event| event.payload.get("message"))
+                .and_then(serde_json::Value::as_str),
+            Some("prepare_handoff received")
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("acknowledged the control_directive"),
+            "summary must be explicit about acknowledgement: {}",
+            outcome.summary
+        );
+        assert!(
+            outcome.summary.contains("status 17"),
+            "summary must preserve terminal exit truth after acknowledgement: {}",
+            outcome.summary
+        );
+        assert!(
+            !outcome.summary.contains("completed on retained worker"),
+            "summary must not imply completion from control_ack: {}",
+            outcome.summary
+        );
+
+        let obligations = store
+            .list_obligations("sess_dispatch")
+            .expect("list obligations after control_ack");
+        assert!(
+            obligations.is_empty(),
+            "control_ack must not persist durable obligations: {obligations:?}"
+        );
+
+        server.await.expect("stub world server task");
     }
 
     #[cfg(target_os = "linux")]
@@ -9492,7 +9784,7 @@ agents:
     fn continue_world_worker_summary_stays_delivery_only_without_ack_implication() {
         let submit = sample_continue_submit_request();
 
-        let success = summarize_continue_world_worker_result(&submit, 0);
+        let success = summarize_continue_world_worker_result(&submit, 0, None);
         assert!(
             success.contains("delivered to retained worker ash_member"),
             "successful summary must stay explicit about delivery: {success}"
@@ -9506,7 +9798,7 @@ agents:
             "successful summary must not imply completion: {success}"
         );
 
-        let failure = summarize_continue_world_worker_result(&submit, 17);
+        let failure = summarize_continue_world_worker_result(&submit, 17, None);
         assert!(
             failure.contains("status 17"),
             "non-zero summary must preserve terminal status truth: {failure}"
@@ -9514,6 +9806,52 @@ agents:
         assert!(
             failure.contains("worker-defined"),
             "non-zero summary must still avoid ack implication: {failure}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_summary_distinguishes_control_ack_from_completion() {
+        let submit = sample_continue_submit_request();
+        let control_ack = ContinueWorldWorkerEventV1 {
+            event_class: ContinueWorldWorkerEventClassV1::ControlAck,
+            source_participant_id: "ash_member".to_string(),
+            target_participant_id: "orch_dispatch".to_string(),
+            source_backend_id: "cli:codex_world".to_string(),
+            attention_required: false,
+            thread_id: Some("thread-direct".to_string()),
+            stream_channel: Some("worker.reply".to_string()),
+            payload: serde_json::json!({
+                "message": "directive received",
+            }),
+        };
+
+        let success = summarize_continue_world_worker_result(&submit, 0, Some(&control_ack));
+        assert!(
+            success.contains("acknowledged the control_directive"),
+            "control_ack summary must surface acknowledgement truth: {success}"
+        );
+        assert!(
+            success.contains("downstream completion remains worker-defined"),
+            "control_ack summary must keep completion separate from acknowledgement: {success}"
+        );
+        assert!(
+            !success.contains("completed on retained worker"),
+            "control_ack summary must not imply completion: {success}"
+        );
+
+        let failure = summarize_continue_world_worker_result(&submit, 17, Some(&control_ack));
+        assert!(
+            failure.contains("status 17"),
+            "control_ack summary must preserve terminal status truth: {failure}"
+        );
+        assert!(
+            failure.contains("acknowledgement of the control_directive"),
+            "non-zero control_ack summary must stay explicit about acknowledgement: {failure}"
+        );
+        assert!(
+            failure.contains("downstream completion remains worker-defined"),
+            "non-zero control_ack summary must keep completion separate from acknowledgement: {failure}"
         );
     }
 }
