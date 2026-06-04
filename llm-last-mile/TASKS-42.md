@@ -7,7 +7,7 @@ Phase: `TASKS`
 Execution model: four separate `/incremental-implementation` sessions  
 Status: Packet 4 complete on `2026-06-04`; docs truth is aligned and the final validation wall is green
 Landed posture note: typed host `clarification_response` now has deny-by-default policy gating, exact unresolved `FollowUpRequired` binding, deterministic prompt rendering on `continue_world_worker`, and post-delivery closeout, while broader host response/control classes, active-ephemeral exact task-identity widening, and Family-2 router execution remain deferred.
-Validation note: final validation did not expose any in-scope stabilization follow-up, and no broader host response/control work, active-ephemeral identity widening, transport redesign, or Family-2 execution work was reopened.
+Validation note: final validation did land one bounded validation-driven test-only follow-up in `crates/shell/src/execution/orchestrator_world_dispatch.rs`, and no broader host response/control work, active-ephemeral identity widening, transport redesign, or Family-2 execution work was reopened.
 
 ## Execution Packets
 

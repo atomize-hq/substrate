@@ -5,7 +5,7 @@ Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./N
 Plan type: first post-Slice-41 host follow-up consumer slice  
 Status: implemented on `2026-06-04`
 Landed posture note: typed host `clarification_response` is now a deny-by-default internal bootstrap on `continue_world_worker`, bound to exact unresolved `FollowUpRequired` obligations with deterministic prompt rendering and post-delivery closeout, while broader host response/control classes, active-ephemeral exact task identity, and Family-2 router execution remain deferred.
-Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and the landed slice stayed bounded to typed clarification-response bootstrap over the existing `continue_world_worker` seam.
+Validation note: Packet 4's validation wall is green. Final validation did land one bounded validation-driven test-only follow-up in `crates/shell/src/execution/orchestrator_world_dispatch.rs`, and the landed slice stayed bounded to typed clarification-response bootstrap over the existing `continue_world_worker` seam.
 
 ## Objective
 

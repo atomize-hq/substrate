@@ -16,7 +16,7 @@ Related design stack:
 Phase: `SPECIFY`  
 Status: implemented on `2026-06-04`
 Landed posture note: typed host `clarification_response` now has a dedicated deny-by-default gate, exact unresolved `FollowUpRequired` binding, deterministic prompt rendering over the existing `continue_world_worker` seam, and post-delivery follow-up closeout, while broader host response/control classes, active-ephemeral exact task identity, and Family-2 router/attach execution remain deferred.
-Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and no broader host-response/control, active-ephemeral identity, transport redesign, or Family-2 work was reopened.
+Validation note: Packet 4's validation wall is green. Final validation did land one bounded validation-driven test-only follow-up in `crates/shell/src/execution/orchestrator_world_dispatch.rs`, and no broader host-response/control, active-ephemeral identity, transport redesign, or Family-2 work was reopened.
 
 ## Assumptions
 
