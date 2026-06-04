@@ -106,7 +106,7 @@ Verification checkpoint:
 Goal:
 
 1. freeze the narrow initial directive-kind set,
-2. compile typed control directives onto the existing member-turn prompt seam deterministically,
+2. compile typed control directives onto the existing live member-turn prompt seam deterministically,
 3. keep rendering implementation-owned and reviewable.
 
 Primary touch surface:
@@ -127,11 +127,11 @@ Verification checkpoint:
 2. directive kinds outside the bounded set fail closed,
 3. normal prompt-based continue remains valid and unchanged.
 
-### Packet 3: Live Continue Routing And No-Ack-Implication Regression Proof
+### Packet 3: Outcome Honesty And No-Ack-Implication Regression Proof
 
 Goal:
 
-1. wire the live `continue_world_worker` path to deliver typed control directives,
+1. prove the already-landed live `continue_world_worker` control-directive delivery reports truthful operational outcomes,
 2. prove that successful delivery reports truthful operational outcomes,
 3. prove that the slice does not imply or require typed `control_ack`.
 
@@ -143,7 +143,7 @@ Primary touch surface:
 Why third:
 
 1. the live runtime path should consume the frozen contract, policy surface, and deterministic renderer,
-2. this packet proves the slice is real runtime behavior rather than doc-only schema work,
+2. this packet proves the already-landed delivery path stays honest about runtime outcomes rather than implying more transport than exists,
 3. the key safety property is outcome honesty: delivery is real, but worker acknowledgement is still deferred.
 
 Verification checkpoint:

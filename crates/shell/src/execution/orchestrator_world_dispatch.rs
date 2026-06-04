@@ -3335,7 +3335,7 @@ mod tests {
             payload: WorldDispatchPayloadV1::WorkerContinueControlDirective(
                 WorkerContinueControlDirectivePayloadV1 {
                     directive_kind: ControlDirectiveKindV1::PrepareHandoff,
-                    directive_text: Some("timing:before_stop".to_string()),
+                    directive_text: Some("  timing:before_stop  ".to_string()),
                     thread_id: Some("thread-control-43".to_string()),
                 },
             ),

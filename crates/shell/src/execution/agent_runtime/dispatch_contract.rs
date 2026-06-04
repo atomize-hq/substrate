@@ -397,9 +397,9 @@ pub(crate) struct ValidatedWorldDispatchRequestV1 {
 }
 
 impl WorldDispatchRequestV1 {
-    pub(crate) fn validate(self) -> anyhow::Result<ValidatedWorldDispatchRequestV1> {
+    pub(crate) fn validate(mut self) -> anyhow::Result<ValidatedWorldDispatchRequestV1> {
         validate_world_dispatch_action_mode(self.action, self.mode)?;
-        validate_world_dispatch_payload(self.action, &self.payload)?;
+        validate_world_dispatch_payload(self.action, &mut self.payload)?;
 
         let request_id = required_world_dispatch_string("request_id", self.request_id)?;
         let idempotency_key =
@@ -473,7 +473,7 @@ fn validate_world_dispatch_action_mode(
 
 fn validate_world_dispatch_payload(
     action: WorldDispatchActionV1,
-    payload: &WorldDispatchPayloadV1,
+    payload: &mut WorldDispatchPayloadV1,
 ) -> anyhow::Result<()> {
     match (action, payload) {
         (WorldDispatchActionV1::RunWorldTask, WorldDispatchPayloadV1::Task(task)) => {
@@ -556,20 +556,20 @@ fn validate_clarification_response_continue_payload(
 
 fn validate_control_directive_continue_payload(
     action: WorldDispatchActionV1,
-    directive: &WorkerContinueControlDirectivePayloadV1,
+    directive: &mut WorkerContinueControlDirectivePayloadV1,
 ) -> anyhow::Result<()> {
     validate_optional_world_dispatch_string(action, "directive_text", &directive.directive_text)?;
     validate_optional_world_dispatch_string(action, "thread_id", &directive.thread_id)?;
-    validate_control_directive_detail_fragment(action, directive)?;
+    directive.directive_text = canonicalize_control_directive_detail_fragment(action, directive)?;
     Ok(())
 }
 
-fn validate_control_directive_detail_fragment(
+fn canonicalize_control_directive_detail_fragment(
     action: WorldDispatchActionV1,
     directive: &WorkerContinueControlDirectivePayloadV1,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<String>> {
     let Some(detail) = directive.directive_text.as_deref() else {
-        return Ok(());
+        return Ok(None);
     };
 
     let trimmed = detail.trim();
@@ -636,7 +636,7 @@ fn validate_control_directive_detail_fragment(
         );
     }
 
-    Ok(())
+    Ok(Some(trimmed.to_string()))
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -653,9 +653,9 @@ pub(crate) fn render_continue_world_worker_transport_prompt(
         WorldDispatchPayloadV1::WorkerContinueClarificationResponse(response) => Ok(
             render_continue_world_worker_clarification_response_prompt(response),
         ),
-        WorldDispatchPayloadV1::WorkerContinueControlDirective(directive) => Ok(
-            render_continue_world_worker_control_directive_prompt(directive),
-        ),
+        WorldDispatchPayloadV1::WorkerContinueControlDirective(directive) => {
+            render_continue_world_worker_control_directive_prompt(directive)
+        }
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
         ),
@@ -700,14 +700,18 @@ fn render_continue_world_worker_clarification_response_prompt(
 #[cfg(any(target_os = "linux", test))]
 fn render_continue_world_worker_control_directive_prompt(
     directive: &WorkerContinueControlDirectivePayloadV1,
-) -> String {
+) -> anyhow::Result<String> {
+    let directive_text = canonicalize_control_directive_detail_fragment(
+        WorldDispatchActionV1::ContinueWorldWorker,
+        directive,
+    )?;
     let rendered = serde_json::json!({
         "kind": "control_directive",
         "directive_kind": directive.directive_kind.as_str(),
-        "directive_text": directive.directive_text,
+        "directive_text": directive_text,
         "thread_id": directive.thread_id,
     });
-    let detail_guidance = match directive.directive_text.as_deref() {
+    let detail_guidance = match directive_text.as_deref() {
         Some(_) => {
             let detail_label = directive.directive_kind.detail_label();
             format!(
@@ -718,13 +722,13 @@ fn render_continue_world_worker_control_directive_prompt(
             "No directive_text detail was provided beyond the typed directive kind.".to_string()
         }
     };
-    format!(
+    Ok(format!(
         "SUBSTRATE_INTERNAL_HOST_CONTROL_DIRECTIVE_V1\n{}\nTreat this as the host's typed control_directive for the retained worker. Apply directive_kind={} as authoritative host guidance. {} {}",
         rendered,
         directive.directive_kind.as_str(),
         directive.directive_kind.canonical_instruction(),
         detail_guidance,
-    )
+    ))
 }
 
 fn validate_world_dispatch_target(
@@ -3682,7 +3686,7 @@ mod tests {
             &WorldDispatchPayloadV1::WorkerContinueControlDirective(
                 WorkerContinueControlDirectivePayloadV1 {
                     directive_kind: ControlDirectiveKindV1::PrepareHandoff,
-                    directive_text: Some("timing:before_stop".to_string()),
+                    directive_text: Some("  timing:before_stop  ".to_string()),
                     thread_id: Some("thread-control".to_string()),
                 },
             ),
@@ -3774,6 +3778,33 @@ mod tests {
             assert_eq!(payload.directive_kind, directive_kind);
             assert_eq!(payload.directive_text.as_deref(), Some(directive_text));
         }
+    }
+
+    #[test]
+    fn world_dispatch_contract_canonicalizes_bounded_control_directive_text_before_storing() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueControlDirective(
+                WorkerContinueControlDirectivePayloadV1 {
+                    directive_kind: ControlDirectiveKindV1::PrepareHandoff,
+                    directive_text: Some("  timing:before_stop  ".to_string()),
+                    thread_id: Some("thread-control".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-43")
+        .validate()
+        .expect("recognized bounded directive text should canonicalize before storage");
+
+        let WorldDispatchPayloadV1::WorkerContinueControlDirective(payload) = validated.payload
+        else {
+            panic!("validated payload should remain typed control directive payload");
+        };
+        assert_eq!(
+            payload.directive_text.as_deref(),
+            Some("timing:before_stop")
+        );
     }
 
     #[test]
