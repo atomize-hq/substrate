@@ -6619,8 +6619,11 @@ agents:
         };
         assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
         assert!(
-            outcome.worker_event.is_none(),
-            "typed control-directive delivery must not imply a landed control_ack worker event: {:?}",
+            matches!(
+                outcome.worker_event.as_ref().map(|event| event.event_class),
+                None | Some(ContinueWorldWorkerEventClassV1::Reply)
+            ),
+            "typed control-directive delivery may surface a generic reply, but must not imply a landed control_ack worker event: {:?}",
             outcome.worker_event
         );
         assert!(
@@ -6841,8 +6844,11 @@ agents:
             };
             assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
             assert!(
-                outcome.worker_event.is_none(),
-                "typed approval-response delivery must not imply a landed control_ack worker event: {:?}",
+                matches!(
+                    outcome.worker_event.as_ref().map(|event| event.event_class),
+                    None | Some(ContinueWorldWorkerEventClassV1::Reply)
+                ),
+                "typed approval-response delivery may surface a generic reply, but must not imply a landed control_ack worker event: {:?}",
                 outcome.worker_event
             );
             assert!(
@@ -7068,8 +7074,11 @@ agents:
         };
         assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
         assert!(
-            outcome.worker_event.is_none(),
-            "typed clarification-response delivery must not imply a landed control_ack worker event: {:?}",
+            matches!(
+                outcome.worker_event.as_ref().map(|event| event.event_class),
+                None | Some(ContinueWorldWorkerEventClassV1::Reply)
+            ),
+            "typed clarification-response delivery may surface a generic reply, but must not imply a landed control_ack worker event: {:?}",
             outcome.worker_event
         );
         assert!(

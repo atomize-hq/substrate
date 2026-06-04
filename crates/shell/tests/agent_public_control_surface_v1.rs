@@ -4410,6 +4410,50 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     assert_eq!(submit.prompt, "continue in world");
     drop(guard);
 
+    let status_output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        status_output.status.success(),
+        "public status must stay available after retained world follow-up delivery: {status_output:?}"
+    );
+    let status_json = parse_json_output(&status_output);
+    let status_row = status_sessions(&status_json)
+        .iter()
+        .find(|session| {
+            session
+                .get("orchestration_session_id")
+                .and_then(Value::as_str)
+                == Some(orchestration_session_id.as_str())
+                && session.get("participant_id").and_then(Value::as_str)
+                    == Some(member_participant_id.as_str())
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "missing retained world status row for session {} participant {}: {:?}",
+                orchestration_session_id,
+                member_participant_id,
+                status_sessions(&status_json)
+            )
+        });
+    assert_eq!(
+        status_row.get("posture").and_then(Value::as_str),
+        Some("active_attached")
+    );
+    assert_eq!(
+        status_row
+            .get("attached_participant_id")
+            .and_then(Value::as_str),
+        Some(owner_participant_id.as_str()),
+        "public control projection must remain attached to the authoritative owner while status surfaces the retained worker row"
+    );
+    assert_eq!(
+        status_row.get("world_id").and_then(Value::as_str),
+        Some(world_id.as_str())
+    );
+    assert_eq!(
+        status_row.get("world_generation").and_then(Value::as_u64),
+        Some(world_generation)
+    );
+
     assert!(
         String::from_utf8_lossy(&turn_output.stdout)
             .contains("__MEMBER_TURN_SUBMIT_STUB__ continue in world"),

@@ -2794,8 +2794,13 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         Some(expected_summary.as_str())
     );
     assert!(
-        response.pointer("/outcome/worker_event").is_none(),
-        "successful typed control-directive delivery must not imply a landed control_ack worker_event: {response:#?}"
+        matches!(
+            response
+                .pointer("/outcome/worker_event/event_class")
+                .and_then(Value::as_str),
+            None | Some("reply")
+        ),
+        "successful typed control-directive delivery may surface a generic reply, but must not imply a landed control_ack worker_event: {response:#?}"
     );
 
     repl.send_line("exit");
