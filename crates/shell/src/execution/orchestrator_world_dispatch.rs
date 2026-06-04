@@ -2076,13 +2076,13 @@ fn classify_continue_world_worker_event(
         event_class
     };
 
+    let requires_explicit_identity =
+        continue_world_worker_event_requires_explicit_identity(event_class);
     let requires_exact_session_world_binding =
         continue_world_worker_event_requires_exact_session_world_binding(event_class);
 
     let source_participant_id = continue_world_worker_identity_field(event.participant_id.as_deref())
-        .or_else(|| {
-            (!requires_exact_session_world_binding).then_some(request.participant_id.as_str())
-        })
+        .or_else(|| (!requires_explicit_identity).then_some(request.participant_id.as_str()))
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "protocol error: continue_world_worker surfaced packet one worker request without participant_id"
@@ -2097,7 +2097,7 @@ fn classify_continue_world_worker_event(
     }
 
     let source_backend_id = continue_world_worker_identity_field(event.backend_id.as_deref())
-        .or_else(|| (!requires_exact_session_world_binding).then_some(request.backend_id.as_str()))
+        .or_else(|| (!requires_explicit_identity).then_some(request.backend_id.as_str()))
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "protocol error: continue_world_worker surfaced packet one worker request without backend_id"
@@ -2169,6 +2169,18 @@ fn classify_continue_world_worker_event(
 }
 
 #[cfg(target_os = "linux")]
+fn continue_world_worker_event_requires_explicit_identity(
+    event_class: ContinueWorldWorkerEventClassV1,
+) -> bool {
+    matches!(
+        event_class,
+        ContinueWorldWorkerEventClassV1::ApprovalRequest
+            | ContinueWorldWorkerEventClassV1::ForkRequest
+            | ContinueWorldWorkerEventClassV1::ForkRecommendation
+    )
+}
+
+#[cfg(target_os = "linux")]
 fn continue_world_worker_event_requires_exact_session_world_binding(
     event_class: ContinueWorldWorkerEventClassV1,
 ) -> bool {
@@ -2177,6 +2189,8 @@ fn continue_world_worker_event_requires_exact_session_world_binding(
         ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
+            | ContinueWorldWorkerEventClassV1::FollowUpQuestion
+            | ContinueWorldWorkerEventClassV1::Blocked
     )
 }
 
@@ -4189,6 +4203,32 @@ mod tests {
                 },
                 "world_generation 9 did not match targeted world generation 2",
             ),
+            (
+                "follow_up_question",
+                substrate_common::agent_events::AgentEvent {
+                    orchestration_session_id: "sess_other".to_string(),
+                    ..sample_continue_stream_event(json!({
+                        "event_class": "follow_up_question",
+                        "payload": {
+                            "message": "need host confirmation"
+                        }
+                    }))
+                },
+                "orchestration_session_id sess_other did not match targeted orchestration session sess_dispatch",
+            ),
+            (
+                "blocked",
+                substrate_common::agent_events::AgentEvent {
+                    world_id: Some("world-other".to_string()),
+                    ..sample_continue_stream_event(json!({
+                        "event_class": "blocked",
+                        "payload": {
+                            "message": "waiting on host"
+                        }
+                    }))
+                },
+                "world_id world-other did not match targeted world world-17",
+            ),
         ];
 
         for (event_label, drifted, expected_error) in cases {
@@ -4248,6 +4288,41 @@ mod tests {
             for (event, expected_error) in cases {
                 let err = classify_continue_world_worker_event(&submit, &event).expect_err(
                     "packet one worker events must fail closed when fields are omitted",
+                );
+                assert!(
+                    err.to_string().contains(expected_error),
+                    "unexpected error for {event_label}: {err}"
+                );
+            }
+        }
+
+        for event_label in ["follow_up_question", "blocked"] {
+            let base = sample_continue_stream_event(json!({
+                "event_class": event_label,
+                "payload": {
+                    "message": "packet two request"
+                }
+            }));
+            let cases = [
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        world_id: None,
+                        ..base.clone()
+                    },
+                    "without world_id",
+                ),
+                (
+                    substrate_common::agent_events::AgentEvent {
+                        world_generation: None,
+                        ..base.clone()
+                    },
+                    "without world_generation",
+                ),
+            ];
+
+            for (event, expected_error) in cases {
+                let err = classify_continue_world_worker_event(&submit, &event).expect_err(
+                    "packet two worker events must fail closed when world binding fields are omitted",
                 );
                 assert!(
                     err.to_string().contains(expected_error),
