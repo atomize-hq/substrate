@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::{AnalyzeRequest, DriftClass};
+use agent_drift_analyzer::{AnalyzeRequest, DriftClass, DriftState};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -21,6 +21,7 @@ fn truth_grounding_gap_flags_verification_without_truth_reads() {
 
     assert!(score.raw_score >= 60);
     assert!(score.flagged);
+    assert_eq!(score.state, DriftState::Active);
 }
 
 #[test]
@@ -81,6 +82,8 @@ fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_act
 
     assert!(first.flagged);
     assert!(!second.flagged);
+    assert_eq!(first.state, DriftState::Active);
+    assert_eq!(second.state, DriftState::Recovered);
     assert!(second.evidence.iter().any(|evidence| evidence
         .reason
         .starts_with("historical truth-grounding gap:")));
@@ -144,10 +147,99 @@ fn truth_grounding_gap_does_not_turn_clean_grounding_into_historical_gap_evidenc
 
     assert!(!first.flagged);
     assert!(!second.flagged);
+    assert_eq!(first.state, DriftState::Cleared);
+    assert_eq!(second.state, DriftState::Cleared);
     assert!(first.evidence.iter().any(|evidence| !evidence
         .reason
         .starts_with("historical truth-grounding gap:")));
     assert!(!second.evidence.iter().any(|evidence| evidence
+        .reason
+        .starts_with("historical truth-grounding gap:")));
+}
+
+#[test]
+fn truth_grounding_gap_downgrades_to_historical_only_after_the_recovery_transition() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md and verify with `cargo test -p agent-drift-analyzer -- --nocapture`.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Read docs/specs/agent-drift-analyzer-v0.4-spec.md before acting.",
+        ),
+        tool_row(2, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        row(
+            3,
+            CompactionKind::AssistantMessage,
+            "I need to re-ground on the spec before editing again.",
+        ),
+        tool_row(4, "sed -n '1,120p' docs/specs/agent-drift-analyzer-v0.4-spec.md"),
+        row(
+            5,
+            CompactionKind::AssistantMessage,
+            "Grounding is back in place. I am continuing with the requested change.",
+        ),
+        tool_row(
+            6,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\n*** End Patch\nPATCH",
+        ),
+        row(
+            7,
+            CompactionKind::AssistantMessage,
+            "The recovery checkpoint already happened; this is later historical context only.",
+        ),
+        tool_row(
+            8,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\n*** End Patch\nPATCH",
+        ),
+    ];
+    let mut archival_rows = rows.clone();
+    let mut duplicate = archival_rows[2].clone();
+    duplicate.row_ordinal = 1;
+    duplicate.line_number += 100;
+    archival_rows.push(duplicate.clone());
+    let dedupe_groups = vec![DedupeGroup {
+        kind: CompactionKind::ToolCall,
+        canonical_text_hash_hex: "truth-grounding-gap-historical-only-dup".to_string(),
+        representative: RowRef::from_row(&rows[2]),
+        duplicates: vec![RowRef::from_row(&duplicate)],
+    }];
+    let fixture = BundleFixture::from_rows(archival_rows, rows, dedupe_groups);
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze historical-only custom bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert!(checkpoints.len() >= 3);
+    let truth_gap_scores = checkpoints
+        .iter()
+        .map(|checkpoint| {
+            checkpoint
+                .drift_scores
+                .iter()
+                .find(|score| score.class == DriftClass::TruthGroundingGap)
+                .expect("truth grounding gap score")
+        })
+        .collect::<Vec<_>>();
+    let recovered_index = truth_gap_scores
+        .iter()
+        .position(|score| score.state == DriftState::Recovered)
+        .expect("recovered checkpoint");
+    let historical_only_index = truth_gap_scores
+        .iter()
+        .rposition(|score| score.state == DriftState::HistoricalOnly)
+        .expect("historical-only checkpoint");
+    let historical_only = truth_gap_scores[historical_only_index];
+
+    assert_eq!(truth_gap_scores[0].state, DriftState::Active);
+    assert!(historical_only_index > recovered_index);
+    assert!(!historical_only.flagged);
+    assert!(historical_only.evidence.iter().any(|evidence| evidence
         .reason
         .starts_with("historical truth-grounding gap:")));
 }

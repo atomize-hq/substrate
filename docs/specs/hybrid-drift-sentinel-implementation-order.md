@@ -552,6 +552,12 @@ Packet 18 note:
   - `v0.6A`: analyzer-owned per-class state contract plus additive checkpoint export
   - `v0.6B`: sentinel cutover to exported state, compatibility fallback, and replay/live proof
   - typed outcome evidence remains a separate follow-on after `v0.6`, not part of the same packet
+- `2026-06-04`: Packet `v0.6A` landed as an analyzer-only slice.
+  It added exported per-class `DriftState`, one analyzer-owned state builder, and checkpoint
+  schema `v0.3` so each `DriftScore` now carries explicit `active`, `recovered`,
+  `historical_only`, or `cleared` state.
+  `v0.6B` remains the next packet for sentinel cutover, legacy `v0.2` compatibility, and
+  replay/live proof without mixing typed outcome evidence into the same change set.
 
 ## If You Want Fewer Packets
 

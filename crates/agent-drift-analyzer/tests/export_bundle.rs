@@ -10,8 +10,8 @@ use agent_drift_analyzer::checkpoint::{
     CheckpointDiagnostics,
 };
 use agent_drift_analyzer::{
-    BundleSession, Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, EvidenceRef,
-    TaskFrame,
+    BundleSession, Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, DriftState,
+    EvidenceRef, TaskFrame,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -197,7 +197,7 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(checkpoints.len(), 2);
     assert!(checkpoints
         .iter()
-        .all(|checkpoint| checkpoint.schema_version == "v0.2"));
+        .all(|checkpoint| checkpoint.schema_version == "v0.3"));
 
     let first = &checkpoints[0];
     let second = &checkpoints[1];
@@ -207,12 +207,20 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(first.diagnostics.interval_command_count, 4);
     assert_eq!(first.diagnostics.interval_verification_command_count, 2);
     assert!(first.diagnostics.evidence_item_count > 0);
+    assert!(first
+        .drift_scores
+        .iter()
+        .all(|score| matches!(score.state, DriftState::Active | DriftState::Cleared)));
 
     assert!(second.diagnostics.task_frame_transitioned);
     assert!(second.diagnostics.working_set_changed);
     assert_eq!(second.diagnostics.interval_command_count, 3);
     assert_eq!(second.diagnostics.interval_verification_command_count, 1);
     assert!(second.diagnostics.evidence_item_count > 0);
+    assert!(second
+        .drift_scores
+        .iter()
+        .all(|score| matches!(score.state, DriftState::Active | DriftState::Recovered)));
 }
 
 #[test]
@@ -618,6 +626,7 @@ fn export_bundle_dedupes_duplicate_evidence_items_in_checkpoint_diagnostics() {
         &task_frame,
         vec![DriftScore {
             class: DriftClass::WrongPlanBranch,
+            state: DriftState::Active,
             raw_score: 80,
             confidence: Confidence::Medium,
             flagged: true,
@@ -743,7 +752,7 @@ fn fixture_checkpoint(
         .unwrap_or_else(|| vec![format!("src/{}/base.rs", session.session_id)]);
 
     Checkpoint {
-        schema_version: "v0.2".to_string(),
+        schema_version: "v0.3".to_string(),
         session_id: session.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", session.session_id),
         ordinal,
@@ -774,6 +783,11 @@ fn fixture_checkpoint(
         .into_iter()
         .map(|class| DriftScore {
             class,
+            state: if flagged_classes.contains(&class) {
+                DriftState::Active
+            } else {
+                DriftState::Cleared
+            },
             raw_score: if flagged_classes.contains(&class) {
                 80
             } else {

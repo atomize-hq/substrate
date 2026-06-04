@@ -2,6 +2,14 @@
 
 ## Scope
 
+Implementation status on `2026-06-04`:
+
+- Packet `v0.6A` is the analyzer-only landing for exported `DriftState`, the centralized
+  analyzer-owned state builder, and checkpoint schema `v0.3`
+- Packet `v0.6B` stays reserved for sentinel posture cutover, `v0.2` compatibility handling, and
+  replay/live proof refresh
+- typed outcome evidence remains outside this packet family
+
 This plan implements `docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-spec.md`.
 
 The goal is to move checkpoint-state ownership into `agent-drift-analyzer`, widen checkpoint

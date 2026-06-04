@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, EvidenceRef};
+use crate::checkpoint::{
+    CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
+};
 use crate::context::CommandObservation;
 
 const HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX: &str = "historical truth-grounding gap:";
@@ -74,6 +76,7 @@ pub(crate) fn score_truth_grounding_gap(
 
     DriftScore {
         class: DriftClass::TruthGroundingGap,
+        state: DriftState::Cleared,
         raw_score,
         confidence: if truth_paths.is_empty() {
             Confidence::Low

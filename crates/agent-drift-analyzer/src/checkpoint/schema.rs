@@ -52,9 +52,23 @@ pub struct CheckpointDiagnostics {
     pub evidence_item_count: usize,
 }
 
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum DriftState {
+    Active,
+    Recovered,
+    HistoricalOnly,
+    #[default]
+    Cleared,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DriftScore {
     pub class: DriftClass,
+    #[serde(default)]
+    pub state: DriftState,
     pub raw_score: u8,
     pub confidence: Confidence,
     pub flagged: bool,

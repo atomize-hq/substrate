@@ -19,7 +19,8 @@ pub mod input;
 pub mod scoring;
 
 pub use checkpoint::{
-    Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, EvidenceRef, TaskFrame,
+    Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
+    TaskFrame,
 };
 pub use input::{AnalyzerSurface, BundleSession, InputBundle, InputError};
 
@@ -73,13 +74,17 @@ pub fn analyze_loaded_bundle(
         let task_frame = infer_task_frame(&context);
         let mut checkpoints = Vec::new();
         let mut previous_truth_grounding_gap = None;
+        let mut previous_checkpoint_scores: Option<Vec<DriftScore>> = None;
         for analysis in checkpoint::checkpoint_analyses(session) {
-            let scores = score_session(&analysis, previous_truth_grounding_gap.as_ref());
+            let raw_scores = score_session(&analysis, previous_truth_grounding_gap.as_ref());
+            let scores =
+                checkpoint::assign_drift_states(raw_scores, previous_checkpoint_scores.as_deref());
             previous_truth_grounding_gap = scores
                 .iter()
                 .find(|score| score.class == DriftClass::TruthGroundingGap)
                 .filter(|score| truth_grounding_gap_has_history(score))
                 .cloned();
+            previous_checkpoint_scores = Some(scores.clone());
             checkpoints.push(checkpoint::build_session_checkpoint_from_analysis(
                 &analysis,
                 &analysis.current.task_frame,

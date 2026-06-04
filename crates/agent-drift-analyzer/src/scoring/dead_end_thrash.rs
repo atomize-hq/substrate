@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use crate::checkpoint::{
-    CheckpointAnalysis, Confidence, DriftClass, DriftScore, EvidenceRef, RepeatedCommandLoop,
-    RepeatedFailureLoop,
+    CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
+    RepeatedCommandLoop, RepeatedFailureLoop,
 };
 
 const HISTORICAL_REPEATED_VERIFICATION_REASON_PREFIX: &str =
@@ -29,6 +29,7 @@ pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> DriftScore
 
     DriftScore {
         class: DriftClass::DeadEndThrash,
+        state: DriftState::Cleared,
         raw_score,
         confidence: if !analysis.repetition.repeated_verification_loops.is_empty() {
             Confidence::High

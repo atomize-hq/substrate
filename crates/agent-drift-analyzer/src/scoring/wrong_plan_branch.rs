@@ -1,4 +1,4 @@
-use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore};
+use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState};
 
 pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> DriftScore {
     let context = &analysis.current.context;
@@ -38,6 +38,7 @@ pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> DriftSco
     };
     DriftScore {
         class: DriftClass::WrongPlanBranch,
+        state: DriftState::Cleared,
         raw_score,
         confidence: if expected.is_empty() {
             Confidence::Low

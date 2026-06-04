@@ -17,6 +17,13 @@
 
 ## Objective
 
+Implementation status on `2026-06-04`:
+
+- `v0.6A` lands the analyzer-owned `DriftState` contract, centralized state builder, and
+  additive `checkpoints.jsonl` widening to checkpoint schema `v0.3`
+- `v0.6B` remains the separate sentinel cutover / compatibility / proof packet
+- typed outcome evidence remains a separate follow-on after `v0.6`
+
 Deepen the checkpoint-state module in `agent-drift-analyzer` so the analyzer owns current versus
 recovered versus historical-only versus cleared state for each drift class, exports that state in
 `checkpoints.jsonl`, and lets `agent-drift-sentinel` become presentation-only for posture.

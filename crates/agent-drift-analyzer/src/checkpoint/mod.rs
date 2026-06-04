@@ -17,7 +17,7 @@ pub use export::{
 };
 pub use schema::{
     Checkpoint, CheckpointBoundary, CheckpointDiagnostics, Confidence, DriftClass, DriftScore,
-    EvidenceRef, TaskFrame,
+    DriftState, EvidenceRef, TaskFrame,
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
@@ -127,6 +127,19 @@ pub(crate) fn build_session_checkpoint_from_analysis(
     )
 }
 
+pub(crate) fn assign_drift_states(
+    drift_scores: Vec<DriftScore>,
+    previous_drift_scores: Option<&[DriftScore]>,
+) -> Vec<DriftScore> {
+    drift_scores
+        .into_iter()
+        .map(|score| DriftScore {
+            state: drift_state_for_score(&score, previous_drift_scores),
+            ..score
+        })
+        .collect()
+}
+
 fn build_session_checkpoint_from_analysis_with_ordinal(
     analysis: &CheckpointAnalysis,
     ordinal: usize,
@@ -137,7 +150,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
     Checkpoint {
-        schema_version: "v0.2".to_string(),
+        schema_version: "v0.3".to_string(),
         session_id: analysis.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
         ordinal,
@@ -148,6 +161,62 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         drift_scores,
         expected_next_step,
     }
+}
+
+fn drift_state_for_score(
+    score: &DriftScore,
+    previous_drift_scores: Option<&[DriftScore]>,
+) -> DriftState {
+    if score.flagged {
+        return DriftState::Active;
+    }
+
+    if !supports_historical_state(score.class) {
+        return DriftState::Cleared;
+    }
+
+    if !has_historical_evidence(score) {
+        return DriftState::Cleared;
+    }
+
+    match previous_state_for_class(previous_drift_scores, score.class) {
+        Some(DriftState::Active) => DriftState::Recovered,
+        _ => DriftState::HistoricalOnly,
+    }
+}
+
+fn supports_historical_state(class: DriftClass) -> bool {
+    matches!(
+        class,
+        DriftClass::TruthGroundingGap | DriftClass::DeadEndThrash
+    )
+}
+
+fn has_historical_evidence(score: &DriftScore) -> bool {
+    score.evidence.iter().any(|evidence| match score.class {
+        DriftClass::WrongPlanBranch => false,
+        DriftClass::TruthGroundingGap => evidence
+            .reason
+            .starts_with("historical truth-grounding gap:"),
+        DriftClass::DeadEndThrash => {
+            evidence
+                .reason
+                .starts_with("historical repeated verification evidence:")
+                || evidence
+                    .reason
+                    .starts_with("historical repeated failure evidence:")
+        }
+    })
+}
+
+fn previous_state_for_class(
+    previous_drift_scores: Option<&[DriftScore]>,
+    class: DriftClass,
+) -> Option<DriftState> {
+    previous_drift_scores?
+        .iter()
+        .find(|score| score.class == class)
+        .map(|score| score.state)
 }
 
 pub fn build_session_checkpoint(

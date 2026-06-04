@@ -9,7 +9,7 @@ This task list implements:
 
 ## Packet v0.6A: Analyzer-Owned State Contract And Export
 
-- [ ] Task: Lock the checkpoint-state contract and packet boundary in repo docs
+- [x] Task: Lock the checkpoint-state contract and packet boundary in repo docs
   - Acceptance: the docs explicitly define:
     - analyzer-owned `active`, `recovered`, `historical_only`, and `cleared` per-class state
     - additive checkpoint export on `DriftScore`
@@ -24,7 +24,7 @@ This task list implements:
     - `docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-tasks.md`
     - `docs/specs/hybrid-drift-sentinel-implementation-order.md`
 
-- [ ] Task: Add one analyzer-owned `DriftState` contract and state builder
+- [x] Task: Add one analyzer-owned `DriftState` contract and state builder
   - Acceptance: analyzer code has one centralized state seam that:
     - defines exported per-class `DriftState`
     - computes state from `CheckpointAnalysis` plus scorer semantics
@@ -41,7 +41,7 @@ This task list implements:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
     - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
 
-- [ ] Task: Widen checkpoint export to `v0.3` with per-class state
+- [x] Task: Widen checkpoint export to `v0.3` with per-class state
   - Acceptance: exported checkpoints serialize `DriftScore.state`, checkpoint `schema_version`
     becomes `v0.3`, and analyzer export tests prove the new shape without changing compactor input.
   - Verify:
@@ -57,6 +57,7 @@ Packet `v0.6A` exit condition:
 - analyzer owns one explicit per-class state seam
 - checkpoint export is additively widened to `v0.3`
 - analyzer tests prove state semantics and export shape before sentinel cutover begins
+- `v0.6B` remains unstarted sentinel work; this task file intentionally leaves that packet pending
 
 ## Packet v0.6B: Sentinel Cutover, Compatibility, And Proof
 
