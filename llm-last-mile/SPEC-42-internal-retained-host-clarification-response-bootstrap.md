@@ -14,7 +14,9 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-durable-orchestration-obligation-ledger.md](./DESIGN-durable-orchestration-obligation-ledger.md)  
 Phase: `SPECIFY`  
-Status: draft for review on `2026-06-04`
+Status: implemented on `2026-06-04`
+Landed posture note: typed host `clarification_response` now has a dedicated deny-by-default gate, exact unresolved `FollowUpRequired` binding, deterministic prompt rendering over the existing `continue_world_worker` seam, and post-delivery follow-up closeout, while broader host response/control classes, active-ephemeral exact task identity, and Family-2 router/attach execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and no broader host-response/control, active-ephemeral identity, transport redesign, or Family-2 work was reopened.
 
 ## Assumptions
 
@@ -42,9 +44,9 @@ The current repo already provides most of the floor this slice needs:
 2. the live runtime already proves the required host-response ordering discipline: exact obligation binding before delivery, deterministic prompt rendering, and post-delivery closeout only after successful submit in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) and [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs),
 3. the retained-worker messaging design already treats `clarification_response` as a canonical host-to-worker conversational class paired with worker `follow_up_question`,
 4. the live repo now persists `FollowUpRequired` obligations durably from accepted worker `follow_up_question` events, so the exact consumer-side target for this slice already exists,
-5. the live repo still has no typed host `clarification_response` payload, no dedicated deny-by-default clarification-response gate, and no sanctioned follow-up-obligation closeout path after host delivery.
+5. the live repo now accepts a typed host `clarification_response` payload, enforces a dedicated deny-by-default clarification-response gate, and closes the matching follow-up obligation only after successful host delivery.
 
-That means the missing work is narrow: add the typed host payload and gate, bind it to exact unresolved `FollowUpRequired`, and reuse the already-landed retained delivery seam plus post-delivery closeout discipline.
+That means this slice closed a narrow consumer gap by adding the typed host payload and gate, binding it to exact unresolved `FollowUpRequired`, and reusing the already-landed retained delivery seam plus post-delivery closeout discipline.
 
 ## Objective
 
@@ -66,7 +68,7 @@ Primary runtime story:
 1. the live `continue_world_worker` request payload now accepts either free-form prompt text plus optional `thread_id` or a typed `approval_response` payload bound to exact approval causation,
 2. the live retained-worker event path now persists `FollowUpRequired` durably for accepted `follow_up_question`,
 3. the live transport submit seam still carries a single prompt string rather than a typed host-message envelope, so typed host clarification responses should compile onto that prompt seam through a canonical renderer,
-4. the live policy model still has no dedicated clarification-response gate, and the live state store still has no sanctioned follow-up-obligation closeout path tied to typed host clarification delivery,
+4. the live policy model now exposes a dedicated clarification-response gate, and the live state store now closes the matching follow-up obligation only after successful typed host clarification delivery,
 5. the live repo still has no typed active-ephemeral `task_run_id`, so active-ephemeral inspect/cancel widening remains separate later work.
 
 ## Tech Stack

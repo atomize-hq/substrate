@@ -5,7 +5,9 @@ Source plan: [PLAN-42.md](./PLAN-42.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: draft for review on `2026-06-04`
+Status: Packet 4 complete on `2026-06-04`; docs truth is aligned and the final validation wall is green
+Landed posture note: typed host `clarification_response` now has deny-by-default policy gating, exact unresolved `FollowUpRequired` binding, deterministic prompt rendering on `continue_world_worker`, and post-delivery closeout, while broader host response/control classes, active-ephemeral exact task-identity widening, and Family-2 router execution remain deferred.
+Validation note: final validation did not expose any in-scope stabilization follow-up, and no broader host response/control work, active-ephemeral identity widening, transport redesign, or Family-2 execution work was reopened.
 
 ## Execution Packets
 
@@ -28,14 +30,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Widen the `continue_world_worker` payload contract for typed clarification responses
+- [x] Task 1.1: Widen the `continue_world_worker` payload contract for typed clarification responses
   - Acceptance: internal `continue_world_worker` requests can carry a typed `clarification_response` payload bound to exact follow-up causation plus non-empty clarification text; generic prompt-based continue remains valid; `progress_ack`, `control_directive`, `control_ack`, and `fork_command` remain deferred.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Add minimal deny-by-default policy parsing and denial coverage for typed host clarification responses
+- [x] Task 1.2: Add minimal deny-by-default policy parsing and denial coverage for typed host clarification responses
   - Acceptance: policy/config truth can explicitly allow or deny typed `clarification_response` delivery; denied responses fail with stable explanation-ready errors; existing `agents.world_dispatch` action/mode/backend/boundary checks remain intact.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -66,7 +68,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Freeze exact follow-up-obligation lookup and closeout semantics
+- [x] Task 2.1: Freeze exact follow-up-obligation lookup and closeout semantics
   - Acceptance: typed clarification responses must bind to exact unresolved `FollowUpRequired` obligations; cross-session, wrong-kind, already-resolved, or missing obligations fail closed; no obligation is mutated before delivery succeeds.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -74,7 +76,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
     - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs) if validation helpers need widening
 
-- [ ] Task 2.2: Freeze clarification-response resolution mapping
+- [x] Task 2.2: Freeze clarification-response resolution mapping
   - Acceptance: successful clarification responses resolve the matching follow-up obligation; resolved timestamps and compatibility projections stay deterministic and reviewable; delivery failure leaves the obligation pending.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -102,7 +104,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Render typed clarification responses deterministically onto the existing retained member-turn seam
+- [x] Task 3.1: Render typed clarification responses deterministically onto the existing retained member-turn seam
   - Acceptance: typed clarification responses generate canonical prompt text from the typed payload rather than caller-authored ad hoc prompt assembly; live `continue_world_worker` submits that rendered prompt to the exact retained worker.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -111,7 +113,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 3.2: Prove delivery ordering and follow-up-obligation closeout semantics
+- [x] Task 3.2: Prove delivery ordering and follow-up-obligation closeout semantics
   - Acceptance: successful typed clarification-response delivery resolves the matching obligation exactly once; delivery failure leaves the obligation unresolved; public status/control regressions stay green.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -142,7 +144,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning/config truth without widening the slice
+- [x] Task 4.1: Align planning/config truth without widening the slice
   - Acceptance: repo-local docs describe Slice `42` as typed host clarification-response bootstrap over the existing `continue_world_worker` seam, not transport redesign, generic control-directive delivery, or Family-2 router execution.
   - Verify:
     - manual diff review
@@ -152,7 +154,7 @@ Session goal:
     - [`llm-last-mile/PLAN-42.md`](./PLAN-42.md)
     - [`llm-last-mile/TASKS-42.md`](./TASKS-42.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker tests, and full workspace tests are green; no unintended widening into generic control directives, transport-schema redesign, active-ephemeral identity, or Family-2 execution appears.
   - Verify:
     - `cargo fmt --all -- --check`

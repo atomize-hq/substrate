@@ -3,7 +3,9 @@
 Source spec: [SPEC-42-internal-retained-host-clarification-response-bootstrap.md](./SPEC-42-internal-retained-host-clarification-response-bootstrap.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: first post-Slice-41 host follow-up consumer slice  
-Status: draft for review on `2026-06-04`
+Status: implemented on `2026-06-04`
+Landed posture note: typed host `clarification_response` is now a deny-by-default internal bootstrap on `continue_world_worker`, bound to exact unresolved `FollowUpRequired` obligations with deterministic prompt rendering and post-delivery closeout, while broader host response/control classes, active-ephemeral exact task identity, and Family-2 router execution remain deferred.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope stabilization follow-up, and the landed slice stayed bounded to typed clarification-response bootstrap over the existing `continue_world_worker` seam.
 
 ## Objective
 
@@ -37,14 +39,14 @@ What the repo already has:
 4. a live member-turn submit seam that already delivers exact retained follow-up prompts,
 5. an approval-response implementation pattern that already proves typed host-response closeout after successful delivery.
 
-What the repo still lacks is:
+What the repo lacked before Packets `1` through `3` landed was:
 
 1. a typed host-side clarification-response contract at the dispatch boundary,
 2. explicit deny-by-default policy truth for that typed host response,
 3. sanctioned follow-up-obligation consumer behavior on the live host control-plane path,
 4. regression coverage proving delivery ordering and follow-up closeout semantics.
 
-The narrowest honest implementation order is:
+The narrowest honest implementation order was:
 
 1. freeze the typed clarification-response contract and policy surface first,
 2. freeze follow-up-obligation consumer semantics second,

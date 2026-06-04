@@ -6623,10 +6623,12 @@ agents:
         );
 
         let socket_home = tempdir().expect("socket tempdir");
-        let socket_path = socket_home.path().join("clarification-response-success.sock");
-        let recorded_requests = Arc::new(Mutex::new(
-            Vec::<transport_api_types::MemberTurnSubmitRequestV1>::new(),
-        ));
+        let socket_path = socket_home
+            .path()
+            .join("clarification-response-success.sock");
+        let recorded_requests = Arc::new(Mutex::new(Vec::<
+            transport_api_types::MemberTurnSubmitRequestV1,
+        >::new()));
         let recorded_requests_for_server = recorded_requests.clone();
         let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
         let server = tokio::spawn(async move {
@@ -6710,8 +6712,7 @@ agents:
 
         let mut request = sample_continue_clarification_response_world_dispatch_request();
         request.request_id = Some("req_continue_clarification_response_success".to_string());
-        request.idempotency_key =
-            Some("idem_continue_clarification_response_success".to_string());
+        request.idempotency_key = Some("idem_continue_clarification_response_success".to_string());
         request.payload = WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
             WorkerContinueClarificationResponsePayloadV1 {
                 follow_up_obligation_id: "obl_follow_up_success".to_string(),
@@ -6743,16 +6744,17 @@ agents:
 
         server.await.expect("stub world server task");
 
-        let recorded = recorded_requests
-            .lock()
-            .expect("recorded requests mutex poisoned");
-        assert_eq!(
-            recorded.len(),
-            1,
-            "typed clarification response should submit exactly one retained member turn: {recorded:?}"
-        );
-        assert_eq!(recorded[0].prompt, expected_prompt);
-        drop(recorded);
+        {
+            let recorded = recorded_requests
+                .lock()
+                .expect("recorded requests mutex poisoned");
+            assert_eq!(
+                recorded.len(),
+                1,
+                "typed clarification response should submit exactly one retained member turn: {recorded:?}"
+            );
+            assert_eq!(recorded[0].prompt, expected_prompt);
+        }
 
         let persisted = store
             .load_obligation("sess_dispatch", "obl_follow_up_success")
@@ -6824,8 +6826,7 @@ agents:
         request.payload = WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
             WorkerContinueClarificationResponsePayloadV1 {
                 follow_up_obligation_id: "obl_follow_up_failed".to_string(),
-                clarification_text: "Wait for a fresh world restart before continuing."
-                    .to_string(),
+                clarification_text: "Wait for a fresh world restart before continuing.".to_string(),
                 thread_id: Some("thread-follow-up-failed".to_string()),
             },
         );
