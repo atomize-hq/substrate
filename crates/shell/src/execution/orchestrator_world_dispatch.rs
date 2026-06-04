@@ -653,7 +653,11 @@ async fn continue_world_worker(
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
     let stream_result = execute_continue_world_worker_stream(&submit_request, &base_policy).await?;
     close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
-    if let Some(worker_event) = stream_result.surfaced_worker_event.as_ref() {
+    if let Some(worker_event) = stream_result
+        .surfaced_worker_event
+        .as_ref()
+        .filter(|event| continue_world_worker_event_persists_live_obligation(event.event_class))
+    {
         persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
     }
     let summary = summarize_continue_world_worker_result(&submit_request, stream_result.exit_code);
@@ -761,6 +765,18 @@ fn enforce_continue_world_worker_payload_policy(
             "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
         ),
     }
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_event_persists_live_obligation(
+    event_class: ContinueWorldWorkerEventClassV1,
+) -> bool {
+    matches!(
+        event_class,
+        ContinueWorldWorkerEventClassV1::ApprovalRequest
+            | ContinueWorldWorkerEventClassV1::ForkRequest
+            | ContinueWorldWorkerEventClassV1::ForkRecommendation
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -5298,6 +5314,188 @@ agents:
         );
 
         server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_keeps_packet_two_worker_events_ephemeral_on_live_path(
+    ) {
+        struct Case {
+            event_class: ContinueWorldWorkerEventClassV1,
+            expected_kind: OrchestrationObligationKind,
+            expected_message: &'static str,
+        }
+
+        for case in [
+            Case {
+                event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
+                expected_kind: OrchestrationObligationKind::FollowUpRequired,
+                expected_message: "need host confirmation",
+            },
+            Case {
+                event_class: ContinueWorldWorkerEventClassV1::Blocked,
+                expected_kind: OrchestrationObligationKind::Blocked,
+                expected_message: "waiting on host",
+            },
+        ] {
+            let _env_guard = world_env_guard();
+            let socket_home = tempdir().expect("socket tempdir");
+            let socket_path = socket_home.path().join(format!(
+                "live-ephemeral-{}.sock",
+                continue_worker_event_label(case.event_class)
+            ));
+            let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+            let event_class = case.event_class;
+            let expected_message = case.expected_message;
+            let server = tokio::spawn(async move {
+                while let Ok((mut stream, _addr)) = listener.accept().await {
+                    let Some((header, body)) = read_http_request(&mut stream).await else {
+                        continue;
+                    };
+                    let first_line = header.lines().next().unwrap_or("");
+
+                    if first_line.starts_with("GET /v1/capabilities ") {
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/member_turn/stream ") {
+                        let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                            serde_json::from_slice(&body).expect("member turn submit request");
+                        write_http_stream_start(&mut stream).await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Start {
+                                span_id: "member-turn-span".to_string(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Event {
+                                event: sample_continue_stream_event(json!({
+                                    "event_class": continue_worker_event_label(event_class),
+                                    "payload": {
+                                        "message": expected_message
+                                    }
+                                })),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Exit {
+                                exit: 0,
+                                span_id: "member-turn-span".to_string(),
+                                scopes_used: Vec::new(),
+                                fs_diff: None,
+                                process_telemetry: Default::default(),
+                            },
+                        )
+                        .await;
+                        finish_chunked_stream(&mut stream).await;
+                        break;
+                    }
+
+                    write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+                }
+            });
+
+            let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+            let substrate_home = tempdir().expect("substrate home tempdir");
+            let _substrate_home_guard =
+                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            fs::write(
+                substrate_home.path().join("policy.yaml"),
+                format!(
+                    r#"id: test-global-policy
+name: Test Global Policy
+agents:
+  allowed_backends:
+    - "cli:codex_world"
+  world_dispatch:
+    enabled: true
+    allowed_backends:
+      - "cli:codex_world"
+    allowed_actions:
+      - "continue_world_worker"
+    allowed_modes:
+      - "retained"
+    same_session_only: true
+    same_world_binding_only: true
+    allow_capability_narrowing: false
+    max_live_retained_workers: 4
+    max_concurrent_ephemeral: 4
+    obligations:
+      follow_up_allowed: {}
+      blocked_allowed: {}
+"#,
+                    matches!(
+                        case.event_class,
+                        ContinueWorldWorkerEventClassV1::FollowUpQuestion
+                    ),
+                    matches!(case.event_class, ContinueWorldWorkerEventClassV1::Blocked),
+                ),
+            )
+            .expect("write packet-two live-path policy");
+            let store = AgentRuntimeStateStore::new().expect("state store");
+            persist_authoritative_continue_dispatch_state(
+                &store,
+                socket_home.path(),
+                "world-17",
+                2,
+            );
+
+            let request_id = format!(
+                "req_continue_ephemeral_{}",
+                continue_worker_event_label(case.event_class)
+            );
+            let outcome = dispatch_real_continue_world_worker_request(
+                &store,
+                &request_id,
+                &format!("idem_{request_id}"),
+                "world-17",
+                2,
+            )
+            .await;
+
+            assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+            assert_eq!(
+                outcome.worker_event.as_ref().map(|event| event.event_class),
+                Some(case.event_class)
+            );
+            assert_eq!(
+                outcome
+                    .worker_event
+                    .as_ref()
+                    .and_then(|event| event.payload.get("message"))
+                    .and_then(serde_json::Value::as_str),
+                Some(expected_message)
+            );
+
+            let obligation = store
+                .load_obligation(
+                    "sess_dispatch",
+                    &format!(
+                        "obl_continue_{}_{}",
+                        request_id,
+                        continue_world_worker_event_kind_slug(case.expected_kind)
+                    ),
+                )
+                .expect("load packet-two live-path obligation");
+            assert!(
+                obligation.is_none(),
+                "packet-two worker events must stay ephemeral on the live continue_world_worker path",
+            );
+
+            server.await.expect("stub world server task");
+        }
     }
 
     #[cfg(target_os = "linux")]
