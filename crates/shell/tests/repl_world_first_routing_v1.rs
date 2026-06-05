@@ -5,6 +5,7 @@ mod support;
 
 use serde_json::Value;
 use serial_test::serial;
+#[cfg(target_os = "linux")]
 use std::collections::VecDeque;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
