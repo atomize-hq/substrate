@@ -7540,6 +7540,145 @@ agents:
     }
 
     #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_progress_ack_surfaces_progress_update_without_persisting_obligation(
+    ) {
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_progress_acks(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("progress-ack-progress-update.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_event(json!({
+                                "event_class": "progress_update",
+                                "payload": {
+                                    "message": "still making progress"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let outcome = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_progress_ack_world_dispatch_request(),
+        )
+        .await
+        .expect("progress_ack delivery should surface progress_update");
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+            panic!("expected continue_world_worker outcome");
+        };
+
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(
+            outcome.worker_event.as_ref().map(|event| event.event_class),
+            Some(ContinueWorldWorkerEventClassV1::ProgressUpdate)
+        );
+        assert_eq!(
+            outcome
+                .worker_event
+                .as_ref()
+                .map(|event| event.attention_required),
+            Some(false)
+        );
+        assert_eq!(
+            outcome
+                .worker_event
+                .as_ref()
+                .and_then(|event| event.payload.get("message"))
+                .and_then(serde_json::Value::as_str),
+            Some("still making progress")
+        );
+        assert_eq!(
+            outcome.summary,
+            "continue_world_worker delivered typed progress_ack to retained worker ash_member via the existing member-turn seam; it acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined"
+        );
+        assert!(
+            !outcome.summary.contains("control_directive"),
+            "progress_ack summary must not widen into control acknowledgement: {}",
+            outcome.summary
+        );
+        assert!(
+            !outcome.summary.contains("fork_command"),
+            "progress_ack summary must not widen into fork handling: {}",
+            outcome.summary
+        );
+
+        let obligations = store
+            .list_obligations("sess_dispatch")
+            .expect("list obligations after progress_ack");
+        assert!(
+            obligations.is_empty(),
+            "progress_ack must not persist durable obligations: {obligations:?}"
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_continue_world_worker_fork_command_denies_by_default_before_target_resolution(

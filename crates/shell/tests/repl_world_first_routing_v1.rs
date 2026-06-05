@@ -527,6 +527,7 @@ struct WorldDispatchPolicyArgs<'a> {
     allowed_modes: &'a [&'a str],
     max_live_retained_workers: usize,
     control_directives_allowed: bool,
+    progress_acks_allowed: bool,
     fork_commands_allowed: bool,
 }
 
@@ -539,6 +540,7 @@ fn write_member_runtime_policy_with_world_dispatch(
         home_substrate,
         WorldDispatchPolicyArgs {
             control_directives_allowed: false,
+            progress_acks_allowed: false,
             fork_commands_allowed: false,
             ..args
         },
@@ -558,10 +560,17 @@ fn write_member_runtime_policy_with_world_dispatch_control_directives(
     let dispatch_actions = yaml_quoted_list(args.allowed_actions, 6);
     let dispatch_modes = yaml_quoted_list(args.allowed_modes, 6);
     let max_live_retained_workers = args.max_live_retained_workers;
-    let control_block = if args.control_directives_allowed {
-        "    control:\n      control_directives_allowed: true\n"
+    let control_block = if args.control_directives_allowed || args.progress_acks_allowed {
+        let mut block = String::from("    control:\n");
+        if args.control_directives_allowed {
+            block.push_str("      control_directives_allowed: true\n");
+        }
+        if args.progress_acks_allowed {
+            block.push_str("      progress_acks_allowed: true\n");
+        }
+        block
     } else {
-        ""
+        String::new()
     };
     let fork_block = if args.fork_commands_allowed {
         "    fork:\n      commands_allowed: true\n"
@@ -633,6 +642,7 @@ fn write_member_runtime_policy_with_member_backend(
             allowed_modes: &["ephemeral", "retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: false,
+            progress_acks_allowed: false,
             fork_commands_allowed: false,
         },
     );
@@ -2928,6 +2938,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: false,
+            progress_acks_allowed: false,
             fork_commands_allowed: false,
         },
     );
@@ -3170,6 +3181,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: true,
+            progress_acks_allowed: false,
             fork_commands_allowed: false,
         },
     );
@@ -3369,6 +3381,506 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
+fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_effects() {
+    let temp = temp_dir("substrate-c3-toolbox-progress-ack-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: true,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-progress-ack-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-progress-ack".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy_with_scripts(
+            &proxy_sock,
+            &backend_sock,
+            vec![MemberTurnInterceptScript::UnsupportedWorkerEvent {
+                event_class: "progress_update".to_string(),
+                message: "still making progress".to_string(),
+            }],
+        );
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let member_orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+    assert_eq!(
+        member_orchestrator_participant_id, orchestrator_participant_id,
+        "progress_ack delivery must preserve exact retained-worker ownership"
+    );
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_progress_ack",
+            "idempotency_key": "idem_toolbox_progress_ack",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "continue_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex",
+            "target_participant_id": member_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_continue_progress_ack",
+                "thread_id": "thread-progress-46"
+            }
+        }),
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "toolbox progress_ack must reuse the existing retained member instead of relaunching it: {guard:#?}"
+    );
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    assert_eq!(
+        intercepted_turns.len(),
+        1,
+        "toolbox progress_ack must submit exactly one member turn request: {intercepted_turns:#?}"
+    );
+    let submit = intercepted_turns
+        .first()
+        .expect("member turn submit request");
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, member_participant_id);
+    assert_eq!(
+        submit.orchestrator_participant_id,
+        member_orchestrator_participant_id
+    );
+    assert_eq!(submit.backend_id, "cli:codex");
+    assert_eq!(submit.world_id, world_id);
+    assert_eq!(submit.world_generation, world_generation);
+    assert_eq!(
+        submit.prompt,
+        "SUBSTRATE_INTERNAL_HOST_PROGRESS_ACK_V1\n{\"kind\":\"progress_ack\",\"thread_id\":\"thread-progress-46\"}\nTreat this as the host's typed progress_ack for the retained worker. It only acknowledges that the host saw the worker's recent progress. It does not imply completion, pause, new scope, or durable closeout."
+    );
+    drop(intercepted_turns);
+
+    let expected_summary = format!(
+        "continue_world_worker delivered typed progress_ack to retained worker {} via the existing member-turn seam; it acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined",
+        member_participant_id
+    );
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        response
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("continue_world_worker")
+    );
+    assert_eq!(
+        response.pointer("/outcome/summary").and_then(Value::as_str),
+        Some(expected_summary.as_str())
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/worker_event/event_class")
+            .and_then(Value::as_str),
+        Some("progress_update")
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/worker_event/attention_required")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/worker_event/payload/message")
+            .and_then(Value::as_str),
+        Some("still making progress")
+    );
+    let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
+    let obligation_count = fs::read_dir(&obligations_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    assert_eq!(
+        obligation_count, 0,
+        "progress_ack must not persist durable obligations on the routed toolbox path"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_events() {
+    let temp = temp_dir("substrate-c3-toolbox-progress-ack-fail-closed-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: true,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-progress-ack-fail-closed-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-progress-ack-fail-closed".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy_with_scripts(
+            &proxy_sock,
+            &backend_sock,
+            vec![
+                MemberTurnInterceptScript::ControlAck,
+                MemberTurnInterceptScript::UnsupportedWorkerEvent {
+                    event_class: "fork_command".to_string(),
+                    message: "not in packet 3".to_string(),
+                },
+                MemberTurnInterceptScript::UnsupportedWorkerEvent {
+                    event_class: "control_directive".to_string(),
+                    message: "not in packet 3".to_string(),
+                },
+            ],
+        );
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let member_orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+
+    let send_progress_ack = |request_id: &str, idempotency_key: &str, thread_id: &str| {
+        send_internal_toolbox_world_dispatch_request(
+            &toolbox_path,
+            &serde_json::json!({
+                "request_id": request_id,
+                "idempotency_key": idempotency_key,
+                "orchestration_session_id": orchestration_session_id.clone(),
+                "caller_participant_id": orchestrator_participant_id.clone(),
+                "action": "continue_world_worker",
+                "mode": "retained",
+                "target_backend_id": "cli:codex",
+                "target_participant_id": member_participant_id.clone(),
+                "world_id": world_id.clone(),
+                "world_generation": world_generation,
+                "payload": {
+                    "payload_kind": "worker_continue_progress_ack",
+                    "thread_id": thread_id,
+                }
+            }),
+        )
+    };
+
+    let control_ack_response = send_progress_ack(
+        "req_toolbox_progress_ack_control_ack",
+        "idem_toolbox_progress_ack_control_ack",
+        "thread-progress-46-control-ack",
+    );
+    assert_eq!(
+        control_ack_response.get("ok").and_then(Value::as_bool),
+        Some(false)
+    );
+    assert!(
+        control_ack_response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "unsupported_worker_event_class: continue_world_worker accepts control_ack only for typed control_directive delivery"
+            )),
+        "progress_ack must fail closed for control_ack: {control_ack_response:#?}"
+    );
+
+    let fork_command_response = send_progress_ack(
+        "req_toolbox_progress_ack_fork_command",
+        "idem_toolbox_progress_ack_fork_command",
+        "thread-progress-46-fork-command",
+    );
+    assert_eq!(
+        fork_command_response.get("ok").and_then(Value::as_bool),
+        Some(false)
+    );
+    assert!(
+        fork_command_response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("unsupported_worker_event_class")),
+        "progress_ack must fail closed for deferred fork_command: {fork_command_response:#?}"
+    );
+
+    let control_directive_response = send_progress_ack(
+        "req_toolbox_progress_ack_control_directive",
+        "idem_toolbox_progress_ack_control_directive",
+        "thread-progress-46-control-directive",
+    );
+    assert_eq!(
+        control_directive_response.get("ok").and_then(Value::as_bool),
+        Some(false)
+    );
+    assert!(
+        control_directive_response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("unsupported_worker_event_class")),
+        "progress_ack must fail closed for deferred control_directive: {control_directive_response:#?}"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "progress_ack fail-closed coverage must keep reusing the retained member instead of relaunching it: {guard:#?}"
+    );
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    assert_eq!(
+        intercepted_turns.len(),
+        3,
+        "expected exactly three retained member turn submits for progress_ack fail-closed coverage: {intercepted_turns:#?}"
+    );
+    for submit in intercepted_turns.iter() {
+        assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+        assert_eq!(submit.participant_id, member_participant_id);
+        assert_eq!(
+            submit.orchestrator_participant_id,
+            member_orchestrator_participant_id
+        );
+        assert_eq!(submit.backend_id, "cli:codex");
+        assert_eq!(submit.world_id, world_id);
+        assert_eq!(submit.world_generation, world_generation);
+    }
+    drop(intercepted_turns);
+
+    let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
+    let obligation_count = fs::read_dir(&obligations_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    assert_eq!(
+        obligation_count, 0,
+        "progress_ack fail-closed coverage must not persist durable obligations"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
 fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_scope_worker_events()
 {
     let temp = temp_dir("substrate-c3-toolbox-control-ack-fail-closed-");
@@ -3399,6 +3911,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: true,
+            progress_acks_allowed: false,
             fork_commands_allowed: false,
         },
     );
@@ -3721,6 +4234,7 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: false,
+            progress_acks_allowed: false,
             fork_commands_allowed: true,
         },
     );
@@ -4026,6 +4540,7 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
             allowed_modes: &["retained"],
             max_live_retained_workers: 1,
             control_directives_allowed: false,
+            progress_acks_allowed: false,
             fork_commands_allowed: true,
         },
     );
@@ -4240,6 +4755,7 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: false,
+            progress_acks_allowed: false,
             fork_commands_allowed: true,
         },
     );
