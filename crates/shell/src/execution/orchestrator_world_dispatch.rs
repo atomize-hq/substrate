@@ -3054,13 +3054,13 @@ fn summarize_continue_world_worker_result(
     if turn_kind == ContinueWorldWorkerTurnKind::ProgressAck {
         if exit_code == 0 {
             return format!(
-                "continue_world_worker delivered typed progress_ack to retained worker {} via the existing member-turn seam; it only acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined",
+                "continue_world_worker delivered typed progress_ack to retained worker {} via the existing member-turn seam; it acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined",
                 request.participant_id
             );
         }
 
         return format!(
-            "continue_world_worker delivered typed progress_ack to retained worker {} via the existing member-turn seam, but the turn exited with status {}; it only acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined",
+            "continue_world_worker delivered typed progress_ack to retained worker {} via the existing member-turn seam, but the turn exited with status {}; it acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined",
             request.participant_id, exit_code
         );
     }
@@ -7507,7 +7507,7 @@ agents:
         );
         assert_eq!(
             outcome.summary,
-            "continue_world_worker delivered typed progress_ack to retained worker ash_member via the existing member-turn seam, but the turn exited with status 17; it only acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined"
+            "continue_world_worker delivered typed progress_ack to retained worker ash_member via the existing member-turn seam, but the turn exited with status 17; it acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined"
         );
         assert!(
             !outcome.summary.contains("completed on retained worker"),
@@ -11184,6 +11184,18 @@ agents:
     #[test]
     fn continue_world_worker_progress_ack_summary_stays_seen_progress_only() {
         let submit = sample_continue_submit_request();
+        let follow_up = ContinueWorldWorkerEventV1 {
+            event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
+            source_participant_id: "ash_member".to_string(),
+            target_participant_id: "orch_dispatch".to_string(),
+            source_backend_id: "cli:codex_world".to_string(),
+            attention_required: true,
+            thread_id: Some("thread-direct".to_string()),
+            stream_channel: Some("worker.reply".to_string()),
+            payload: serde_json::json!({
+                "question": "Need a repo-specific decision?",
+            }),
+        };
 
         let success = summarize_continue_world_worker_result(
             &submit,
@@ -11211,6 +11223,30 @@ agents:
         assert!(
             !success.contains("completed on retained worker"),
             "progress_ack summary must not imply completion: {success}"
+        );
+
+        let surfaced_follow_up = summarize_continue_world_worker_result(
+            &submit,
+            ContinueWorldWorkerTurnKind::ProgressAck,
+            0,
+            Some(&follow_up),
+            None,
+        );
+        assert!(
+            surfaced_follow_up.contains("host saw the worker's recent progress"),
+            "progress_ack summary must remain acknowledgement-scoped even when a worker event is surfaced: {surfaced_follow_up}"
+        );
+        assert!(
+            !surfaced_follow_up.contains("only acknowledges"),
+            "progress_ack summary must not claim exclusivity when the same turn also surfaced a worker event: {surfaced_follow_up}"
+        );
+        assert!(
+            !surfaced_follow_up.contains("control_directive"),
+            "progress_ack summary must not widen into control acknowledgement when another worker event is surfaced: {surfaced_follow_up}"
+        );
+        assert!(
+            !surfaced_follow_up.contains("fork_command"),
+            "progress_ack summary must not widen into fork handling when another worker event is surfaced: {surfaced_follow_up}"
         );
 
         let failure = summarize_continue_world_worker_result(
