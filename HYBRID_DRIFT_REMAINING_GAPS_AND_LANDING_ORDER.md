@@ -416,6 +416,20 @@ that narrower analyzer semantics behave honestly on completed non-subagent tails
 - the family still does not widen into turn context, session archetype, progress semantics, or
   sentinel cleanup
 
+Bounded proof note on `2026-06-05`:
+
+- final non-subagent success-tail proof corpus:
+  `019e93fa-60d4-73d1-9092-014130b60e14`,
+  `019e940c-a91b-7fe0-a967-b0bdd595b581`,
+  `019e943c-668e-7a03-992b-6a98cf3055da`
+- each proof replay ended with final `dead_end_thrash.state=cleared`
+- delegated sessions `019e93f8-a5e9-7490-ac1a-955b74c92ad0` and
+  `019e9406-6736-79a2-946b-8a603e557422` were excluded by `multi_agent_v1`
+  `spawn_agent` / `wait_agent` / `close_agent` markers
+- screened session `019e9401-9d69-7190-a43e-9ee3be08b369` was excluded from the final
+  success-tail proof because its rollout includes `Exit code: 1` tool-output rows, so the
+  remaining active `dead_end_thrash` there is outside the successful-output-only claim
+
 ## Packet R2: Analyzer Acceptance Fixture Hardening
 
 ### Objective

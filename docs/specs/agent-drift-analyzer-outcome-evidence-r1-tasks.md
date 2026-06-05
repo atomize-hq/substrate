@@ -97,7 +97,7 @@ Packet `R1B` exit condition:
 
 ## Packet R1C: Prove The Family On A Screened Non-Subagent Replay Corpus
 
-- [ ] Task: Screen a small proof corpus and exclude delegated / subagent sessions
+- [x] Task: Screen a small proof corpus and exclude delegated / subagent sessions
   - Acceptance: proof-session selection proves that:
     - a small handful of completed sessions were screened before use
     - sessions with delegation/subagent markers were excluded
@@ -106,6 +106,13 @@ Packet `R1B` exit condition:
     - if current rollout text is too weak for reliable screening, only the smallest acceptance-only
       `subagent_observed` helper is added and it is not broadened into a general supported
       subagent seam
+  - Result:
+    - rollout-text screening was sufficient; no `subagent_observed` helper was added
+    - excluded delegated sessions:
+      - `019e93f8-a5e9-7490-ac1a-955b74c92ad0`
+      - `019e9406-6736-79a2-946b-8a603e557422`
+    - both excluded rollouts contained `multi_agent_v1` `spawn_agent` / `wait_agent` /
+      `close_agent` markers
   - Verify:
     - inspection of the selected rollout JSONL files
     - targeted test coverage if a tiny acceptance-only helper is added
@@ -113,13 +120,23 @@ Packet `R1B` exit condition:
     - `crates/agent-drift-analyzer/tests/support/mod.rs`
     - `/Users/spensermcconnell/.codex/sessions/`
 
-- [ ] Task: Prove `R1C` on a small handful of completed non-subagent sessions and refresh continuity notes
+- [x] Task: Prove `R1C` on a small handful of completed non-subagent sessions and refresh continuity notes
   - Acceptance: bounded proof shows that:
     - the compactor -> analyzer -> sentinel replay path runs on the final screened session set
     - final checkpoints no longer end in active `dead_end_thrash` for successful-output-only tails
     - proof claims stay clearly labeled as bounded replay proof rather than true live proof
     - continuity notes are refreshed if the final proof corpus, verifier shape, or packet-routing
       language changed materially during `R1A` / `R1B`
+  - Result:
+    - final success-tail proof corpus:
+      - `019e93fa-60d4-73d1-9092-014130b60e14`
+      - `019e940c-a91b-7fe0-a967-b0bdd595b581`
+      - `019e943c-668e-7a03-992b-6a98cf3055da`
+    - each replay ended with final `dead_end_thrash.state=cleared` and `raw_score=0`
+    - screened but excluded from the final success-tail proof corpus:
+      - `019e9401-9d69-7190-a43e-9ee3be08b369`
+    - that excluded rollout is non-subagent, but it contains `Exit code: 1` tool-output rows, so
+      it is not a successful-output-only tail and does not belong in the bounded success-tail proof
   - Verify:
     - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
