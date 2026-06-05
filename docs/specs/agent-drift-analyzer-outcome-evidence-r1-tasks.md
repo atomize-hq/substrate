@@ -56,7 +56,7 @@ Packet `R1A` exit condition:
 
 ## Packet R1B: Preserve Honest Recovery And Export Semantics
 
-- [ ] Task: Preserve honest recovery and `dead_end_thrash` state semantics after the evidence cutover
+- [x] Task: Preserve honest recovery and `dead_end_thrash` state semantics after the evidence cutover
   - Acceptance: analyzer semantics prove that:
     - repeated successful output no longer manufactures repeated-failure loops
     - clean verification intervals are not blocked by neutral bookkeeping or success-only output
@@ -73,7 +73,7 @@ Packet `R1A` exit condition:
     - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
     - `crates/agent-drift-analyzer/tests/export_bundle.rs`
 
-- [ ] Task: Add focused regressions for success tails and bookkeeping output
+- [x] Task: Add focused regressions for success tails and bookkeeping output
   - Acceptance: regression coverage explicitly proves that:
     - `Exit code: 0` tool output stays non-failure
     - plan-update / bookkeeping text stays non-failure
