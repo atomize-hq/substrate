@@ -7144,7 +7144,7 @@ agents:
         assert!(
             outcome
                 .summary
-                .contains("acknowledged the control_directive"),
+                .contains("acknowledgement of the control_directive"),
             "summary must be explicit about acknowledgement: {}",
             outcome.summary
         );
