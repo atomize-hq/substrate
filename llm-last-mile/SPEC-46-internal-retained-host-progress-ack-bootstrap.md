@@ -47,10 +47,10 @@ The current repo already provides most of the floor this slice needs:
 1. the live `continue_world_worker` request payload already accepts free-form prompt text plus the narrow typed host payloads `approval_response`, `clarification_response`, `control_directive`, and `fork_command` on the same retained seam in [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs),
 2. the live retained-worker event path already accepts `progress_update` as an in-scope worker event class and treats it as non-attention-driving by default in [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs),
 3. the live runtime already proves the host-side typed payload pattern for that seam: exact retained-worker targeting, deny-by-default typed payload gating, deterministic implementation-owned rendering, and truthful delivery semantics in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs),
-4. the current request contract still rejects typed `worker_continue_progress_ack`, so the host cannot yet send a narrow typed acknowledgement back over the live retained seam,
-5. the live policy model already distinguishes obligation-bound host responses, control directives, and fork commands with separate deny-by-default gates, but it still exposes no dedicated host `progress_ack` gate.
+4. the live request contract now accepts typed `worker_continue_progress_ack`, so the host can send a narrow typed acknowledgement back over the live retained seam without widening transport schema,
+5. the live policy model already distinguishes obligation-bound host responses, control directives, host progress acknowledgements, and fork commands with separate deny-by-default gates, including `agents.world_dispatch.control.progress_acks_allowed`.
 
-That means the remaining gap is narrower than active-ephemeral identity work and smaller than any transport redesign: the repo needs one optional typed host `progress_ack` class on the existing retained continue seam, but it should land as a delivery-only acknowledgement rather than inventing a durable progress consumer model.
+That means the landed Slice `46` surface remains narrower than active-ephemeral identity work and smaller than any transport redesign: the repo now has one optional typed host `progress_ack` class on the existing retained continue seam, and it remains delivery-only rather than inventing a durable progress consumer model.
 
 ## Objective
 
@@ -68,8 +68,8 @@ Primary runtime story:
 
 ## Current Landed Runtime Note
 
-1. the live `continue_world_worker` request payload now accepts free-form prompt text plus optional `thread_id`, typed `approval_response`, typed `clarification_response`, typed `control_directive`, and typed `fork_command`,
-2. the live retained-worker event path already accepts `progress_update` while still rejecting typed host `worker_continue_progress_ack`,
+1. the live `continue_world_worker` request payload now accepts free-form prompt text plus optional `thread_id`, typed `approval_response`, typed `clarification_response`, typed `control_directive`, typed `progress_ack`, and typed `fork_command`,
+2. the live retained-worker event path already accepts `progress_update` while the host can now send typed `worker_continue_progress_ack` over that same retained seam,
 3. the live transport submit seam still carries a single prompt string rather than a typed host-message envelope, so typed host progress acknowledgements should compile onto that prompt seam through a canonical renderer,
 4. the live repo already distinguishes durable obligation consumers from delivery-only typed host messages, and `progress_update` itself is non-attention-driving by default,
 5. the live repo still has no typed active-ephemeral `task_run_id`, so active-ephemeral inspect/cancel widening remains separate later work.

@@ -1857,7 +1857,9 @@ workflow:
             })
             .and_then(|control| {
                 control
-                    .get(serde_yaml::Value::String("progress_acks_allowed".to_string()))
+                    .get(serde_yaml::Value::String(
+                        "progress_acks_allowed".to_string(),
+                    ))
                     .and_then(|value| value.as_bool())
             });
         assert!(

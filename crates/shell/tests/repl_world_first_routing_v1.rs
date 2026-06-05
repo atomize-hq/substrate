@@ -3819,7 +3819,9 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         "thread-progress-46-control-directive",
     );
     assert_eq!(
-        control_directive_response.get("ok").and_then(Value::as_bool),
+        control_directive_response
+            .get("ok")
+            .and_then(Value::as_bool),
         Some(false)
     );
     assert!(

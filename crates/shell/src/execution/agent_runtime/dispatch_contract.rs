@@ -2033,9 +2033,9 @@ mod tests {
         WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
         WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
         WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
-        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
-        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
+        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -4005,11 +4005,9 @@ mod tests {
         let validated = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchModeV1::Retained,
-            WorldDispatchPayloadV1::WorkerContinueProgressAck(
-                WorkerContinueProgressAckPayloadV1 {
-                    thread_id: Some("thread-progress".to_string()),
-                },
-            ),
+            WorldDispatchPayloadV1::WorkerContinueProgressAck(WorkerContinueProgressAckPayloadV1 {
+                thread_id: Some("thread-progress".to_string()),
+            }),
         )
         .with_target_participant_id("ash-worker-46")
         .validate()
@@ -4026,11 +4024,9 @@ mod tests {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchModeV1::Retained,
-            WorldDispatchPayloadV1::WorkerContinueProgressAck(
-                WorkerContinueProgressAckPayloadV1 {
-                    thread_id: Some(" ".to_string()),
-                },
-            ),
+            WorldDispatchPayloadV1::WorkerContinueProgressAck(WorkerContinueProgressAckPayloadV1 {
+                thread_id: Some(" ".to_string()),
+            }),
         )
         .with_target_participant_id("ash-worker-46")
         .validate()
@@ -4241,33 +4237,32 @@ mod tests {
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_still_deferred_host_response_payload_kinds_during_deserialization()
-    {
-        for payload_kind in ["worker_continue_control_ack"] {
-            let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
-                "request_id": "req-43",
-                "idempotency_key": "idem-43",
-                "orchestration_session_id": "sess-43",
-                "caller_participant_id": "orch-43",
-                "action": "continue_world_worker",
-                "mode": "retained",
-                "target_backend_id": "cli:codex_world",
-                "target_participant_id": "ash-worker-43",
-                "world_id": "world-43",
-                "world_generation": 11,
-                "payload": {
-                    "payload_kind": payload_kind
-                }
-            }))
-            .expect_err("deferred host response classes must stay out of packet 1");
+    fn world_dispatch_contract_rejects_still_deferred_host_response_payload_kinds_during_deserialization(
+    ) {
+        let payload_kind = "worker_continue_control_ack";
+        let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
+            "request_id": "req-43",
+            "idempotency_key": "idem-43",
+            "orchestration_session_id": "sess-43",
+            "caller_participant_id": "orch-43",
+            "action": "continue_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex_world",
+            "target_participant_id": "ash-worker-43",
+            "world_id": "world-43",
+            "world_generation": 11,
+            "payload": {
+                "payload_kind": payload_kind
+            }
+        }))
+        .expect_err("deferred host response classes must stay out of packet 1");
 
-            assert!(
-                error
-                    .to_string()
-                    .contains(&format!("unknown variant `{payload_kind}`")),
-                "unexpected deferred host response serde error for {payload_kind}: {error}"
-            );
-        }
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("unknown variant `{payload_kind}`")),
+            "unexpected deferred host response serde error for {payload_kind}: {error}"
+        );
     }
 
     #[test]
