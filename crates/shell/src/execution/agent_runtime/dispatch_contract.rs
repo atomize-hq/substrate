@@ -397,6 +397,8 @@ pub(crate) struct WorldDispatchRequestV1 {
     pub action: WorldDispatchActionV1,
     pub mode: WorldDispatchModeV1,
     pub target_backend_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_run_id: Option<String>,
     pub target_participant_id: Option<String>,
     pub world_id: Option<String>,
     pub world_generation: Option<u64>,
@@ -414,6 +416,7 @@ pub(crate) struct ValidatedWorldDispatchRequestV1 {
     pub mode: WorldDispatchModeV1,
     pub target_backend_id: String,
     pub target_participant_id: Option<String>,
+    pub task_run_id: Option<String>,
     pub world_id: String,
     pub world_generation: u64,
     pub payload: WorldDispatchPayloadV1,
@@ -423,6 +426,7 @@ impl WorldDispatchRequestV1 {
     pub(crate) fn validate(mut self) -> anyhow::Result<ValidatedWorldDispatchRequestV1> {
         validate_world_dispatch_action_mode(self.action, self.mode)?;
         validate_world_dispatch_payload(self.action, &mut self.payload)?;
+        canonicalize_optional_world_dispatch_task_run_id(self.action, &mut self.task_run_id)?;
 
         let request_id = required_world_dispatch_string("request_id", self.request_id)?;
         let idempotency_key =
@@ -433,8 +437,12 @@ impl WorldDispatchRequestV1 {
         )?;
         let caller_participant_id =
             required_world_dispatch_string("caller_participant_id", self.caller_participant_id)?;
-        let target_participant_id =
-            validate_world_dispatch_target(self.action, self.target_participant_id)?;
+        let target_participant_id = validate_world_dispatch_target(
+            self.action,
+            self.mode,
+            self.target_participant_id,
+            self.task_run_id.as_deref(),
+        )?;
         let world_id = required_world_dispatch_string("world_id", self.world_id)?;
         let world_generation = self.world_generation.ok_or_else(|| {
             anyhow::anyhow!(
@@ -454,6 +462,7 @@ impl WorldDispatchRequestV1 {
             mode: self.mode,
             target_backend_id,
             target_participant_id,
+            task_run_id: self.task_run_id,
             world_id,
             world_generation,
             payload: self.payload,
@@ -483,7 +492,9 @@ fn validate_world_dispatch_action_mode(
         | (WorldDispatchActionV1::SpawnWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::ForkWorldWorker, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Ephemeral)
         | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Ephemeral)
         | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Retained)
         | (WorldDispatchActionV1::StopWorldWorker, WorldDispatchModeV1::Retained) => Ok(()),
         _ => anyhow::bail!(
@@ -870,10 +881,13 @@ fn render_continue_world_worker_control_directive_prompt(
 
 fn validate_world_dispatch_target(
     action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
     value: Option<String>,
+    task_run_id: Option<&str>,
 ) -> anyhow::Result<Option<String>> {
-    match action {
-        WorldDispatchActionV1::ForkWorldWorker => {
+    match (action, mode) {
+        (WorldDispatchActionV1::ForkWorldWorker, WorldDispatchModeV1::Retained) => {
+            reject_task_run_id(action, None, task_run_id)?;
             let value = value.ok_or_else(|| {
                 anyhow::anyhow!(
                     "missing_dispatch_field: fork_world_worker requires target_participant_id"
@@ -886,13 +900,34 @@ fn validate_world_dispatch_target(
             }
             Ok(Some(value))
         }
-        WorldDispatchActionV1::ContinueWorldWorker
-        | WorldDispatchActionV1::InspectWorldWorker
-        | WorldDispatchActionV1::CancelWorldWork
-        | WorldDispatchActionV1::StopWorldWorker => Ok(Some(required_world_dispatch_string(
-            "target_participant_id",
-            value,
-        )?)),
+        (WorldDispatchActionV1::ContinueWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::StopWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Retained)
+        | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Retained) => {
+            reject_task_run_id(action, Some(mode), task_run_id)?;
+            Ok(Some(required_world_dispatch_string(
+                "target_participant_id",
+                value,
+            )?))
+        }
+        (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchModeV1::Ephemeral)
+        | (WorldDispatchActionV1::CancelWorldWork, WorldDispatchModeV1::Ephemeral) => {
+            if value.is_some() {
+                anyhow::bail!(
+                    "invalid_dispatch_target: action {} mode {} does not accept target_participant_id",
+                    action.as_str(),
+                    mode.as_str(),
+                );
+            }
+            if task_run_id.is_none() {
+                anyhow::bail!(
+                    "missing_dispatch_field: {} requires task_run_id for mode {}",
+                    action.as_str(),
+                    mode.as_str(),
+                );
+            }
+            Ok(None)
+        }
         _ => {
             if value.is_some() {
                 anyhow::bail!(
@@ -900,9 +935,49 @@ fn validate_world_dispatch_target(
                     action.as_str(),
                 );
             }
+            reject_task_run_id(action, None, task_run_id)?;
             Ok(None)
         }
     }
+}
+
+fn reject_task_run_id(
+    action: WorldDispatchActionV1,
+    mode: Option<WorldDispatchModeV1>,
+    task_run_id: Option<&str>,
+) -> anyhow::Result<()> {
+    if task_run_id.is_none() {
+        return Ok(());
+    }
+    if let Some(mode) = mode {
+        anyhow::bail!(
+            "invalid_dispatch_target: action {} mode {} does not accept task_run_id",
+            action.as_str(),
+            mode.as_str(),
+        );
+    }
+    anyhow::bail!(
+        "invalid_dispatch_target: action {} does not accept task_run_id",
+        action.as_str(),
+    );
+}
+
+fn canonicalize_optional_world_dispatch_task_run_id(
+    action: WorldDispatchActionV1,
+    task_run_id: &mut Option<String>,
+) -> anyhow::Result<()> {
+    let Some(value) = task_run_id.as_deref() else {
+        return Ok(());
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action {} requires non-empty task_run_id when provided",
+            action.as_str(),
+        );
+    }
+    *task_run_id = Some(trimmed.to_string());
+    Ok(())
 }
 
 fn validate_world_dispatch_prompt(
@@ -951,6 +1026,8 @@ pub(crate) struct RunWorldTaskOutcomeV1 {
     pub orchestration_session_id: String,
     pub action: WorldDispatchActionV1,
     pub mode: WorldDispatchModeV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_run_id: Option<String>,
     pub state: WorldTaskTerminalStateV1,
     pub summary: String,
 }
@@ -2028,14 +2105,14 @@ mod tests {
         DispatchRejectingLayer, DispatchRequestEnvelope, DispatchResolutionErrorKind,
         FieldBaselineOrigin, FieldValueOrigin, ForkWorldWorkerOutcomeV1, HostExecutionClientStart,
         InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
-        TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
-        WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
-        WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
-        WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
-        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
-        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
+        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerCancelPayloadV1,
+        WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
+        WorkerContinueControlDirectivePayloadV1, WorkerContinueForkCommandPayloadV1,
+        WorkerContinuePayloadV1, WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
+        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2825,6 +2902,7 @@ mod tests {
             action,
             mode,
             target_backend_id: Some("cli:codex_world".to_string()),
+            task_run_id: None,
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
             world_generation: Some(2),
@@ -2834,11 +2912,17 @@ mod tests {
 
     trait WorldDispatchRequestTestExt {
         fn with_target_participant_id(self, participant_id: &str) -> Self;
+        fn with_task_run_id(self, task_run_id: &str) -> Self;
     }
 
     impl WorldDispatchRequestTestExt for WorldDispatchRequestV1 {
         fn with_target_participant_id(mut self, participant_id: &str) -> Self {
             self.target_participant_id = Some(participant_id.to_string());
+            self
+        }
+
+        fn with_task_run_id(mut self, task_run_id: &str) -> Self {
+            self.task_run_id = Some(task_run_id.to_string());
             self
         }
     }
@@ -2932,6 +3016,23 @@ mod tests {
             validated.target_participant_id.as_deref(),
             Some("ash-worker-35")
         );
+        assert_eq!(validated.task_run_id, None);
+    }
+
+    #[test]
+    fn world_dispatch_contract_accepts_inspect_world_worker_ephemeral_shape_with_exact_task_identity(
+    ) {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .with_task_run_id("task-run-35")
+        .validate()
+        .expect("ephemeral inspect should validate with exact task identity");
+
+        assert_eq!(validated.target_participant_id, None);
+        assert_eq!(validated.task_run_id.as_deref(), Some("task-run-35"));
     }
 
     #[test]
@@ -2952,6 +3053,23 @@ mod tests {
             validated.target_participant_id.as_deref(),
             Some("ash-worker-37")
         );
+        assert_eq!(validated.task_run_id, None);
+    }
+
+    #[test]
+    fn world_dispatch_contract_accepts_cancel_world_work_ephemeral_shape_with_exact_task_identity()
+    {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::CancelWorldWork,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
+        )
+        .with_task_run_id("task-run-37")
+        .validate()
+        .expect("ephemeral cancel should validate with exact task identity");
+
+        assert_eq!(validated.target_participant_id, None);
+        assert_eq!(validated.task_run_id.as_deref(), Some("task-run-37"));
     }
 
     #[test]
@@ -3127,19 +3245,55 @@ mod tests {
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_inspect_world_worker_ephemeral_mode() {
+    fn world_dispatch_contract_rejects_inspect_world_worker_ephemeral_mode_without_exact_task_identity(
+    ) {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .validate()
+        .expect_err("ephemeral inspect must fail closed without task identity");
+
+        assert_eq!(
+            error.to_string(),
+            "missing_dispatch_field: inspect_world_worker requires task_run_id for mode ephemeral"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_inspect_world_worker_retained_mode_with_task_run_id() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::InspectWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-35")
+        .with_task_run_id("task-run-35")
+        .validate()
+        .expect_err("retained inspect must reject task identity");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_target: action inspect_world_worker mode retained does not accept task_run_id"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_inspect_world_worker_ephemeral_mode_with_mixed_identity() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::InspectWorldWorker,
             WorldDispatchModeV1::Ephemeral,
             WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
         )
         .with_target_participant_id("ash-worker-35")
+        .with_task_run_id("task-run-35")
         .validate()
-        .expect_err("inspect must stay retained-only in packet 1");
+        .expect_err("ephemeral inspect must reject mixed identity");
 
         assert_eq!(
             error.to_string(),
-            "invalid_dispatch_action_mode: action inspect_world_worker is incompatible with mode ephemeral"
+            "invalid_dispatch_target: action inspect_world_worker mode ephemeral does not accept target_participant_id"
         );
     }
 
@@ -3160,19 +3314,55 @@ mod tests {
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_cancel_world_work_ephemeral_mode() {
+    fn world_dispatch_contract_rejects_cancel_world_work_ephemeral_mode_without_exact_task_identity(
+    ) {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::CancelWorldWork,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
+        )
+        .validate()
+        .expect_err("ephemeral cancel must fail closed without task identity");
+
+        assert_eq!(
+            error.to_string(),
+            "missing_dispatch_field: cancel_world_work requires task_run_id for mode ephemeral"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_cancel_world_work_retained_mode_with_task_run_id() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::CancelWorldWork,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
+        )
+        .with_target_participant_id("ash-worker-37")
+        .with_task_run_id("task-run-37")
+        .validate()
+        .expect_err("retained cancel must reject task identity");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_target: action cancel_world_work mode retained does not accept task_run_id"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_cancel_world_work_ephemeral_mode_with_mixed_identity() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::CancelWorldWork,
             WorldDispatchModeV1::Ephemeral,
             WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1::default()),
         )
         .with_target_participant_id("ash-worker-37")
+        .with_task_run_id("task-run-37")
         .validate()
-        .expect_err("cancel must stay retained-only in packet 1");
+        .expect_err("ephemeral cancel must reject mixed identity");
 
         assert_eq!(
             error.to_string(),
-            "invalid_dispatch_action_mode: action cancel_world_work is incompatible with mode ephemeral"
+            "invalid_dispatch_target: action cancel_world_work mode ephemeral does not accept target_participant_id"
         );
     }
 
@@ -3342,6 +3532,25 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_rejects_task_run_id_for_non_inspect_cancel_actions() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::RunWorldTask,
+            WorldDispatchModeV1::Ephemeral,
+            WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "index the repo".to_string(),
+            }),
+        )
+        .with_task_run_id("task-run-32")
+        .validate()
+        .expect_err("non inspect/cancel task identity must fail closed");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_target: action run_world_task does not accept task_run_id"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_rejects_payload_action_mismatch() {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::SpawnWorldWorker,
@@ -3389,6 +3598,29 @@ mod tests {
             json.get("child_participant_id")
                 .and_then(|value| value.as_str()),
             Some("ash-worker-child-38")
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_round_trips_typed_run_world_task_outcome_shape() {
+        let outcome = WorldDispatchOutcomeV1::RunWorldTask(RunWorldTaskOutcomeV1 {
+            request_id: "req-47".to_string(),
+            orchestration_session_id: "sess-47".to_string(),
+            action: WorldDispatchActionV1::RunWorldTask,
+            mode: WorldDispatchModeV1::Ephemeral,
+            task_run_id: Some("task-run-47".to_string()),
+            state: WorldTaskTerminalStateV1::Completed,
+            summary: "run outcome surfaces exact task identity".to_string(),
+        });
+
+        let json = serde_json::to_value(&outcome).expect("serialize run outcome");
+        assert_eq!(
+            json.get("outcome_kind").and_then(|value| value.as_str()),
+            Some("run_world_task")
+        );
+        assert_eq!(
+            json.get("task_run_id").and_then(|value| value.as_str()),
+            Some("task-run-47")
         );
     }
 
