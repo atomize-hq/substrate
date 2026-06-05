@@ -25,6 +25,15 @@ The clean mental model is:
 - Engine seams stop at snapshots, parsed units, graph, topology, matches, facts, derived facts, patches, and exports.
 - App seams turn those engine artifacts into user-facing products like score, impact, policy findings, contract diff, index/export artifacts, and rewrites.
 
+For downstream planning-adjacent consumers, Lift should favor deterministic,
+typed, graph-backed export artifacts over prose-heavy handoffs.
+When the evidence supports it, those exports should preserve typed entities,
+dependency structure, conflict-risk structure or conflict evidence, source
+mappings, confidence and missing-signal annotations, and history-derived
+causal or risk features.
+AI-authored judgments remain fallback annotations for ambiguous regions, not
+the primary Lift substrate.
+
 ## Updated top-level shape
 
 ```mermaid
@@ -295,7 +304,10 @@ Done when detectors emit only facts and evidence, and no detector writes into a 
 
 ### 9. Derive and provenance
 
-Owns generic derivation rules, fact normalization, provenance graphs, conflict resolution, unknown propagation, projection rules, and confidence causes.
+Owns generic derivation rules, fact normalization, provenance graphs, conflict
+resolution, unknown propagation, projection rules, confidence causes, and
+deterministic history-derived or causal feature projection when such signals
+are derived from recorded evidence.
 
 Exposes `DerivedFacts`, `ProvenanceGraph`, and `DeriveEngine`.
 
@@ -321,7 +333,14 @@ Done when a rewrite recipe can turn a `MatchSet` into a deterministic preview pl
 
 ### 11. Export and index
 
-Owns stable export schemas, graph export, topology export, fact export, match export, index export, and canonical serialization.
+Owns stable export schemas, graph export, topology export, fact export, match
+export, index export, and canonical serialization.
+
+Exports in this seam should preserve structured repository intelligence as
+explicit schemas rather than collapsing into prose-only summaries.
+When Lift emits planning-adjacent signals, dependency structure and
+conflict-risk structure should remain distinct surfaces instead of one
+undifferentiated risk blob.
 
 Exposes `ExportService`, `RepoIndexV1`, and `GraphExportV1`.
 
@@ -360,6 +379,9 @@ Internal sub-seams:
 
 Must not own repo walking, AST parsing, or raw detector execution.
 
+Score remains a Lift-owned app, but it should not become the only downstream
+planning substrate when richer graph-backed exports are available.
+
 Done when `lift score` works for vector, diff, and seed-based estimate modes.
 
 #### 13b. Impact app
@@ -393,6 +415,17 @@ Ownership of general context assembly moved to the peer `context` crate describe
 `app::context` remains an inherited placeholder only. It is not the owning direction for future cross-crate context packet assembly.
 
 Index owns repo-wide export jobs and reusable Lift intelligence artifacts.
+
+Those Lift-owned export artifacts should stay on the code-intelligence fact
+layer:
+
+- typed graph and topology outputs
+- explainable scope and impact outputs
+- provenance, confidence, and missing-signal metadata
+- deterministic history-derived features and hints when available
+
+They should not collapse into vague natural-language handoffs, silently absorb
+planning semantics, or take ownership of runtime packet shapes.
 
 Lift may still export artifacts that peer crates consume, but Lift does not regain ownership of program-level context packet assembly.
 
