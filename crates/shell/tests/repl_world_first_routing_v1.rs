@@ -526,6 +526,7 @@ struct WorldDispatchPolicyArgs<'a> {
     allowed_actions: &'a [&'a str],
     allowed_modes: &'a [&'a str],
     control_directives_allowed: bool,
+    fork_commands_allowed: bool,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -537,6 +538,7 @@ fn write_member_runtime_policy_with_world_dispatch(
         home_substrate,
         WorldDispatchPolicyArgs {
             control_directives_allowed: false,
+            fork_commands_allowed: false,
             ..args
         },
     );
@@ -556,6 +558,11 @@ fn write_member_runtime_policy_with_world_dispatch_control_directives(
     let dispatch_modes = yaml_quoted_list(args.allowed_modes, 6);
     let control_block = if args.control_directives_allowed {
         "    control:\n      control_directives_allowed: true\n"
+    } else {
+        ""
+    };
+    let fork_block = if args.fork_commands_allowed {
+        "    fork:\n      commands_allowed: true\n"
     } else {
         ""
     };
@@ -597,6 +604,7 @@ agents:
     max_live_retained_workers: 8
     max_concurrent_ephemeral: 8
 {control_block}
+{fork_block}
 "#
     );
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
@@ -622,6 +630,7 @@ fn write_member_runtime_policy_with_member_backend(
             ],
             allowed_modes: &["ephemeral", "retained"],
             control_directives_allowed: false,
+            fork_commands_allowed: false,
         },
     );
 }
@@ -927,11 +936,19 @@ fn finish_chunked_stream(stream: &mut UnixStream) {
 #[derive(Clone, Debug)]
 enum MemberTurnInterceptScript {
     ControlAck,
+    GenericReply,
     DriftedControlAckWorldId(String),
     UnsupportedWorkerEvent {
         event_class: String,
         message: String,
     },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug)]
+struct ForkChildPersistenceConfig {
+    substrate_home: PathBuf,
+    child_session_handle_id: String,
 }
 
 #[cfg(target_os = "linux")]
@@ -994,10 +1011,135 @@ fn control_ack_stream_event(
 }
 
 #[cfg(target_os = "linux")]
+fn generic_reply_stream_event(
+    participant_id: &str,
+    backend_id: &str,
+    orchestration_session_id: &str,
+    world_id: &str,
+    world_generation: u64,
+) -> substrate_common::agent_events::AgentEvent {
+    substrate_common::agent_events::AgentEvent {
+        ts: chrono::Utc::now(),
+        kind: substrate_common::agent_events::AgentEventKind::TaskProgress,
+        data: serde_json::json!({
+            "type": "item.completed",
+            "thread_id": "thread-direct",
+            "turn_id": "turn-fork-command",
+            "item_id": "msg-fork-command",
+            "status": "completed",
+            "item_type": "agent_message",
+            "content": {
+                "text": "fork command delivered"
+            }
+        }),
+        agent_id: "codex".to_string(),
+        orchestration_session_id: orchestration_session_id.to_string(),
+        run_id: "req_toolbox_fork_command".to_string(),
+        parent_run_id: None,
+        participant_id: Some(participant_id.to_string()),
+        parent_participant_id: None,
+        resumed_from_participant_id: None,
+        backend_id: Some(backend_id.to_string()),
+        thread_id: Some("thread-direct".to_string()),
+        role: Some("member".to_string()),
+        world_id: Some(world_id.to_string()),
+        world_generation: Some(world_generation),
+        cmd_id: None,
+        span_id: Some("member-turn-span".to_string()),
+        channel: Some("worker.reply".to_string()),
+        identity_tuple: None,
+        placement_posture: None,
+        project: None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn persist_test_fork_child_participant_manifest(
+    config: &ForkChildPersistenceConfig,
+    member_dispatch: &transport_api_types::MemberDispatchRequestV1,
+) {
+    let source_participant_id = member_dispatch
+        .parent_participant_id
+        .as_deref()
+        .expect("fork child persistence requires source parent_participant_id");
+    let mut child = read_participant_manifest(&config.substrate_home, source_participant_id);
+    let timestamp = chrono::Utc::now().to_rfc3339();
+
+    child["participant_id"] = Value::String(member_dispatch.participant_id.clone());
+    child["orchestration_session_id"] =
+        Value::String(member_dispatch.orchestration_session_id.clone());
+    child["state"] = Value::String("ready".to_string());
+    child["opened_at"] = Value::String(timestamp.clone());
+    child["last_transition_at"] = Value::String(timestamp.clone());
+    child["world_id"] = Value::String(member_dispatch.world_id.clone());
+    child["world_generation"] = Value::from(member_dispatch.world_generation);
+    child["orchestrator_participant_id"] =
+        Value::String(member_dispatch.orchestrator_participant_id.clone());
+    child["parent_participant_id"] = Value::String(source_participant_id.to_string());
+    child["resumed_from_participant_id"] = Value::Null;
+    child["fork_source_participant_id"] = Value::Null;
+
+    let internal = child
+        .get_mut("internal")
+        .and_then(Value::as_object_mut)
+        .expect("child participant internal object");
+    internal.insert(
+        "lease_token".to_string(),
+        Value::String(format!("lease_{}", member_dispatch.participant_id)),
+    );
+    internal.insert(
+        "uaa_session_id".to_string(),
+        Value::String(config.child_session_handle_id.clone()),
+    );
+    internal.insert(
+        "latest_run_id".to_string(),
+        Value::String(member_dispatch.run_id.clone()),
+    );
+    internal.insert(
+        "last_heartbeat_at".to_string(),
+        Value::String(timestamp.clone()),
+    );
+    internal.insert("last_event_at".to_string(), Value::String(timestamp));
+
+    let participant_path = canonical_participant_path(
+        &config.substrate_home,
+        &member_dispatch.orchestration_session_id,
+        &member_dispatch.participant_id,
+    );
+    if let Some(parent) = participant_path.parent() {
+        fs::create_dir_all(parent).expect("create canonical participant dir");
+    }
+    fs::write(
+        participant_path,
+        serde_json::to_vec_pretty(&child).expect("serialize persisted fork child manifest"),
+    )
+    .expect("write persisted fork child manifest");
+}
+
+#[cfg(target_os = "linux")]
 fn start_member_turn_intercept_proxy_with_scripts(
     listen_path: &Path,
     backend_path: &Path,
     scripts: Vec<MemberTurnInterceptScript>,
+) -> (
+    Arc<Mutex<Vec<transport_api_types::MemberTurnSubmitRequestV1>>>,
+    Arc<AtomicBool>,
+    std::thread::JoinHandle<()>,
+) {
+    start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
+        listen_path,
+        backend_path,
+        scripts,
+        None,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
+    listen_path: &Path,
+    backend_path: &Path,
+    scripts: Vec<MemberTurnInterceptScript>,
+    fork_child_persistence: Option<ForkChildPersistenceConfig>,
 ) -> (
     Arc<Mutex<Vec<transport_api_types::MemberTurnSubmitRequestV1>>>,
     Arc<AtomicBool>,
@@ -1014,6 +1156,7 @@ fn start_member_turn_intercept_proxy_with_scripts(
     let intercepted_requests_for_thread = Arc::clone(&intercepted_requests);
     let scripted_responses = Arc::new(Mutex::new(VecDeque::from(scripts)));
     let scripted_responses_for_thread = Arc::clone(&scripted_responses);
+    let fork_child_persistence = fork_child_persistence.map(Arc::new);
     let shutdown = Arc::new(AtomicBool::new(false));
     let shutdown_for_thread = Arc::clone(&shutdown);
     let backend_path = backend_path.to_path_buf();
@@ -1025,6 +1168,7 @@ fn start_member_turn_intercept_proxy_with_scripts(
                     let backend_path = backend_path.clone();
                     let intercepted_requests = Arc::clone(&intercepted_requests_for_thread);
                     let scripted_responses = Arc::clone(&scripted_responses_for_thread);
+                    let fork_child_persistence = fork_child_persistence.clone();
                     std::thread::spawn(move || {
                         let Some((raw_request, header, body)) = read_http_request(&mut client)
                         else {
@@ -1048,6 +1192,15 @@ fn start_member_turn_intercept_proxy_with_scripts(
                                 let event = match script {
                                     MemberTurnInterceptScript::ControlAck => {
                                         control_ack_stream_event(
+                                            &parsed.participant_id,
+                                            &parsed.backend_id,
+                                            &parsed.orchestration_session_id,
+                                            &parsed.world_id,
+                                            parsed.world_generation,
+                                        )
+                                    }
+                                    MemberTurnInterceptScript::GenericReply => {
+                                        generic_reply_stream_event(
                                             &parsed.participant_id,
                                             &parsed.backend_id,
                                             &parsed.orchestration_session_id,
@@ -1104,6 +1257,24 @@ fn start_member_turn_intercept_proxy_with_scripts(
                                 );
                                 finish_chunked_stream(&mut client);
                                 return;
+                            }
+                        }
+                        if first_line.starts_with("POST /v1/execute/stream ") {
+                            if let Some(config) = fork_child_persistence.as_deref() {
+                                if let Ok(parsed) =
+                                    serde_json::from_slice::<transport_api_types::ExecuteRequest>(
+                                        &body,
+                                    )
+                                {
+                                    if let Some(member_dispatch) = parsed.member_dispatch.as_ref() {
+                                        if member_dispatch.parent_participant_id.is_some() {
+                                            persist_test_fork_child_participant_manifest(
+                                                config,
+                                                member_dispatch,
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -2754,6 +2925,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             control_directives_allowed: false,
+            fork_commands_allowed: false,
         },
     );
 
@@ -2994,6 +3166,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             control_directives_allowed: true,
+            fork_commands_allowed: false,
         },
     );
 
@@ -3221,6 +3394,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             control_directives_allowed: true,
+            fork_commands_allowed: false,
         },
     );
 
@@ -3500,6 +3674,521 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
     assert_eq!(
         obligation_count, 0,
         "Packet 3 fail-closed routing proofs must not persist durable obligations"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit_lineage() {
+    let temp = temp_dir("substrate-c3-toolbox-fork-command-success-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            control_directives_allowed: false,
+            fork_commands_allowed: true,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-fork-command-success-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![
+            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-toolbox-fork-source".to_string(),
+                exit_code_on_cancel: 130,
+            },
+            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-toolbox-fork-child".to_string(),
+                exit_code_on_cancel: 130,
+            },
+        ],
+    );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
+            &proxy_sock,
+            &backend_sock,
+            vec![MemberTurnInterceptScript::GenericReply],
+            Some(ForkChildPersistenceConfig {
+                substrate_home: substrate_home.clone(),
+                child_session_handle_id: "session-toolbox-fork-child".to_string(),
+            }),
+        );
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let source_member = &live_members[0];
+    let source_participant_id = source_member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("source participant_id")
+        .to_string();
+    let source_orchestrator_participant_id = source_member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("source orchestrator_participant_id")
+        .to_string();
+    let world_id = source_member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("source world_id")
+        .to_string();
+    let world_generation = source_member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("source world_generation");
+    assert_eq!(
+        source_orchestrator_participant_id, orchestrator_participant_id,
+        "fork-command routing must preserve exact retained-worker ownership"
+    );
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_fork_command",
+            "idempotency_key": "idem_toolbox_fork_command",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "continue_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex",
+            "target_participant_id": source_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_continue_fork_command",
+                "child_prompt": "Investigate the flaky Linux replay trace.",
+                "fork_reason": "parallelize_investigation",
+                "fork_strategy": "exact_source_retained",
+                "thread_id": "thread-fork-command-45"
+            }
+        }),
+    );
+
+    wait_for_min_member_dispatch_requests(&records, 2, Duration::from_secs(3));
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        2,
+        "fork-command routing must reuse the existing retained source and add exactly one retained child bootstrap: {guard:#?}"
+    );
+    let child_dispatch = guard
+        .member_dispatch_requests
+        .get(1)
+        .and_then(|request| request.member_dispatch.as_ref())
+        .expect("child member dispatch request");
+    assert_eq!(
+        child_dispatch.parent_participant_id.as_deref(),
+        Some(source_participant_id.as_str()),
+        "fork-command child bootstrap must preserve exact source lineage in the retained launch request"
+    );
+    let child_participant_id = child_dispatch.participant_id.clone();
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    assert_eq!(
+        intercepted_turns.len(),
+        1,
+        "fork-command routing must still deliver exactly one retained member turn before child allocation: {intercepted_turns:#?}"
+    );
+    let submit = intercepted_turns
+        .first()
+        .expect("member turn submit request");
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, source_participant_id);
+    assert_eq!(
+        submit.orchestrator_participant_id,
+        source_orchestrator_participant_id
+    );
+    assert_eq!(submit.backend_id, "cli:codex");
+    assert_eq!(submit.world_id, world_id);
+    assert_eq!(submit.world_generation, world_generation);
+    assert!(
+        submit
+            .prompt
+            .starts_with("SUBSTRATE_INTERNAL_HOST_FORK_COMMAND_V1\n"),
+        "fork-command delivery must stay on the deterministic retained member-turn seam: {submit:#?}"
+    );
+    drop(intercepted_turns);
+
+    let live_members_after = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        2,
+        Duration::from_secs(5),
+    );
+    let child_member = live_members_after
+        .iter()
+        .find(|manifest| {
+            manifest.get("participant_id").and_then(Value::as_str) == Some(child_participant_id.as_str())
+        })
+        .expect("retained child manifest");
+    assert_eq!(
+        child_member
+            .get("orchestrator_participant_id")
+            .and_then(Value::as_str),
+        Some(source_orchestrator_participant_id.as_str()),
+        "fork-command child must stay linked to the same authoritative orchestrator participant"
+    );
+    assert_eq!(
+        child_member
+            .get("parent_participant_id")
+            .and_then(Value::as_str),
+        Some(source_participant_id.as_str()),
+        "fork-command child must persist exact source parent lineage"
+    );
+    assert_eq!(
+        child_member
+            .get("fork_source_participant_id")
+            .and_then(Value::as_str),
+        Some(source_participant_id.as_str()),
+        "fork-command child must persist explicit fork_source_participant_id lineage"
+    );
+
+    let expected_summary = format!(
+        "continue_world_worker delivered typed fork_command to retained worker {} via the existing member-turn seam and launched retained child {} from source {} via the existing fork bootstrap path; explicit source-to-child lineage is preserved and downstream child completion remains worker-defined",
+        source_participant_id, child_participant_id, source_participant_id
+    );
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        response
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("continue_world_worker")
+    );
+    assert_eq!(
+        response.pointer("/outcome/summary").and_then(Value::as_str),
+        Some(expected_summary.as_str())
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/worker_event/event_class")
+            .and_then(Value::as_str),
+        Some("reply")
+    );
+    assert_eq!(
+        response.pointer("/outcome/thread_id").and_then(Value::as_str),
+        Some("thread-direct")
+    );
+
+    let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
+    let obligation_count = fs::read_dir(&obligations_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    assert_eq!(
+        obligation_count, 0,
+        "fork-command routing must not persist durable obligations when the child allocation succeeds"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
+    let temp = temp_dir("substrate-c3-toolbox-fork-command-fail-closed-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            control_directives_allowed: false,
+            fork_commands_allowed: true,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-fork-command-fail-closed-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![
+            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-toolbox-fork-source".to_string(),
+                exit_code_on_cancel: 130,
+            },
+            MemberDispatchStreamScript::ExitWithoutReady { exit_code: 73 },
+        ],
+    );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy_with_scripts(
+            &proxy_sock,
+            &backend_sock,
+            vec![MemberTurnInterceptScript::GenericReply],
+        );
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let source_member = &live_members[0];
+    let source_participant_id = source_member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("source participant_id")
+        .to_string();
+    let world_id = source_member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("source world_id")
+        .to_string();
+    let world_generation = source_member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("source world_generation");
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_fork_command",
+            "idempotency_key": "idem_toolbox_fork_command",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "continue_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex",
+            "target_participant_id": source_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_continue_fork_command",
+                "child_prompt": "Investigate the flaky Linux replay trace.",
+                "fork_reason": "parallelize_investigation",
+                "fork_strategy": "exact_source_retained",
+                "thread_id": "thread-fork-command-45"
+            }
+        }),
+    );
+
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    assert!(
+        response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("fork_command_bootstrap_failed:")),
+        "failed fork-command routing must return the Packet 3 bootstrap wrapper: {response:#?}"
+    );
+    assert!(
+        response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "retained_bootstrap_failed: spawn_world_worker exited with status 73 before authoritative registration"
+            )),
+        "failed fork-command routing must preserve the pre-registration bootstrap cause: {response:#?}"
+    );
+
+    wait_for_min_member_dispatch_requests(&records, 2, Duration::from_secs(3));
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        2,
+        "fail-closed fork-command routing must attempt exactly one retained child bootstrap after delivery: {guard:#?}"
+    );
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    assert_eq!(
+        intercepted_turns.len(),
+        1,
+        "fail-closed fork-command routing must still deliver exactly one retained member turn before bootstrap failure: {intercepted_turns:#?}"
+    );
+    drop(intercepted_turns);
+
+    let live_participants_after = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    assert_eq!(
+        live_participants_after.len(),
+        2,
+        "pre-registration fork-command failure must not register an additional authoritative participant: {live_participants_after:?}"
+    );
+    let live_members_after = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(3),
+    );
+    assert_eq!(
+        live_members_after
+            .iter()
+            .filter(|manifest| manifest.get("participant_id").and_then(Value::as_str) == Some(source_participant_id.as_str()))
+            .count(),
+        1,
+        "pre-registration fork-command failure must leave only the exact retained source authoritative-live: {live_members_after:?}"
+    );
+
+    let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
+    let obligation_count = fs::read_dir(&obligations_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    assert_eq!(
+        obligation_count, 0,
+        "pre-registration fork-command failure must not persist durable obligations"
     );
 
     repl.send_line("exit");

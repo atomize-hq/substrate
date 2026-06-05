@@ -521,6 +521,12 @@ struct ContinueWorldWorkerStreamResult {
 }
 
 #[cfg(target_os = "linux")]
+struct ContinueWorldWorkerForkBootstrapOutcome {
+    source_participant_id: String,
+    child_participant_id: String,
+}
+
+#[cfg(target_os = "linux")]
 const STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(target_os = "linux")]
 const STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL: Duration = Duration::from_millis(25);
@@ -676,6 +682,9 @@ async fn continue_world_worker(
         &prepared,
         clarification_closeout.as_ref(),
     )?;
+    let fork_bootstrap =
+        continue_world_worker_fork_command_bootstrap_after_delivery(&prepared, &base_policy)
+            .await?;
     if let Some(worker_event) = stream_result
         .surfaced_worker_event
         .as_ref()
@@ -687,6 +696,7 @@ async fn continue_world_worker(
         &submit_request,
         stream_result.exit_code,
         stream_result.surfaced_worker_event.as_ref(),
+        fork_bootstrap.as_ref(),
     );
 
     Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
@@ -705,6 +715,107 @@ async fn continue_world_worker(
             summary,
         },
     ))
+}
+
+#[cfg(target_os = "linux")]
+async fn continue_world_worker_fork_command_bootstrap_after_delivery(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    base_policy: &Policy,
+) -> Result<Option<ContinueWorldWorkerForkBootstrapOutcome>> {
+    let WorldDispatchPayloadV1::WorkerContinueForkCommand(_) = &prepared.request.payload else {
+        return Ok(None);
+    };
+    let target_participant_id = prepared
+        .request
+        .target_participant_id
+        .as_deref()
+        .expect("validated continue request must include target_participant_id");
+    let resolved = prepared
+        .store
+        .resolve_internal_fork_world_dispatch_target(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            target_participant_id,
+            &prepared.request.target_backend_id,
+        )
+        .map_err(map_fork_world_dispatch_resolution_error)?;
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let context = resolve_internal_dispatch_context(&workspace_root)?;
+    let contract = resolve_world_dispatch_contract(
+        &workspace_root,
+        &context,
+        &prepared.request,
+        "continue_world_worker fork_command bootstrap",
+    )?;
+    let descriptor = materialize_runtime_descriptor(&contract).map_err(|err| {
+        anyhow::anyhow!(
+            "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+            contract.agent_id,
+            err.reason
+        )
+    })?;
+    let _concurrency_guard =
+        acquire_continue_world_worker_fork_command_bootstrap_guard(prepared, base_policy)?;
+    let dispatch_workspace_root = std::env::current_dir()
+        .context("failed to resolve cwd for continue_world_worker fork_command bootstrap")?;
+    let transport_request = build_continue_world_worker_fork_command_transport_request(
+        &prepared.request,
+        &resolved.source_participant,
+        &descriptor,
+    )?;
+    let receipt = execute_spawn_world_worker_stream(
+        &dispatch_workspace_root,
+        &transport_request,
+        &prepared.request,
+    )
+    .await
+    .map_err(|err| {
+        anyhow::anyhow!(
+            "{}",
+            format_continue_world_worker_fork_command_bootstrap_failure(
+                resolved.source_participant.participant_id(),
+                format!(
+                    "retained child bootstrap failed before authoritative registration ({err:#})"
+                ),
+            )
+        )
+    })?;
+    let lineage =
+        match persist_fork_child_lineage(&prepared.store, &resolved, &receipt.participant_id) {
+            Ok(lineage) => lineage,
+            Err(lineage_err) => {
+                let detail = match rollback_failed_fork_child_launch(
+                    &prepared.store,
+                    &resolved,
+                    &receipt.participant_id,
+                )
+                .await
+                {
+                    Ok(()) => format_fork_lineage_persist_failure(
+                        &receipt.participant_id,
+                        &lineage_err,
+                        None,
+                    ),
+                    Err(rollback_err) => format_fork_lineage_persist_failure(
+                        &receipt.participant_id,
+                        &lineage_err,
+                        Some(&rollback_err),
+                    ),
+                };
+                anyhow::bail!(
+                    "{}",
+                    format_continue_world_worker_fork_command_bootstrap_failure(
+                        resolved.source_participant.participant_id(),
+                        detail,
+                    )
+                );
+            }
+        };
+
+    Ok(Some(ContinueWorldWorkerForkBootstrapOutcome {
+        source_participant_id: lineage.source_participant_id,
+        child_participant_id: lineage.child_participant_id,
+    }))
 }
 
 #[cfg(target_os = "linux")]
@@ -756,6 +867,27 @@ fn continue_world_worker_turn_kind(
         }
         _ => ContinueWorldWorkerTurnKind::GenericContinue,
     }
+}
+
+#[cfg(target_os = "linux")]
+fn acquire_continue_world_worker_fork_command_bootstrap_guard(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    base_policy: &Policy,
+) -> Result<Option<WorldDispatchConcurrencyGuard>> {
+    let mut fork_request = prepared.request.clone();
+    fork_request.action = WorldDispatchActionV1::ForkWorldWorker;
+
+    acquire_world_dispatch_concurrency_guard(
+        &PreparedOrchestratorWorldDispatch {
+            store: prepared.store.clone(),
+            request: fork_request,
+            session: prepared.session.clone(),
+            caller_participant: prepared.caller_participant.clone(),
+            target_participant: prepared.target_participant.clone(),
+            live_retained_worker_count: prepared.live_retained_worker_count,
+        },
+        base_policy,
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -1721,6 +1853,28 @@ fn build_fork_world_worker_transport_request(
         backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
         binary_path: descriptor.binary_path.display().to_string(),
     })
+}
+
+#[cfg(target_os = "linux")]
+fn build_continue_world_worker_fork_command_transport_request(
+    request: &ValidatedWorldDispatchRequestV1,
+    source_participant: &AgentRuntimeParticipantRecord,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> Result<MemberDispatchTransportRequest> {
+    let WorldDispatchPayloadV1::WorkerContinueForkCommand(payload) = &request.payload else {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action continue_world_worker fork_command bootstrap requires matching typed payload"
+        );
+    };
+    let mut fork_request = request.clone();
+    fork_request.action = WorldDispatchActionV1::ForkWorldWorker;
+    fork_request.payload = WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+        prompt: payload.child_prompt.clone(),
+        fork_reason: payload.fork_reason.clone(),
+        fork_strategy: payload.fork_strategy.clone(),
+    });
+
+    build_fork_world_worker_transport_request(&fork_request, source_participant, descriptor)
 }
 
 #[cfg(target_os = "linux")]
@@ -2835,7 +2989,27 @@ fn summarize_continue_world_worker_result(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     exit_code: i32,
     surfaced_worker_event: Option<&ContinueWorldWorkerEventV1>,
+    fork_bootstrap: Option<&ContinueWorldWorkerForkBootstrapOutcome>,
 ) -> String {
+    if let Some(fork_bootstrap) = fork_bootstrap {
+        if exit_code == 0 {
+            return format!(
+                "continue_world_worker delivered typed fork_command to retained worker {} via the existing member-turn seam and launched retained child {} from source {} via the existing fork bootstrap path; explicit source-to-child lineage is preserved and downstream child completion remains worker-defined",
+                request.participant_id,
+                fork_bootstrap.child_participant_id,
+                fork_bootstrap.source_participant_id,
+            );
+        }
+
+        return format!(
+            "continue_world_worker delivered typed fork_command to retained worker {} via the existing member-turn seam, the source turn exited with status {}, and launched retained child {} from source {} via the existing fork bootstrap path; explicit source-to-child lineage is preserved and downstream child completion remains worker-defined",
+            request.participant_id,
+            exit_code,
+            fork_bootstrap.child_participant_id,
+            fork_bootstrap.source_participant_id,
+        );
+    }
+
     if matches!(
         surfaced_worker_event.map(|event| event.event_class),
         Some(ContinueWorldWorkerEventClassV1::ControlAck)
@@ -2864,6 +3038,18 @@ fn summarize_continue_world_worker_result(
             request.participant_id, exit_code
         )
     }
+}
+
+#[cfg(target_os = "linux")]
+fn format_continue_world_worker_fork_command_bootstrap_failure(
+    source_participant_id: &str,
+    detail: impl AsRef<str>,
+) -> String {
+    format!(
+        "fork_command_bootstrap_failed: continue_world_worker delivered typed fork_command to retained worker {} via the existing member-turn seam, but retained child allocation did not complete ({})",
+        source_participant_id,
+        detail.as_ref().trim(),
+    )
 }
 
 #[cfg(target_os = "linux")]
