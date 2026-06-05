@@ -892,6 +892,15 @@ fn enforce_continue_world_worker_payload_policy(
             }
             Ok(())
         }
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(_) => {
+            if !base_policy.world_dispatch_fork_commands_allowed() {
+                return Err(steering_policy_denial(
+                    WorldDispatchSteeringDenialV1::ActionNotAllowed,
+                    "effective policy does not allow continue_world_worker fork_command payloads",
+                ));
+            }
+            Ok(())
+        }
         WorldDispatchPayloadV1::WorkerContinue(_) => Ok(()),
         _ => anyhow::bail!(
             "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
@@ -2989,7 +2998,8 @@ mod tests {
     use crate::execution::agent_runtime::dispatch_contract::{
         ApprovalResponseDecisionV1, ControlDirectiveKindV1, WorkerCancelPayloadV1,
         WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
-        WorkerContinueControlDirectivePayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
+        WorkerContinueControlDirectivePayloadV1, WorkerContinueForkCommandPayloadV1,
+        WorkerContinuePayloadV1, WorkerInspectPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
@@ -3420,6 +3430,30 @@ mod tests {
                     directive_kind: ControlDirectiveKindV1::PrepareHandoff,
                     directive_text: Some("  timing:before_stop  ".to_string()),
                     thread_id: Some("thread-control-43".to_string()),
+                },
+            ),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_continue_fork_command_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_continue_fork_command".to_string()),
+            idempotency_key: Some("idem_continue_fork_command".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerContinueForkCommand(
+                WorkerContinueForkCommandPayloadV1 {
+                    child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
+                    fork_reason: Some("parallelize_investigation".to_string()),
+                    fork_strategy: Some("exact_source_retained".to_string()),
+                    thread_id: Some("thread-fork-command-45".to_string()),
                 },
             ),
         }
@@ -6880,6 +6914,49 @@ agents:
         assert_eq!(
             message,
             "action_not_allowed: effective policy does not allow continue_world_worker control_directive payloads"
+        );
+        assert!(
+            !message.contains("stale_linkage:"),
+            "payload gate must not leak retained-worker lifecycle truth first: {message}"
+        );
+        assert!(
+            !message.contains(
+                "world_binding_mismatch: orchestration session sess_dispatch retained worker"
+            ),
+            "payload gate must not leak retained-worker topology drift first: {message}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_fork_command_denies_by_default_before_target_resolution(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_fork_command_world_dispatch_request(),
+        )
+        .await
+        .expect_err("fork-command payloads must fail closed by default");
+        let message = err.to_string();
+
+        assert_eq!(
+            message,
+            "action_not_allowed: effective policy does not allow continue_world_worker fork_command payloads"
         );
         assert!(
             !message.contains("stale_linkage:"),
