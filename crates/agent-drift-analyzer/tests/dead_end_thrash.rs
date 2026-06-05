@@ -279,6 +279,117 @@ fn dead_end_thrash_downgrades_to_historical_only_after_the_recovery_transition()
         .starts_with("historical repeated failure evidence:")));
 }
 
+#[test]
+fn dead_end_thrash_treats_explicit_error_rows_as_repeated_failure_evidence() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Verify explicit error rows stay failure evidence.",
+        ),
+        tool_row(1, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        tool_row(2, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        tool_row(3, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        row(4, CompactionKind::Error, "world failed"),
+        row(5, CompactionKind::Error, "world failed"),
+    ];
+    let mut archival_rows = rows.clone();
+    archival_rows[4].text_hash_hex = "hash-explicit-error".to_string();
+    archival_rows[5].text_hash_hex = "hash-explicit-error".to_string();
+    let compact_rows = archival_rows.clone();
+    let dedupe_groups = vec![DedupeGroup {
+        kind: CompactionKind::ToolCall,
+        canonical_text_hash_hex: "dup-hash-explicit-error".to_string(),
+        representative: RowRef::from_row(&archival_rows[1]),
+        duplicates: vec![RowRef::from_row(&archival_rows[2])],
+    }];
+    let fixture = BundleFixture::from_rows(archival_rows, compact_rows, dedupe_groups);
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze explicit error bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints[0]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert!(thrash.flagged);
+    assert_eq!(thrash.raw_score, 70);
+    assert!(thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason == "repeated failure evidence"));
+}
+
+#[test]
+fn dead_end_thrash_ignores_repeated_neutral_tool_output_evidence() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Verify neutral tool output stays out of repeated failure loops.",
+        ),
+        tool_row(1, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        tool_row(2, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        tool_row(3, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        row(4, CompactionKind::ToolOutput, "Exit code: 0"),
+        row(5, CompactionKind::ToolOutput, "Exit code: 0"),
+        row(6, CompactionKind::ToolOutput, "Plan updated"),
+        row(7, CompactionKind::ToolOutput, "Plan updated"),
+        row(
+            8,
+            CompactionKind::ToolOutput,
+            "function_call_output: wrote analyzer patch",
+        ),
+        row(
+            9,
+            CompactionKind::ToolOutput,
+            "function_call_output: wrote analyzer patch",
+        ),
+    ];
+    let mut archival_rows = rows.clone();
+    archival_rows[4].text_hash_hex = "hash-exit-zero".to_string();
+    archival_rows[5].text_hash_hex = "hash-exit-zero".to_string();
+    archival_rows[6].text_hash_hex = "hash-plan-updated".to_string();
+    archival_rows[7].text_hash_hex = "hash-plan-updated".to_string();
+    archival_rows[8].text_hash_hex = "hash-function-output".to_string();
+    archival_rows[9].text_hash_hex = "hash-function-output".to_string();
+    let compact_rows = archival_rows.clone();
+    let dedupe_groups = vec![DedupeGroup {
+        kind: CompactionKind::ToolCall,
+        canonical_text_hash_hex: "dup-hash-neutral-output".to_string(),
+        representative: RowRef::from_row(&archival_rows[1]),
+        duplicates: vec![RowRef::from_row(&archival_rows[2])],
+    }];
+    let fixture = BundleFixture::from_rows(archival_rows, compact_rows, dedupe_groups);
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze neutral tool output bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints[0]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert!(thrash.flagged);
+    assert_eq!(thrash.raw_score, 40);
+    assert!(thrash
+        .evidence
+        .iter()
+        .all(|item| item.reason != "repeated failure evidence"));
+    assert!(thrash.evidence.iter().any(|item| item
+        .reason
+        .starts_with("repeated verification command:")));
+}
+
 fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
     CompactionRow {
         source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),

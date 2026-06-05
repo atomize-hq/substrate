@@ -562,6 +562,11 @@ Packet 18 note:
   remains isolated to the legacy `v0.2` fallback path.
   Replay/live parity coverage and bounded smoke guidance were refreshed without mixing the
   separate typed outcome evidence follow-on into the same packet.
+- `2026-06-05`: the typed outcome evidence follow-on is now intentionally split for focused
+  sessions:
+  - `R1A`: docs lock, analyzer outcome-evidence seam, and repeated-failure cutover
+  - `R1B`: recovery/export semantics plus focused downgrade regressions
+  - `R1C`: screened bounded replay proof and continuity-note refresh
 
 ## If You Want Fewer Packets
 

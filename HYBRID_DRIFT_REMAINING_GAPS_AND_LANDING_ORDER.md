@@ -350,29 +350,71 @@ This is cleanup after the analyzer-side semantic gaps are fixed, not before.
 The correct next sequence is not “reopen checkpoint-state.” The correct next sequence is the
 follow-on after checkpoint-state.
 
-## Packet R1: Analyzer Outcome Evidence Fix
+## Packet Family R1: Analyzer Outcome Evidence Fix
 
 ### Objective
 
 Stop treating generic `ToolOutput` as failure evidence and establish one explicit outcome-evidence
-seam.
+seam, but do it as three tighter packets rather than one oversized landing session.
 
 ### Why First
 
 Everything else depends on this. Archetype-aware and turn-aware heuristics are not trustworthy if
-the underlying failure surface is already polluted.
+the underlying failure surface is already polluted. The replay-proof work is still part of this
+family, but it should follow the analyzer-semantic cutover instead of sharing the first landing.
 
-### Scope
+### Packet Split
+
+#### Packet R1A
+
+- docs lock for the `R1A` / `R1B` / `R1C` family boundary
+- `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+- analyzer tests for classification and repeated-failure grouping
+
+#### Packet R1B
 
 - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
 - `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`
-- analyzer tests for repeated failure / recovery
+- analyzer tests for recovery, downgrade, and export determinism
+
+#### Packet R1C
+
+- screened bounded replay proof over a small non-subagent corpus
+- continuity-note refresh if the final proof surface changed materially
+
+### Intentionally Left Out Of The R1 Family
+
+The following work is intentionally not part of the `R1` family as currently scoped:
+
+- real rollout-tail acceptance hardening beyond the narrow analyzer regression shape
+  - falls under `R2`
+- per-checkpoint turn context, long-turn detection, and turn-local checkpoint density
+  - falls under `R3`
+- session archetype classification such as troubleshooting vs planning vs review / closeout
+  - falls under `R4`
+- archetype-aware progress semantics such as frontier movement, narrowing candidate sets, or
+  verification-wall advance
+  - falls under `R5`
+- broader drift-scorer redesign that combines typed outcome evidence with turn context, archetype,
+  and progress modules
+  - falls under `R6`
+- replay/live checkpoint interpretation cleanup inside sentinel
+  - falls under `R7`
+
+The `R1` family is only the evidence-surface correction needed to stop generic `ToolOutput` from
+polluting repeated-failure history and `dead_end_thrash`, plus the bounded proof needed to show
+that narrower analyzer semantics behave honestly on completed non-subagent tails.
 
 ### Acceptance
 
-- repeated-failure loops no longer include successful tool output
-- `dead_end_thrash` remains active on real explicit failures
-- `dead_end_thrash` clears or downgrades on successful-tool-output-only tails
+- `R1A` lands the analyzer-owned outcome-evidence seam and repeated-failure cutover
+- `R1B` proves honest recovery/export semantics on the narrower failure surface
+- `R1C` proves the fix on a small handful of completed non-subagent sessions rather than a single
+  spot-check
+- those proof sessions exclude subagent / delegated runs, or are explicitly screened to prove no
+  subagent usage was present
+- the family still does not widen into turn context, session archetype, progress semantics, or
+  sentinel cleanup
 
 ## Packet R2: Real Rollout Acceptance Seam
 
@@ -522,13 +564,13 @@ This improves locality and maintainability, but it should not block the analyzer
 
 ## Immediate Next Action
 
-If only one packet lands next, it should be `R1`.
+If only one packet lands next, it should be `R1A`.
 
 The next honest implementation target is:
 
 - explicit outcome evidence classification
-- `dead_end_thrash` cutover to that narrower evidence surface
-- one real-session-style regression proving the false-positive tail is fixed
+- repeated-failure cutover to that narrower evidence surface
+- focused analyzer tests first, with bounded replay proof deferred to `R1C`
 
 That is the current blocking gap. Everything else in this document should follow from there.
 

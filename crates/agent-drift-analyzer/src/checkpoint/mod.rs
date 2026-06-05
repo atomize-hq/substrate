@@ -68,6 +68,12 @@ pub(crate) struct RepeatedFailureLoop {
     pub evidence: Vec<EvidenceRef>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutcomeEvidenceKind {
+    Failure,
+    Neutral,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct TaskFrameDelta {
     pub task_frame_transitioned: bool,
@@ -578,7 +584,26 @@ fn row_ref_key(row: &RowRef) -> (Utf8PathBuf, usize, usize) {
     (row.source_file.clone(), row.event_index, row.row_ordinal)
 }
 
+fn classify_outcome_evidence(row: &CompactionRow) -> OutcomeEvidenceKind {
+    if row.text.trim().is_empty() {
+        return OutcomeEvidenceKind::Neutral;
+    }
+
+    match row.kind {
+        CompactionKind::Error => OutcomeEvidenceKind::Failure,
+        CompactionKind::ToolOutput if tool_output_is_unambiguous_failure(&row.text) => {
+            OutcomeEvidenceKind::Failure
+        }
+        _ => OutcomeEvidenceKind::Neutral,
+    }
+}
+
+fn tool_output_is_unambiguous_failure(text: &str) -> bool {
+    text.trim()
+        .get(..6)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("error:"))
+}
+
 fn is_failure_row(row: &CompactionRow) -> bool {
-    matches!(row.kind, CompactionKind::Error | CompactionKind::ToolOutput)
-        && !row.text.trim().is_empty()
+    matches!(classify_outcome_evidence(row), OutcomeEvidenceKind::Failure)
 }
