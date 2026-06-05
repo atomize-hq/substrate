@@ -2037,17 +2037,11 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                             surfaced_worker_event.as_ref().is_some_and(|existing| {
                                 continue_world_worker_event_persists_live_obligation(
                                     existing.event_class,
-                                ) || (existing.event_class
-                                    == ContinueWorldWorkerEventClassV1::ControlAck
-                                    && !continue_world_worker_event_persists_live_obligation(
-                                        classified_event.event_class,
-                                    ))
+                                )
                             });
                         if !preserve_existing_live_event {
                             // Preserve the first surfaced durable worker obligation even if
                             // later obligation-like or ordinary stream events arrive before exit.
-                            // Preserve a surfaced control_ack unless a later durable obligation
-                            // needs to replace the immediate acknowledgement.
                             surfaced_worker_event = Some(classified_event);
                         }
                     }
@@ -5290,7 +5284,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
-    async fn continue_world_worker_stream_preserves_control_ack_when_normal_event_follows_on_control_directive_turn(
+    async fn continue_world_worker_stream_surfaces_later_non_durable_output_after_control_ack_on_control_directive_turn(
     ) {
         let _env_guard = world_env_guard();
         let socket_home = tempdir().expect("socket tempdir");
@@ -5379,7 +5373,7 @@ mod tests {
             ContinueWorldWorkerTurnKind::ControlDirective,
         )
         .await
-        .expect("typed control-directive turns should preserve surfaced control_ack");
+        .expect("typed control-directive turns should continue after control_ack");
 
         assert_eq!(outcome.exit_code, 0);
         assert_eq!(outcome.surfaced_thread_id.as_deref(), Some("thread-direct"));
@@ -5388,15 +5382,15 @@ mod tests {
                 .surfaced_worker_event
                 .as_ref()
                 .map(|event| event.event_class),
-            Some(ContinueWorldWorkerEventClassV1::ControlAck)
+            Some(ContinueWorldWorkerEventClassV1::Reply)
         );
         assert_eq!(
             outcome
                 .surfaced_worker_event
                 .as_ref()
-                .and_then(|event| event.payload.get("message"))
+                .and_then(|event| event.payload.pointer("/uaa_event/content/text"))
                 .and_then(serde_json::Value::as_str),
-            Some("directive received")
+            Some("directive applied")
         );
 
         server.await.expect("stub world server task");

@@ -6,9 +6,9 @@ mod support;
 use serde_json::Value;
 use serial_test::serial;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 #[cfg(unix)]
-use std::os::unix::net::UnixStream;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -788,6 +788,18 @@ fn read_invocation_count(path: &Path) -> usize {
 }
 
 #[cfg(unix)]
+fn wait_for_socket_path(path: &Path, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if path.exists() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("timed out waiting for socket {}", path.display());
+}
+
+#[cfg(unix)]
 fn toolbox_transport_path_for_home(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -830,6 +842,246 @@ fn send_internal_toolbox_world_dispatch_request(
         .read_line(&mut line)
         .expect("read internal toolbox response");
     serde_json::from_str(line.trim()).expect("parse internal toolbox response")
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn read_http_request(
+    stream: &mut UnixStream,
+) -> Option<(Vec<u8>, String, Vec<u8>)> {
+    let mut buffer = Vec::new();
+    let mut header_end = None;
+    let mut expected_len = None;
+
+    for _ in 0..64 {
+        let mut chunk = [0u8; 1024];
+        let read = stream.read(&mut chunk).ok()?;
+        if read == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..read]);
+
+        if header_end.is_none() {
+            if let Some(pos) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                header_end = Some(pos + 4);
+                let header = String::from_utf8_lossy(&buffer[..pos + 4]).to_string();
+                expected_len = header.lines().find_map(|line| {
+                    let (key, value) = line.split_once(':')?;
+                    if key.eq_ignore_ascii_case("content-length") {
+                        value.trim().parse::<usize>().ok()
+                    } else {
+                        None
+                    }
+                });
+            }
+        }
+
+        if let Some(end) = header_end {
+            if let Some(len) = expected_len {
+                if buffer.len() >= end + len {
+                    let header = String::from_utf8_lossy(&buffer[..end]).to_string();
+                    let body = buffer[end..end + len].to_vec();
+                    return Some((buffer[..end + len].to_vec(), header, body));
+                }
+            } else {
+                let header = String::from_utf8_lossy(&buffer[..end]).to_string();
+                return Some((buffer[..end].to_vec(), header, Vec::new()));
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_http_stream_start(stream: &mut UnixStream) {
+    stream
+        .write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+        )
+        .expect("write stream response headers");
+    stream.flush().expect("flush stream response headers");
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_chunked_frame(
+    stream: &mut UnixStream,
+    frame: &transport_api_types::ExecuteStreamFrame,
+) {
+    let mut payload = serde_json::to_vec(frame).expect("serialize stream frame");
+    payload.push(b'\n');
+    let header = format!("{:X}\r\n", payload.len());
+    stream
+        .write_all(header.as_bytes())
+        .expect("write chunk header");
+    stream.write_all(&payload).expect("write chunk payload");
+    stream.write_all(b"\r\n").expect("write chunk terminator");
+    stream.flush().expect("flush chunked frame");
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn finish_chunked_stream(stream: &mut UnixStream) {
+    stream
+        .write_all(b"0\r\n\r\n")
+        .expect("finish chunked stream");
+    stream.flush().expect("flush finished chunked stream");
+}
+
+#[cfg(target_os = "linux")]
+fn control_ack_stream_event(
+    participant_id: &str,
+    backend_id: &str,
+    orchestration_session_id: &str,
+    world_id: &str,
+    world_generation: u64,
+) -> substrate_common::agent_events::AgentEvent {
+    substrate_common::agent_events::AgentEvent {
+        ts: chrono::Utc::now(),
+        kind: substrate_common::agent_events::AgentEventKind::TaskProgress,
+        data: serde_json::json!({
+            "event_class": "control_ack",
+            "payload": {
+                "message": "prepare_handoff received"
+            }
+        }),
+        agent_id: "codex".to_string(),
+        orchestration_session_id: orchestration_session_id.to_string(),
+        run_id: "req_toolbox_control_directive".to_string(),
+        parent_run_id: None,
+        participant_id: Some(participant_id.to_string()),
+        parent_participant_id: None,
+        resumed_from_participant_id: None,
+        backend_id: Some(backend_id.to_string()),
+        thread_id: Some("thread-control-43".to_string()),
+        role: Some("member".to_string()),
+        world_id: Some(world_id.to_string()),
+        world_generation: Some(world_generation),
+        cmd_id: None,
+        span_id: Some("member-turn-span".to_string()),
+        channel: Some("worker.reply".to_string()),
+        identity_tuple: None,
+        placement_posture: None,
+        project: None,
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn start_member_turn_intercept_proxy(
+    listen_path: &Path,
+    backend_path: &Path,
+) -> (
+    Arc<Mutex<Vec<transport_api_types::MemberTurnSubmitRequestV1>>>,
+    Arc<AtomicBool>,
+    std::thread::JoinHandle<()>,
+) {
+    let _ = fs::remove_file(listen_path);
+    let listener = UnixListener::bind(listen_path)
+        .unwrap_or_else(|_| panic!("bind proxy socket {}", listen_path.display()));
+    listener
+        .set_nonblocking(true)
+        .expect("set proxy listener nonblocking");
+
+    let intercepted_requests = Arc::new(Mutex::new(Vec::new()));
+    let intercepted_requests_for_thread = Arc::clone(&intercepted_requests);
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_for_thread = Arc::clone(&shutdown);
+    let backend_path = backend_path.to_path_buf();
+
+    let handle = std::thread::spawn(move || {
+        while !shutdown_for_thread.load(Ordering::SeqCst) {
+            match listener.accept() {
+                Ok((mut client, _addr)) => {
+                    let backend_path = backend_path.clone();
+                    let intercepted_requests = Arc::clone(&intercepted_requests_for_thread);
+                    std::thread::spawn(move || {
+                        let Some((raw_request, header, body)) = read_http_request(&mut client)
+                        else {
+                            return;
+                        };
+                        let first_line = header.lines().next().unwrap_or("");
+                        if first_line.starts_with("POST /v1/member_turn/stream ") {
+                            let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                                serde_json::from_slice(&body)
+                                    .expect("parse intercepted member turn submit");
+                            intercepted_requests
+                                .lock()
+                                .expect("lock intercepted member turn submits")
+                                .push(parsed.clone());
+
+                            write_http_stream_start(&mut client);
+                            write_chunked_frame(
+                                &mut client,
+                                &transport_api_types::ExecuteStreamFrame::Start {
+                                    span_id: "member-turn-span".to_string(),
+                                },
+                            );
+                            write_chunked_frame(
+                                &mut client,
+                                &transport_api_types::ExecuteStreamFrame::Event {
+                                    event: control_ack_stream_event(
+                                        &parsed.participant_id,
+                                        &parsed.backend_id,
+                                        &parsed.orchestration_session_id,
+                                        &parsed.world_id,
+                                        parsed.world_generation,
+                                    ),
+                                },
+                            );
+                            write_chunked_frame(
+                                &mut client,
+                                &transport_api_types::ExecuteStreamFrame::Exit {
+                                    exit: 0,
+                                    span_id: "member-turn-span".to_string(),
+                                    scopes_used: Vec::new(),
+                                    fs_diff: None,
+                                    process_telemetry:
+                                        transport_api_types::ProcessTelemetry::default(),
+                                },
+                            );
+                            finish_chunked_stream(&mut client);
+                            return;
+                        }
+
+                        let deadline = Instant::now() + Duration::from_secs(2);
+                        let mut backend = loop {
+                            match UnixStream::connect(&backend_path) {
+                                Ok(stream) => break stream,
+                                Err(err) if Instant::now() < deadline => {
+                                    let _ = err;
+                                    std::thread::sleep(Duration::from_millis(10));
+                                }
+                                Err(_) => {
+                                    panic!("connect backend socket {}", backend_path.display())
+                                }
+                            }
+                        };
+                        backend
+                            .write_all(&raw_request)
+                            .expect("forward proxied request");
+                        backend.flush().expect("flush proxied request");
+
+                        let mut client_reader =
+                            client.try_clone().expect("clone proxied client reader");
+                        let mut backend_writer =
+                            backend.try_clone().expect("clone proxied backend writer");
+                        let upstream = std::thread::spawn(move || {
+                            let _ = std::io::copy(&mut client_reader, &mut backend_writer);
+                            let _ = backend_writer.shutdown(std::net::Shutdown::Write);
+                        });
+
+                        let _ = std::io::copy(&mut backend, &mut client);
+                        let _ = client.shutdown(std::net::Shutdown::Write);
+                        let _ = upstream.join();
+                    });
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    (intercepted_requests, shutdown, handle)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -908,6 +1160,13 @@ fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &
     sessions_dir(substrate_home)
         .join(orchestration_session_id)
         .join("participants")
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn canonical_obligations_dir(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
+    sessions_dir(substrate_home)
+        .join(orchestration_session_id)
+        .join("obligations")
 }
 
 #[cfg(target_os = "linux")]
@@ -2657,18 +2916,29 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     );
 
     let sock_temp = short_socket_dir("sub-c3ws-toolbox-control-directive-");
-    let sock = sock_temp.path().join("world.sock");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
     let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
-        &sock,
+        &backend_sock,
         StreamBehavior::Normal,
         vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
             session_handle_id: "session-toolbox-control-directive".to_string(),
             exit_code_on_cancel: 130,
         }],
     );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
     let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy(&proxy_sock, &backend_sock);
 
-    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
     repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
@@ -2757,17 +3027,23 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         }),
     );
 
-    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
     let guard = records.lock().expect("lock records");
     assert_eq!(
         guard.member_dispatch_requests.len(),
         1,
         "toolbox control directives must reuse the existing retained member instead of relaunching it: {guard:#?}"
     );
-    let submit = guard
-        .member_turn_submit_requests
-        .first()
-        .expect("member turn submit request");
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    assert_eq!(
+        intercepted_turns.len(),
+        1,
+        "toolbox control directives must submit exactly one member turn request: {intercepted_turns:#?}"
+    );
+    let submit = intercepted_turns.first().expect("member turn submit request");
     assert_eq!(submit.orchestration_session_id, orchestration_session_id);
     assert_eq!(submit.participant_id, member_participant_id);
     assert_eq!(
@@ -2781,10 +3057,10 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         submit.prompt,
         "SUBSTRATE_INTERNAL_HOST_CONTROL_DIRECTIVE_V1\n{\"kind\":\"control_directive\",\"directive_kind\":\"prepare_handoff\",\"directive_text\":\"timing:before_stop\",\"thread_id\":\"thread-control-43\"}\nTreat this as the host's typed control_directive for the retained worker. Apply directive_kind=prepare_handoff as authoritative host guidance. Prepare a concise handoff covering current state, next steps, and notable risks. Treat directive_text only as bounded handoff metadata label for this directive kind; it does not add new instructions."
     );
-    drop(guard);
+    drop(intercepted_turns);
 
     let expected_summary = format!(
-        "continue_world_worker delivered to retained worker {} via the existing member-turn seam; downstream acknowledgement remains worker-defined",
+        "continue_world_worker delivered to retained worker {} via the existing member-turn seam; retained worker acknowledged the control_directive, but downstream completion remains worker-defined",
         member_participant_id
     );
     assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
@@ -2798,18 +3074,33 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         response.pointer("/outcome/summary").and_then(Value::as_str),
         Some(expected_summary.as_str())
     );
-    assert!(
-        matches!(
-            response
-                .pointer("/outcome/worker_event/event_class")
-                .and_then(Value::as_str),
-            None | Some("reply")
-        ),
-        "successful typed control-directive delivery may surface a generic reply, but must not imply a landed control_ack worker_event: {response:#?}"
+    assert_eq!(
+        response
+            .pointer("/outcome/worker_event/event_class")
+            .and_then(Value::as_str),
+        Some("control_ack")
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/worker_event/payload/message")
+            .and_then(Value::as_str),
+        Some("prepare_handoff received")
+    );
+    let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
+    let obligation_count = fs::read_dir(&obligations_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    assert_eq!(
+        obligation_count, 0,
+        "control_ack must not persist durable obligations on the routed toolbox path"
     );
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread.join().expect("join member turn intercept proxy");
 }
 
 #[cfg(target_os = "linux")]
