@@ -10297,7 +10297,7 @@ agents:
     fn continue_world_worker_summary_stays_delivery_only_without_ack_implication() {
         let submit = sample_continue_submit_request();
 
-        let success = summarize_continue_world_worker_result(&submit, 0, None);
+        let success = summarize_continue_world_worker_result(&submit, 0, None, None);
         assert!(
             success.contains("delivered to retained worker ash_member"),
             "successful summary must stay explicit about delivery: {success}"
@@ -10311,7 +10311,7 @@ agents:
             "successful summary must not imply completion: {success}"
         );
 
-        let failure = summarize_continue_world_worker_result(&submit, 17, None);
+        let failure = summarize_continue_world_worker_result(&submit, 17, None, None);
         assert!(
             failure.contains("status 17"),
             "non-zero summary must preserve terminal status truth: {failure}"
@@ -10339,7 +10339,8 @@ agents:
             }),
         };
 
-        let success = summarize_continue_world_worker_result(&submit, 0, Some(&control_ack));
+        let success =
+            summarize_continue_world_worker_result(&submit, 0, Some(&control_ack), None);
         assert!(
             success.contains("acknowledged the control_directive"),
             "control_ack summary must surface acknowledgement truth: {success}"
@@ -10353,7 +10354,8 @@ agents:
             "control_ack summary must not imply completion: {success}"
         );
 
-        let failure = summarize_continue_world_worker_result(&submit, 17, Some(&control_ack));
+        let failure =
+            summarize_continue_world_worker_result(&submit, 17, Some(&control_ack), None);
         assert!(
             failure.contains("status 17"),
             "control_ack summary must preserve terminal status truth: {failure}"
