@@ -1050,6 +1050,15 @@ fn enforce_continue_world_worker_payload_policy(
             }
             Ok(())
         }
+        WorldDispatchPayloadV1::WorkerContinueProgressAck(_) => {
+            if !base_policy.world_dispatch_progress_acks_allowed() {
+                return Err(steering_policy_denial(
+                    WorldDispatchSteeringDenialV1::ActionNotAllowed,
+                    "effective policy does not allow continue_world_worker progress_ack payloads",
+                ));
+            }
+            Ok(())
+        }
         WorldDispatchPayloadV1::WorkerContinueForkCommand(_) => {
             if !base_policy.world_dispatch_fork_commands_allowed() {
                 return Err(steering_policy_denial(
@@ -3223,7 +3232,7 @@ mod tests {
         ApprovalResponseDecisionV1, ControlDirectiveKindV1, WorkerCancelPayloadV1,
         WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
         WorkerContinueControlDirectivePayloadV1, WorkerContinueForkCommandPayloadV1,
-        WorkerContinuePayloadV1, WorkerInspectPayloadV1,
+        WorkerContinuePayloadV1, WorkerContinueProgressAckPayloadV1, WorkerInspectPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
@@ -3689,6 +3698,27 @@ mod tests {
                     directive_kind: ControlDirectiveKindV1::PrepareHandoff,
                     directive_text: Some("  timing:before_stop  ".to_string()),
                     thread_id: Some("thread-control-43".to_string()),
+                },
+            ),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_continue_progress_ack_world_dispatch_request() -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_continue_progress_ack".to_string()),
+            idempotency_key: Some("idem_continue_progress_ack".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            target_participant_id: Some("ash_member".to_string()),
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerContinueProgressAck(
+                WorkerContinueProgressAckPayloadV1 {
+                    thread_id: Some("thread-progress-46".to_string()),
                 },
             ),
         }
@@ -7173,6 +7203,49 @@ agents:
         assert_eq!(
             message,
             "action_not_allowed: effective policy does not allow continue_world_worker control_directive payloads"
+        );
+        assert!(
+            !message.contains("stale_linkage:"),
+            "payload gate must not leak retained-worker lifecycle truth first: {message}"
+        );
+        assert!(
+            !message.contains(
+                "world_binding_mismatch: orchestration session sess_dispatch retained worker"
+            ),
+            "payload gate must not leak retained-worker topology drift first: {message}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_progress_ack_denies_by_default_before_target_resolution(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_progress_ack_world_dispatch_request(),
+        )
+        .await
+        .expect_err("progress-ack payloads must fail closed by default");
+        let message = err.to_string();
+
+        assert_eq!(
+            message,
+            "action_not_allowed: effective policy does not allow continue_world_worker progress_ack payloads"
         );
         assert!(
             !message.contains("stale_linkage:"),
