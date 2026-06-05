@@ -7236,9 +7236,16 @@ agents:
             &["continue_world_worker"],
             &["retained"],
         );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex_world",
+            AgentExecutionScope::World,
+        );
 
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("fork-command-success.sock");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let store_for_server = store.clone();
         let recorded_requests = Arc::new(Mutex::new(Vec::<
             transport_api_types::MemberTurnSubmitRequestV1,
         >::new()));
@@ -7305,6 +7312,93 @@ agents:
                     )
                     .await;
                     finish_chunked_stream(&mut stream).await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("member dispatch execute request");
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("member dispatch request");
+                    let descriptor =
+                        crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
+                            agent_id: execute_request.agent_id.clone(),
+                            backend_id: member_dispatch.backend_id.clone(),
+                            backend_kind: match member_dispatch.resolved_runtime.backend_kind {
+                                MemberRuntimeBackendKindV1::Codex => AgentRuntimeBackendKind::Codex,
+                                MemberRuntimeBackendKindV1::ClaudeCode => {
+                                    AgentRuntimeBackendKind::ClaudeCode
+                                }
+                            },
+                            protocol: member_dispatch.protocol.clone(),
+                            execution_scope:
+                                crate::execution::config_model::AgentExecutionScope::World,
+                            binary_path: PathBuf::from(
+                                &member_dispatch.resolved_runtime.binary_path,
+                            ),
+                        };
+                    let child = AgentRuntimeParticipantRecord::new_member_participant(
+                        &descriptor,
+                        member_dispatch.orchestration_session_id.clone(),
+                        member_dispatch.participant_id.clone(),
+                        member_dispatch.orchestrator_participant_id.clone(),
+                        member_dispatch.parent_participant_id.clone(),
+                        Some(
+                            crate::execution::agent_runtime::session::AgentRuntimeParticipantWorldBinding {
+                                world_id: member_dispatch.world_id.clone(),
+                                world_generation: member_dispatch.world_generation,
+                            },
+                        ),
+                        format!("lease_{}", member_dispatch.participant_id),
+                    )
+                    .expect("authoritative child participant");
+                    store_for_server
+                        .persist_participant(&child)
+                        .expect("persist authoritative child participant");
+
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "fork-bootstrap-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: substrate_common::agent_events::AgentEvent {
+                                ts: chrono::Utc::now(),
+                                kind: AgentEventKind::Registered,
+                                data: json!({}),
+                                agent_id: execute_request.agent_id,
+                                orchestration_session_id: member_dispatch
+                                    .orchestration_session_id
+                                    .clone(),
+                                run_id: member_dispatch.run_id.clone(),
+                                parent_run_id: None,
+                                participant_id: Some(member_dispatch.participant_id.clone()),
+                                parent_participant_id: member_dispatch.parent_participant_id.clone(),
+                                resumed_from_participant_id: member_dispatch
+                                    .resumed_from_participant_id
+                                    .clone(),
+                                backend_id: Some(member_dispatch.backend_id.clone()),
+                                thread_id: None,
+                                role: Some("member".to_string()),
+                                world_id: Some(member_dispatch.world_id.clone()),
+                                world_generation: Some(member_dispatch.world_generation),
+                                cmd_id: None,
+                                span_id: Some("fork-bootstrap-span".to_string()),
+                                channel: None,
+                                identity_tuple: None,
+                                placement_posture: None,
+                                project: None,
+                            },
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
                     break;
                 }
 
@@ -7314,7 +7408,6 @@ agents:
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
         let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
         let request = sample_continue_fork_command_world_dispatch_request();
         let expected_prompt = render_continue_world_worker_transport_prompt(
@@ -7333,29 +7426,41 @@ agents:
             panic!("expected continue_world_worker outcome");
         };
         assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert_eq!(outcome.source_participant_id.as_deref(), Some("ash_member"));
+        let child_participant_id = outcome
+            .child_participant_id
+            .as_deref()
+            .expect("continue fork-command outcome child_participant_id");
         assert!(
             matches!(
                 outcome.worker_event.as_ref().map(|event| event.event_class),
                 None | Some(ContinueWorldWorkerEventClassV1::Reply)
             ),
-            "typed fork-command delivery may surface a generic reply, but must not imply child allocation or a new worker event class: {:?}",
+            "typed fork-command delivery may surface a generic reply, but must not imply a new worker event class: {:?}",
             outcome.worker_event
         );
         assert!(
             outcome
                 .summary
-                .contains("delivered to retained worker ash_member"),
-            "successful delivery should stay explicit about delivery-only truth: {}",
+                .contains("delivered typed fork_command to retained worker ash_member"),
+            "successful Packet 3 delivery should stay explicit about delivery truth: {}",
             outcome.summary
         );
         assert!(
             outcome.summary.contains("status 23"),
-            "successful delivery should preserve the terminal exit status in the summary: {}",
+            "successful Packet 3 delivery should preserve the terminal exit status in the summary: {}",
             outcome.summary
         );
         assert!(
-            !outcome.summary.contains("child"),
-            "Packet 2 summary must not imply child allocation: {}",
+            outcome.summary.contains(child_participant_id),
+            "Packet 3 summary must surface explicit child allocation truth: {}",
+            outcome.summary
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("explicit source-to-child lineage is preserved"),
+            "Packet 3 summary must keep explicit lineage in scope: {}",
             outcome.summary
         );
 
