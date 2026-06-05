@@ -333,6 +333,7 @@ pub struct WorldDispatchPolicy {
     pub approval_responses_allowed: bool,
     pub clarification_responses_allowed: bool,
     pub control_directives_allowed: bool,
+    pub progress_acks_allowed: bool,
     pub follow_up_allowed: bool,
     pub blocked_allowed: bool,
 }
@@ -424,6 +425,7 @@ struct AgentsWorldDispatchForkPolicyFileV1 {
 #[serde(deny_unknown_fields)]
 struct AgentsWorldDispatchControlPolicyFileV1 {
     control_directives_allowed: bool,
+    progress_acks_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -551,6 +553,7 @@ struct RawAgentsWorldDispatchForkPolicyV1 {
 #[serde(default, deny_unknown_fields)]
 struct RawAgentsWorldDispatchControlPolicyV1 {
     control_directives_allowed: bool,
+    progress_acks_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -649,6 +652,7 @@ pub struct Policy {
     pub agents_world_dispatch_obligations_approval_response_allowed: bool, // agents.world_dispatch.obligations.approval_response_allowed
     pub agents_world_dispatch_obligations_clarification_response_allowed: bool, // agents.world_dispatch.obligations.clarification_response_allowed
     pub agents_world_dispatch_control_directives_allowed: bool, // agents.world_dispatch.control.control_directives_allowed
+    pub agents_world_dispatch_control_progress_acks_allowed: bool, // agents.world_dispatch.control.progress_acks_allowed
     pub agents_world_dispatch_obligations_follow_up_allowed: bool, // agents.world_dispatch.obligations.follow_up_allowed
     pub agents_world_dispatch_obligations_blocked_allowed: bool, // agents.world_dispatch.obligations.blocked_allowed
 
@@ -724,6 +728,7 @@ impl Default for Policy {
             agents_world_dispatch_obligations_approval_response_allowed: false,
             agents_world_dispatch_obligations_clarification_response_allowed: false,
             agents_world_dispatch_control_directives_allowed: false,
+            agents_world_dispatch_control_progress_acks_allowed: false,
             agents_world_dispatch_obligations_follow_up_allowed: false,
             agents_world_dispatch_obligations_blocked_allowed: false,
             workflow_router_enabled: false,
@@ -931,6 +936,7 @@ impl Policy {
             clarification_responses_allowed: self
                 .agents_world_dispatch_obligations_clarification_response_allowed,
             control_directives_allowed: self.agents_world_dispatch_control_directives_allowed,
+            progress_acks_allowed: self.agents_world_dispatch_control_progress_acks_allowed,
             follow_up_allowed: self.agents_world_dispatch_obligations_follow_up_allowed,
             blocked_allowed: self.agents_world_dispatch_obligations_blocked_allowed,
         }
@@ -962,6 +968,10 @@ impl Policy {
 
     pub fn world_dispatch_control_directives_allowed(&self) -> bool {
         self.agents_world_dispatch_control_directives_allowed
+    }
+
+    pub fn world_dispatch_progress_acks_allowed(&self) -> bool {
+        self.agents_world_dispatch_control_progress_acks_allowed
     }
 
     pub fn world_dispatch_follow_up_allowed(&self) -> bool {
@@ -1130,6 +1140,9 @@ impl Policy {
         self.agents_world_dispatch_control_directives_allowed = self
             .agents_world_dispatch_control_directives_allowed
             && other.agents_world_dispatch_control_directives_allowed;
+        self.agents_world_dispatch_control_progress_acks_allowed = self
+            .agents_world_dispatch_control_progress_acks_allowed
+            && other.agents_world_dispatch_control_progress_acks_allowed;
         self.agents_world_dispatch_obligations_follow_up_allowed = self
             .agents_world_dispatch_obligations_follow_up_allowed
             && other.agents_world_dispatch_obligations_follow_up_allowed;
@@ -1342,6 +1355,11 @@ impl<'de> Deserialize<'de> for Policy {
                 .world_dispatch
                 .control
                 .control_directives_allowed,
+            agents_world_dispatch_control_progress_acks_allowed: raw
+                .agents
+                .world_dispatch
+                .control
+                .progress_acks_allowed,
             agents_world_dispatch_obligations_follow_up_allowed: raw
                 .agents
                 .world_dispatch
@@ -1498,6 +1516,8 @@ impl Serialize for Policy {
                     control: AgentsWorldDispatchControlPolicyFileV1 {
                         control_directives_allowed: self
                             .agents_world_dispatch_control_directives_allowed,
+                        progress_acks_allowed: self
+                            .agents_world_dispatch_control_progress_acks_allowed,
                     },
                     obligations: AgentsWorldDispatchObligationsPolicyFileV1 {
                         approval_allowed: self.agents_world_dispatch_obligations_approval_allowed,

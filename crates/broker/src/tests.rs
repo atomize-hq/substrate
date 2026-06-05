@@ -149,6 +149,8 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
                 "control": {
                     "control_directives_allowed": policy
                         .agents_world_dispatch_control_directives_allowed,
+                    "progress_acks_allowed": policy
+                        .agents_world_dispatch_control_progress_acks_allowed,
                 },
                 "obligations": {
                     "approval_allowed": policy.agents_world_dispatch_obligations_approval_allowed,
@@ -1714,6 +1716,13 @@ workflow:
             control_directives_allowed.is_none() || control_directives_allowed == Some(false),
             "unexpected agents.world_dispatch.control.control_directives_allowed in policy JSON: {json}"
         );
+        let progress_acks_allowed = json
+            .pointer("/agents/world_dispatch/control/progress_acks_allowed")
+            .and_then(serde_json::Value::as_bool);
+        assert!(
+            progress_acks_allowed.is_none() || progress_acks_allowed == Some(false),
+            "unexpected agents.world_dispatch.control.progress_acks_allowed in policy JSON: {json}"
+        );
         assert_eq!(
             json.pointer("/agents/world_dispatch/obligations/follow_up_allowed")
                 .and_then(serde_json::Value::as_bool),
@@ -1835,6 +1844,26 @@ workflow:
             control_directives_allowed.is_none() || control_directives_allowed == Some(false),
             "unexpected agents.world_dispatch.control.control_directives_allowed in policy YAML: {yaml:?}"
         );
+        let progress_acks_allowed = agents
+            .and_then(|agents| {
+                agents
+                    .get(serde_yaml::Value::String("world_dispatch".to_string()))
+                    .and_then(|value| value.as_mapping())
+            })
+            .and_then(|world_dispatch| {
+                world_dispatch
+                    .get(serde_yaml::Value::String("control".to_string()))
+                    .and_then(|value| value.as_mapping())
+            })
+            .and_then(|control| {
+                control
+                    .get(serde_yaml::Value::String("progress_acks_allowed".to_string()))
+                    .and_then(|value| value.as_bool())
+            });
+        assert!(
+            progress_acks_allowed.is_none() || progress_acks_allowed == Some(false),
+            "unexpected agents.world_dispatch.control.progress_acks_allowed in policy YAML: {yaml:?}"
+        );
         assert_eq!(
             agents
                 .and_then(|agents| {
@@ -1954,6 +1983,7 @@ metadata:
                     .and_then(serde_json::Value::as_object_mut)
                 {
                     control.remove("control_directives_allowed");
+                    control.remove("progress_acks_allowed");
                     if control.is_empty() {
                         world_dispatch.remove("control");
                     }
@@ -2032,6 +2062,13 @@ metadata:
                 .and_then(serde_json::Value::as_bool),
             Some(false),
             "broker effective policy should expose control.control_directives_allowed"
+        );
+        assert_eq!(
+            broker_json
+                .pointer("/agents/world_dispatch/control/progress_acks_allowed")
+                .and_then(serde_json::Value::as_bool),
+            Some(false),
+            "broker effective policy should expose control.progress_acks_allowed"
         );
 
         let mut broker_json_sanitized = broker_json.clone();

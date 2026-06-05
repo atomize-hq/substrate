@@ -269,11 +269,13 @@ impl AgentsWorldDispatchForkPatch {
 pub(crate) struct AgentsWorldDispatchControlPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub control_directives_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress_acks_allowed: Option<bool>,
 }
 
 impl AgentsWorldDispatchControlPatch {
     fn is_empty(&self) -> bool {
-        self.control_directives_allowed.is_none()
+        self.control_directives_allowed.is_none() && self.progress_acks_allowed.is_none()
     }
 }
 
@@ -1426,6 +1428,9 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     {
         target.agents_world_dispatch_control_directives_allowed = v;
     }
+    if let Some(v) = patch.agents.world_dispatch.control.progress_acks_allowed {
+        target.agents_world_dispatch_control_progress_acks_allowed = v;
+    }
     if let Some(v) = patch.agents.world_dispatch.obligations.follow_up_allowed {
         target.agents_world_dispatch_obligations_follow_up_allowed = v;
     }
@@ -1625,6 +1630,13 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
             .world_dispatch
             .control
             .control_directives_allowed
+            .take()
+            .is_some()),
+        "agents.world_dispatch.control.progress_acks_allowed" => Ok(patch
+            .agents
+            .world_dispatch
+            .control
+            .progress_acks_allowed
             .take()
             .is_some()),
         "agents.world_dispatch.obligations.follow_up_allowed" => Ok(patch
@@ -1846,6 +1858,11 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
                 .world_dispatch
                 .control
                 .control_directives_allowed,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.control.progress_acks_allowed" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.control.progress_acks_allowed,
             &update.op,
             &update.value,
         ),
@@ -2293,6 +2310,11 @@ mod tests {
                 value: "true".to_string(),
             },
             ConfigUpdate {
+                key: "agents.world_dispatch.control.progress_acks_allowed".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
+            ConfigUpdate {
                 key: "agents.world_dispatch.obligations.follow_up_allowed".to_string(),
                 op: UpdateOp::Set,
                 value: "true".to_string(),
@@ -2377,6 +2399,10 @@ mod tests {
             Some(true)
         );
         assert_eq!(
+            patch.agents.world_dispatch.control.progress_acks_allowed,
+            Some(true)
+        );
+        assert_eq!(
             patch.agents.world_dispatch.obligations.follow_up_allowed,
             Some(true)
         );
@@ -2419,6 +2445,7 @@ agents:
       recommendations_allowed: true
     control:
       control_directives_allowed: true
+      progress_acks_allowed: true
     obligations:
       approval_allowed: true
       approval_response_allowed: true
@@ -2489,6 +2516,10 @@ agents:
             Some(true)
         );
         assert_eq!(
+            patch.agents.world_dispatch.control.progress_acks_allowed,
+            Some(true)
+        );
+        assert_eq!(
             patch.agents.world_dispatch.obligations.follow_up_allowed,
             Some(true)
         );
@@ -2519,6 +2550,7 @@ agents:
         assert!(!effective.agents_world_dispatch_obligations_approval_response_allowed);
         assert!(!effective.agents_world_dispatch_obligations_clarification_response_allowed);
         assert!(!effective.agents_world_dispatch_control_directives_allowed);
+        assert!(!effective.agents_world_dispatch_control_progress_acks_allowed);
         assert!(!effective.agents_world_dispatch_obligations_follow_up_allowed);
         assert!(!effective.agents_world_dispatch_obligations_blocked_allowed);
     }

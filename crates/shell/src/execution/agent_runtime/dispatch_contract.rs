@@ -264,6 +264,14 @@ pub(crate) struct WorkerContinueForkCommandPayloadV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkerContinueProgressAckPayloadV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+}
+
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ControlDirectiveKindV1 {
@@ -372,6 +380,7 @@ pub(crate) enum WorldDispatchPayloadV1 {
     WorkerContinueApprovalResponse(WorkerContinueApprovalResponsePayloadV1),
     WorkerContinueClarificationResponse(WorkerContinueClarificationResponsePayloadV1),
     WorkerContinueForkCommand(WorkerContinueForkCommandPayloadV1),
+    WorkerContinueProgressAck(WorkerContinueProgressAckPayloadV1),
     WorkerContinueControlDirective(WorkerContinueControlDirectivePayloadV1),
     WorkerInspect(WorkerInspectPayloadV1),
     WorkerCancel(WorkerCancelPayloadV1),
@@ -522,6 +531,10 @@ fn validate_world_dispatch_payload(
         ) => validate_fork_command_continue_payload(action, command),
         (
             WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchPayloadV1::WorkerContinueProgressAck(ack),
+        ) => validate_progress_ack_continue_payload(action, ack),
+        (
+            WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchPayloadV1::WorkerContinueControlDirective(directive),
         ) => validate_control_directive_continue_payload(action, directive),
         (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchPayloadV1::WorkerInspect(_)) => {
@@ -580,6 +593,13 @@ fn validate_control_directive_continue_payload(
     validate_optional_world_dispatch_string(action, "thread_id", &directive.thread_id)?;
     directive.directive_text = canonicalize_control_directive_detail_fragment(action, directive)?;
     Ok(())
+}
+
+fn validate_progress_ack_continue_payload(
+    action: WorldDispatchActionV1,
+    ack: &WorkerContinueProgressAckPayloadV1,
+) -> anyhow::Result<()> {
+    validate_optional_world_dispatch_string(action, "thread_id", &ack.thread_id)
 }
 
 fn validate_fork_command_continue_payload(
@@ -1105,7 +1125,11 @@ impl ContinueWorldWorkerEventClassV1 {
     pub(crate) fn is_deferred_wire_label(label: &str) -> bool {
         matches!(
             label.trim(),
-            "approval_response" | "fork_command" | "control_directive" | "attention_required"
+            "approval_response"
+                | "fork_command"
+                | "progress_ack"
+                | "control_directive"
+                | "attention_required"
         )
     }
 }
@@ -1990,8 +2014,9 @@ mod tests {
         RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
         TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
         WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
-        WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
-        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
+        WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
+        WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
+        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
         WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
         WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
@@ -3958,6 +3983,48 @@ mod tests {
         assert_eq!(payload.thread_id.as_deref(), Some("thread-control"));
     }
 
+    #[test]
+    fn world_dispatch_contract_accepts_continue_world_worker_typed_progress_ack_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueProgressAck(
+                WorkerContinueProgressAckPayloadV1 {
+                    thread_id: Some("thread-progress".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-46")
+        .validate()
+        .expect("typed progress_ack should validate");
+
+        let WorldDispatchPayloadV1::WorkerContinueProgressAck(payload) = validated.payload else {
+            panic!("validated payload should remain typed progress_ack payload");
+        };
+        assert_eq!(payload.thread_id.as_deref(), Some("thread-progress"));
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_blank_thread_id_in_typed_progress_ack() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueProgressAck(
+                WorkerContinueProgressAckPayloadV1 {
+                    thread_id: Some(" ".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-46")
+        .validate()
+        .expect_err("typed progress_ack must reject blank thread_id when provided");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty thread_id when provided"
+        );
+    }
+
     #[cfg(any(target_os = "linux", test))]
     #[test]
     fn world_dispatch_contract_renders_typed_control_directive_prompt_deterministically() {
@@ -4139,12 +4206,9 @@ mod tests {
     }
 
     #[test]
-    fn world_dispatch_contract_rejects_still_deferred_host_response_payload_kinds_during_deserialization(
-    ) {
-        for payload_kind in [
-            "worker_continue_progress_ack",
-            "worker_continue_control_ack",
-        ] {
+    fn world_dispatch_contract_rejects_still_deferred_host_response_payload_kinds_during_deserialization()
+    {
+        for payload_kind in ["worker_continue_control_ack"] {
             let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
                 "request_id": "req-43",
                 "idempotency_key": "idem-43",
@@ -4215,6 +4279,9 @@ mod tests {
         ));
         assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "approval_response"
+        ));
+        assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
+            "progress_ack"
         ));
         assert!(ContinueWorldWorkerEventClassV1::is_deferred_wire_label(
             "control_directive"
