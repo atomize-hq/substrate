@@ -965,6 +965,10 @@ pub(crate) struct ContinueWorldWorkerOutcomeV1 {
     pub world_id: String,
     pub world_generation: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_event: Option<ContinueWorldWorkerEventV1>,
@@ -1988,6 +1992,7 @@ mod tests {
         WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
         WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
         WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
+        ContinueWorldWorkerOutcomeV1,
         WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
         WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
@@ -3343,6 +3348,42 @@ mod tests {
             json.get("child_participant_id")
                 .and_then(|value| value.as_str()),
             Some("ash-worker-child-38")
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_round_trips_continue_fork_command_lineage_shape() {
+        let outcome = WorldDispatchOutcomeV1::ContinueWorldWorker(ContinueWorldWorkerOutcomeV1 {
+            request_id: "req-45".to_string(),
+            orchestration_session_id: "sess-45".to_string(),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch-45".to_string(),
+            target_participant_id: "ash-worker-source-45".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-45".to_string(),
+            world_generation: 9,
+            source_participant_id: Some("ash-worker-source-45".to_string()),
+            child_participant_id: Some("ash-worker-child-45".to_string()),
+            thread_id: Some("thread-45".to_string()),
+            worker_event: None,
+            summary: "continue fork-command outcome preserves explicit lineage".to_string(),
+        });
+
+        let json = serde_json::to_value(&outcome).expect("serialize continue outcome");
+        assert_eq!(
+            json.get("outcome_kind").and_then(|value| value.as_str()),
+            Some("continue_world_worker")
+        );
+        assert_eq!(
+            json.get("source_participant_id")
+                .and_then(|value| value.as_str()),
+            Some("ash-worker-source-45")
+        );
+        assert_eq!(
+            json.get("child_participant_id")
+                .and_then(|value| value.as_str()),
+            Some("ash-worker-child-45")
         );
     }
 

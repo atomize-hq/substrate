@@ -699,6 +699,13 @@ async fn continue_world_worker(
         stream_result.surfaced_worker_event.as_ref(),
         fork_bootstrap.as_ref(),
     );
+    let (source_participant_id, child_participant_id) = match fork_bootstrap.as_ref() {
+        Some(fork_bootstrap) => (
+            Some(fork_bootstrap.source_participant_id.clone()),
+            Some(fork_bootstrap.child_participant_id.clone()),
+        ),
+        None => (None, None),
+    };
 
     Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
         ContinueWorldWorkerOutcomeV1 {
@@ -711,6 +718,8 @@ async fn continue_world_worker(
             target_backend_id: submit_request.backend_id.clone(),
             world_id: submit_request.world_id.clone(),
             world_generation: submit_request.world_generation,
+            source_participant_id,
+            child_participant_id,
             thread_id: stream_result.surfaced_thread_id,
             worker_event: stream_result.surfaced_worker_event,
             summary,

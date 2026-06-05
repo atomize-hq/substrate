@@ -3947,6 +3947,18 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         Some("continue_world_worker")
     );
     assert_eq!(
+        response
+            .pointer("/outcome/source_participant_id")
+            .and_then(Value::as_str),
+        Some(source_participant_id.as_str())
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/child_participant_id")
+            .and_then(Value::as_str),
+        Some(child_participant_id.as_str())
+    );
+    assert_eq!(
         response.pointer("/outcome/summary").and_then(Value::as_str),
         Some(expected_summary.as_str())
     );
