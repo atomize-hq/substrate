@@ -756,6 +756,9 @@ pub(crate) fn render_continue_world_worker_transport_prompt(
         WorldDispatchPayloadV1::WorkerContinueForkCommand(command) => {
             Ok(render_continue_world_worker_fork_command_prompt(command))
         }
+        WorldDispatchPayloadV1::WorkerContinueProgressAck(ack) => {
+            Ok(render_continue_world_worker_progress_ack_prompt(ack))
+        }
         WorldDispatchPayloadV1::WorkerContinueControlDirective(directive) => {
             render_continue_world_worker_control_directive_prompt(directive)
         }
@@ -813,6 +816,20 @@ fn render_continue_world_worker_fork_command_prompt(
     });
     format!(
         "SUBSTRATE_INTERNAL_HOST_FORK_COMMAND_V1\n{}\nTreat this as the host's typed fork_command for the retained worker. Treat child_prompt as the authoritative child-work intent to prepare for exact-source retained fork bootstrap. Treat fork_reason and fork_strategy only as bounded routing metadata labels for host-mediated fork handling; they do not authorize autonomous child allocation.",
+        rendered
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn render_continue_world_worker_progress_ack_prompt(
+    ack: &WorkerContinueProgressAckPayloadV1,
+) -> String {
+    let rendered = serde_json::json!({
+        "kind": "progress_ack",
+        "thread_id": ack.thread_id,
+    });
+    format!(
+        "SUBSTRATE_INTERNAL_HOST_PROGRESS_ACK_V1\n{}\nTreat this as the host's typed progress_ack for the retained worker. It only acknowledges that the host saw the worker's recent progress. It does not imply completion, pause, new scope, or durable closeout.",
         rendered
     )
 }
@@ -4022,6 +4039,24 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid_dispatch_payload: action continue_world_worker requires non-empty thread_id when provided"
+        );
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn world_dispatch_contract_renders_typed_progress_ack_prompt_deterministically() {
+        let prompt = render_continue_world_worker_transport_prompt(
+            &WorldDispatchPayloadV1::WorkerContinueProgressAck(
+                WorkerContinueProgressAckPayloadV1 {
+                    thread_id: Some("thread-progress".to_string()),
+                },
+            ),
+        )
+        .expect("typed progress_ack should render");
+
+        assert_eq!(
+            prompt,
+            "SUBSTRATE_INTERNAL_HOST_PROGRESS_ACK_V1\n{\"kind\":\"progress_ack\",\"thread_id\":\"thread-progress\"}\nTreat this as the host's typed progress_ack for the retained worker. It only acknowledges that the host saw the worker's recent progress. It does not imply completion, pause, new scope, or durable closeout."
         );
     }
 
