@@ -669,6 +669,8 @@ async fn continue_world_worker(
     let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
     let clarification_closeout = prepare_continue_world_worker_clarification_closeout(&prepared)?;
     let turn_kind = continue_world_worker_turn_kind(&prepared.request.payload);
+    let _fork_command_bootstrap_guard =
+        acquire_continue_world_worker_fork_command_bootstrap_guard(&prepared, &base_policy)?;
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
     let stream_result = execute_continue_world_worker_stream_for_turn_kind(
@@ -682,9 +684,8 @@ async fn continue_world_worker(
         &prepared,
         clarification_closeout.as_ref(),
     )?;
-    let fork_bootstrap =
-        continue_world_worker_fork_command_bootstrap_after_delivery(&prepared, &base_policy)
-            .await?;
+    let fork_bootstrap = continue_world_worker_fork_command_bootstrap_after_delivery(&prepared)
+        .await?;
     if let Some(worker_event) = stream_result
         .surfaced_worker_event
         .as_ref()
@@ -720,7 +721,6 @@ async fn continue_world_worker(
 #[cfg(target_os = "linux")]
 async fn continue_world_worker_fork_command_bootstrap_after_delivery(
     prepared: &PreparedOrchestratorWorldDispatch,
-    base_policy: &Policy,
 ) -> Result<Option<ContinueWorldWorkerForkBootstrapOutcome>> {
     let WorldDispatchPayloadV1::WorkerContinueForkCommand(_) = &prepared.request.payload else {
         return Ok(None);
@@ -754,8 +754,6 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
             err.reason
         )
     })?;
-    let _concurrency_guard =
-        acquire_continue_world_worker_fork_command_bootstrap_guard(prepared, base_policy)?;
     let dispatch_workspace_root = std::env::current_dir()
         .context("failed to resolve cwd for continue_world_worker fork_command bootstrap")?;
     let transport_request = build_continue_world_worker_fork_command_transport_request(
@@ -874,6 +872,17 @@ fn acquire_continue_world_worker_fork_command_bootstrap_guard(
     prepared: &PreparedOrchestratorWorldDispatch,
     base_policy: &Policy,
 ) -> Result<Option<WorldDispatchConcurrencyGuard>> {
+    if !matches!(
+        prepared.request.payload,
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+    ) {
+        return Ok(None);
+    }
+
+    let live_retained_worker_count = prepared.store.count_authoritative_live_retained_workers(
+        &prepared.request.orchestration_session_id,
+        prepared.caller_participant.participant_id(),
+    )?;
     let mut fork_request = prepared.request.clone();
     fork_request.action = WorldDispatchActionV1::ForkWorldWorker;
 
@@ -884,7 +893,7 @@ fn acquire_continue_world_worker_fork_command_bootstrap_guard(
             session: prepared.session.clone(),
             caller_participant: prepared.caller_participant.clone(),
             target_participant: prepared.target_participant.clone(),
-            live_retained_worker_count: prepared.live_retained_worker_count,
+            live_retained_worker_count,
         },
         base_policy,
     )
@@ -7397,6 +7406,38 @@ agents:
         assert_eq!(
             err.to_string(),
             "invalidated_worker_not_routable: target_already_terminal: orchestration session sess_dispatch retained worker ash_member is already terminal (invalidated)"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_fork_command_rejects_live_retained_worker_cap_before_delivery(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        fs::write(
+            substrate_home.path().join("policy.yaml"),
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n    - \"cli:codex_world\"\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"continue_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 1\n    max_concurrent_ephemeral: 4\n    fork:\n      commands_allowed: true\n",
+        )
+        .expect("write policy");
+        let missing_socket = substrate_home.path().join("missing-world.sock");
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &missing_socket);
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_fork_command_world_dispatch_request(),
+        )
+        .await
+        .expect_err("full retained worker cap must fail closed before delivery");
+
+        assert_eq!(
+            err.to_string(),
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_dispatch; authoritative live count is 1"
         );
     }
 

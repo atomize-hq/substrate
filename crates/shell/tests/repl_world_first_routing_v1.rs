@@ -525,6 +525,7 @@ struct WorldDispatchPolicyArgs<'a> {
     allowed_backends: &'a [&'a str],
     allowed_actions: &'a [&'a str],
     allowed_modes: &'a [&'a str],
+    max_live_retained_workers: usize,
     control_directives_allowed: bool,
     fork_commands_allowed: bool,
 }
@@ -556,6 +557,7 @@ fn write_member_runtime_policy_with_world_dispatch_control_directives(
     let dispatch_backends = yaml_quoted_list(args.allowed_backends, 6);
     let dispatch_actions = yaml_quoted_list(args.allowed_actions, 6);
     let dispatch_modes = yaml_quoted_list(args.allowed_modes, 6);
+    let max_live_retained_workers = args.max_live_retained_workers;
     let control_block = if args.control_directives_allowed {
         "    control:\n      control_directives_allowed: true\n"
     } else {
@@ -601,7 +603,7 @@ agents:
     same_session_only: true
     same_world_binding_only: true
     allow_capability_narrowing: false
-    max_live_retained_workers: 8
+    max_live_retained_workers: {max_live_retained_workers}
     max_concurrent_ephemeral: 8
 {control_block}
 {fork_block}
@@ -629,6 +631,7 @@ fn write_member_runtime_policy_with_member_backend(
                 "continue_world_worker",
             ],
             allowed_modes: &["ephemeral", "retained"],
+            max_live_retained_workers: 8,
             control_directives_allowed: false,
             fork_commands_allowed: false,
         },
@@ -2924,6 +2927,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             allowed_backends: &["cli:codex"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
             control_directives_allowed: false,
             fork_commands_allowed: false,
         },
@@ -3165,6 +3169,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
             allowed_backends: &["cli:codex"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
             control_directives_allowed: true,
             fork_commands_allowed: false,
         },
@@ -3393,6 +3398,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             allowed_backends: &["cli:codex"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
             control_directives_allowed: true,
             fork_commands_allowed: false,
         },
@@ -3714,6 +3720,7 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
             allowed_backends: &["cli:codex"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
             control_directives_allowed: false,
             fork_commands_allowed: true,
         },
@@ -3976,6 +3983,220 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
+fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_delivery() {
+    let temp = temp_dir("substrate-c3-toolbox-fork-command-cap-deny-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            max_live_retained_workers: 1,
+            control_directives_allowed: false,
+            fork_commands_allowed: true,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-fork-command-cap-deny-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-fork-source".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy(&proxy_sock, &backend_sock);
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let source_member = &live_members[0];
+    let source_participant_id = source_member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("source participant_id")
+        .to_string();
+    let world_id = source_member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("source world_id")
+        .to_string();
+    let world_generation = source_member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("source world_generation");
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_fork_command_live_cap",
+            "idempotency_key": "idem_toolbox_fork_command_live_cap",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "continue_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex",
+            "target_participant_id": source_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_continue_fork_command",
+                "child_prompt": "Investigate the flaky Linux replay trace.",
+                "fork_reason": "parallelize_investigation",
+                "fork_strategy": "exact_source_retained",
+                "thread_id": "thread-fork-command-cap-deny-45"
+            }
+        }),
+    );
+
+    let expected_error = format!(
+        "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session {}; authoritative live count is 1",
+        orchestration_session_id
+    );
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    assert_eq!(
+        response.get("error").and_then(Value::as_str),
+        Some(expected_error.as_str())
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "fork-command capacity denial must fail before launching a retained child bootstrap: {guard:#?}"
+    );
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    assert_eq!(
+        intercepted_turns.len(),
+        0,
+        "fork-command capacity denial must fail before submitting any retained member turn: {intercepted_turns:#?}"
+    );
+    drop(intercepted_turns);
+
+    let live_participants_after = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    assert_eq!(
+        live_participants_after.len(),
+        2,
+        "pre-delivery fork-command cap denial must not register any additional authoritative participant: {live_participants_after:?}"
+    );
+    let live_members_after = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(3),
+    );
+    assert_eq!(
+        live_members_after
+            .iter()
+            .filter(|manifest| {
+                manifest.get("participant_id").and_then(Value::as_str)
+                    == Some(source_participant_id.as_str())
+            })
+            .count(),
+        1,
+        "pre-delivery fork-command cap denial must leave only the exact retained source authoritative-live: {live_members_after:?}"
+    );
+
+    let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
+    let obligation_count = fs::read_dir(&obligations_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    assert_eq!(
+        obligation_count, 0,
+        "pre-delivery fork-command cap denial must not persist durable obligations"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
 fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
     let temp = temp_dir("substrate-c3-toolbox-fork-command-fail-closed-");
     let home = temp.path().join("home");
@@ -4003,6 +4224,7 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
             allowed_backends: &["cli:codex"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
             control_directives_allowed: false,
             fork_commands_allowed: true,
         },
