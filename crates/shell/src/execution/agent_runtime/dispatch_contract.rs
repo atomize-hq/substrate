@@ -733,6 +733,9 @@ pub(crate) fn render_continue_world_worker_transport_prompt(
         WorldDispatchPayloadV1::WorkerContinueClarificationResponse(response) => Ok(
             render_continue_world_worker_clarification_response_prompt(response),
         ),
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(command) => {
+            Ok(render_continue_world_worker_fork_command_prompt(command))
+        }
         WorldDispatchPayloadV1::WorkerContinueControlDirective(directive) => {
             render_continue_world_worker_control_directive_prompt(directive)
         }
@@ -773,6 +776,23 @@ fn render_continue_world_worker_clarification_response_prompt(
     });
     format!(
         "SUBSTRATE_INTERNAL_HOST_CLARIFICATION_RESPONSE_V1\n{}\nTreat this as the host's typed clarification_response for the matching pending follow-up obligation. Use clarification_text as authoritative host guidance before continuing work.",
+        rendered
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn render_continue_world_worker_fork_command_prompt(
+    command: &WorkerContinueForkCommandPayloadV1,
+) -> String {
+    let rendered = serde_json::json!({
+        "kind": "fork_command",
+        "child_prompt": command.child_prompt,
+        "fork_reason": command.fork_reason,
+        "fork_strategy": command.fork_strategy,
+        "thread_id": command.thread_id,
+    });
+    format!(
+        "SUBSTRATE_INTERNAL_HOST_FORK_COMMAND_V1\n{}\nTreat this as the host's typed fork_command for the retained worker. Treat child_prompt as the authoritative child-work intent to prepare for exact-source retained fork bootstrap. Treat fork_reason and fork_strategy only as bounded routing metadata labels for host-mediated fork handling; they do not authorize autonomous child allocation.",
         rendered
     )
 }
@@ -3818,6 +3838,35 @@ mod tests {
         assert_eq!(
             payload.fork_strategy.as_deref(),
             Some("parallelize_investigation")
+        );
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn world_dispatch_contract_renders_typed_fork_command_prompt_deterministically() {
+        let prompt = render_continue_world_worker_transport_prompt(
+            &base_world_dispatch_request(
+                WorldDispatchActionV1::ContinueWorldWorker,
+                WorldDispatchModeV1::Retained,
+                WorldDispatchPayloadV1::WorkerContinueForkCommand(
+                    WorkerContinueForkCommandPayloadV1 {
+                        child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
+                        fork_reason: Some("specialize:replay_trace".to_string()),
+                        fork_strategy: Some("parallelize_investigation".to_string()),
+                        thread_id: Some("thread-fork".to_string()),
+                    },
+                ),
+            )
+            .with_target_participant_id("ash-worker-45")
+            .validate()
+            .expect("validated typed fork command request")
+            .payload,
+        )
+        .expect("render typed fork command prompt");
+
+        assert_eq!(
+            prompt,
+            "SUBSTRATE_INTERNAL_HOST_FORK_COMMAND_V1\n{\"kind\":\"fork_command\",\"child_prompt\":\"Investigate the flaky Linux replay trace.\",\"fork_reason\":\"specialize:replay_trace\",\"fork_strategy\":\"parallelize_investigation\",\"thread_id\":\"thread-fork\"}\nTreat this as the host's typed fork_command for the retained worker. Treat child_prompt as the authoritative child-work intent to prepare for exact-source retained fork bootstrap. Treat fork_reason and fork_strategy only as bounded routing metadata labels for host-mediated fork handling; they do not authorize autonomous child allocation."
         );
     }
 

@@ -1308,6 +1308,28 @@ impl AgentRuntimeStateStore {
     }
 
     #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn resolve_internal_continue_fork_command_dispatch_target(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        target_participant_id: &str,
+        target_backend_id: &str,
+    ) -> Result<ResolvedInternalContinueWorldDispatchTarget> {
+        let resolved = self.resolve_internal_fork_world_dispatch_target(
+            orchestration_session_id,
+            caller_participant_id,
+            target_participant_id,
+            target_backend_id,
+        )?;
+
+        Ok(ResolvedInternalContinueWorldDispatchTarget {
+            session: resolved.session,
+            caller_participant: resolved.caller_participant,
+            target_participant: resolved.source_participant,
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
     #[allow(dead_code)]
     fn prepare_internal_continue_approval_response_obligation_closeout(
         &self,
@@ -8171,6 +8193,38 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_internal_continue_fork_command_dispatch_target_reuses_exact_retained_source() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_fork", "orch_fork");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member("codex_world", "sess_fork", "ash_source", "orch_fork");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_continue_fork_command_dispatch_target(
+                    "sess_fork",
+                    "orch_fork",
+                    "ash_source",
+                    "cli:codex_world",
+                )
+                .expect("resolve exact retained continue fork-command source");
+
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_fork");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_source");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_internal_fork_world_dispatch_target_rejects_non_authoritative_caller() {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_fork", "orch_fork");
@@ -8347,6 +8401,42 @@ mod tests {
                     "cli:codex_world",
                 )
                 .expect_err("terminal source must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "target_already_terminal: orchestration session sess_fork retained worker ash_source is already terminal (invalidated)"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_continue_fork_command_dispatch_target_rejects_terminal_source() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_fork", "orch_fork");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_fork", "ash_source", "orch_fork");
+            member.mark_terminal_state("worker invalidated");
+            member.transition_state(AgentRuntimeSessionState::Invalidated);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_continue_fork_command_dispatch_target(
+                    "sess_fork",
+                    "orch_fork",
+                    "ash_source",
+                    "cli:codex_world",
+                )
+                .expect_err("terminal exact source must fail closed for continue fork command");
 
             assert_eq!(
                 err.to_string(),

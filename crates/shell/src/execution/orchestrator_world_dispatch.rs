@@ -660,14 +660,6 @@ async fn continue_world_worker(
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
     enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
-    if matches!(
-        &prepared.request.payload,
-        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
-    ) {
-        anyhow::bail!(
-            "fork_command_deferred: continue_world_worker fork_command payloads are policy-gated in Packet 1, but deterministic rendering and child bootstrap remain deferred until Packet 2"
-        );
-    }
     let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
     let clarification_closeout = prepare_continue_world_worker_clarification_closeout(&prepared)?;
     let turn_kind = continue_world_worker_turn_kind(&prepared.request.payload);
@@ -1422,19 +1414,31 @@ fn resolve_continue_world_dispatch_target_for_routing(
         return Ok(prepared);
     }
 
-    let resolved = prepared
-        .store
-        .resolve_internal_continue_world_dispatch_target(
-            &prepared.request.orchestration_session_id,
-            &prepared.request.caller_participant_id,
-            prepared
-                .request
-                .target_participant_id
-                .as_deref()
-                .expect("validated continue request must include target_participant_id"),
-            &prepared.request.target_backend_id,
-        )
-        .map_err(map_continue_world_dispatch_resolution_error)?;
+    let target_participant_id = prepared
+        .request
+        .target_participant_id
+        .as_deref()
+        .expect("validated continue request must include target_participant_id");
+    let resolved = match &prepared.request.payload {
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(_) => prepared
+            .store
+            .resolve_internal_continue_fork_command_dispatch_target(
+                &prepared.request.orchestration_session_id,
+                &prepared.request.caller_participant_id,
+                target_participant_id,
+                &prepared.request.target_backend_id,
+            )
+            .map_err(map_fork_world_dispatch_resolution_error)?,
+        _ => prepared
+            .store
+            .resolve_internal_continue_world_dispatch_target(
+                &prepared.request.orchestration_session_id,
+                &prepared.request.caller_participant_id,
+                target_participant_id,
+                &prepared.request.target_backend_id,
+            )
+            .map_err(map_continue_world_dispatch_resolution_error)?,
+    };
 
     Ok(PreparedOrchestratorWorldDispatch {
         store: prepared.store,
@@ -7014,9 +7018,164 @@ agents:
     }
 
     #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_fork_command_submits_rendered_prompt_to_exact_retained_source(
+    ) {
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_fork_commands(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("fork-command-success.sock");
+        let recorded_requests = Arc::new(Mutex::new(Vec::<
+            transport_api_types::MemberTurnSubmitRequestV1,
+        >::new()));
+        let recorded_requests_for_server = recorded_requests.clone();
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    recorded_requests_for_server
+                        .lock()
+                        .expect("recorded requests mutex poisoned")
+                        .push(parsed);
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_uaa_event(json!({
+                                "type": "item.completed",
+                                "thread_id": "thread-delivered-fork-command",
+                                "turn_id": "turn-fork-command",
+                                "item_id": "msg-fork-command",
+                                "status": "completed",
+                                "item_type": "agent_message",
+                                "content": {
+                                    "text": "fork command delivered"
+                                }
+                            })),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 23,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let request = sample_continue_fork_command_world_dispatch_request();
+        let expected_prompt = render_continue_world_worker_transport_prompt(
+            &request
+                .clone()
+                .validate()
+                .expect("validated fork-command request")
+                .payload,
+        )
+        .expect("render fork-command prompt");
+
+        let outcome = dispatch_orchestrator_world_request(&store, request)
+            .await
+            .expect("fork-command delivery should succeed in Packet 2");
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+            panic!("expected continue_world_worker outcome");
+        };
+        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+        assert!(
+            matches!(
+                outcome.worker_event.as_ref().map(|event| event.event_class),
+                None | Some(ContinueWorldWorkerEventClassV1::Reply)
+            ),
+            "typed fork-command delivery may surface a generic reply, but must not imply child allocation or a new worker event class: {:?}",
+            outcome.worker_event
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("delivered to retained worker ash_member"),
+            "successful delivery should stay explicit about delivery-only truth: {}",
+            outcome.summary
+        );
+        assert!(
+            outcome.summary.contains("status 23"),
+            "successful delivery should preserve the terminal exit status in the summary: {}",
+            outcome.summary
+        );
+        assert!(
+            !outcome.summary.contains("child"),
+            "Packet 2 summary must not imply child allocation: {}",
+            outcome.summary
+        );
+
+        server.await.expect("stub world server task");
+
+        let recorded = recorded_requests
+            .lock()
+            .expect("recorded requests mutex poisoned");
+        assert_eq!(
+            recorded.len(),
+            1,
+            "typed fork command should submit exactly one retained member turn: {recorded:?}"
+        );
+        assert_eq!(recorded[0].participant_id, "ash_member");
+        assert!(
+            recorded[0].prompt == expected_prompt,
+            "typed fork command must render deterministically over the retained member-turn seam"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn dispatch_contract_continue_world_worker_fork_command_allowed_path_fails_with_explicit_deferred_error_before_rendering(
+    async fn dispatch_contract_continue_world_worker_fork_command_rejects_terminal_exact_source_before_delivery(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -7032,23 +7191,26 @@ agents:
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
 
+        let mut member = store
+            .load_participant("ash_member")
+            .expect("load retained worker")
+            .expect("retained worker must exist");
+        member.mark_terminal_state("worker invalidated");
+        member.transition_state(AgentRuntimeSessionState::Invalidated);
+        store
+            .persist_participant(&member)
+            .expect("persist terminal retained worker");
+
         let err = dispatch_orchestrator_world_request(
             &store,
             sample_continue_fork_command_world_dispatch_request(),
         )
         .await
-        .expect_err("Packet 1 must fail explicitly before Packet 2 rendering/bootstrap lands");
-        let message = err.to_string();
+        .expect_err("terminal exact source must fail closed before delivery");
 
         assert_eq!(
-            message,
-            "fork_command_deferred: continue_world_worker fork_command payloads are policy-gated in Packet 1, but deterministic rendering and child bootstrap remain deferred until Packet 2"
-        );
-        assert!(
-            !message.contains(
-                "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
-            ),
-            "allowed fork-command path must not fall back to the generic renderer mismatch: {message}"
+            err.to_string(),
+            "invalidated_worker_not_routable: target_already_terminal: orchestration session sess_dispatch retained worker ash_member is already terminal (invalidated)"
         );
     }
 
