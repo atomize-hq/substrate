@@ -567,17 +567,19 @@ Packet 18 note:
   - `R1A`: docs lock, analyzer outcome-evidence seam, and repeated-failure cutover
   - `R1B`: recovery/export semantics plus focused downgrade regressions
   - `R1C`: screened bounded replay proof and continuity-note refresh
-- `2026-06-05`: `R1C` bounded replay proof is now grounded in a screened non-subagent success-tail
-  corpus:
-  - proof sessions `019e93fa-60d4-73d1-9092-014130b60e14`,
-    `019e940c-a91b-7fe0-a967-b0bdd595b581`, and `019e943c-668e-7a03-992b-6a98cf3055da` all end
-    with final `dead_end_thrash.state=cleared`
+- `2026-06-05`: `R1C` screening is grounded, but the bounded replay proof is not landed yet:
+  - clean non-subagent control replays `019e93fa-60d4-73d1-9092-014130b60e14`,
+    `019e940c-a91b-7fe0-a967-b0bdd595b581`, and `019e943c-668e-7a03-992b-6a98cf3055da` still end
+    with final `dead_end_thrash.state=cleared` and `raw_score=0`
   - delegated sessions `019e93f8-a5e9-7490-ac1a-955b74c92ad0` and
-    `019e9406-6736-79a2-946b-8a603e557422` were excluded because their rollouts contain
+    `019e9406-6736-79a2-946b-8a603e557422` remain excluded because their rollouts contain
     `multi_agent_v1` `spawn_agent` / `wait_agent` / `close_agent` markers
-  - screened session `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the success-tail proof
-    corpus because its rollout includes `Exit code: 1` tool-output rows, so its still-active final
-    `dead_end_thrash` does not invalidate the successful-output-only bounded proof claim
+  - screened session `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the successful-output
+    control corpus because its rollout includes `Exit code: 1` tool-output rows, and its rerun
+    still ends with active `dead_end_thrash`
+  - representative non-subagent sticky live session `019e894a-86c9-71e3-b57b-e3d3285f0988` still
+    ends with final `dead_end_thrash.state=active` and `raw_score=100` when rerun, so the
+    successful-output-only honesty claim remains open
 
 ## If You Want Fewer Packets
 

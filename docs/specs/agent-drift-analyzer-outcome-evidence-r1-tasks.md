@@ -120,7 +120,7 @@ Packet `R1B` exit condition:
     - `crates/agent-drift-analyzer/tests/support/mod.rs`
     - `/Users/spensermcconnell/.codex/sessions/`
 
-- [x] Task: Prove `R1C` on a small handful of completed non-subagent sessions and refresh continuity notes
+- [ ] Task: Prove `R1C` on a small handful of completed non-subagent sessions and refresh continuity notes
   - Acceptance: bounded proof shows that:
     - the compactor -> analyzer -> sentinel replay path runs on the final screened session set
     - final checkpoints no longer end in active `dead_end_thrash` for successful-output-only tails
@@ -128,15 +128,26 @@ Packet `R1B` exit condition:
     - continuity notes are refreshed if the final proof corpus, verifier shape, or packet-routing
       language changed materially during `R1A` / `R1B`
   - Result:
-    - final success-tail proof corpus:
+    - rerun control corpus that still ends with final `dead_end_thrash.state=cleared` and
+      `raw_score=0`:
       - `019e93fa-60d4-73d1-9092-014130b60e14`
       - `019e940c-a91b-7fe0-a967-b0bdd595b581`
       - `019e943c-668e-7a03-992b-6a98cf3055da`
-    - each replay ended with final `dead_end_thrash.state=cleared` and `raw_score=0`
+    - representative non-subagent sticky live session still fails the bounded honesty claim on
+      rerun:
+      - `019e894a-86c9-71e3-b57b-e3d3285f0988`
+      - rerun output directory:
+        `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1c-refresh/`
+      - final checkpoint still ends `dead_end_thrash.state=active` with `raw_score=100`
     - screened but excluded from the final success-tail proof corpus:
       - `019e9401-9d69-7190-a43e-9ee3be08b369`
     - that excluded rollout is non-subagent, but it contains `Exit code: 1` tool-output rows, so
       it is not a successful-output-only tail and does not belong in the bounded success-tail proof
+    - current status:
+      - corpus screening is still valid
+      - clean non-subagent control replays still stay clear
+      - the bounded honesty proof itself is not landed yet because the representative sticky live
+        session still ends active under the current analyzer replay
   - Verify:
     - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
@@ -163,6 +174,7 @@ Packet `R1C` exit condition:
 
 - `R1A` landed the analyzer outcome-evidence seam and repeated-failure cutover
 - `R1B` landed the honest recovery/export semantics and focused regressions
-- `R1C` landed the screened bounded replay proof and continuity-note refresh
+- `R1C` remains open until the screened bounded replay proof is honest on a representative
+  non-subagent recovery tail as well as the clean control corpus
 - the family stayed inside analyzer outcome evidence plus `dead_end_thrash` semantics and did not
   widen into turn context, archetype, progress, or sentinel cleanup

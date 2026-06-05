@@ -416,19 +416,25 @@ that narrower analyzer semantics behave honestly on completed non-subagent tails
 - the family still does not widen into turn context, session archetype, progress semantics, or
   sentinel cleanup
 
-Bounded proof note on `2026-06-05`:
+R1C rerun note on `2026-06-05`:
 
-- final non-subagent success-tail proof corpus:
+- screened delegated sessions `019e93f8-a5e9-7490-ac1a-955b74c92ad0` and
+  `019e9406-6736-79a2-946b-8a603e557422` remain excluded by `multi_agent_v1`
+  `spawn_agent` / `wait_agent` / `close_agent` markers
+- clean non-subagent control replays still end with final `dead_end_thrash.state=cleared` and
+  `raw_score=0`:
   `019e93fa-60d4-73d1-9092-014130b60e14`,
   `019e940c-a91b-7fe0-a967-b0bdd595b581`,
   `019e943c-668e-7a03-992b-6a98cf3055da`
-- each proof replay ended with final `dead_end_thrash.state=cleared`
-- delegated sessions `019e93f8-a5e9-7490-ac1a-955b74c92ad0` and
-  `019e9406-6736-79a2-946b-8a603e557422` were excluded by `multi_agent_v1`
-  `spawn_agent` / `wait_agent` / `close_agent` markers
-- screened session `019e9401-9d69-7190-a43e-9ee3be08b369` was excluded from the final
-  success-tail proof because its rollout includes `Exit code: 1` tool-output rows, so the
-  remaining active `dead_end_thrash` there is outside the successful-output-only claim
+- screened session `019e9401-9d69-7190-a43e-9ee3be08b369` remains excluded from the
+  successful-output-only control corpus because its rollout includes `Exit code: 1` tool-output
+  rows, and its rerun still ends with active `dead_end_thrash`
+- representative non-subagent sticky live session `019e894a-86c9-71e3-b57b-e3d3285f0988` still
+  ends with final `dead_end_thrash.state=active` and `raw_score=100` when rerun into
+  `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1c-refresh/`
+- conclusion: `R1C` screening and control-corpus notes are current, but the bounded honesty proof
+  is not landed yet because the representative sticky recovery case still fails under current
+  replay
 
 ## Packet R2: Analyzer Acceptance Fixture Hardening
 
@@ -439,9 +445,9 @@ reappearing after the `R1` family is fully landed.
 
 ### Why Second
 
-`R1C` already owns the screened bounded replay proof and any continuity/proof-language refresh tied
-to that proof surface. `R2` starts only after that proof lands and focuses on keeping a durable
-analyzer-local acceptance guard in place for later packets.
+`R1C` still owns the screened bounded replay proof and any continuity/proof-language refresh tied
+to that proof surface. `R2` starts only after that proof actually lands and focuses on keeping a
+durable analyzer-local acceptance guard in place for later packets.
 
 ### Scope
 
