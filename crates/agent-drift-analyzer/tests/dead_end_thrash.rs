@@ -287,9 +287,18 @@ fn dead_end_thrash_treats_explicit_error_rows_as_repeated_failure_evidence() {
             CompactionKind::UserMessage,
             "/goal Verify explicit error rows stay failure evidence.",
         ),
-        tool_row(1, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
-        tool_row(2, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
-        tool_row(3, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        tool_row(
+            1,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
+        tool_row(
+            2,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
+        tool_row(
+            3,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
         row(4, CompactionKind::Error, "world failed"),
         row(5, CompactionKind::Error, "world failed"),
     ];
@@ -326,6 +335,61 @@ fn dead_end_thrash_treats_explicit_error_rows_as_repeated_failure_evidence() {
 }
 
 #[test]
+fn dead_end_thrash_treats_non_zero_exit_code_tool_output_as_failure_evidence() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Verify explicit non-zero exit codes stay failure evidence.",
+        ),
+        tool_row(
+            1,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
+        tool_row(
+            2,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
+        tool_row(
+            3,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
+        row(4, CompactionKind::ToolOutput, "Exit code: 101"),
+        row(5, CompactionKind::ToolOutput, "Exit code: 101"),
+    ];
+    let mut archival_rows = rows.clone();
+    archival_rows[4].text_hash_hex = "hash-exit-code-101".to_string();
+    archival_rows[5].text_hash_hex = "hash-exit-code-101".to_string();
+    let compact_rows = archival_rows.clone();
+    let dedupe_groups = vec![DedupeGroup {
+        kind: CompactionKind::ToolCall,
+        canonical_text_hash_hex: "dup-hash-non-zero-exit".to_string(),
+        representative: RowRef::from_row(&archival_rows[1]),
+        duplicates: vec![RowRef::from_row(&archival_rows[2])],
+    }];
+    let fixture = BundleFixture::from_rows(archival_rows, compact_rows, dedupe_groups);
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze non-zero exit code bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints[0]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert!(thrash.flagged);
+    assert_eq!(thrash.raw_score, 70);
+    assert!(thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason == "repeated failure evidence"));
+}
+
+#[test]
 fn dead_end_thrash_ignores_repeated_neutral_tool_output_evidence() {
     let rows = vec![
         row(
@@ -333,9 +397,18 @@ fn dead_end_thrash_ignores_repeated_neutral_tool_output_evidence() {
             CompactionKind::UserMessage,
             "/goal Verify neutral tool output stays out of repeated failure loops.",
         ),
-        tool_row(1, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
-        tool_row(2, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
-        tool_row(3, "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture"),
+        tool_row(
+            1,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
+        tool_row(
+            2,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
+        tool_row(
+            3,
+            "cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture",
+        ),
         row(4, CompactionKind::ToolOutput, "Exit code: 0"),
         row(5, CompactionKind::ToolOutput, "Exit code: 0"),
         row(6, CompactionKind::ToolOutput, "Plan updated"),
@@ -385,9 +458,10 @@ fn dead_end_thrash_ignores_repeated_neutral_tool_output_evidence() {
         .evidence
         .iter()
         .all(|item| item.reason != "repeated failure evidence"));
-    assert!(thrash.evidence.iter().any(|item| item
-        .reason
-        .starts_with("repeated verification command:")));
+    assert!(thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason.starts_with("repeated verification command:")));
 }
 
 fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {

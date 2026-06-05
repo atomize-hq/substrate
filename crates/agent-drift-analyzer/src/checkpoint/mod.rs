@@ -599,11 +599,44 @@ fn classify_outcome_evidence(row: &CompactionRow) -> OutcomeEvidenceKind {
 }
 
 fn tool_output_is_unambiguous_failure(text: &str) -> bool {
-    text.trim()
+    let trimmed = text.trim();
+    trimmed
         .get(..6)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("error:"))
+        || trimmed
+            .lines()
+            .next()
+            .and_then(|line| line.strip_prefix("Exit code: "))
+            .and_then(|code| code.trim().parse::<i32>().ok())
+            .is_some_and(|code| code != 0)
 }
 
 fn is_failure_row(row: &CompactionRow) -> bool {
     matches!(classify_outcome_evidence(row), OutcomeEvidenceKind::Failure)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tool_output_is_unambiguous_failure;
+
+    #[test]
+    fn tool_output_unambiguous_failure_subset_stays_tiny_and_deterministic() {
+        for text in [
+            "error: failed to compile analyzer",
+            "Exit code: 1",
+            "Exit code: 101\nWall time: 1.2 seconds\nOutput:\n",
+            "Exit code: 128",
+        ] {
+            assert!(tool_output_is_unambiguous_failure(text), "{text}");
+        }
+
+        for text in [
+            "",
+            "Exit code: 0",
+            "Plan updated",
+            "function_call_output: wrote analyzer patch",
+        ] {
+            assert!(!tool_output_is_unambiguous_failure(text), "{text}");
+        }
+    }
 }

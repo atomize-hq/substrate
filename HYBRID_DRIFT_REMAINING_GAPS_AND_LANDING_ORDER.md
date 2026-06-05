@@ -416,28 +416,30 @@ that narrower analyzer semantics behave honestly on completed non-subagent tails
 - the family still does not widen into turn context, session archetype, progress semantics, or
   sentinel cleanup
 
-## Packet R2: Real Rollout Acceptance Seam
+## Packet R2: Analyzer Acceptance Fixture Hardening
 
 ### Objective
 
-Add a bounded real-session-style acceptance regression that prevents the same semantic mistake from
-reappearing.
+Add analyzer-owned acceptance fixture hardening that prevents the same semantic mistake from
+reappearing after the `R1` family is fully landed.
 
 ### Why Second
 
-The new evidence seam needs a real honesty gate immediately. Otherwise the next heuristic packet
-can regress the same behavior.
+`R1C` already owns the screened bounded replay proof and any continuity/proof-language refresh tied
+to that proof surface. `R2` starts only after that proof lands and focuses on keeping a durable
+analyzer-local acceptance guard in place for later packets.
 
 ### Scope
 
-- analyzer regression fixture(s)
-- replay acceptance assertion(s)
-- doc/proof guidance refresh
+- analyzer acceptance fixture(s)
+- analyzer-local replay/assertion hardening that does not reopen the `R1C` bounded proof story
+- follow-on regression maintenance for later `R*` packets
 
 ### Acceptance
 
-- at least one real-session-style artifact proves the final checkpoint is not falsely active
-- docs stop overstating bounded live proof until the new proof passes
+- analyzer acceptance coverage keeps the final checkpoint from regressing back to falsely active
+  on already-screened success-tail shapes
+- `R1C` remains the sole owner of screened bounded replay proof claims and continuity-note refresh
 
 ## Packet R3: Per-Checkpoint Turn Context
 
