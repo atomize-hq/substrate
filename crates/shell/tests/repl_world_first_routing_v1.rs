@@ -5,6 +5,7 @@ mod support;
 
 use serde_json::Value;
 use serial_test::serial;
+use std::collections::VecDeque;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 #[cfg(unix)]
@@ -927,7 +928,17 @@ fn finish_chunked_stream(stream: &mut UnixStream) {
 }
 
 #[cfg(target_os = "linux")]
-fn control_ack_stream_event(
+#[derive(Clone, Debug)]
+enum MemberTurnInterceptScript {
+    ControlAck,
+    DriftedControlAckWorldId(String),
+    UnsupportedWorkerEvent { event_class: String, message: String },
+}
+
+#[cfg(target_os = "linux")]
+fn member_stream_event(
+    event_class: &str,
+    message: &str,
     participant_id: &str,
     backend_id: &str,
     orchestration_session_id: &str,
@@ -938,9 +949,9 @@ fn control_ack_stream_event(
         ts: chrono::Utc::now(),
         kind: substrate_common::agent_events::AgentEventKind::TaskProgress,
         data: serde_json::json!({
-            "event_class": "control_ack",
+            "event_class": event_class,
             "payload": {
-                "message": "prepare_handoff received"
+                "message": message
             }
         }),
         agent_id: "codex".to_string(),
@@ -964,10 +975,30 @@ fn control_ack_stream_event(
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn start_member_turn_intercept_proxy(
+#[cfg(target_os = "linux")]
+fn control_ack_stream_event(
+    participant_id: &str,
+    backend_id: &str,
+    orchestration_session_id: &str,
+    world_id: &str,
+    world_generation: u64,
+) -> substrate_common::agent_events::AgentEvent {
+    member_stream_event(
+        "control_ack",
+        "prepare_handoff received",
+        participant_id,
+        backend_id,
+        orchestration_session_id,
+        world_id,
+        world_generation,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn start_member_turn_intercept_proxy_with_scripts(
     listen_path: &Path,
     backend_path: &Path,
+    scripts: Vec<MemberTurnInterceptScript>,
 ) -> (
     Arc<Mutex<Vec<transport_api_types::MemberTurnSubmitRequestV1>>>,
     Arc<AtomicBool>,
@@ -982,6 +1013,8 @@ fn start_member_turn_intercept_proxy(
 
     let intercepted_requests = Arc::new(Mutex::new(Vec::new()));
     let intercepted_requests_for_thread = Arc::clone(&intercepted_requests);
+    let scripted_responses = Arc::new(Mutex::new(VecDeque::from(scripts)));
+    let scripted_responses_for_thread = Arc::clone(&scripted_responses);
     let shutdown = Arc::new(AtomicBool::new(false));
     let shutdown_for_thread = Arc::clone(&shutdown);
     let backend_path = backend_path.to_path_buf();
@@ -992,6 +1025,7 @@ fn start_member_turn_intercept_proxy(
                 Ok((mut client, _addr)) => {
                     let backend_path = backend_path.clone();
                     let intercepted_requests = Arc::clone(&intercepted_requests_for_thread);
+                    let scripted_responses = Arc::clone(&scripted_responses_for_thread);
                     std::thread::spawn(move || {
                         let Some((raw_request, header, body)) = read_http_request(&mut client)
                         else {
@@ -1007,38 +1041,69 @@ fn start_member_turn_intercept_proxy(
                                 .expect("lock intercepted member turn submits")
                                 .push(parsed.clone());
 
-                            write_http_stream_start(&mut client);
-                            write_chunked_frame(
-                                &mut client,
-                                &transport_api_types::ExecuteStreamFrame::Start {
-                                    span_id: "member-turn-span".to_string(),
-                                },
-                            );
-                            write_chunked_frame(
-                                &mut client,
-                                &transport_api_types::ExecuteStreamFrame::Event {
-                                    event: control_ack_stream_event(
+                            if let Some(script) = scripted_responses
+                                .lock()
+                                .expect("lock scripted member turn responses")
+                                .pop_front()
+                            {
+                                let event = match script {
+                                    MemberTurnInterceptScript::ControlAck => control_ack_stream_event(
                                         &parsed.participant_id,
                                         &parsed.backend_id,
                                         &parsed.orchestration_session_id,
                                         &parsed.world_id,
                                         parsed.world_generation,
                                     ),
-                                },
-                            );
-                            write_chunked_frame(
-                                &mut client,
-                                &transport_api_types::ExecuteStreamFrame::Exit {
-                                    exit: 0,
-                                    span_id: "member-turn-span".to_string(),
-                                    scopes_used: Vec::new(),
-                                    fs_diff: None,
-                                    process_telemetry:
-                                        transport_api_types::ProcessTelemetry::default(),
-                                },
-                            );
-                            finish_chunked_stream(&mut client);
-                            return;
+                                    MemberTurnInterceptScript::DriftedControlAckWorldId(world_id) => {
+                                        member_stream_event(
+                                            "control_ack",
+                                            "prepare_handoff received",
+                                            &parsed.participant_id,
+                                            &parsed.backend_id,
+                                            &parsed.orchestration_session_id,
+                                            &world_id,
+                                            parsed.world_generation,
+                                        )
+                                    }
+                                    MemberTurnInterceptScript::UnsupportedWorkerEvent {
+                                        event_class,
+                                        message,
+                                    } => member_stream_event(
+                                        &event_class,
+                                        &message,
+                                        &parsed.participant_id,
+                                        &parsed.backend_id,
+                                        &parsed.orchestration_session_id,
+                                        &parsed.world_id,
+                                        parsed.world_generation,
+                                    ),
+                                };
+
+                                write_http_stream_start(&mut client);
+                                write_chunked_frame(
+                                    &mut client,
+                                    &transport_api_types::ExecuteStreamFrame::Start {
+                                        span_id: "member-turn-span".to_string(),
+                                    },
+                                );
+                                write_chunked_frame(
+                                    &mut client,
+                                    &transport_api_types::ExecuteStreamFrame::Event { event },
+                                );
+                                write_chunked_frame(
+                                    &mut client,
+                                    &transport_api_types::ExecuteStreamFrame::Exit {
+                                        exit: 0,
+                                        span_id: "member-turn-span".to_string(),
+                                        scopes_used: Vec::new(),
+                                        fs_diff: None,
+                                        process_telemetry:
+                                            transport_api_types::ProcessTelemetry::default(),
+                                    },
+                                );
+                                finish_chunked_stream(&mut client);
+                                return;
+                            }
                         }
 
                         let deadline = Instant::now() + Duration::from_secs(2);
@@ -1082,6 +1147,22 @@ fn start_member_turn_intercept_proxy(
     });
 
     (intercepted_requests, shutdown, handle)
+}
+
+#[cfg(target_os = "linux")]
+fn start_member_turn_intercept_proxy(
+    listen_path: &Path,
+    backend_path: &Path,
+) -> (
+    Arc<Mutex<Vec<transport_api_types::MemberTurnSubmitRequestV1>>>,
+    Arc<AtomicBool>,
+    std::thread::JoinHandle<()>,
+) {
+    start_member_turn_intercept_proxy_with_scripts(
+        listen_path,
+        backend_path,
+        vec![MemberTurnInterceptScript::ControlAck],
+    )
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -3095,6 +3176,275 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     assert_eq!(
         obligation_count, 0,
         "control_ack must not persist durable obligations on the routed toolbox path"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread.join().expect("join member turn intercept proxy");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_scope_worker_events(
+) {
+    let temp = temp_dir("substrate-c3-toolbox-control-ack-fail-closed-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch_control_directives(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_modes: &["retained"],
+            control_directives_allowed: true,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-control-ack-fail-closed-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-control-ack-fail-closed".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy_with_scripts(
+            &proxy_sock,
+            &backend_sock,
+            vec![
+                MemberTurnInterceptScript::ControlAck,
+                MemberTurnInterceptScript::DriftedControlAckWorldId(
+                    "world-drifted".to_string(),
+                ),
+                MemberTurnInterceptScript::UnsupportedWorkerEvent {
+                    event_class: "fork_command".to_string(),
+                    message: "not in slice 44".to_string(),
+                },
+            ],
+        );
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let member_orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+    assert_eq!(
+        member_orchestrator_participant_id, orchestrator_participant_id,
+        "Packet 3 fail-closed coverage must keep exact retained-worker ownership"
+    );
+
+    let send_request = |request_id: &str, idempotency_key: &str, payload: serde_json::Value| {
+        send_internal_toolbox_world_dispatch_request(
+            &toolbox_path,
+            &serde_json::json!({
+                "request_id": request_id,
+                "idempotency_key": idempotency_key,
+                "orchestration_session_id": orchestration_session_id.clone(),
+                "caller_participant_id": orchestrator_participant_id.clone(),
+                "action": "continue_world_worker",
+                "mode": "retained",
+                "target_backend_id": "cli:codex",
+                "target_participant_id": member_participant_id.clone(),
+                "world_id": world_id.clone(),
+                "world_generation": world_generation,
+                "payload": payload,
+            }),
+        )
+    };
+
+    let generic_continue_response = send_request(
+        "req_toolbox_control_ack_invalid_context",
+        "idem_toolbox_control_ack_invalid_context",
+        serde_json::json!({
+            "payload_kind": "worker_continue",
+            "prompt": "continue current work",
+            "thread_id": "thread-generic-44"
+        }),
+    );
+    assert_eq!(
+        generic_continue_response.get("ok").and_then(Value::as_bool),
+        Some(false)
+    );
+    assert!(
+        generic_continue_response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "unsupported_worker_event_class: continue_world_worker accepts control_ack only for typed control_directive delivery"
+            )),
+        "generic continue must fail closed for control_ack: {generic_continue_response:#?}"
+    );
+
+    let world_drift_response = send_request(
+        "req_toolbox_control_ack_world_drift",
+        "idem_toolbox_control_ack_world_drift",
+        serde_json::json!({
+            "payload_kind": "worker_continue_control_directive",
+            "directive_kind": "prepare_handoff",
+            "directive_text": "timing:before_stop",
+            "thread_id": "thread-control-44-drift"
+        }),
+    );
+    assert_eq!(world_drift_response.get("ok").and_then(Value::as_bool), Some(false));
+    assert!(
+        world_drift_response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "world_id world-drifted did not match targeted world"
+            )),
+        "control_ack world drift must fail closed: {world_drift_response:#?}"
+    );
+
+    let unsupported_event_response = send_request(
+        "req_toolbox_control_ack_unsupported_label",
+        "idem_toolbox_control_ack_unsupported_label",
+        serde_json::json!({
+            "payload_kind": "worker_continue_control_directive",
+            "directive_kind": "prepare_handoff",
+            "directive_text": "timing:before_stop",
+            "thread_id": "thread-control-44-unsupported"
+        }),
+    );
+    assert_eq!(
+        unsupported_event_response.get("ok").and_then(Value::as_bool),
+        Some(false)
+    );
+    assert!(
+        unsupported_event_response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("unsupported_worker_event_class")),
+        "out-of-scope worker labels must stay rejected: {unsupported_event_response:#?}"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "Packet 3 fail-closed proofs must keep reusing the retained member instead of relaunching it: {guard:#?}"
+    );
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    assert_eq!(
+        intercepted_turns.len(),
+        3,
+        "expected exactly three retained member turn submits for Packet 3 regression coverage: {intercepted_turns:#?}"
+    );
+    for submit in intercepted_turns.iter() {
+        assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+        assert_eq!(submit.participant_id, member_participant_id);
+        assert_eq!(
+            submit.orchestrator_participant_id,
+            member_orchestrator_participant_id
+        );
+        assert_eq!(submit.backend_id, "cli:codex");
+        assert_eq!(submit.world_id, world_id);
+        assert_eq!(submit.world_generation, world_generation);
+    }
+    drop(intercepted_turns);
+
+    let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
+    let obligation_count = fs::read_dir(&obligations_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    assert_eq!(
+        obligation_count, 0,
+        "Packet 3 fail-closed routing proofs must not persist durable obligations"
     );
 
     repl.send_line("exit");
