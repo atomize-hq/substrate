@@ -3232,6 +3232,17 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
     );
     wait_for_socket_path(&backend_sock, Duration::from_secs(2));
     let records = server.records();
+    let unsupported_worker_event_cases = [
+        ("fork_command", "thread-control-44-unsupported-fork-command"),
+        (
+            "control_directive",
+            "thread-control-44-unsupported-control-directive",
+        ),
+        (
+            "attention_required",
+            "thread-control-44-unsupported-attention-required",
+        ),
+    ];
     let (member_turn_submits, proxy_shutdown, proxy_thread) =
         start_member_turn_intercept_proxy_with_scripts(
             &proxy_sock,
@@ -3242,7 +3253,15 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
                     "world-drifted".to_string(),
                 ),
                 MemberTurnInterceptScript::UnsupportedWorkerEvent {
-                    event_class: "fork_command".to_string(),
+                    event_class: unsupported_worker_event_cases[0].0.to_string(),
+                    message: "not in slice 44".to_string(),
+                },
+                MemberTurnInterceptScript::UnsupportedWorkerEvent {
+                    event_class: unsupported_worker_event_cases[1].0.to_string(),
+                    message: "not in slice 44".to_string(),
+                },
+                MemberTurnInterceptScript::UnsupportedWorkerEvent {
+                    event_class: unsupported_worker_event_cases[2].0.to_string(),
                     message: "not in slice 44".to_string(),
                 },
             ],
@@ -3385,27 +3404,53 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         "control_ack world drift must fail closed: {world_drift_response:#?}"
     );
 
-    let unsupported_event_response = send_request(
-        "req_toolbox_control_ack_unsupported_label",
-        "idem_toolbox_control_ack_unsupported_label",
-        serde_json::json!({
-            "payload_kind": "worker_continue_control_directive",
-            "directive_kind": "prepare_handoff",
-            "directive_text": "timing:before_stop",
-            "thread_id": "thread-control-44-unsupported"
-        }),
-    );
-    assert_eq!(
-        unsupported_event_response.get("ok").and_then(Value::as_bool),
-        Some(false)
-    );
-    assert!(
-        unsupported_event_response
-            .get("error")
-            .and_then(Value::as_str)
-            .is_some_and(|error| error.contains("unsupported_worker_event_class")),
-        "out-of-scope worker labels must stay rejected: {unsupported_event_response:#?}"
-    );
+    for (event_class, thread_id) in unsupported_worker_event_cases {
+        let cancel_count_before = records
+            .lock()
+            .expect("lock records before unsupported worker label")
+            .execute_cancel_requests
+            .len();
+        let unsupported_event_response = send_request(
+            &format!("req_toolbox_control_ack_unsupported_label_{event_class}"),
+            &format!("idem_toolbox_control_ack_unsupported_label_{event_class}"),
+            serde_json::json!({
+                "payload_kind": "worker_continue_control_directive",
+                "directive_kind": "prepare_handoff",
+                "directive_text": "timing:before_stop",
+                "thread_id": thread_id,
+            }),
+        );
+        assert_eq!(
+            unsupported_event_response.get("ok").and_then(Value::as_bool),
+            Some(false)
+        );
+        assert!(
+            unsupported_event_response
+                .get("error")
+                .and_then(Value::as_str)
+                .is_some_and(|error| error.contains("unsupported_worker_event_class")),
+            "out-of-scope worker label {event_class} must stay rejected: {unsupported_event_response:#?}"
+        );
+        wait_for_min_execute_cancel_requests(
+            &records,
+            cancel_count_before + 1,
+            Duration::from_secs(3),
+        );
+        let guard = records.lock().expect("lock records after unsupported worker label");
+        let cancel = guard
+            .execute_cancel_requests
+            .get(cancel_count_before)
+            .expect("recorded cancel request for unsupported worker label");
+        assert_eq!(
+            cancel.span_id, "member-turn-span",
+            "unsupported worker label {event_class} must still cancel the live member-turn stream: {guard:#?}"
+        );
+        assert_eq!(
+            cancel.sig, "INT",
+            "unsupported worker label {event_class} must preserve fail-closed live-stream cancellation: {guard:#?}"
+        );
+        drop(guard);
+    }
 
     let guard = records.lock().expect("lock records");
     assert_eq!(
@@ -3420,8 +3465,8 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         .expect("lock intercepted member turn submits");
     assert_eq!(
         intercepted_turns.len(),
-        3,
-        "expected exactly three retained member turn submits for Packet 3 regression coverage: {intercepted_turns:#?}"
+        5,
+        "expected exactly five retained member turn submits for Packet 3 regression coverage: {intercepted_turns:#?}"
     );
     for submit in intercepted_turns.iter() {
         assert_eq!(submit.orchestration_session_id, orchestration_session_id);
