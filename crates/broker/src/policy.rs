@@ -326,6 +326,7 @@ pub struct WorldDispatchPolicy {
     pub allow_capability_narrowing: bool,
     pub max_live_retained_workers: u32,
     pub max_concurrent_ephemeral: u32,
+    pub fork_commands_allowed: bool,
     pub fork_requests_allowed: bool,
     pub fork_recommendations_allowed: bool,
     pub approval_requests_allowed: bool,
@@ -414,6 +415,7 @@ struct AgentsWorldDispatchPolicyFileV1 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AgentsWorldDispatchForkPolicyFileV1 {
+    commands_allowed: bool,
     requests_allowed: bool,
     recommendations_allowed: bool,
 }
@@ -540,6 +542,7 @@ struct RawAgentsWorldDispatchPolicyV1 {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct RawAgentsWorldDispatchForkPolicyV1 {
+    commands_allowed: bool,
     requests_allowed: bool,
     recommendations_allowed: bool,
 }
@@ -639,6 +642,7 @@ pub struct Policy {
     pub agents_world_dispatch_allow_capability_narrowing: bool, // agents.world_dispatch.allow_capability_narrowing
     pub agents_world_dispatch_max_live_retained_workers: u32, // agents.world_dispatch.max_live_retained_workers
     pub agents_world_dispatch_max_concurrent_ephemeral: u32, // agents.world_dispatch.max_concurrent_ephemeral
+    pub agents_world_dispatch_fork_commands_allowed: bool, // agents.world_dispatch.fork.commands_allowed
     pub agents_world_dispatch_fork_requests_allowed: bool, // agents.world_dispatch.fork.requests_allowed
     pub agents_world_dispatch_fork_recommendations_allowed: bool, // agents.world_dispatch.fork.recommendations_allowed
     pub agents_world_dispatch_obligations_approval_allowed: bool, // agents.world_dispatch.obligations.approval_allowed
@@ -713,6 +717,7 @@ impl Default for Policy {
             agents_world_dispatch_allow_capability_narrowing: false,
             agents_world_dispatch_max_live_retained_workers: 0,
             agents_world_dispatch_max_concurrent_ephemeral: 0,
+            agents_world_dispatch_fork_commands_allowed: false,
             agents_world_dispatch_fork_requests_allowed: false,
             agents_world_dispatch_fork_recommendations_allowed: false,
             agents_world_dispatch_obligations_approval_allowed: false,
@@ -917,6 +922,7 @@ impl Policy {
             allow_capability_narrowing: self.agents_world_dispatch_allow_capability_narrowing,
             max_live_retained_workers: self.agents_world_dispatch_max_live_retained_workers,
             max_concurrent_ephemeral: self.agents_world_dispatch_max_concurrent_ephemeral,
+            fork_commands_allowed: self.agents_world_dispatch_fork_commands_allowed,
             fork_requests_allowed: self.agents_world_dispatch_fork_requests_allowed,
             fork_recommendations_allowed: self.agents_world_dispatch_fork_recommendations_allowed,
             approval_requests_allowed: self.agents_world_dispatch_obligations_approval_allowed,
@@ -928,6 +934,10 @@ impl Policy {
             follow_up_allowed: self.agents_world_dispatch_obligations_follow_up_allowed,
             blocked_allowed: self.agents_world_dispatch_obligations_blocked_allowed,
         }
+    }
+
+    pub fn world_dispatch_fork_commands_allowed(&self) -> bool {
+        self.agents_world_dispatch_fork_commands_allowed
     }
 
     pub fn world_dispatch_fork_requests_allowed(&self) -> bool {
@@ -1099,6 +1109,9 @@ impl Policy {
         self.agents_world_dispatch_max_concurrent_ephemeral = self
             .agents_world_dispatch_max_concurrent_ephemeral
             .min(other.agents_world_dispatch_max_concurrent_ephemeral);
+        self.agents_world_dispatch_fork_commands_allowed = self
+            .agents_world_dispatch_fork_commands_allowed
+            && other.agents_world_dispatch_fork_commands_allowed;
         self.agents_world_dispatch_fork_requests_allowed = self
             .agents_world_dispatch_fork_requests_allowed
             && other.agents_world_dispatch_fork_requests_allowed;
@@ -1294,6 +1307,11 @@ impl<'de> Deserialize<'de> for Policy {
                 .agents
                 .world_dispatch
                 .max_concurrent_ephemeral,
+            agents_world_dispatch_fork_commands_allowed: raw
+                .agents
+                .world_dispatch
+                .fork
+                .commands_allowed,
             agents_world_dispatch_fork_requests_allowed: raw
                 .agents
                 .world_dispatch
@@ -1472,6 +1490,7 @@ impl Serialize for Policy {
                     max_live_retained_workers: self.agents_world_dispatch_max_live_retained_workers,
                     max_concurrent_ephemeral: self.agents_world_dispatch_max_concurrent_ephemeral,
                     fork: AgentsWorldDispatchForkPolicyFileV1 {
+                        commands_allowed: self.agents_world_dispatch_fork_commands_allowed,
                         requests_allowed: self.agents_world_dispatch_fork_requests_allowed,
                         recommendations_allowed: self
                             .agents_world_dispatch_fork_recommendations_allowed,

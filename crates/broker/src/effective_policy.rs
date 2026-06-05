@@ -254,6 +254,8 @@ impl AgentsWorldDispatchPatch {
 #[serde(default, deny_unknown_fields)]
 pub struct AgentsWorldDispatchForkPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub commands_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub requests_allowed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recommendations_allowed: Option<bool>,
@@ -261,7 +263,9 @@ pub struct AgentsWorldDispatchForkPatch {
 
 impl AgentsWorldDispatchForkPatch {
     fn is_empty(&self) -> bool {
-        self.requests_allowed.is_none() && self.recommendations_allowed.is_none()
+        self.commands_allowed.is_none()
+            && self.requests_allowed.is_none()
+            && self.recommendations_allowed.is_none()
     }
 }
 
@@ -1526,6 +1530,31 @@ pub fn resolve_effective_policy_with_explain(
     }
 
     let (
+        agents_world_dispatch_fork_commands_allowed,
+        agents_world_dispatch_fork_commands_allowed_src,
+    ) = resolve_replace(
+        effective.agents_world_dispatch_fork_commands_allowed,
+        global_patch.agents.world_dispatch.fork.commands_allowed,
+        workspace_patch.and_then(|p| p.agents.world_dispatch.fork.commands_allowed),
+        workspace_enabled,
+    );
+    effective.agents_world_dispatch_fork_commands_allowed =
+        agents_world_dispatch_fork_commands_allowed;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.world_dispatch.fork.commands_allowed".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_world_dispatch_fork_commands_allowed_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (
         agents_world_dispatch_fork_requests_allowed,
         agents_world_dispatch_fork_requests_allowed_src,
     ) = resolve_replace(
@@ -2205,6 +2234,9 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     }
     if let Some(v) = patch.agents.world_dispatch.fork.requests_allowed {
         target.agents_world_dispatch_fork_requests_allowed = v;
+    }
+    if let Some(v) = patch.agents.world_dispatch.fork.commands_allowed {
+        target.agents_world_dispatch_fork_commands_allowed = v;
     }
     if let Some(v) = patch.agents.world_dispatch.fork.recommendations_allowed {
         target.agents_world_dispatch_fork_recommendations_allowed = v;

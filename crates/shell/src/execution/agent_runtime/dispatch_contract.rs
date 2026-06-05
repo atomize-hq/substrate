@@ -251,6 +251,19 @@ pub(crate) struct WorkerContinueClarificationResponsePayloadV1 {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkerContinueForkCommandPayloadV1 {
+    pub child_prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_strategy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+}
+
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ControlDirectiveKindV1 {
@@ -358,6 +371,7 @@ pub(crate) enum WorldDispatchPayloadV1 {
     WorkerContinue(WorkerContinuePayloadV1),
     WorkerContinueApprovalResponse(WorkerContinueApprovalResponsePayloadV1),
     WorkerContinueClarificationResponse(WorkerContinueClarificationResponsePayloadV1),
+    WorkerContinueForkCommand(WorkerContinueForkCommandPayloadV1),
     WorkerContinueControlDirective(WorkerContinueControlDirectivePayloadV1),
     WorkerInspect(WorkerInspectPayloadV1),
     WorkerCancel(WorkerCancelPayloadV1),
@@ -504,6 +518,10 @@ fn validate_world_dispatch_payload(
         ) => validate_clarification_response_continue_payload(action, response),
         (
             WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(command),
+        ) => validate_fork_command_continue_payload(action, command),
+        (
+            WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchPayloadV1::WorkerContinueControlDirective(directive),
         ) => validate_control_directive_continue_payload(action, directive),
         (WorldDispatchActionV1::InspectWorldWorker, WorldDispatchPayloadV1::WorkerInspect(_)) => {
@@ -562,6 +580,62 @@ fn validate_control_directive_continue_payload(
     validate_optional_world_dispatch_string(action, "thread_id", &directive.thread_id)?;
     directive.directive_text = canonicalize_control_directive_detail_fragment(action, directive)?;
     Ok(())
+}
+
+fn validate_fork_command_continue_payload(
+    action: WorldDispatchActionV1,
+    command: &mut WorkerContinueForkCommandPayloadV1,
+) -> anyhow::Result<()> {
+    if command.child_prompt.trim().is_empty() {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action {} requires non-empty child_prompt when payload_kind is worker_continue_fork_command",
+            action.as_str(),
+        );
+    }
+    command.child_prompt = command.child_prompt.trim().to_string();
+    validate_optional_world_dispatch_string(action, "thread_id", &command.thread_id)?;
+    command.fork_reason = canonicalize_bounded_fork_command_metadata_label(
+        action,
+        "fork_reason",
+        &command.fork_reason,
+    )?;
+    command.fork_strategy = canonicalize_bounded_fork_command_metadata_label(
+        action,
+        "fork_strategy",
+        &command.fork_strategy,
+    )?;
+    Ok(())
+}
+
+fn canonicalize_bounded_fork_command_metadata_label(
+    action: WorldDispatchActionV1,
+    field_name: &'static str,
+    value: &Option<String>,
+) -> anyhow::Result<Option<String>> {
+    let Some(value) = value.as_deref() else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action {} requires non-empty {} when provided",
+            action.as_str(),
+            field_name,
+        );
+    }
+    if trimmed.len() > 64
+        || trimmed.contains(char::is_whitespace)
+        || !trimmed
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '_' | '-'))
+    {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action {} requires {} to be a bounded metadata label when payload_kind is worker_continue_fork_command",
+            action.as_str(),
+            field_name,
+        );
+    }
+    Ok(Some(trimmed.to_string()))
 }
 
 fn canonicalize_control_directive_detail_fragment(
@@ -1892,8 +1966,9 @@ mod tests {
         RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
         TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
         WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
-        WorkerContinuePayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1, WorkerSpawnPayloadV1,
-        WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
+        WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
         WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
@@ -3658,6 +3733,119 @@ mod tests {
     }
 
     #[test]
+    fn world_dispatch_contract_accepts_continue_world_worker_typed_fork_command_shape() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(
+                WorkerContinueForkCommandPayloadV1 {
+                    child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
+                    fork_reason: Some("specialize:replay_trace".to_string()),
+                    fork_strategy: Some("parallelize_investigation".to_string()),
+                    thread_id: Some("thread-fork".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-45")
+        .validate()
+        .expect("typed fork command should validate");
+
+        let WorldDispatchPayloadV1::WorkerContinueForkCommand(payload) = validated.payload else {
+            panic!("validated payload should remain typed fork command payload");
+        };
+        assert_eq!(payload.child_prompt, "Investigate the flaky Linux replay trace.");
+        assert_eq!(
+            payload.fork_reason.as_deref(),
+            Some("specialize:replay_trace")
+        );
+        assert_eq!(
+            payload.fork_strategy.as_deref(),
+            Some("parallelize_investigation")
+        );
+        assert_eq!(payload.thread_id.as_deref(), Some("thread-fork"));
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_blank_child_prompt_in_typed_fork_command() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(
+                WorkerContinueForkCommandPayloadV1 {
+                    child_prompt: " ".to_string(),
+                    fork_reason: Some("specialize:replay_trace".to_string()),
+                    fork_strategy: Some("parallelize_investigation".to_string()),
+                    thread_id: None,
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-45")
+        .validate()
+        .expect_err("typed fork commands must carry child work intent");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires non-empty child_prompt when payload_kind is worker_continue_fork_command"
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_canonicalizes_bounded_typed_fork_command_metadata_before_storing() {
+        let validated = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(
+                WorkerContinueForkCommandPayloadV1 {
+                    child_prompt: "  Investigate the flaky Linux replay trace.  ".to_string(),
+                    fork_reason: Some("  specialize:replay_trace  ".to_string()),
+                    fork_strategy: Some("  parallelize_investigation  ".to_string()),
+                    thread_id: Some("thread-fork".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-45")
+        .validate()
+        .expect("bounded fork-command metadata labels should canonicalize");
+
+        let WorldDispatchPayloadV1::WorkerContinueForkCommand(payload) = validated.payload else {
+            panic!("validated payload should remain typed fork command payload");
+        };
+        assert_eq!(payload.child_prompt, "Investigate the flaky Linux replay trace.");
+        assert_eq!(
+            payload.fork_reason.as_deref(),
+            Some("specialize:replay_trace")
+        );
+        assert_eq!(
+            payload.fork_strategy.as_deref(),
+            Some("parallelize_investigation")
+        );
+    }
+
+    #[test]
+    fn world_dispatch_contract_rejects_free_form_typed_fork_command_metadata() {
+        let error = base_world_dispatch_request(
+            WorldDispatchActionV1::ContinueWorldWorker,
+            WorldDispatchModeV1::Retained,
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(
+                WorkerContinueForkCommandPayloadV1 {
+                    child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
+                    fork_reason: Some("needs replay trace specialization".to_string()),
+                    fork_strategy: Some("parallelize_investigation".to_string()),
+                    thread_id: Some("thread-fork".to_string()),
+                },
+            ),
+        )
+        .with_target_participant_id("ash-worker-45")
+        .validate()
+        .expect_err("fork command metadata must stay bounded");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid_dispatch_payload: action continue_world_worker requires fork_reason to be a bounded metadata label when payload_kind is worker_continue_fork_command"
+        );
+    }
+
+    #[test]
     fn world_dispatch_contract_accepts_continue_world_worker_typed_control_directive_shape() {
         let validated = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
@@ -3866,11 +4054,7 @@ mod tests {
     #[test]
     fn world_dispatch_contract_rejects_still_deferred_host_response_payload_kinds_during_deserialization(
     ) {
-        for payload_kind in [
-            "worker_continue_progress_ack",
-            "worker_continue_control_ack",
-            "worker_continue_fork_command",
-        ] {
+        for payload_kind in ["worker_continue_progress_ack", "worker_continue_control_ack"] {
             let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
                 "request_id": "req-43",
                 "idempotency_key": "idem-43",

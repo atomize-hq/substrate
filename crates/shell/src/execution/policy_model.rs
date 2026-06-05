@@ -249,6 +249,8 @@ impl AgentsWorldDispatchPatch {
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentsWorldDispatchForkPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub commands_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub requests_allowed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recommendations_allowed: Option<bool>,
@@ -256,7 +258,9 @@ pub(crate) struct AgentsWorldDispatchForkPatch {
 
 impl AgentsWorldDispatchForkPatch {
     fn is_empty(&self) -> bool {
-        self.requests_allowed.is_none() && self.recommendations_allowed.is_none()
+        self.commands_allowed.is_none()
+            && self.requests_allowed.is_none()
+            && self.recommendations_allowed.is_none()
     }
 }
 
@@ -1386,6 +1390,9 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = patch.agents.world_dispatch.max_concurrent_ephemeral {
         target.agents_world_dispatch_max_concurrent_ephemeral = v;
     }
+    if let Some(v) = patch.agents.world_dispatch.fork.commands_allowed {
+        target.agents_world_dispatch_fork_commands_allowed = v;
+    }
     if let Some(v) = patch.agents.world_dispatch.fork.requests_allowed {
         target.agents_world_dispatch_fork_requests_allowed = v;
     }
@@ -1576,6 +1583,13 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
             .world_dispatch
             .fork
             .requests_allowed
+            .take()
+            .is_some()),
+        "agents.world_dispatch.fork.commands_allowed" => Ok(patch
+            .agents
+            .world_dispatch
+            .fork
+            .commands_allowed
             .take()
             .is_some()),
         "agents.world_dispatch.fork.recommendations_allowed" => Ok(patch
@@ -1790,6 +1804,11 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
         ),
         "agents.world_dispatch.fork.requests_allowed" => apply_bool_opt(
             &mut patch.agents.world_dispatch.fork.requests_allowed,
+            &update.op,
+            &update.value,
+        ),
+        "agents.world_dispatch.fork.commands_allowed" => apply_bool_opt(
+            &mut patch.agents.world_dispatch.fork.commands_allowed,
             &update.op,
             &update.value,
         ),
@@ -2239,6 +2258,11 @@ mod tests {
                 value: "1".to_string(),
             },
             ConfigUpdate {
+                key: "agents.world_dispatch.fork.commands_allowed".to_string(),
+                op: UpdateOp::Set,
+                value: "true".to_string(),
+            },
+            ConfigUpdate {
                 key: "agents.world_dispatch.fork.requests_allowed".to_string(),
                 op: UpdateOp::Set,
                 value: "true".to_string(),
@@ -2311,6 +2335,10 @@ mod tests {
         assert_eq!(
             patch.agents.world_dispatch.max_concurrent_ephemeral,
             Some(1)
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.fork.commands_allowed,
+            Some(true)
         );
         assert_eq!(
             patch.agents.world_dispatch.fork.requests_allowed,
@@ -2386,6 +2414,7 @@ agents:
     max_live_retained_workers: 2
     max_concurrent_ephemeral: 1
     fork:
+      commands_allowed: true
       requests_allowed: true
       recommendations_allowed: true
     control:
@@ -2418,6 +2447,10 @@ agents:
         assert_eq!(
             patch.agents.world_dispatch.allowed_modes.as_deref(),
             Some(&["ephemeral".to_string(), "retained".to_string()][..])
+        );
+        assert_eq!(
+            patch.agents.world_dispatch.fork.commands_allowed,
+            Some(true)
         );
         assert_eq!(
             patch.agents.world_dispatch.fork.requests_allowed,
@@ -2479,6 +2512,7 @@ agents:
         .expect("worker event autonomy keys may be omitted");
 
         let effective = apply_policy_patch(&Policy::default(), &patch);
+        assert!(!effective.agents_world_dispatch_fork_commands_allowed);
         assert!(!effective.agents_world_dispatch_fork_requests_allowed);
         assert!(!effective.agents_world_dispatch_fork_recommendations_allowed);
         assert!(!effective.agents_world_dispatch_obligations_approval_allowed);
