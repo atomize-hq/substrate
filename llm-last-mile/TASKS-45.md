@@ -5,7 +5,7 @@ Source plan: [PLAN-45.md](./PLAN-45.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: drafted on `2026-06-05`
+Status: Packets `1`-`3` are landed on the current tree; Packet `4` remains open on `2026-06-05`
 
 ## Phase Gate
 
@@ -15,9 +15,9 @@ These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `45` have been r
 
 This slice should be implemented as four sequential `/incremental-implementation` sessions.
 
-- Packet 1 freezes the typed host `fork_command` contract and the deny-by-default policy surface.
-- Packet 2 lands deterministic rendering and exact-source bootstrap preparation.
-- Packet 3 lands routed allocation reuse plus outcome-honesty and rollback proof.
+- Packet 1 froze the typed host `fork_command` contract and the deny-by-default policy surface on the live tree.
+- Packet 2 landed deterministic rendering and exact-source bootstrap preparation on the live tree.
+- Packet 3 landed routed allocation reuse plus outcome-honesty and rollback proof on the live tree.
 - Packet 4 aligns docs/config truth and runs the final validation wall.
 
 Do not start a later packet until the prior packet checkpoint is green.
@@ -32,14 +32,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the typed host `fork_command` payload contract
+- [x] Task 1.1: Add the typed host `fork_command` payload contract
   - Acceptance: `continue_world_worker` accepts the new typed host `fork_command` payload only with the required exact child-work intent fields plus optional bounded metadata; generic prompt-based continue remains valid.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Expected files touched:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Add the dedicated deny-by-default host fork-command policy gate
+- [x] Task 1.2: Add the dedicated deny-by-default host fork-command policy gate
   - Acceptance: `agents.world_dispatch.fork.commands_allowed` parses, defaults to deny, and yields explanation-ready denials for disallowed typed host fork commands.
   - Verify:
     - `cargo test -p shell policy_model -- --nocapture`
@@ -70,7 +70,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Render typed host `fork_command` deterministically over the retained member-turn seam
+- [x] Task 2.1: Render typed host `fork_command` deterministically over the retained member-turn seam
   - Acceptance: accepted typed host fork commands render through the existing transport prompt seam in a deterministic implementation-owned format rather than caller-authored ad hoc prompt assembly.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -78,7 +78,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - targeted tests adjacent to the touched implementation
 
-- [ ] Task 2.2: Prepare exact-source fork bootstrap reuse without child side effects
+- [x] Task 2.2: Prepare exact-source fork bootstrap reuse without child side effects
   - Acceptance: invalidated, terminal, cross-session, or world-binding-drifted sources fail closed before any child allocation; exact retained source-worker targeting remains mandatory.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -108,7 +108,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Reuse the landed fork bootstrap path for accepted typed host fork commands
+- [x] Task 3.1: Reuse the landed fork bootstrap path for accepted typed host fork commands
   - Acceptance: allowed typed host fork commands allocate one retained child through the existing exact-source fork path and preserve explicit source-to-child lineage.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -116,7 +116,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - targeted shell tests adjacent to the touched implementation files
 
-- [ ] Task 3.2: Preserve honest summaries and fail-closed rollback behaviour
+- [x] Task 3.2: Preserve honest summaries and fail-closed rollback behaviour
   - Acceptance: successful summaries distinguish typed command delivery from child allocation truth; failure paths are explanation-ready and leave no partial child-registration side effects.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -146,7 +146,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning and config truth without widening the slice
+- [x] Task 4.1: Align planning and config truth without widening the slice
   - Acceptance: repo-local docs describe Slice `45` as typed host `fork_command` bootstrap over the existing `continue_world_worker` seam plus reuse of the landed fork bootstrap path, not generalized control transport, worker auto-fork, or Family-2 router execution.
   - Verify:
     - manual diff review
@@ -156,7 +156,7 @@ Session goal:
     - [`llm-last-mile/PLAN-45.md`](./PLAN-45.md)
     - [`llm-last-mile/TASKS-45.md`](./TASKS-45.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, broker policy coverage, and full workspace tests are green against the already-landed Slice `45` file set; this task validates the bounded implementation and does not serve as an open-ended fix bucket.
   - Verify:
     - `cargo fmt --all -- --check`

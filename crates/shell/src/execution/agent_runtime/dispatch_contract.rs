@@ -1982,19 +1982,18 @@ mod tests {
         resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
         AgentRuntimeBackendKind, ApprovalResponseDecisionV1, AttachLaunchKnobs,
         AttachModePreference, CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1,
-        ContinueWorldWorkerEventClassV1, ControlDirectiveKindV1, DispatchBaselineKind,
-        DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRejectingLayer,
-        DispatchRequestEnvelope, DispatchResolutionErrorKind, FieldBaselineOrigin,
-        FieldValueOrigin, ForkWorldWorkerOutcomeV1, HostExecutionClientStart,
+        ContinueWorldWorkerEventClassV1, ContinueWorldWorkerOutcomeV1, ControlDirectiveKindV1,
+        DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
+        DispatchRejectingLayer, DispatchRequestEnvelope, DispatchResolutionErrorKind,
+        FieldBaselineOrigin, FieldValueOrigin, ForkWorldWorkerOutcomeV1, HostExecutionClientStart,
         InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
         RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, StopWorldWorkerOutcomeV1,
         TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
         WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
         WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1, WorkerForkPayloadV1,
-        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1,
-        ContinueWorldWorkerOutcomeV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchOutcomeV1,
-        WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
+        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -3798,14 +3797,12 @@ mod tests {
         let validated = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchModeV1::Retained,
-            WorldDispatchPayloadV1::WorkerContinueForkCommand(
-                WorkerContinueForkCommandPayloadV1 {
-                    child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
-                    fork_reason: Some("specialize:replay_trace".to_string()),
-                    fork_strategy: Some("parallelize_investigation".to_string()),
-                    thread_id: Some("thread-fork".to_string()),
-                },
-            ),
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(WorkerContinueForkCommandPayloadV1 {
+                child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
+                fork_reason: Some("specialize:replay_trace".to_string()),
+                fork_strategy: Some("parallelize_investigation".to_string()),
+                thread_id: Some("thread-fork".to_string()),
+            }),
         )
         .with_target_participant_id("ash-worker-45")
         .validate()
@@ -3814,7 +3811,10 @@ mod tests {
         let WorldDispatchPayloadV1::WorkerContinueForkCommand(payload) = validated.payload else {
             panic!("validated payload should remain typed fork command payload");
         };
-        assert_eq!(payload.child_prompt, "Investigate the flaky Linux replay trace.");
+        assert_eq!(
+            payload.child_prompt,
+            "Investigate the flaky Linux replay trace."
+        );
         assert_eq!(
             payload.fork_reason.as_deref(),
             Some("specialize:replay_trace")
@@ -3831,14 +3831,12 @@ mod tests {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchModeV1::Retained,
-            WorldDispatchPayloadV1::WorkerContinueForkCommand(
-                WorkerContinueForkCommandPayloadV1 {
-                    child_prompt: " ".to_string(),
-                    fork_reason: Some("specialize:replay_trace".to_string()),
-                    fork_strategy: Some("parallelize_investigation".to_string()),
-                    thread_id: None,
-                },
-            ),
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(WorkerContinueForkCommandPayloadV1 {
+                child_prompt: " ".to_string(),
+                fork_reason: Some("specialize:replay_trace".to_string()),
+                fork_strategy: Some("parallelize_investigation".to_string()),
+                thread_id: None,
+            }),
         )
         .with_target_participant_id("ash-worker-45")
         .validate()
@@ -3855,14 +3853,12 @@ mod tests {
         let validated = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchModeV1::Retained,
-            WorldDispatchPayloadV1::WorkerContinueForkCommand(
-                WorkerContinueForkCommandPayloadV1 {
-                    child_prompt: "  Investigate the flaky Linux replay trace.  ".to_string(),
-                    fork_reason: Some("  specialize:replay_trace  ".to_string()),
-                    fork_strategy: Some("  parallelize_investigation  ".to_string()),
-                    thread_id: Some("thread-fork".to_string()),
-                },
-            ),
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(WorkerContinueForkCommandPayloadV1 {
+                child_prompt: "  Investigate the flaky Linux replay trace.  ".to_string(),
+                fork_reason: Some("  specialize:replay_trace  ".to_string()),
+                fork_strategy: Some("  parallelize_investigation  ".to_string()),
+                thread_id: Some("thread-fork".to_string()),
+            }),
         )
         .with_target_participant_id("ash-worker-45")
         .validate()
@@ -3871,7 +3867,10 @@ mod tests {
         let WorldDispatchPayloadV1::WorkerContinueForkCommand(payload) = validated.payload else {
             panic!("validated payload should remain typed fork command payload");
         };
-        assert_eq!(payload.child_prompt, "Investigate the flaky Linux replay trace.");
+        assert_eq!(
+            payload.child_prompt,
+            "Investigate the flaky Linux replay trace."
+        );
         assert_eq!(
             payload.fork_reason.as_deref(),
             Some("specialize:replay_trace")
@@ -3916,14 +3915,12 @@ mod tests {
         let error = base_world_dispatch_request(
             WorldDispatchActionV1::ContinueWorldWorker,
             WorldDispatchModeV1::Retained,
-            WorldDispatchPayloadV1::WorkerContinueForkCommand(
-                WorkerContinueForkCommandPayloadV1 {
-                    child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
-                    fork_reason: Some("needs replay trace specialization".to_string()),
-                    fork_strategy: Some("parallelize_investigation".to_string()),
-                    thread_id: Some("thread-fork".to_string()),
-                },
-            ),
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(WorkerContinueForkCommandPayloadV1 {
+                child_prompt: "Investigate the flaky Linux replay trace.".to_string(),
+                fork_reason: Some("needs replay trace specialization".to_string()),
+                fork_strategy: Some("parallelize_investigation".to_string()),
+                thread_id: Some("thread-fork".to_string()),
+            }),
         )
         .with_target_participant_id("ash-worker-45")
         .validate()
@@ -4144,7 +4141,10 @@ mod tests {
     #[test]
     fn world_dispatch_contract_rejects_still_deferred_host_response_payload_kinds_during_deserialization(
     ) {
-        for payload_kind in ["worker_continue_progress_ack", "worker_continue_control_ack"] {
+        for payload_kind in [
+            "worker_continue_progress_ack",
+            "worker_continue_control_ack",
+        ] {
             let error = serde_json::from_value::<WorldDispatchRequestV1>(serde_json::json!({
                 "request_id": "req-43",
                 "idempotency_key": "idem-43",

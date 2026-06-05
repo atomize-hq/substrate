@@ -691,8 +691,8 @@ async fn continue_world_worker(
     {
         persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
     }
-    let fork_bootstrap = continue_world_worker_fork_command_bootstrap_after_delivery(&prepared)
-        .await?;
+    let fork_bootstrap =
+        continue_world_worker_fork_command_bootstrap_after_delivery(&prepared).await?;
     let summary = summarize_continue_world_worker_result(
         &submit_request,
         stream_result.exit_code,
@@ -7387,7 +7387,9 @@ agents:
                                 run_id: member_dispatch.run_id.clone(),
                                 parent_run_id: None,
                                 participant_id: Some(member_dispatch.participant_id.clone()),
-                                parent_participant_id: member_dispatch.parent_participant_id.clone(),
+                                parent_participant_id: member_dispatch
+                                    .parent_participant_id
+                                    .clone(),
                                 resumed_from_participant_id: member_dispatch
                                     .resumed_from_participant_id
                                     .clone(),
@@ -7548,7 +7550,9 @@ agents:
         );
 
         let socket_home = tempdir().expect("socket tempdir");
-        let socket_path = socket_home.path().join("fork-command-post-delivery-invalidation.sock");
+        let socket_path = socket_home
+            .path()
+            .join("fork-command-post-delivery-invalidation.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
         let store = AgentRuntimeStateStore::new().expect("state store");
         let store_for_server = store.clone();
@@ -7770,7 +7774,8 @@ agents:
         .expect_err("bootstrap failure must still preserve the surfaced durable obligation");
 
         assert!(
-            err.to_string().starts_with("fork_command_bootstrap_failed:"),
+            err.to_string()
+                .starts_with("fork_command_bootstrap_failed:"),
             "post-delivery fork-command failure must stay wrapped as bootstrap failure: {err:#}"
         );
 
@@ -10769,8 +10774,7 @@ agents:
             }),
         };
 
-        let success =
-            summarize_continue_world_worker_result(&submit, 0, Some(&control_ack), None);
+        let success = summarize_continue_world_worker_result(&submit, 0, Some(&control_ack), None);
         assert!(
             success.contains("acknowledged the control_directive"),
             "control_ack summary must surface acknowledgement truth: {success}"
@@ -10784,8 +10788,7 @@ agents:
             "control_ack summary must not imply completion: {success}"
         );
 
-        let failure =
-            summarize_continue_world_worker_result(&submit, 17, Some(&control_ack), None);
+        let failure = summarize_continue_world_worker_result(&submit, 17, Some(&control_ack), None);
         assert!(
             failure.contains("status 17"),
             "control_ack summary must preserve terminal status truth: {failure}"

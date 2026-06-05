@@ -1264,10 +1264,9 @@ fn start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
                         }
                         if first_line.starts_with("POST /v1/execute/stream ") {
                             if let Some(config) = fork_child_persistence.as_deref() {
-                                if let Ok(parsed) =
-                                    serde_json::from_slice::<transport_api_types::ExecuteRequest>(
-                                        &body,
-                                    )
+                                if let Ok(parsed) = serde_json::from_slice::<
+                                    transport_api_types::ExecuteRequest,
+                                >(&body)
                                 {
                                     if let Some(member_dispatch) = parsed.member_dispatch.as_ref() {
                                         if member_dispatch.parent_participant_id.is_some() {
@@ -3910,7 +3909,8 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
     let child_member = live_members_after
         .iter()
         .find(|manifest| {
-            manifest.get("participant_id").and_then(Value::as_str) == Some(child_participant_id.as_str())
+            manifest.get("participant_id").and_then(Value::as_str)
+                == Some(child_participant_id.as_str())
         })
         .expect("retained child manifest");
     assert_eq!(
@@ -3969,7 +3969,9 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         Some("reply")
     );
     assert_eq!(
-        response.pointer("/outcome/thread_id").and_then(Value::as_str),
+        response
+            .pointer("/outcome/thread_id")
+            .and_then(Value::as_str),
         Some("thread-direct")
     );
 

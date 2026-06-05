@@ -38,19 +38,19 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-durable-orchestration-obligation-ledger.md](./DESIGN-durable-orchestration-obligation-ledger.md)  
 Phase: `SPECIFY`  
-Status: drafted on `2026-06-05`
+Status: runtime landed through Packet `3` on `2026-06-05`; Packet `4` docs/validation alignment pending
 
 ## Observed Repo Floor
 
 The current repo already provides most of the floor this slice needs:
 
-1. the live `continue_world_worker` request payload already accepts free-form prompt text plus the narrow typed host payloads `approval_response`, `clarification_response`, and `control_directive` on the same retained seam in [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs),
-2. the live runtime already proves the host-side typed payload pattern for that seam: exact retained-worker targeting, deny-by-default typed payload gating, deterministic implementation-owned rendering, and truthful delivery semantics in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs),
+1. the live `continue_world_worker` request payload now accepts free-form prompt text plus the narrow typed host payloads `approval_response`, `clarification_response`, `fork_command`, and `control_directive` on the same retained seam in [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs),
+2. the live runtime now proves the host-side typed payload pattern for that seam: exact retained-worker targeting, deny-by-default typed payload gating, deterministic implementation-owned rendering, truthful delivery semantics, and routed `fork_command` reuse of the authoritative fork bootstrap path in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs),
 3. the landed `fork_world_worker` action already allocates one retained child with explicit source-to-child lineage, exact same-session/world binding, and Linux-routed bootstrap truth in [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs),
 4. retained-worker `fork_request` and `fork_recommendation` events already persist durable local obligations, but they still require later explicit host action before any child worker is allocated,
-5. the current retained-worker event classifier still treats `fork_command` as a deferred label and the current request contract still exposes no typed `worker_continue_fork_command` host payload.
+5. the live policy model now distinguishes worker-side fork requests and recommendations from host-side `fork_command` and `control_directive` bootstraps with separate deny-by-default gates.
 
-That means the remaining gap is smaller than a new allocator and more specific than generic control: the repo needs a typed host `fork_command` class on the existing retained continue seam, but it should land by reusing already-landed fork bootstrap and lineage truth rather than inventing a second child-allocation plane.
+That means the runtime gap described by this spec is now closed on the current tree. Packet `4` is the remaining bounded work: keep repo-local docs aligned to the landed contract, policy gate, rendered prompt seam, and fork-bootstrap reuse without reopening scope.
 
 ## Objective
 
@@ -69,10 +69,11 @@ Primary runtime story:
 ## Current Landed Runtime Note
 
 1. the live `continue_world_worker` request payload now accepts free-form prompt text plus optional `thread_id`, typed `approval_response`, typed `clarification_response`, and typed `control_directive`,
-2. the live retained-worker event path now accepts `control_ack`, `fork_request`, and `fork_recommendation`, but still treats `fork_command` as deferred,
-3. the live `fork_world_worker` action already returns explicit source and child identity plus authoritative same-session/world lineage,
-4. the live policy model now distinguishes worker-side fork requests and recommendations from host-side control directives with dedicated deny-by-default keys, but it still exposes no dedicated host `fork_command` gate,
-5. the live repo still has no typed active-ephemeral `task_run_id`, so active-ephemeral inspect/cancel widening remains separate later work.
+2. the live `continue_world_worker` request payload also accepts typed `fork_command`, rendered deterministically over the existing prompt seam and bound to exact retained-worker identity,
+3. the live retained-worker event path now accepts `control_ack`, `fork_request`, and `fork_recommendation`, while typed host `fork_command` remains a host-issued command class rather than a worker event label,
+4. the live `fork_world_worker` action already returns explicit source and child identity plus authoritative same-session/world lineage, and typed host `fork_command` now reuses that same authoritative bootstrap path,
+5. the live policy model now distinguishes worker-side fork requests and recommendations from host-side `fork_command` and `control_directive` with dedicated deny-by-default keys,
+6. the live repo still has no typed active-ephemeral `task_run_id`, so active-ephemeral inspect/cancel widening remains separate later work.
 
 ## Tech Stack
 

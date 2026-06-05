@@ -3,7 +3,7 @@
 Source spec: [SPEC-45-internal-retained-host-fork-command-bootstrap.md](./SPEC-45-internal-retained-host-fork-command-bootstrap.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: first post-Slice-44 retained fork-command slice  
-Status: drafted on `2026-06-05`
+Status: Packets `1`-`3` landed on the current tree on `2026-06-05`; Packet `4` docs/validation alignment is the remaining work
 
 ## Objective
 
@@ -22,6 +22,13 @@ This slice is complete only when all of the following are true:
 
 This plan assumes the `SPECIFY` phase artifact in [SPEC-45-internal-retained-host-fork-command-bootstrap.md](./SPEC-45-internal-retained-host-fork-command-bootstrap.md) has been reviewed and is the source of truth for scope before implementation planning advances.
 
+Packet status on the current tree:
+
+1. Packet `1` contract and policy work is landed.
+2. Packet `2` deterministic rendering and exact-source preparation work is landed.
+3. Packet `3` routed allocation reuse and outcome-honesty work is landed.
+4. Packet `4` docs alignment and the final validation wall remain the only bounded work in this session.
+
 ## Major Components And Dependencies
 
 1. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
@@ -39,14 +46,14 @@ This plan assumes the `SPECIFY` phase artifact in [SPEC-45-internal-retained-hos
 
 ## Plan Summary
 
-After Slice `44`, the repo already has the host operational steering loop on the retained continue seam:
+After Slice `44`, the repo already had the host operational steering loop on the retained continue seam:
 
 1. typed host `control_directive` is landed,
 2. same-stream worker `control_ack` is landed,
 3. worker `fork_request` and `fork_recommendation` obligations are already landed and remain host-mediated,
 4. exact-source `fork_world_worker` allocation with explicit lineage is already landed.
 
-What remains is the next distinct typed host class still deferred on that same seam: `fork_command`.
+On the current tree, that next distinct typed host class, `fork_command`, is now landed on that same seam.
 
 That is narrower than optional `progress_ack` because:
 
@@ -60,12 +67,14 @@ That is narrower than Family-2 router or attach work because:
 2. the missing gap is message-class bootstrap and policy truth on the retained continue seam,
 3. no host-global inbox, router work-loop, or cross-host ingress widening is required to land it.
 
-The narrowest honest implementation order is:
+The narrowest honest implementation order was:
 
 1. freeze the typed host fork-command contract and policy surface first,
 2. freeze deterministic rendering and exact-source bootstrap reuse second,
 3. prove outcome honesty and fail-closed rollback behaviour third,
 4. finish with docs and the validation wall.
+
+That implementation order is now complete through Packet `3`, so this plan is in its Packet `4` closeout stage.
 
 ## Locked Decisions
 
