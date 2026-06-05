@@ -660,6 +660,14 @@ async fn continue_world_worker(
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
     enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
     let prepared = resolve_continue_world_dispatch_target_for_routing(prepared)?;
+    if matches!(
+        &prepared.request.payload,
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+    ) {
+        anyhow::bail!(
+            "fork_command_deferred: continue_world_worker fork_command payloads are policy-gated in Packet 1, but deterministic rendering and child bootstrap remain deferred until Packet 2"
+        );
+    }
     let approval_closeout = prepare_continue_world_worker_approval_closeout(&prepared)?;
     let clarification_closeout = prepare_continue_world_worker_clarification_closeout(&prepared)?;
     let turn_kind = continue_world_worker_turn_kind(&prepared.request.payload);
@@ -3334,6 +3342,41 @@ mod tests {
             .join("\n");
         let policy = format!(
             "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n    control:\n      control_directives_allowed: true\n"
+        );
+        fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn write_world_dispatch_policy_with_fork_commands(
+        substrate_home: &Path,
+        enabled: bool,
+        allowed_backends: &[&str],
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        let enabled = if enabled { "true" } else { "false" };
+        let backends = allowed_backends
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let agent_backends = allowed_backends
+            .iter()
+            .map(|value| format!("    - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let actions = allowed_actions
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let modes = allowed_modes
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let policy = format!(
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n    fork:\n      commands_allowed: true\n"
         );
         fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
     }
@@ -6967,6 +7010,45 @@ agents:
                 "world_binding_mismatch: orchestration session sess_dispatch retained worker"
             ),
             "payload gate must not leak retained-worker topology drift first: {message}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_fork_command_allowed_path_fails_with_explicit_deferred_error_before_rendering(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_fork_commands(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_fork_command_world_dispatch_request(),
+        )
+        .await
+        .expect_err("Packet 1 must fail explicitly before Packet 2 rendering/bootstrap lands");
+        let message = err.to_string();
+
+        assert_eq!(
+            message,
+            "fork_command_deferred: continue_world_worker fork_command payloads are policy-gated in Packet 1, but deterministic rendering and child bootstrap remain deferred until Packet 2"
+        );
+        assert!(
+            !message.contains(
+                "invalid_dispatch_payload: action continue_world_worker requires matching typed payload"
+            ),
+            "allowed fork-command path must not fall back to the generic renderer mismatch: {message}"
         );
     }
 
