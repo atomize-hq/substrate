@@ -847,9 +847,7 @@ fn send_internal_toolbox_world_dispatch_request(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn read_http_request(
-    stream: &mut UnixStream,
-) -> Option<(Vec<u8>, String, Vec<u8>)> {
+fn read_http_request(stream: &mut UnixStream) -> Option<(Vec<u8>, String, Vec<u8>)> {
     let mut buffer = Vec::new();
     let mut header_end = None;
     let mut expected_len = None;
@@ -905,10 +903,7 @@ fn write_http_stream_start(stream: &mut UnixStream) {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn write_chunked_frame(
-    stream: &mut UnixStream,
-    frame: &transport_api_types::ExecuteStreamFrame,
-) {
+fn write_chunked_frame(stream: &mut UnixStream, frame: &transport_api_types::ExecuteStreamFrame) {
     let mut payload = serde_json::to_vec(frame).expect("serialize stream frame");
     payload.push(b'\n');
     let header = format!("{:X}\r\n", payload.len());
@@ -933,7 +928,10 @@ fn finish_chunked_stream(stream: &mut UnixStream) {
 enum MemberTurnInterceptScript {
     ControlAck,
     DriftedControlAckWorldId(String),
-    UnsupportedWorkerEvent { event_class: String, message: String },
+    UnsupportedWorkerEvent {
+        event_class: String,
+        message: String,
+    },
 }
 
 #[cfg(target_os = "linux")]
@@ -1048,24 +1046,26 @@ fn start_member_turn_intercept_proxy_with_scripts(
                                 .pop_front()
                             {
                                 let event = match script {
-                                    MemberTurnInterceptScript::ControlAck => control_ack_stream_event(
-                                        &parsed.participant_id,
-                                        &parsed.backend_id,
-                                        &parsed.orchestration_session_id,
-                                        &parsed.world_id,
-                                        parsed.world_generation,
-                                    ),
-                                    MemberTurnInterceptScript::DriftedControlAckWorldId(world_id) => {
-                                        member_stream_event(
-                                            "control_ack",
-                                            "prepare_handoff received",
+                                    MemberTurnInterceptScript::ControlAck => {
+                                        control_ack_stream_event(
                                             &parsed.participant_id,
                                             &parsed.backend_id,
                                             &parsed.orchestration_session_id,
-                                            &world_id,
+                                            &parsed.world_id,
                                             parsed.world_generation,
                                         )
                                     }
+                                    MemberTurnInterceptScript::DriftedControlAckWorldId(
+                                        world_id,
+                                    ) => member_stream_event(
+                                        "control_ack",
+                                        "prepare_handoff received",
+                                        &parsed.participant_id,
+                                        &parsed.backend_id,
+                                        &parsed.orchestration_session_id,
+                                        &world_id,
+                                        parsed.world_generation,
+                                    ),
                                     MemberTurnInterceptScript::UnsupportedWorkerEvent {
                                         event_class,
                                         message,
@@ -3125,7 +3125,9 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         1,
         "toolbox control directives must submit exactly one member turn request: {intercepted_turns:#?}"
     );
-    let submit = intercepted_turns.first().expect("member turn submit request");
+    let submit = intercepted_turns
+        .first()
+        .expect("member turn submit request");
     assert_eq!(submit.orchestration_session_id, orchestration_session_id);
     assert_eq!(submit.participant_id, member_participant_id);
     assert_eq!(
@@ -3182,14 +3184,16 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
     proxy_shutdown.store(true, Ordering::SeqCst);
-    proxy_thread.join().expect("join member turn intercept proxy");
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
-fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_scope_worker_events(
-) {
+fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_scope_worker_events()
+{
     let temp = temp_dir("substrate-c3-toolbox-control-ack-fail-closed-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -3250,9 +3254,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             &backend_sock,
             vec![
                 MemberTurnInterceptScript::ControlAck,
-                MemberTurnInterceptScript::DriftedControlAckWorldId(
-                    "world-drifted".to_string(),
-                ),
+                MemberTurnInterceptScript::DriftedControlAckWorldId("world-drifted".to_string()),
                 MemberTurnInterceptScript::UnsupportedWorkerEvent {
                     event_class: unsupported_worker_event_cases[0].0.to_string(),
                     message: "not in slice 44".to_string(),
@@ -3394,14 +3396,17 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             "thread_id": "thread-control-44-drift"
         }),
     );
-    assert_eq!(world_drift_response.get("ok").and_then(Value::as_bool), Some(false));
+    assert_eq!(
+        world_drift_response.get("ok").and_then(Value::as_bool),
+        Some(false)
+    );
     assert!(
         world_drift_response
             .get("error")
             .and_then(Value::as_str)
-            .is_some_and(|error| error.contains(
-                "world_id world-drifted did not match targeted world"
-            )),
+            .is_some_and(
+                |error| error.contains("world_id world-drifted did not match targeted world")
+            ),
         "control_ack world drift must fail closed: {world_drift_response:#?}"
     );
 
@@ -3422,7 +3427,9 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             }),
         );
         assert_eq!(
-            unsupported_event_response.get("ok").and_then(Value::as_bool),
+            unsupported_event_response
+                .get("ok")
+                .and_then(Value::as_bool),
             Some(false)
         );
         assert!(
@@ -3437,7 +3444,9 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             cancel_count_before + 1,
             Duration::from_secs(3),
         );
-        let guard = records.lock().expect("lock records after unsupported worker label");
+        let guard = records
+            .lock()
+            .expect("lock records after unsupported worker label");
         let cancel = guard
             .execute_cancel_requests
             .get(cancel_count_before)
@@ -3496,7 +3505,9 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
     proxy_shutdown.store(true, Ordering::SeqCst);
-    proxy_thread.join().expect("join member turn intercept proxy");
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
 }
 
 #[cfg(target_os = "linux")]

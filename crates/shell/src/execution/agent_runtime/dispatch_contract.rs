@@ -1007,10 +1007,7 @@ impl ContinueWorldWorkerEventClassV1 {
     pub(crate) fn is_deferred_wire_label(label: &str) -> bool {
         matches!(
             label.trim(),
-            "approval_response"
-                | "fork_command"
-                | "control_directive"
-                | "attention_required"
+            "approval_response" | "fork_command" | "control_directive" | "attention_required"
         )
     }
 }

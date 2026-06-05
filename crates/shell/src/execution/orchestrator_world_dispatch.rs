@@ -665,9 +665,12 @@ async fn continue_world_worker(
     let turn_kind = continue_world_worker_turn_kind(&prepared.request.payload);
 
     let submit_request = build_continue_world_worker_submit_request(&prepared)?;
-    let stream_result =
-        execute_continue_world_worker_stream_for_turn_kind(&submit_request, &base_policy, turn_kind)
-            .await?;
+    let stream_result = execute_continue_world_worker_stream_for_turn_kind(
+        &submit_request,
+        &base_policy,
+        turn_kind,
+    )
+    .await?;
     close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
     close_continue_world_worker_clarification_after_delivery(
         &prepared,
@@ -4407,8 +4410,8 @@ mod tests {
                 ContinueWorldWorkerTurnKind::GenericContinue,
                 &event,
             )
-                .unwrap_or_else(|_| panic!("classification must accept {event_class}"))
-                .unwrap_or_else(|| panic!("classification must surface {event_class}"));
+            .unwrap_or_else(|_| panic!("classification must accept {event_class}"))
+            .unwrap_or_else(|| panic!("classification must surface {event_class}"));
 
             assert_eq!(
                 serde_json::to_value(&classified)
@@ -4461,7 +4464,12 @@ mod tests {
     #[test]
     fn continue_world_worker_dispatch_contract_rejects_deferred_worker_event_classes() {
         let submit = sample_continue_submit_request();
-        for deferred in ["approval_response", "fork_command", "control_directive", "attention_required"] {
+        for deferred in [
+            "approval_response",
+            "fork_command",
+            "control_directive",
+            "attention_required",
+        ] {
             let err = classify_continue_world_worker_event(
                 &submit,
                 ContinueWorldWorkerTurnKind::GenericContinue,
@@ -4538,7 +4546,7 @@ mod tests {
             ContinueWorldWorkerTurnKind::GenericContinue,
             &drifted,
         )
-            .expect_err("participant drift must fail");
+        .expect_err("participant drift must fail");
         assert!(
             err.to_string().contains(
                 "participant_id ash_other did not match targeted retained worker ash_member"
@@ -4704,7 +4712,9 @@ mod tests {
                     ContinueWorldWorkerTurnKind::GenericContinue
                 };
                 let err = classify_continue_world_worker_event(&submit, turn_kind, &event)
-                    .expect_err("packet one worker events must fail closed when fields are omitted");
+                    .expect_err(
+                        "packet one worker events must fail closed when fields are omitted",
+                    );
                 assert!(
                     err.to_string().contains(expected_error),
                     "unexpected error for {event_label}: {err}"
@@ -7052,7 +7062,9 @@ agents:
         );
 
         let socket_home = tempdir().expect("socket tempdir");
-        let socket_path = socket_home.path().join("control-directive-control-ack.sock");
+        let socket_path = socket_home
+            .path()
+            .join("control-directive-control-ack.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
         let server = tokio::spawn(async move {
             while let Ok((mut stream, _addr)) = listener.accept().await {
