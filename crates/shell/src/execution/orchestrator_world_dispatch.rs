@@ -1057,7 +1057,9 @@ fn enforce_continue_world_worker_payload_policy(
                     "effective policy does not allow continue_world_worker progress_ack payloads",
                 ));
             }
-            Ok(())
+            anyhow::bail!(
+                "unsupported_dispatch_action: continue_world_worker progress_ack delivery remains unavailable in packet 1 until packet 2 deterministic rendering lands"
+            );
         }
         WorldDispatchPayloadV1::WorkerContinueForkCommand(_) => {
             if !base_policy.world_dispatch_fork_commands_allowed() {
@@ -3567,6 +3569,41 @@ mod tests {
             .join("\n");
         let policy = format!(
             "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n    control:\n      control_directives_allowed: true\n"
+        );
+        fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn write_world_dispatch_policy_with_progress_acks(
+        substrate_home: &Path,
+        enabled: bool,
+        allowed_backends: &[&str],
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        let enabled = if enabled { "true" } else { "false" };
+        let backends = allowed_backends
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let agent_backends = allowed_backends
+            .iter()
+            .map(|value| format!("    - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let actions = allowed_actions
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let modes = allowed_modes
+            .iter()
+            .map(|value| format!("      - \"{value}\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let policy = format!(
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n{agent_backends}\n  world_dispatch:\n    enabled: {enabled}\n    allowed_backends:\n{backends}\n    allowed_actions:\n{actions}\n    allowed_modes:\n{modes}\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n    control:\n      progress_acks_allowed: true\n"
         );
         fs::write(substrate_home.join("policy.yaml"), policy).expect("write policy");
     }
@@ -7256,6 +7293,53 @@ agents:
                 "world_binding_mismatch: orchestration session sess_dispatch retained worker"
             ),
             "payload gate must not leak retained-worker topology drift first: {message}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_progress_ack_remains_packet_one_fail_closed_when_policy_enabled(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_progress_acks(
+            substrate_home.path(),
+            true,
+            &["cli:codex_world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_continue_progress_ack_world_dispatch_request(),
+        )
+        .await
+        .expect_err("packet 1 progress_ack routing must fail closed even when policy-enabled");
+        let message = err.to_string();
+
+        assert_eq!(
+            message,
+            "unsupported_dispatch_action: continue_world_worker progress_ack delivery remains unavailable in packet 1 until packet 2 deterministic rendering lands"
+        );
+        assert!(
+            !message.contains("stale_linkage:"),
+            "packet 1 progress_ack routing must fail before retained-worker lifecycle resolution: {message}"
+        );
+        assert!(
+            !message.contains(
+                "world_binding_mismatch: orchestration session sess_dispatch retained worker"
+            ),
+            "packet 1 progress_ack routing must fail before retained-worker topology drift checks: {message}"
+        );
+        assert!(
+            !message.contains("invalid_dispatch_payload:"),
+            "packet 1 progress_ack routing must fail before submit-request rendering: {message}"
         );
     }
 
