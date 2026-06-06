@@ -5,7 +5,7 @@ Source plan: [PLAN-47.md](./PLAN-47.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: Packets `1`-`4` are complete and green on the current tree as of `2026-06-06`
+Status: Packets `1`-`3` are complete; Task `4.1` is complete; Task `4.2` is blocked in validation on `2026-06-06`
 
 ## Phase Gate
 
@@ -18,7 +18,7 @@ This slice should be implemented as four sequential `/incremental-implementation
 - Packet 1 froze exact active-task identity and the dual-target contract surface on the live tree.
 - Packet 2 landed authoritative active-task tracking and inspect snapshot truth on the live tree.
 - Packet 3 landed routed active-ephemeral inspect/cancel over that exact identity on the live tree.
-- Packet 4 aligns docs truth and runs the final validation wall.
+- Packet 4 aligned docs truth and ran the validation wall, but it remains open until every required command is green.
 
 Do not start a later packet until the prior packet checkpoint is green.
 
@@ -160,7 +160,7 @@ Session goal:
     - [`llm-last-mile/PLAN-47.md`](./PLAN-47.md)
     - [`llm-last-mile/TASKS-47.md`](./TASKS-47.md)
 
-- [x] Task 4.2: Run the final validation wall
+- [ ] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, transport/world-service tests if touched, and full workspace tests are green against the bounded Slice `47` file set; this task validates the implementation and does not serve as an open-ended cleanup bucket.
   - Verify:
     - `cargo fmt --all -- --check`
@@ -176,6 +176,8 @@ Session goal:
   - Files:
     - none
   - Stop condition: if any validation command fails because Slice `47` needs more code or doc changes, stop and add an explicit follow-up task against the concrete failing files instead of treating this validation step as implicit cleanup.
+  - Current blocker on `2026-06-06`: `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture` is still non-green. One isolated rerun of `c3_internal_toolbox_fork_command_fail_closed_before_child_registration` passed, but the full suite then failed with seven cases: `c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_events`, `c3_targeted_world_turn_relaunches_exact_backend_after_world_restart`, `c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member`, `c3_world_restart_failed_member_replacement_leaves_honest_absence`, `c3_world_restart_invalidates_stale_member_generation_before_publish`, `c3_world_restart_keeps_same_agent_members_in_other_sessions_isolated`, and `c3_world_restart_launches_live_member_replacement_on_new_generation`.
+  - Required follow-up before Packet `4` can close: land a bounded fix for the `repl_world_first_routing_v1` readiness/relaunch failures in the concrete runtime/test files they exercise, then rerun the full Packet `4` validation wall from the top.
 
 ### Packet 4 Checkpoint
 

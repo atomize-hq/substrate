@@ -16,7 +16,7 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: Slice `47` is landed through Packet `4` on `2026-06-06`
+Status: Slice `47` runtime packets `1`-`3` are landed, and Packet `4` is blocked in validation on `2026-06-06`
 
 ## Assumptions
 
@@ -31,7 +31,7 @@ ASSUMPTIONS I'M MAKING:
 
 If any of these are wrong, correct them before implementation.
 
-The current tree now has this slice landed end to end: exact active `task_run_id` truth is surfaced for in-flight `run_world_task`, `inspect_world_worker` and `cancel_world_work` both admit `mode=ephemeral` only with that exact identity, terminal one-shot outcomes remain non-durable, docs/config truth matches the live behavior, and the Packet `4` validation wall is green.
+The current tree has the Slice `47` runtime behavior landed: exact active `task_run_id` truth is surfaced for in-flight `run_world_task`, `inspect_world_worker` and `cancel_world_work` both admit `mode=ephemeral` only with that exact identity, and terminal one-shot outcomes remain non-durable. Packet `4` remains open because `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture` is still non-green on `2026-06-06`: one isolated rerun of `c3_internal_toolbox_fork_command_fail_closed_before_child_registration` passed, but the full suite then failed with seven readiness/relaunch cases, including `c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_events`, `c3_targeted_world_turn_relaunches_exact_backend_after_world_restart`, and `c3_world_restart_launches_live_member_replacement_on_new_generation`.
 
 ## Objective
 
@@ -47,22 +47,24 @@ Primary runtime story:
 6. `cancel_world_work` interrupts that one exact in-flight task and returns truthful cancel closeout distinct from retained-worker cancel and stop semantics,
 7. terminal one-shot outcomes remain terminal, non-routable, and non-durable.
 
-## Observed Repo Floor
+## Observed Repo Floor At Slice Start
 
-The current repo already provides most of the floor this slice needs:
+This section records the honest pre-landing floor that Slice `47` started from. It is historical context for why the slice was planned this way, not a description of the current tree.
 
-1. the live internal dispatch vocabulary already includes `run_world_task`, `inspect_world_worker`, and `cancel_world_work` on the same control-plane family,
-2. the current request contract still rejects `inspect_world_worker` and `cancel_world_work` in `mode=ephemeral`, which means active-ephemeral widening is not yet runtime truth,
-3. the live `RunWorldTaskOutcomeV1` still returns a terminal one-shot outcome with no typed `task_run_id`,
-4. the live `run_world_task` path already has runtime-owned active execution truth under the hood:
+At slice start, the repo already provided most of the floor this slice needed:
+
+1. the internal dispatch vocabulary already included `run_world_task`, `inspect_world_worker`, and `cancel_world_work` on the same control-plane family,
+2. the request contract still rejected `inspect_world_worker` and `cancel_world_work` in `mode=ephemeral`, which meant active-ephemeral widening was not yet runtime truth,
+3. `RunWorldTaskOutcomeV1` still returned a terminal one-shot outcome with no typed `task_run_id`,
+4. the `run_world_task` path already had runtime-owned active execution truth under the hood:
    - exact `request_id`,
    - exact backend/world-binding routing,
    - streamed execute `span_id`,
    - existing `cancel_execute(span_id, sig)` transport for active interruption,
-5. the authoritative state store currently models retained sessions, retained participants, and durable obligations, but it does not yet expose a first-class active-ephemeral task resolver or snapshot contract,
-6. retained inspect and retained cancel are already landed as Linux-first routed behavior, so this slice is a widening of existing verbs rather than a new verb family.
+5. the authoritative state store modeled retained sessions, retained participants, and durable obligations, but did not yet expose a first-class active-ephemeral task resolver or snapshot contract,
+6. retained inspect and retained cancel were already landed as Linux-first routed behavior, so this slice was a widening of existing verbs rather than a new verb family.
 
-That means the remaining gap is identity-model work first: the repo needs exact active-ephemeral task identity plus authoritative live-task resolution before dual-target inspect/cancel can be honest.
+Those were the gaps Slice `47` closed. On the current tree, exact active `task_run_id` truth, authoritative active-task resolution, and `mode=ephemeral` inspect/cancel widening are landed runtime behavior.
 
 ## Tech Stack
 

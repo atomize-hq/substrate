@@ -3,7 +3,7 @@
 Source spec: [SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md](./SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: post-Slice-46 identity-model widening slice  
-Status: Packets `1`-`4` are complete on the current tree as of `2026-06-06`
+Status: Packets `1`-`3` are complete on the current tree; Packet `4` is blocked in validation as of `2026-06-06`
 
 ## Objective
 
@@ -28,7 +28,7 @@ Packet status on the current tree:
 1. Packet `1` exact `task_run_id` contract and dual-target validation work is landed.
 2. Packet `2` authoritative active-task tracking and inspect snapshot truth is landed.
 3. Packet `3` routed active-ephemeral inspect/cancel behavior is landed.
-4. Packet `4` doc alignment and the final validation wall are landed and green.
+4. Packet `4` doc alignment is complete, but the validation wall is currently non-green.
 
 ## Major Components And Dependencies
 
@@ -48,28 +48,30 @@ Packet status on the current tree:
 
 ## Plan Summary
 
-After Slice `46`, the retained-worker control plane is no longer the narrowest remaining seam. The live repo already has retained inspect, retained cancel, retained stop, retained fork, retained continue, host responses, and the retained control/fork/progress message loop.
+This section records the planning rationale that was true when Slice `47` opened. On the current tree, Packets `1`-`3` are landed and Packet `4` remains open because the validation wall is not green; the summary below explains why the packet order was chosen.
 
-What remains is the identity gap that kept active-ephemeral inspect/cancel out of scope:
+After Slice `46`, the retained-worker control plane was no longer the narrowest remaining seam. The repo already had retained inspect, retained cancel, retained stop, retained fork, retained continue, host responses, and the retained control/fork/progress message loop.
 
-1. the current dispatch contract still rejects `inspect_world_worker` and `cancel_world_work` in `mode=ephemeral`,
-2. the current `RunWorldTaskOutcomeV1` still exposes no typed `task_run_id`,
-3. the current runtime has active execute/cancel truth under the hood but does not yet surface it as exact control-plane identity.
+What remained at slice start was the identity gap that kept active-ephemeral inspect/cancel out of scope:
 
-That makes Slice `47` an identity-model slice first, not a router slice:
+1. the dispatch contract still rejected `inspect_world_worker` and `cancel_world_work` in `mode=ephemeral`,
+2. `RunWorldTaskOutcomeV1` still exposed no typed `task_run_id`,
+3. the runtime had active execute/cancel truth under the hood but did not yet surface it as exact control-plane identity.
+
+That made Slice `47` an identity-model slice first, not a router slice:
 
 1. exact task identity must be frozen before active inspect/cancel can be honest,
 2. active-task resolution must be authoritative before dual-target routing can be safe,
 3. cancel/inspect wiring should then consume that frozen identity rather than inventing it inline.
 
-The narrowest honest implementation order is therefore:
+The narrowest honest implementation order was therefore:
 
 1. freeze exact `task_run_id` contract and dual-target validity rules first,
 2. add authoritative active-task tracking and snapshot truth second,
 3. wire active-ephemeral inspect/cancel over that exact identity third,
 4. finish with docs and the validation wall.
 
-That implementation order is now complete through Packet `4`, and no broader Slice `47` scope widening was required to close the slice.
+That implementation order is now complete through Packet `3`. Packet `4` remains open because the required `repl_world_first_routing_v1` validation command is still non-green, so no broader Slice `47` scope widening has been authorized or applied.
 
 ## Locked Decisions
 
