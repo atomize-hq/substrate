@@ -842,10 +842,10 @@ fn toolbox_transport_path_for_home(
 }
 
 #[cfg(unix)]
-fn send_internal_toolbox_world_dispatch_request(
+fn start_internal_toolbox_world_dispatch_request(
     path: &Path,
     request: &serde_json::Value,
-) -> serde_json::Value {
+) -> BufReader<UnixStream> {
     let mut stream = UnixStream::connect(path)
         .unwrap_or_else(|_| panic!("connect internal toolbox transport {}", path.display()));
     stream
@@ -860,12 +860,109 @@ fn send_internal_toolbox_world_dispatch_request(
         .expect("terminate internal toolbox request");
     stream.flush().expect("flush internal toolbox request");
 
-    let mut reader = BufReader::new(stream);
+    BufReader::new(stream)
+}
+
+#[cfg(unix)]
+fn read_internal_toolbox_world_dispatch_response_frame(
+    reader: &mut BufReader<UnixStream>,
+) -> serde_json::Value {
     let mut line = String::new();
-    reader
+    let read = reader
         .read_line(&mut line)
         .expect("read internal toolbox response");
+    assert!(
+        read > 0,
+        "internal toolbox transport closed before responding"
+    );
     serde_json::from_str(line.trim()).expect("parse internal toolbox response")
+}
+
+#[cfg(unix)]
+fn read_internal_toolbox_world_dispatch_started_task_run_id(
+    reader: &mut BufReader<UnixStream>,
+) -> String {
+    loop {
+        let payload = read_internal_toolbox_world_dispatch_response_frame(reader);
+        match payload.pointer("/frame_kind").and_then(Value::as_str) {
+            Some("event") => {
+                assert_eq!(
+                    payload.pointer("/event_kind").and_then(Value::as_str),
+                    Some("task_run_id_registered"),
+                    "unexpected internal toolbox event frame: {payload:?}"
+                );
+                assert_eq!(
+                    payload.pointer("/action").and_then(Value::as_str),
+                    Some("run_world_task"),
+                    "unexpected internal toolbox event action: {payload:?}"
+                );
+                return payload
+                    .pointer("/task_run_id")
+                    .and_then(Value::as_str)
+                    .expect("task_run_id_registered event must include task_run_id")
+                    .to_string();
+            }
+            Some("result") | None => {
+                panic!(
+                    "expected internal toolbox started event before terminal result: {payload:?}"
+                )
+            }
+            Some(other) => panic!("unexpected internal toolbox frame_kind {other}: {payload:?}"),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn read_internal_toolbox_world_dispatch_result(
+    reader: &mut BufReader<UnixStream>,
+) -> serde_json::Value {
+    loop {
+        let payload = read_internal_toolbox_world_dispatch_response_frame(reader);
+        match payload.pointer("/frame_kind").and_then(Value::as_str) {
+            Some("event") => continue,
+            Some("result") | None => return payload,
+            Some(other) => panic!("unexpected internal toolbox frame_kind {other}: {payload:?}"),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn send_internal_toolbox_world_dispatch_request(
+    path: &Path,
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let mut reader = start_internal_toolbox_world_dispatch_request(path, request);
+    read_internal_toolbox_world_dispatch_result(&mut reader)
+}
+
+#[cfg(unix)]
+fn send_execute_cancel_request(path: &Path, span_id: &str) {
+    let request = transport_api_types::ExecuteCancelRequestV1 {
+        span_id: span_id.to_string(),
+        sig: "INT".to_string(),
+    };
+    let body = serde_json::to_vec(&request).expect("serialize execute cancel request");
+    let mut stream = UnixStream::connect(path)
+        .unwrap_or_else(|_| panic!("connect world socket {}", path.display()));
+    let header = format!(
+        "POST /v1/execute/cancel HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream
+        .write_all(header.as_bytes())
+        .expect("write execute cancel header");
+    stream.write_all(&body).expect("write execute cancel body");
+    stream.flush().expect("flush execute cancel request");
+
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .expect("read execute cancel response");
+    let response_text = String::from_utf8_lossy(&response);
+    assert!(
+        response_text.starts_with("HTTP/1.1 200"),
+        "execute cancel request must succeed: {response_text}"
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -3147,6 +3244,376 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_terminal_result_and_ephemeral_inspect_uses_it(
+) {
+    let temp = temp_dir("substrate-c3-toolbox-run-world-task-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["run_world_task", "inspect_world_worker"],
+            allowed_modes: &["ephemeral"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-run-world-task-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let mut server = Some(ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-run-world-task".to_string(),
+            exit_code_on_cancel: 0,
+        }],
+    ));
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.as_ref().expect("world stub should exist").records();
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &backend_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    let world_id = session
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("session world_id")
+        .to_string();
+    let world_generation = session
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("session world_generation");
+
+    let mut run_response_reader = start_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_run_world_task_live_id",
+            "idempotency_key": "idem_toolbox_run_world_task_live_id",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "run_world_task",
+            "mode": "ephemeral",
+            "target_backend_id": "cli:codex",
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "task",
+                "prompt": "hold the in-flight world task open until the host inspects it"
+            }
+        }),
+    );
+    let task_run_id =
+        read_internal_toolbox_world_dispatch_started_task_run_id(&mut run_response_reader);
+    assert!(
+        task_run_id.starts_with("member-span-"),
+        "run_world_task must surface the authoritative member dispatch span id: {task_run_id}"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "run_world_task must still be in flight when the started event is delivered: {guard:#?}"
+    );
+    drop(guard);
+
+    let inspect = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_inspect_live_task",
+            "idempotency_key": "idem_toolbox_inspect_live_task",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id,
+            "action": "inspect_world_worker",
+            "mode": "ephemeral",
+            "target_backend_id": "cli:codex",
+            "task_run_id": task_run_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_inspect"
+            }
+        }),
+    );
+    assert_eq!(inspect.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        inspect
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("inspect_world_worker")
+    );
+    assert_eq!(
+        inspect
+            .pointer("/outcome/target_participant_id")
+            .and_then(Value::as_str),
+        Some(task_run_id.as_str())
+    );
+    assert_eq!(
+        inspect
+            .pointer("/outcome/target_backend_id")
+            .and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        inspect.pointer("/outcome/world_id").and_then(Value::as_str),
+        Some(world_id.as_str())
+    );
+    assert_eq!(
+        inspect
+            .pointer("/outcome/world_generation")
+            .and_then(Value::as_u64),
+        Some(world_generation)
+    );
+    assert_eq!(
+        inspect
+            .pointer("/outcome/snapshot/participant_state")
+            .and_then(Value::as_str),
+        Some("running")
+    );
+
+    send_execute_cancel_request(&backend_sock, &task_run_id);
+    wait_for_min_execute_cancel_requests(&records, 1, Duration::from_secs(3));
+
+    let run_response = read_internal_toolbox_world_dispatch_result(&mut run_response_reader);
+    assert_eq!(run_response.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        run_response
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("run_world_task")
+    );
+    assert_eq!(
+        run_response
+            .pointer("/outcome/task_run_id")
+            .and_then(Value::as_str),
+        Some(task_run_id.as_str())
+    );
+    assert_eq!(
+        run_response
+            .pointer("/outcome/state")
+            .and_then(Value::as_str),
+        Some("completed")
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    drop(server.take());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_run_world_task_fast_completion_still_streams_registered_task_run_id_before_terminal_result(
+) {
+    let temp = temp_dir("substrate-c3-toolbox-run-world-task-fast-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["run_world_task"],
+            allowed_modes: &["ephemeral"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-run-world-task-fast-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let mut server = Some(ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndExit {
+            session_handle_id: "session-toolbox-run-world-task-fast".to_string(),
+            exit_code: 0,
+        }],
+    ));
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &backend_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    let world_id = session
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("session world_id")
+        .to_string();
+    let world_generation = session
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("session world_generation");
+
+    let mut run_response_reader = start_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_run_world_task_fast",
+            "idempotency_key": "idem_toolbox_run_world_task_fast",
+            "orchestration_session_id": orchestration_session_id,
+            "caller_participant_id": orchestrator_participant_id,
+            "action": "run_world_task",
+            "mode": "ephemeral",
+            "target_backend_id": "cli:codex",
+            "world_id": world_id,
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "task",
+                "prompt": "complete this world task immediately after registration"
+            }
+        }),
+    );
+    let task_run_id =
+        read_internal_toolbox_world_dispatch_started_task_run_id(&mut run_response_reader);
+    assert!(
+        task_run_id.starts_with("member-span-"),
+        "fast run_world_task must surface the authoritative member dispatch span id: {task_run_id}"
+    );
+
+    let run_response = read_internal_toolbox_world_dispatch_result(&mut run_response_reader);
+    assert_eq!(run_response.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        run_response
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("run_world_task")
+    );
+    assert_eq!(
+        run_response
+            .pointer("/outcome/task_run_id")
+            .and_then(Value::as_str),
+        Some(task_run_id.as_str())
+    );
+    assert_eq!(
+        run_response
+            .pointer("/outcome/state")
+            .and_then(Value::as_str),
+        Some("completed")
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    drop(server.take());
 }
 
 #[cfg(target_os = "linux")]

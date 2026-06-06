@@ -902,25 +902,18 @@ impl AgentRuntimeStateStore {
             .lock()
             .expect("snapshot write mutex poisoned");
         record.validate()?;
-
-        for session_id in self.canonical_session_root_ids()? {
-            let existing_path =
-                self.canonical_active_ephemeral_task_path(&session_id, &record.task_run_id);
-            if existing_path.exists() {
-                anyhow::bail!(
-                    "duplicate_active_task_run_id: active ephemeral task {} is already registered",
-                    record.task_run_id
-                );
-            }
+        let path = self.canonical_active_ephemeral_task_path(
+            &record.orchestration_session_id,
+            &record.task_run_id,
+        );
+        if path.exists() {
+            anyhow::bail!(
+                "duplicate_active_task_run_id: active ephemeral task {} is already registered",
+                record.task_run_id
+            );
         }
 
-        write_atomic_json(
-            &self.canonical_active_ephemeral_task_path(
-                &record.orchestration_session_id,
-                &record.task_run_id,
-            ),
-            &record,
-        )?;
+        write_atomic_json(&path, &record)?;
 
         Ok(ActiveEphemeralWorldTaskGuard {
             store: self.clone(),
@@ -936,15 +929,9 @@ impl AgentRuntimeStateStore {
         task_run_id: &str,
     ) -> Result<Option<ActiveEphemeralWorldTaskRecord>> {
         let path = self.canonical_active_ephemeral_task_path(orchestration_session_id, task_run_id);
-        if !path.exists() {
+        let Some(record) = read_json_if_exists::<ActiveEphemeralWorldTaskRecord>(&path)? else {
             return Ok(None);
-        }
-
-        let record: ActiveEphemeralWorldTaskRecord = serde_json::from_str(
-            &fs::read_to_string(&path)
-                .with_context(|| format!("failed to read {}", path.display()))?,
-        )
-        .with_context(|| format!("failed to parse {}", path.display()))?;
+        };
         record.validate()?;
         if record.orchestration_session_id != orchestration_session_id {
             anyhow::bail!(
@@ -4750,11 +4737,58 @@ mod tests {
     #[cfg(any(target_os = "linux", test))]
     #[test]
     #[serial_test::serial]
-    fn active_ephemeral_world_task_registry_rejects_duplicate_task_run_id() {
+    fn active_ephemeral_world_task_registry_allows_duplicate_task_run_id_across_sessions() {
+        with_store(|store| {
+            let record_a = ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_active_a".to_string(),
+                task_run_id: "task-run-duplicate".to_string(),
+                caller_participant_id: "orch_a".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            };
+            let record_b = ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_active_b".to_string(),
+                task_run_id: "task-run-duplicate".to_string(),
+                caller_participant_id: "orch_b".to_string(),
+                target_backend_id: "cli:other_world".to_string(),
+                world_id: "world-18".to_string(),
+                world_generation: 3,
+            };
+
+            let guard_a = store
+                .register_active_ephemeral_world_task(record_a.clone())
+                .expect("register initial active ephemeral task");
+            let guard_b = store
+                .register_active_ephemeral_world_task(record_b.clone())
+                .expect("duplicate task ids across sessions should stay routable");
+
+            assert_eq!(
+                store
+                    .load_active_ephemeral_world_task("sess_active_a", "task-run-duplicate")
+                    .expect("load active task for first session"),
+                Some(record_a)
+            );
+            assert_eq!(
+                store
+                    .load_active_ephemeral_world_task("sess_active_b", "task-run-duplicate")
+                    .expect("load active task for second session"),
+                Some(record_b)
+            );
+
+            drop(guard_b);
+            drop(guard_a);
+        });
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    #[serial_test::serial]
+    fn active_ephemeral_world_task_registry_rejects_duplicate_task_run_id_within_session() {
         with_store(|store| {
             let _guard = store
                 .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                    orchestration_session_id: "sess_active_a".to_string(),
+                    orchestration_session_id: "sess_active".to_string(),
                     task_run_id: "task-run-duplicate".to_string(),
                     caller_participant_id: "orch_a".to_string(),
                     target_backend_id: "cli:codex_world".to_string(),
@@ -4765,18 +4799,52 @@ mod tests {
 
             let err = store
                 .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                    orchestration_session_id: "sess_active_b".to_string(),
+                    orchestration_session_id: "sess_active".to_string(),
                     task_run_id: "task-run-duplicate".to_string(),
                     caller_participant_id: "orch_b".to_string(),
                     target_backend_id: "cli:codex_world".to_string(),
                     world_id: "world-18".to_string(),
                     world_generation: 3,
                 })
-                .expect_err("duplicate active task ids must fail closed");
+                .expect_err("same-session duplicate active task ids must fail closed");
 
             assert_eq!(
                 err.to_string(),
                 "duplicate_active_task_run_id: active ephemeral task task-run-duplicate is already registered"
+            );
+        });
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    #[serial_test::serial]
+    fn load_active_ephemeral_world_task_maps_not_found_to_none() {
+        with_store(|store| {
+            let record = ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_active".to_string(),
+                task_run_id: "task-run-not-found".to_string(),
+                caller_participant_id: "orch_active".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            };
+            let path =
+                store.canonical_active_ephemeral_task_path("sess_active", "task-run-not-found");
+
+            let guard = store
+                .register_active_ephemeral_world_task(record)
+                .expect("register active ephemeral task");
+            drop(guard);
+
+            assert!(
+                !path.exists(),
+                "dropping the live-task guard must remove the registry file"
+            );
+            assert_eq!(
+                store
+                    .load_active_ephemeral_world_task("sess_active", "task-run-not-found")
+                    .expect("load active ephemeral task after teardown"),
+                None
             );
         });
     }

@@ -83,6 +83,8 @@ use crate::execution::agent_runtime::{
 use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
+#[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::dispatch_run_world_task_request_with_started_task_run_id_tx;
 use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
     prepare_spawn_world_worker_bootstrap,
@@ -1877,9 +1879,10 @@ struct RemoteRetainedRunControl {
 #[derive(Debug)]
 struct InternalToolboxDispatchRequest {
     request: WorldDispatchRequestV1,
-    response_tx: tokio::sync::oneshot::Sender<Result<WorldDispatchOutcomeV1, String>>,
+    response_tx: InternalToolboxDispatchResponseSender,
 }
 
+type InternalToolboxDispatchResponseSender = mpsc::UnboundedSender<serde_json::Value>;
 type InternalToolboxDispatchRequestReceiver =
     mpsc::UnboundedReceiver<InternalToolboxDispatchRequest>;
 type InternalToolboxDispatchRequestSender = mpsc::UnboundedSender<InternalToolboxDispatchRequest>;
@@ -1889,6 +1892,43 @@ struct InternalToolboxTransport {
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
     path: PathBuf,
+}
+
+fn internal_toolbox_run_world_task_started_frame(
+    task_run_id: impl Into<String>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "version": 1,
+        "frame_kind": "event",
+        "event_kind": "task_run_id_registered",
+        "action": "run_world_task",
+        "task_run_id": task_run_id.into(),
+    })
+}
+
+fn internal_toolbox_success_result_frame(outcome: WorldDispatchOutcomeV1) -> serde_json::Value {
+    serde_json::json!({
+        "version": 1,
+        "frame_kind": "result",
+        "ok": true,
+        "outcome": outcome,
+    })
+}
+
+fn internal_toolbox_error_result_frame(error: impl Into<String>) -> serde_json::Value {
+    serde_json::json!({
+        "version": 1,
+        "frame_kind": "result",
+        "ok": false,
+        "error": error.into(),
+    })
+}
+
+fn internal_toolbox_frame_is_terminal(payload: &serde_json::Value) -> bool {
+    payload
+        .get("frame_kind")
+        .and_then(serde_json::Value::as_str)
+        .is_none_or(|kind| kind == "result")
 }
 
 enum RetainedRunControl {
@@ -4750,7 +4790,7 @@ async fn register_internal_toolbox_transport(
     runtime: &AsyncReplAgentRuntime,
     request_tx: InternalToolboxDispatchRequestSender,
 ) -> Result<InternalToolboxTransport> {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::net::UnixListener;
 
     let orchestration_session_id = runtime
@@ -4805,51 +4845,66 @@ async fn register_internal_toolbox_transport(
                     tokio::spawn(async move {
                         let mut reader = BufReader::new(stream);
                         let mut line = String::new();
-                        let response = match reader.read_line(&mut line).await {
-                            Ok(0) => Err("empty internal toolbox request".to_string()),
-                            Ok(_) => {
-                                let request = serde_json::from_str::<WorldDispatchRequestV1>(line.trim())
-                                    .map_err(|err| format!("failed to decode internal toolbox request: {err}"));
-                                match request {
-                                    Ok(request) => {
-                                        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
-                                        if request_tx
-                                            .send(InternalToolboxDispatchRequest { request, response_tx })
-                                            .is_err()
-                                        {
-                                            Err("internal toolbox owner is no longer available".to_string())
-                                        } else {
-                                            match response_rx.await {
-                                                Ok(result) => result,
-                                                Err(_) => Err("internal toolbox owner closed before responding".to_string()),
-                                            }
-                                        }
-                                    }
-                                    Err(err) => Err(err),
-                                }
+                        let mut response_rx = match reader.read_line(&mut line).await {
+                            Ok(0) => {
+                                let mut stream = reader.into_inner();
+                                let payload =
+                                    internal_toolbox_error_result_frame("empty internal toolbox request");
+                                write_internal_toolbox_frame(&mut stream, &payload).await;
+                                return;
                             }
-                            Err(err) => Err(format!("failed to read internal toolbox request: {err}")),
+                            Ok(_) => match serde_json::from_str::<WorldDispatchRequestV1>(line.trim()) {
+                                Ok(request) => {
+                                    let (response_tx, response_rx) = mpsc::unbounded_channel();
+                                    if request_tx
+                                        .send(InternalToolboxDispatchRequest { request, response_tx })
+                                        .is_err()
+                                    {
+                                        let mut stream = reader.into_inner();
+                                        let payload = internal_toolbox_error_result_frame(
+                                            "internal toolbox owner is no longer available",
+                                        );
+                                        write_internal_toolbox_frame(&mut stream, &payload).await;
+                                        return;
+                                    }
+                                    response_rx
+                                }
+                                Err(err) => {
+                                    let mut stream = reader.into_inner();
+                                    let payload = internal_toolbox_error_result_frame(format!(
+                                        "failed to decode internal toolbox request: {err}"
+                                    ));
+                                    write_internal_toolbox_frame(&mut stream, &payload).await;
+                                    return;
+                                }
+                            },
+                            Err(err) => {
+                                let mut stream = reader.into_inner();
+                                let payload = internal_toolbox_error_result_frame(format!(
+                                    "failed to read internal toolbox request: {err}"
+                                ));
+                                write_internal_toolbox_frame(&mut stream, &payload).await;
+                                return;
+                            }
                         };
 
                         let mut stream = reader.into_inner();
-                        let payload = match response {
-                            Ok(outcome) => serde_json::json!({
-                                "version": 1,
-                                "ok": true,
-                                "outcome": outcome,
-                            }),
-                            Err(message) => serde_json::json!({
-                                "version": 1,
-                                "ok": false,
-                                "error": message,
-                            }),
-                        };
-                        let serialized = serde_json::to_string(&payload).unwrap_or_else(|_| {
-                            "{\"version\":1,\"ok\":false,\"error\":\"internal toolbox response serialization failed\"}".to_string()
-                        });
-                        let _ = stream.write_all(serialized.as_bytes()).await;
-                        let _ = stream.write_all(b"\n").await;
-                        let _ = stream.flush().await;
+                        let mut saw_terminal = false;
+                        while let Some(payload) = response_rx.recv().await {
+                            if internal_toolbox_frame_is_terminal(&payload) {
+                                saw_terminal = true;
+                            }
+                            write_internal_toolbox_frame(&mut stream, &payload).await;
+                            if saw_terminal {
+                                break;
+                            }
+                        }
+                        if !saw_terminal {
+                            let payload = internal_toolbox_error_result_frame(
+                                "internal toolbox owner closed before responding",
+                            );
+                            write_internal_toolbox_frame(&mut stream, &payload).await;
+                        }
                     });
                 }
             }
@@ -4896,6 +4951,21 @@ async fn ensure_internal_toolbox_transport_registered(
             .context("failed to register internal toolbox transport")?,
     );
     Ok(())
+}
+
+#[cfg(unix)]
+async fn write_internal_toolbox_frame(
+    stream: &mut tokio::net::UnixStream,
+    payload: &serde_json::Value,
+) {
+    use tokio::io::AsyncWriteExt;
+
+    let serialized = serde_json::to_string(payload).unwrap_or_else(|_| {
+        "{\"version\":1,\"frame_kind\":\"result\",\"ok\":false,\"error\":\"internal toolbox response serialization failed\"}".to_string()
+    });
+    let _ = stream.write_all(serialized.as_bytes()).await;
+    let _ = stream.write_all(b"\n").await;
+    let _ = stream.flush().await;
 }
 
 fn runtime_launch_span_id(runtime: &AsyncReplAgentRuntime) -> Option<String> {
@@ -4948,29 +5018,39 @@ async fn request_internal_toolbox_world_dispatch(
     stream.flush().await?;
 
     let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    reader.read_line(&mut line).await?;
-    let payload: serde_json::Value = serde_json::from_str(line.trim()).with_context(|| {
-        format!(
-            "failed to decode internal toolbox response from {}",
-            path.display()
-        )
-    })?;
-    if payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
-        return serde_json::from_value(
-            payload
-                .get("outcome")
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("internal toolbox response omitted outcome"))?,
-        )
-        .context("failed to decode internal toolbox outcome");
-    }
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).await? == 0 {
+            anyhow::bail!("internal toolbox owner closed before responding");
+        }
+        let payload: serde_json::Value = serde_json::from_str(line.trim()).with_context(|| {
+            format!(
+                "failed to decode internal toolbox response from {}",
+                path.display()
+            )
+        })?;
+        let frame_kind = payload
+            .get("frame_kind")
+            .and_then(serde_json::Value::as_str);
+        if frame_kind == Some("event") {
+            continue;
+        }
+        if payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+            return serde_json::from_value(
+                payload
+                    .get("outcome")
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("internal toolbox response omitted outcome"))?,
+            )
+            .context("failed to decode internal toolbox outcome");
+        }
 
-    let message = payload
-        .get("error")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("internal toolbox request failed");
-    anyhow::bail!("{message}");
+        let message = payload
+            .get("error")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("internal toolbox request failed");
+        anyhow::bail!("{message}");
+    }
 }
 
 async fn handle_internal_toolbox_dispatch_request(
@@ -4980,6 +5060,70 @@ async fn handle_internal_toolbox_dispatch_request(
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) {
+    #[cfg(target_os = "linux")]
+    if request.request.action == WorldDispatchActionV1::RunWorldTask {
+        let InternalToolboxDispatchRequest {
+            request,
+            response_tx,
+        } = request;
+        let Some(startup_context) = startup_context else {
+            let _ = response_tx.send(internal_toolbox_error_result_frame(
+                "owner_unreachable: internal world dispatch bootstrap requires a live orchestrator runtime",
+            ));
+            return;
+        };
+        let store = startup_context.store.clone();
+        tokio::spawn(async move {
+            let (started_task_run_id_tx, mut started_task_run_id_rx) = mpsc::unbounded_channel();
+            let dispatch = dispatch_run_world_task_request_with_started_task_run_id_tx(
+                &store,
+                request,
+                started_task_run_id_tx,
+            );
+            pin_mut!(dispatch);
+            let mut started_task_run_id_forwarded = false;
+            let mut started_task_run_id_rx_closed = false;
+            loop {
+                tokio::select! {
+                    maybe_task_run_id = started_task_run_id_rx.recv(),
+                    if !started_task_run_id_forwarded && !started_task_run_id_rx_closed => {
+                        match maybe_task_run_id {
+                            Some(task_run_id) => {
+                                let _ = response_tx.send(
+                                    internal_toolbox_run_world_task_started_frame(task_run_id),
+                                );
+                                started_task_run_id_forwarded = true;
+                            }
+                            None => {
+                                started_task_run_id_rx_closed = true;
+                            }
+                        }
+                    }
+                    response = &mut dispatch => {
+                        if !started_task_run_id_forwarded {
+                            match started_task_run_id_rx.try_recv() {
+                                Ok(task_run_id) => {
+                                    let _ = response_tx.send(
+                                        internal_toolbox_run_world_task_started_frame(task_run_id),
+                                    );
+                                }
+                                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+                                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {}
+                            }
+                        }
+                        let payload = match response {
+                            Ok(outcome) => internal_toolbox_success_result_frame(outcome),
+                            Err(err) => internal_toolbox_error_result_frame(err.to_string()),
+                        };
+                        let _ = response_tx.send(payload);
+                        break;
+                    }
+                }
+            }
+        });
+        return;
+    }
+
     let response = handle_internal_toolbox_world_dispatch_request(
         request.request,
         startup_context,
@@ -4987,9 +5131,12 @@ async fn handle_internal_toolbox_dispatch_request(
         agent_printer,
         telemetry,
     )
-    .await
-    .map_err(|err| err.to_string());
-    let _ = request.response_tx.send(response);
+    .await;
+    let payload = match response {
+        Ok(outcome) => internal_toolbox_success_result_frame(outcome),
+        Err(err) => internal_toolbox_error_result_frame(err.to_string()),
+    };
+    let _ = request.response_tx.send(payload);
 }
 
 async fn handle_internal_toolbox_world_dispatch_request(
