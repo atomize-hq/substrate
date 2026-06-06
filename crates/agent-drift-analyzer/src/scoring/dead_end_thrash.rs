@@ -62,8 +62,8 @@ fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {
         .then_some(analysis.repetition.repeated_verification_loops.len() * 40)
         .unwrap_or(0);
 
-    (repeated_verification_score + (analysis.repetition.repeated_failure_loops.len() * 30))
-        .min(100) as u8
+    (repeated_verification_score + (analysis.repetition.repeated_failure_loops.len() * 30)).min(100)
+        as u8
 }
 
 fn current_thrashing_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {

@@ -462,12 +462,9 @@ fn dead_end_thrash_ignores_repeated_neutral_tool_output_evidence() {
         .evidence
         .iter()
         .all(|item| item.reason != "repeated failure evidence"));
-    assert!(thrash
-        .evidence
-        .iter()
-        .any(|item| item
-            .reason
-            .starts_with("historical repeated verification evidence:")));
+    assert!(thrash.evidence.iter().any(|item| item
+        .reason
+        .starts_with("historical repeated verification evidence:")));
 }
 
 #[test]

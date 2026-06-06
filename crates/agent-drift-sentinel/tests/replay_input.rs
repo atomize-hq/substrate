@@ -4,9 +4,9 @@ mod support;
 
 use std::fs;
 
+use agent_drift_analyzer::DriftState;
 use agent_drift_sentinel::input::{load_replay_bundle, InputError};
 use camino::Utf8Path;
-use agent_drift_analyzer::DriftState;
 use support::{checkpoint, ReplayFixture};
 use tempfile::TempDir;
 

@@ -455,7 +455,10 @@ fn collect_state_backed_evidence_lines(
     evidence_lines
 }
 
-fn collect_legacy_evidence_lines(checkpoint: &Checkpoint, max_evidence_lines: usize) -> Vec<String> {
+fn collect_legacy_evidence_lines(
+    checkpoint: &Checkpoint,
+    max_evidence_lines: usize,
+) -> Vec<String> {
     let mut evidence_lines = Vec::new();
     for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
         push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);
