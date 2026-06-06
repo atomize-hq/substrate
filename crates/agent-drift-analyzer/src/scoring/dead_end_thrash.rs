@@ -56,14 +56,21 @@ pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> ScoredDrif
 }
 
 fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {
-    ((analysis.repetition.repeated_verification_loops.len() * 40)
-        + (analysis.repetition.repeated_failure_loops.len() * 30))
+    let repeated_verification_score = analysis
+        .recovery
+        .active_repeated_verification
+        .then_some(analysis.repetition.repeated_verification_loops.len() * 40)
+        .unwrap_or(0);
+
+    (repeated_verification_score + (analysis.repetition.repeated_failure_loops.len() * 30))
         .min(100) as u8
 }
 
 fn current_thrashing_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
-    let mut evidence =
-        repeated_verification_evidence(&analysis.repetition.repeated_verification_loops, false);
+    let mut evidence = repeated_verification_evidence(
+        &analysis.repetition.repeated_verification_loops,
+        !analysis.recovery.active_repeated_verification,
+    );
     evidence.extend(repeated_failure_evidence(
         &analysis.repetition.repeated_failure_loops,
         false,

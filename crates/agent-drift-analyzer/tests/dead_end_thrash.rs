@@ -27,7 +27,7 @@ fn dead_end_thrash_stays_active_when_verification_interval_remains_out_of_scope(
         .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
         .expect("second dead end thrash score");
 
-    assert!(first.raw_score >= 60);
+    assert_eq!(first.raw_score, 30);
     assert!(first.flagged);
     assert_eq!(first.state, DriftState::Active);
     assert!(first.evidence.len() >= 3);
@@ -35,6 +35,9 @@ fn dead_end_thrash_stays_active_when_verification_interval_remains_out_of_scope(
         .evidence
         .iter()
         .any(|item| item.reason == "repeated failure evidence"));
+    assert!(first.evidence.iter().any(|item| item
+        .reason
+        .starts_with("historical repeated verification evidence:")));
 
     assert!(second.raw_score >= 60);
     assert!(second.flagged);
@@ -161,7 +164,7 @@ fn dead_end_thrash_does_not_clear_when_latest_repeat_exists_only_in_archival_row
         .expect("archival-only dead end thrash score");
 
     assert!(archived_repeat.flagged);
-    assert!(archived_repeat.raw_score >= 60);
+    assert_eq!(archived_repeat.raw_score, 30);
     assert_eq!(archived_repeat.state, DriftState::Active);
     assert!(archived_repeat.evidence.iter().any(|item| {
         item.reason == "repeated failure evidence"
@@ -327,7 +330,7 @@ fn dead_end_thrash_treats_explicit_error_rows_as_repeated_failure_evidence() {
         .expect("dead end thrash score");
 
     assert!(thrash.flagged);
-    assert_eq!(thrash.raw_score, 70);
+    assert_eq!(thrash.raw_score, 30);
     assert!(thrash
         .evidence
         .iter()
@@ -382,7 +385,7 @@ fn dead_end_thrash_treats_non_zero_exit_code_tool_output_as_failure_evidence() {
         .expect("dead end thrash score");
 
     assert!(thrash.flagged);
-    assert_eq!(thrash.raw_score, 70);
+    assert_eq!(thrash.raw_score, 30);
     assert!(thrash
         .evidence
         .iter()
@@ -528,6 +531,77 @@ fn dead_end_thrash_keeps_repeated_successful_verification_as_historical_context(
         item.reason
             == "historical repeated verification evidence: repeated verification command: cargo test -p agent-drift-analyzer -- --nocapture"
     }));
+}
+
+#[test]
+fn dead_end_thrash_keeps_historical_verification_loops_out_of_active_failure_score() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Finish verification before investigating the remaining failure.",
+        ),
+        tool_row(1, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        tool_row(2, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        tool_row(3, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        row(
+            4,
+            CompactionKind::AssistantMessage,
+            "Verification is done; now inspect the fresh failure.",
+        ),
+        row(
+            5,
+            CompactionKind::UserMessage,
+            "/goal Diagnose the new repeated failure without reopening verification.",
+        ),
+        row(6, CompactionKind::Error, "world failed"),
+        row(7, CompactionKind::Error, "world failed"),
+    ];
+    let mut archival_rows = rows.clone();
+    archival_rows[6].text_hash_hex = "hash-mixed-current-failure".to_string();
+    archival_rows[7].text_hash_hex = "hash-mixed-current-failure".to_string();
+    let compact_rows = rows
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| *index != 2)
+        .map(|(_, row)| row)
+        .collect();
+    let dedupe_groups = vec![DedupeGroup {
+        kind: CompactionKind::ToolCall,
+        canonical_text_hash_hex: "dup-hash-mixed-historical-verification".to_string(),
+        representative: RowRef::from_row(&archival_rows[1]),
+        duplicates: vec![RowRef::from_row(&archival_rows[2])],
+    }];
+    let fixture = BundleFixture::from_rows(archival_rows, compact_rows, dedupe_groups);
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze mixed historical-verification/current-failure bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints[1]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert_eq!(checkpoints.len(), 2);
+    assert!(thrash.flagged);
+    assert_eq!(thrash.raw_score, 30);
+    assert_eq!(thrash.state, DriftState::Active);
+    assert!(thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason == "repeated failure evidence"));
+    assert!(thrash.evidence.iter().any(|item| {
+        item.reason
+            == "historical repeated verification evidence: repeated verification command: cargo test -p agent-drift-analyzer -- --nocapture"
+    }));
+    assert!(!thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason.starts_with("repeated verification command:")));
 }
 
 #[test]
