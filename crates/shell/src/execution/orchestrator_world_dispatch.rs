@@ -267,7 +267,7 @@ fn publish_active_ephemeral_terminal_truth(
     )) else {
         return;
     };
-    let _ = entry.state_tx.send(Some(terminal_state));
+    entry.state_tx.send_replace(Some(terminal_state));
 }
 
 #[cfg(target_os = "linux")]
