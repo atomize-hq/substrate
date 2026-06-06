@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::{Path, PathBuf};
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 #[cfg(target_os = "linux")]
 use std::time::{Duration, Instant};
 
@@ -13,7 +13,7 @@ use anyhow::Result;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, Notify};
 #[cfg(target_os = "linux")]
 use uuid::Uuid;
 
@@ -144,6 +144,152 @@ fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurren
     static TRACKER: LazyLock<Mutex<WorldDispatchConcurrencyTracker>> =
         LazyLock::new(|| Mutex::new(WorldDispatchConcurrencyTracker::default()));
     &TRACKER
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone)]
+struct ActiveEphemeralTerminalWaitEntry {
+    terminal_state: Option<WorldTaskTerminalStateV1>,
+    notify: Arc<Notify>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl Default for ActiveEphemeralTerminalWaitEntry {
+    fn default() -> Self {
+        Self {
+            terminal_state: None,
+            notify: Arc::new(Notify::new()),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Default)]
+struct ActiveEphemeralTerminalWaitTracker {
+    by_task: BTreeMap<String, ActiveEphemeralTerminalWaitEntry>,
+}
+
+#[cfg(target_os = "linux")]
+const ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[cfg(any(target_os = "linux", test))]
+fn active_ephemeral_terminal_wait_tracker() -> &'static Mutex<ActiveEphemeralTerminalWaitTracker> {
+    static TRACKER: LazyLock<Mutex<ActiveEphemeralTerminalWaitTracker>> =
+        LazyLock::new(|| Mutex::new(ActiveEphemeralTerminalWaitTracker::default()));
+    &TRACKER
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn active_ephemeral_terminal_wait_key(orchestration_session_id: &str, task_run_id: &str) -> String {
+    format!("{orchestration_session_id}:{task_run_id}")
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn register_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
+    let mut tracker = active_ephemeral_terminal_wait_tracker()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    tracker
+        .by_task
+        .entry(active_ephemeral_terminal_wait_key(
+            orchestration_session_id,
+            task_run_id,
+        ))
+        .or_default();
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn clear_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
+    let mut tracker = active_ephemeral_terminal_wait_tracker()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    tracker.by_task.remove(&active_ephemeral_terminal_wait_key(
+        orchestration_session_id,
+        task_run_id,
+    ));
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn publish_active_ephemeral_terminal_truth(
+    orchestration_session_id: &str,
+    task_run_id: &str,
+    terminal_state: WorldTaskTerminalStateV1,
+) {
+    let notify = {
+        let mut tracker = active_ephemeral_terminal_wait_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(entry) = tracker.by_task.get_mut(&active_ephemeral_terminal_wait_key(
+            orchestration_session_id,
+            task_run_id,
+        )) else {
+            return;
+        };
+        entry.terminal_state = Some(terminal_state);
+        entry.notify.clone()
+    };
+    notify.notify_waiters();
+}
+
+#[cfg(target_os = "linux")]
+async fn wait_for_active_ephemeral_terminal_truth(
+    orchestration_session_id: &str,
+    task_run_id: &str,
+) -> Result<WorldTaskTerminalStateV1> {
+    let key = active_ephemeral_terminal_wait_key(orchestration_session_id, task_run_id);
+
+    loop {
+        let notify = {
+            let mut tracker = active_ephemeral_terminal_wait_tracker()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let Some(entry) = tracker.by_task.get(&key) else {
+                anyhow::bail!(
+                    "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
+                    task_run_id,
+                    orchestration_session_id
+                );
+            };
+            if let Some(terminal_state) = entry.terminal_state {
+                tracker.by_task.remove(&key);
+                return Ok(terminal_state);
+            }
+            entry.notify.clone()
+        };
+
+        tokio::time::timeout(
+            ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT,
+            notify.notified(),
+        )
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "cancel_closeout_timeout: active ephemeral task {} in orchestration session {} did not surface terminal truth after execute cancel delivery",
+                task_run_id,
+                orchestration_session_id
+            )
+        })?;
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn active_ephemeral_terminal_state_label(state: WorldTaskTerminalStateV1) -> &'static str {
+    match state {
+        WorldTaskTerminalStateV1::Completed => "completed",
+        WorldTaskTerminalStateV1::Failed => "failed",
+        WorldTaskTerminalStateV1::Cancelled => "cancelled",
+        WorldTaskTerminalStateV1::NeedsRetainedFollowup => "needs_retained_followup",
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn connect_world_agent_client() -> Result<transport_api_client::AgentClient> {
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/run/substrate.sock"));
+    transport_api_client::AgentClient::unix_socket(&socket_path).map_err(|err| {
+        anyhow::anyhow!("failed to connect world transport for execute cancel: {err}")
+    })
 }
 
 #[allow(dead_code)]
@@ -375,19 +521,18 @@ async fn cancel_world_work(
         };
         match prepared.request.mode {
             WorldDispatchModeV1::Retained => {
-                let resolved = prepared
-                    .store
-                    .resolve_internal_cancel_world_dispatch_target(
-                        &prepared.request.orchestration_session_id,
-                        &prepared.request.caller_participant_id,
-                        prepared
-                            .request
-                            .target_participant_id
-                            .as_deref()
-                            .expect("validated cancel request must include target_participant_id"),
-                        &prepared.request.target_backend_id,
-                    )
-                    .map_err(map_world_dispatch_resolution_error)?;
+                let resolved =
+                    prepared
+                        .store
+                        .resolve_internal_cancel_world_dispatch_target(
+                            &prepared.request.orchestration_session_id,
+                            &prepared.request.caller_participant_id,
+                            prepared.request.target_participant_id.as_deref().expect(
+                                "validated cancel request must include target_participant_id",
+                            ),
+                            &prepared.request.target_backend_id,
+                        )
+                        .map_err(map_world_dispatch_resolution_error)?;
                 let transport_path = private_cancel_transport_path(
                     &prepared.store,
                     &resolved.session.orchestration_session_id,
@@ -471,30 +616,12 @@ async fn cancel_world_work(
             }
             WorldDispatchModeV1::Ephemeral => {
                 let resolved = resolve_active_ephemeral_inspect_target(&prepared)?;
-                let context = resolve_internal_dispatch_context(&workspace_root)?;
-                let dispatch_contract = resolve_world_dispatch_contract(
-                    &workspace_root,
-                    &context,
-                    &prepared.request,
-                    "cancel_world_work",
-                )?;
-                let descriptor = materialize_runtime_descriptor(&dispatch_contract).map_err(
-                    |err| {
-                        anyhow::anyhow!(
-                            "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
-                            dispatch_contract.agent_id,
-                            err.reason
-                        )
-                    },
-                )?;
-                let transport_request =
-                    build_active_ephemeral_cancel_transport_request(&prepared.request, &descriptor);
-                let (client, _, _) = build_agent_client_and_member_dispatch_request_for_cwd(
-                    &transport_request,
-                    &workspace_root,
-                )
-                .context(
-                    "failed to build member dispatch cancel request for active ephemeral cancel_world_work",
+                register_active_ephemeral_terminal_wait(
+                    &resolved.session.orchestration_session_id,
+                    &resolved.task_run_id,
+                );
+                let client = connect_world_agent_client().context(
+                    "failed to connect active ephemeral cancel_world_work to /v1/execute/cancel",
                 )?;
                 let delivered = client
                     .cancel_execute(ExecuteCancelRequestV1 {
@@ -506,12 +633,32 @@ async fn cancel_world_work(
                         "failed to deliver active ephemeral cancel_world_work over /v1/execute/cancel",
                     )?;
                 if !delivered.delivered {
+                    clear_active_ephemeral_terminal_wait(
+                        &resolved.session.orchestration_session_id,
+                        &resolved.task_run_id,
+                    );
                     anyhow::bail!(
                         "target_already_terminal: orchestration session {} active ephemeral task {} is already terminal or no longer live",
                         resolved.session.orchestration_session_id,
                         resolved.task_run_id
                     );
                 }
+                let terminal_state = match wait_for_active_ephemeral_terminal_truth(
+                    &resolved.session.orchestration_session_id,
+                    &resolved.task_run_id,
+                )
+                .await?
+                {
+                    WorldTaskTerminalStateV1::Cancelled => WorldTaskTerminalStateV1::Cancelled,
+                    other => {
+                        anyhow::bail!(
+                            "cancel_closeout_not_cancelled: active ephemeral task {} in orchestration session {} reached terminal state {} after execute cancel delivery",
+                            resolved.task_run_id,
+                            resolved.session.orchestration_session_id,
+                            active_ephemeral_terminal_state_label(other)
+                        );
+                    }
+                };
 
                 let world_id = resolved.session.world_id.clone().ok_or_else(|| {
                     anyhow::anyhow!(
@@ -544,7 +691,14 @@ async fn cancel_world_work(
                         target_backend_id: resolved.target_backend_id,
                         world_id,
                         world_generation,
-                        state: CancelWorldWorkTerminalStateV1::Cancelled,
+                        state: match terminal_state {
+                            WorldTaskTerminalStateV1::Cancelled => {
+                                CancelWorldWorkTerminalStateV1::Cancelled
+                            }
+                            _ => unreachable!(
+                                "ephemeral cancel closeout must only return cancelled terminal truth"
+                            ),
+                        },
                         closeout: RetainedWorkerCancelCloseoutV1 {
                             participant_state: None,
                             session_state: None,
@@ -2165,28 +2319,6 @@ fn build_spawn_world_worker_transport_request(
 }
 
 #[cfg(target_os = "linux")]
-fn build_active_ephemeral_cancel_transport_request(
-    request: &ValidatedWorldDispatchRequestV1,
-    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
-) -> MemberDispatchTransportRequest {
-    MemberDispatchTransportRequest {
-        orchestration_session_id: request.orchestration_session_id.clone(),
-        participant_id: format!("awm_cancel_{}", Uuid::now_v7()),
-        orchestrator_participant_id: request.caller_participant_id.clone(),
-        parent_participant_id: None,
-        resumed_from_participant_id: None,
-        backend_id: descriptor.backend_id.clone(),
-        protocol: descriptor.protocol.clone(),
-        run_id: request.request_id.clone(),
-        world_id: request.world_id.clone(),
-        world_generation: request.world_generation,
-        initial_prompt: None,
-        backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
-        binary_path: descriptor.binary_path.display().to_string(),
-    }
-}
-
-#[cfg(target_os = "linux")]
 fn build_fork_world_worker_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
     source_participant: &AgentRuntimeParticipantRecord,
@@ -2394,6 +2526,13 @@ async fn execute_run_world_task_stream(
     let exit_code = exit_code.ok_or_else(|| {
         anyhow::anyhow!("run_world_task stream ended without a terminal exit frame")
     })?;
+    if let Some(task_run_id) = active_span_id.as_deref() {
+        publish_active_ephemeral_terminal_truth(
+            &active_task_record.orchestration_session_id,
+            task_run_id,
+            world_task_terminal_state_from_exit_code(exit_code),
+        );
+    }
 
     Ok(RunWorldTaskStreamResult {
         exit_code,
@@ -10462,11 +10601,6 @@ agents:
             &["cancel_world_work"],
             &["ephemeral"],
         );
-        write_runtime_inventory_entry(
-            substrate_home.path(),
-            "codex_world",
-            AgentExecutionScope::World,
-        );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -10485,6 +10619,8 @@ agents:
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let (cancel_seen_tx, cancel_seen_rx) = tokio::sync::oneshot::channel();
+        let mut cancel_seen_tx = Some(cancel_seen_tx);
         let server = tokio::spawn(async move {
             while let Ok((mut stream, _addr)) = listener.accept().await {
                 let Some((header, body)) = read_http_request(&mut stream).await else {
@@ -10507,12 +10643,16 @@ agents:
                         serde_json::from_slice(&body).expect("execute cancel request");
                     assert_eq!(parsed.span_id, "task-run-cancel-live");
                     assert_eq!(parsed.sig, "TERM");
-                    let body = serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
-                        schema_version: 1,
-                        delivered: true,
-                    })
-                    .expect("serialize execute cancel response");
+                    let body =
+                        serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                            schema_version: 1,
+                            delivered: true,
+                        })
+                        .expect("serialize execute cancel response");
                     write_http_json(&mut stream, "200 OK", &body).await;
+                    if let Some(cancel_seen_tx) = cancel_seen_tx.take() {
+                        let _ = cancel_seen_tx.send(());
+                    }
                     continue;
                 }
 
@@ -10526,8 +10666,24 @@ agents:
             sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-live"),
         )
         .expect("prepare active cancel dispatch request");
-        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+        let dispatch_task = tokio::spawn(dispatch_prepared_orchestrator_world_request(prepared));
+        tokio::time::timeout(Duration::from_secs(3), cancel_seen_rx)
             .await
+            .expect("timed out waiting for execute cancel delivery")
+            .expect("execute cancel delivery signal");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !dispatch_task.is_finished(),
+            "ephemeral cancel must wait for terminal truth before returning cancelled"
+        );
+        publish_active_ephemeral_terminal_truth(
+            "sess_dispatch",
+            "task-run-cancel-live",
+            WorldTaskTerminalStateV1::Cancelled,
+        );
+        let outcome = dispatch_task
+            .await
+            .expect("dispatch join should succeed")
             .expect("dispatch prepared active cancel request");
 
         let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
@@ -10574,11 +10730,6 @@ agents:
             &["cancel_world_work"],
             &["ephemeral"],
         );
-        write_runtime_inventory_entry(
-            substrate_home.path(),
-            "codex_world",
-            AgentExecutionScope::World,
-        );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -10615,11 +10766,12 @@ agents:
                 }
 
                 if first_line.starts_with("POST /v1/execute/cancel ") {
-                    let body = serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
-                        schema_version: 1,
-                        delivered: false,
-                    })
-                    .expect("serialize execute cancel response");
+                    let body =
+                        serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                            schema_version: 1,
+                            delivered: false,
+                        })
+                        .expect("serialize execute cancel response");
                     write_http_json(&mut stream, "200 OK", &body).await;
                     continue;
                 }

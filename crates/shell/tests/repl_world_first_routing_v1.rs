@@ -3619,9 +3619,7 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
         Some("cancel_world_work")
     );
     assert_eq!(
-        cancel
-            .pointer("/outcome/mode")
-            .and_then(Value::as_str),
+        cancel.pointer("/outcome/mode").and_then(Value::as_str),
         Some("ephemeral")
     );
     assert_eq!(
@@ -3666,18 +3664,21 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
     wait_for_min_execute_cancel_requests(&records, 1, Duration::from_secs(3));
     let guard = records.lock().expect("lock records");
     assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "ephemeral cancel must reuse the active task seam instead of re-materializing a fresh launch request: {guard:#?}"
+    );
+    assert_eq!(
         guard.execute_cancel_requests.len(),
         1,
         "ephemeral cancel must route exactly one execute-cancel request: {guard:#?}"
     );
     assert_eq!(
-        guard.execute_cancel_requests[0].span_id,
-        task_run_id,
+        guard.execute_cancel_requests[0].span_id, task_run_id,
         "ephemeral cancel must target the authoritative in-flight task_run_id: {guard:#?}"
     );
     assert_eq!(
-        guard.execute_cancel_requests[0].sig,
-        "TERM",
+        guard.execute_cancel_requests[0].sig, "TERM",
         "ephemeral cancel must preserve the exact graceful=false signal mapping: {guard:#?}"
     );
     drop(guard);
