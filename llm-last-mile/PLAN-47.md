@@ -3,7 +3,7 @@
 Source spec: [SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md](./SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: post-Slice-46 identity-model widening slice  
-Status: Packets `1`-`3` are complete on the current tree; Packet `4` is blocked in validation as of `2026-06-06`
+Status: Packets `1`-`4` are complete and green on the current tree as of `2026-06-06`
 
 ## Objective
 
@@ -28,7 +28,7 @@ Packet status on the current tree:
 1. Packet `1` exact `task_run_id` contract and dual-target validation work is landed.
 2. Packet `2` authoritative active-task tracking and inspect snapshot truth is landed.
 3. Packet `3` routed active-ephemeral inspect/cancel behavior is landed.
-4. Packet `4` doc alignment is complete, but the validation wall is currently non-green.
+4. Packet `4` doc alignment and the validation wall are landed and green.
 
 ## Major Components And Dependencies
 
@@ -48,7 +48,7 @@ Packet status on the current tree:
 
 ## Plan Summary
 
-This section records the planning rationale that was true when Slice `47` opened. On the current tree, Packets `1`-`3` are landed and Packet `4` remains open because the validation wall is not green; the summary below explains why the packet order was chosen.
+This section records the planning rationale that was true when Slice `47` opened. On the current tree, Packets `1`-`4` are landed and the validation wall is green; the summary below explains why the packet order was chosen.
 
 After Slice `46`, the retained-worker control plane was no longer the narrowest remaining seam. The repo already had retained inspect, retained cancel, retained stop, retained fork, retained continue, host responses, and the retained control/fork/progress message loop.
 
@@ -71,7 +71,7 @@ The narrowest honest implementation order was therefore:
 3. wire active-ephemeral inspect/cancel over that exact identity third,
 4. finish with docs and the validation wall.
 
-That implementation order is now complete through Packet `3`. Packet `4` remains open because the required `repl_world_first_routing_v1` validation command is still non-green, so no broader Slice `47` scope widening has been authorized or applied.
+That implementation order is now complete through Packet `4`, and no broader Slice `47` scope widening was required to close the slice.
 
 ## Locked Decisions
 

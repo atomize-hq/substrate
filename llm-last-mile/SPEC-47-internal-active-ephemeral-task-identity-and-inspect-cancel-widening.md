@@ -16,7 +16,7 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: Slice `47` runtime packets `1`-`3` are landed, and Packet `4` is blocked in validation on `2026-06-06`
+Status: Slice `47` is landed through Packet `4` on `2026-06-06`
 
 ## Assumptions
 
@@ -31,7 +31,7 @@ ASSUMPTIONS I'M MAKING:
 
 If any of these are wrong, correct them before implementation.
 
-The current tree has the Slice `47` runtime behavior landed: exact active `task_run_id` truth is surfaced for in-flight `run_world_task`, `inspect_world_worker` and `cancel_world_work` both admit `mode=ephemeral` only with that exact identity, and terminal one-shot outcomes remain non-durable. Packet `4` remains open because `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture` is still non-green on `2026-06-06`: one isolated rerun of `c3_internal_toolbox_fork_command_fail_closed_before_child_registration` passed, but the full suite then failed with seven readiness/relaunch cases, including `c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_events`, `c3_targeted_world_turn_relaunches_exact_backend_after_world_restart`, and `c3_world_restart_launches_live_member_replacement_on_new_generation`.
+The current tree now has this slice landed end to end: exact active `task_run_id` truth is surfaced for in-flight `run_world_task`, `inspect_world_worker` and `cancel_world_work` both admit `mode=ephemeral` only with that exact identity, terminal one-shot outcomes remain non-durable, docs/config truth matches the live behavior, and the Packet `4` validation wall is green.
 
 ## Objective
 
