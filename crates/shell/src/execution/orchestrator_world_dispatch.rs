@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::{Path, PathBuf};
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex};
 #[cfg(target_os = "linux")]
 use std::time::{Duration, Instant};
 
@@ -13,7 +13,7 @@ use anyhow::Result;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
-use tokio::sync::{mpsc::UnboundedSender, Notify};
+use tokio::sync::{mpsc::UnboundedSender, watch};
 #[cfg(target_os = "linux")]
 use uuid::Uuid;
 
@@ -149,18 +149,17 @@ fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurren
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone)]
 struct ActiveEphemeralTerminalWaitEntry {
-    terminal_state: Option<WorldTaskTerminalStateV1>,
     waiter_count: usize,
-    notify: Arc<Notify>,
+    state_tx: watch::Sender<Option<WorldTaskTerminalStateV1>>,
 }
 
 #[cfg(any(target_os = "linux", test))]
 impl Default for ActiveEphemeralTerminalWaitEntry {
     fn default() -> Self {
+        let (state_tx, _state_rx) = watch::channel(None);
         Self {
-            terminal_state: None,
             waiter_count: 0,
-            notify: Arc::new(Notify::new()),
+            state_tx,
         }
     }
 }
@@ -201,10 +200,7 @@ impl Drop for ActiveEphemeralTerminalWaitRegistrationGuard {
         if !self.armed {
             return;
         }
-        release_active_ephemeral_terminal_wait(
-            &self.orchestration_session_id,
-            &self.task_run_id,
-        );
+        release_active_ephemeral_terminal_wait(&self.orchestration_session_id, &self.task_run_id);
     }
 }
 
@@ -257,30 +253,21 @@ fn release_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_r
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn clear_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
-    release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-}
-
-#[cfg(any(target_os = "linux", test))]
 fn publish_active_ephemeral_terminal_truth(
     orchestration_session_id: &str,
     task_run_id: &str,
     terminal_state: WorldTaskTerminalStateV1,
 ) {
-    let notify = {
-        let mut tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(entry) = tracker.by_task.get_mut(&active_ephemeral_terminal_wait_key(
-            orchestration_session_id,
-            task_run_id,
-        )) else {
-            return;
-        };
-        entry.terminal_state = Some(terminal_state);
-        entry.notify.clone()
+    let mut tracker = active_ephemeral_terminal_wait_tracker()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(entry) = tracker.by_task.get_mut(&active_ephemeral_terminal_wait_key(
+        orchestration_session_id,
+        task_run_id,
+    )) else {
+        return;
     };
-    notify.notify_waiters();
+    let _ = entry.state_tx.send(Some(terminal_state));
 }
 
 #[cfg(target_os = "linux")]
@@ -288,31 +275,34 @@ async fn wait_for_active_ephemeral_terminal_truth(
     orchestration_session_id: &str,
     task_run_id: &str,
 ) -> Result<WorldTaskTerminalStateV1> {
-    let key = active_ephemeral_terminal_wait_key(orchestration_session_id, task_run_id);
-
-    loop {
-        let notify = {
-            let tracker = active_ephemeral_terminal_wait_tracker()
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let Some(entry) = tracker.by_task.get(&key) else {
-                anyhow::bail!(
-                    "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
-                    task_run_id,
-                    orchestration_session_id
-                );
-            };
-            if let Some(terminal_state) = entry.terminal_state {
-                drop(tracker);
-                release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-                return Ok(terminal_state);
-            }
-            entry.notify.clone()
+    let mut state_rx = {
+        let tracker = active_ephemeral_terminal_wait_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(entry) = tracker
+            .by_task
+            .get(&active_ephemeral_terminal_wait_key(
+                orchestration_session_id,
+                task_run_id,
+            ))
+        else {
+            anyhow::bail!(
+                "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
+                task_run_id,
+                orchestration_session_id
+            );
         };
+        entry.state_tx.subscribe()
+    };
+    loop {
+        if let Some(terminal_state) = *state_rx.borrow() {
+            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
+            return Ok(terminal_state);
+        }
 
-        tokio::time::timeout(
+        let changed = tokio::time::timeout(
             ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT,
-            notify.notified(),
+            state_rx.changed(),
         )
         .await
         .map_err(|_| {
@@ -323,6 +313,14 @@ async fn wait_for_active_ephemeral_terminal_truth(
                 orchestration_session_id
             )
         })?;
+        if changed.is_err() {
+            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
+            anyhow::bail!(
+                "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
+                task_run_id,
+                orchestration_session_id
+            );
+        }
     }
 }
 
@@ -345,11 +343,7 @@ fn publish_active_ephemeral_terminal_truth_if_registered(
     let Some(task_run_id) = task_run_id.filter(|task_run_id| !task_run_id.trim().is_empty()) else {
         return;
     };
-    publish_active_ephemeral_terminal_truth(
-        orchestration_session_id,
-        task_run_id,
-        terminal_state,
-    );
+    publish_active_ephemeral_terminal_truth(orchestration_session_id, task_run_id, terminal_state);
 }
 
 #[cfg(target_os = "linux")]
@@ -734,9 +728,9 @@ async fn cancel_world_work(
                 let resolved = resolve_active_ephemeral_inspect_target(&prepared)?;
                 let mut terminal_wait_registration =
                     ActiveEphemeralTerminalWaitRegistrationGuard::new(
-                    &resolved.session.orchestration_session_id,
-                    &resolved.task_run_id,
-                );
+                        &resolved.session.orchestration_session_id,
+                        &resolved.task_run_id,
+                    );
                 let client = connect_world_agent_client().context(
                     "failed to connect active ephemeral cancel_world_work to /v1/execute/cancel",
                 )?;
@@ -10839,8 +10833,8 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn active_ephemeral_terminal_wait_allows_multiple_waiters_to_observe_same_terminal_truth(
-    ) {
+    async fn active_ephemeral_terminal_wait_allows_multiple_waiters_to_observe_same_terminal_truth()
+    {
         let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-shared");
         register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-shared");
         register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-shared");
@@ -10862,11 +10856,17 @@ agents:
         );
 
         assert_eq!(
-            waiter_one.await.expect("waiter one should join").expect("waiter one result"),
+            waiter_one
+                .await
+                .expect("waiter one should join")
+                .expect("waiter one result"),
             WorldTaskTerminalStateV1::Cancelled
         );
         assert_eq!(
-            waiter_two.await.expect("waiter two should join").expect("waiter two result"),
+            waiter_two
+                .await
+                .expect("waiter two should join")
+                .expect("waiter two result"),
             WorldTaskTerminalStateV1::Cancelled
         );
 
@@ -10877,6 +10877,186 @@ agents:
             !tracker.by_task.contains_key(&key),
             "all waiters should release the shared terminal wait entry"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn active_ephemeral_terminal_wait_registration_guard_releases_non_happy_path_registrations() {
+        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-cleanup");
+        {
+            let _guard = ActiveEphemeralTerminalWaitRegistrationGuard::new(
+                "sess_dispatch",
+                "task-run-cleanup",
+            );
+        }
+
+        let tracker = active_ephemeral_terminal_wait_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(
+            !tracker.by_task.contains_key(&key),
+            "dropping the registration guard must release non-happy-path wait registrations"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn active_ephemeral_terminal_truth_guard_publishes_failed_terminal_truth_on_drop_after_start(
+    ) {
+        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-stream-failure");
+        register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-stream-failure");
+        {
+            let mut guard = ActiveEphemeralTerminalTruthGuard::new("sess_dispatch");
+            guard.register_task_run_id("task-run-stream-failure".to_string());
+        }
+
+        assert_eq!(
+            wait_for_active_ephemeral_terminal_truth("sess_dispatch", "task-run-stream-failure")
+                .await
+                .expect("terminal truth should be published on drop"),
+            WorldTaskTerminalStateV1::Failed
+        );
+
+        let tracker = active_ephemeral_terminal_wait_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(
+            !tracker.by_task.contains_key(&key),
+            "published failure truth must still release the wait registration after consumption"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_cancel_world_work_ephemeral_retry_reuses_shared_terminal_truth() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["cancel_world_work"],
+            &["ephemeral"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-cancel-shared".to_string(),
+                caller_participant_id: "orch_dispatch".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            })
+            .expect("register active ephemeral task");
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let (cancel_seen_tx, mut cancel_seen_rx) = tokio::sync::mpsc::unbounded_channel();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("execute cancel request");
+                    assert_eq!(parsed.span_id, "task-run-cancel-shared");
+                    assert_eq!(parsed.sig, "TERM");
+                    let body =
+                        serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                            schema_version: 1,
+                            delivered: true,
+                        })
+                        .expect("serialize execute cancel response");
+                    write_http_json(&mut stream, "200 OK", &body).await;
+                    let _ = cancel_seen_tx.send(parsed.span_id);
+                    continue;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let store_for_first = store.clone();
+        let first_cancel = tokio::spawn(async move {
+            dispatch_orchestrator_world_request(
+                &store_for_first,
+                sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared"),
+            )
+            .await
+        });
+
+        cancel_seen_rx
+            .recv()
+            .await
+            .expect("first cancel should reach execute-cancel");
+
+        let mut retry_request =
+            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared");
+        retry_request.request_id = Some("req_cancel_ephemeral_retry".to_string());
+        retry_request.idempotency_key = Some("idem_cancel_ephemeral_retry".to_string());
+        let store_for_retry = store.clone();
+        let retry_cancel = tokio::spawn(async move {
+            dispatch_orchestrator_world_request(&store_for_retry, retry_request).await
+        });
+
+        cancel_seen_rx
+            .recv()
+            .await
+            .expect("retry cancel should reuse execute-cancel while the task is still live");
+
+        publish_active_ephemeral_terminal_truth(
+            "sess_dispatch",
+            "task-run-cancel-shared",
+            WorldTaskTerminalStateV1::Cancelled,
+        );
+
+        for dispatch_task in [first_cancel, retry_cancel] {
+            let outcome = dispatch_task
+                .await
+                .expect("cancel dispatch join should succeed")
+                .expect("cancel dispatch should observe shared terminal truth");
+            let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
+                panic!("expected cancel_world_work outcome envelope");
+            };
+            assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
+            assert_eq!(outcome.target_participant_id, "task-run-cancel-shared");
+        }
+
+        let tracker = active_ephemeral_terminal_wait_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(
+            !tracker
+                .by_task
+                .contains_key(&active_ephemeral_terminal_wait_key(
+                    "sess_dispatch",
+                    "task-run-cancel-shared",
+                )),
+            "shared cancel closeout tracking must release after both waiters finish"
+        );
+
+        server.abort();
     }
 
     #[cfg(target_os = "linux")]
