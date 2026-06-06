@@ -7,7 +7,7 @@ This task list implements:
 
 ## Task List
 
-- [ ] Task: Lock the `R2` packet boundary and acceptance-fixture contract in repo docs
+- [x] Task: Lock the `R2` packet boundary and acceptance-fixture contract in repo docs
   - Acceptance:
     - the docs define `R2` as analyzer-local acceptance hardening only
     - the docs name the exact included screened `R1E` sessions:
@@ -27,7 +27,7 @@ This task list implements:
     - `docs/specs/agent-drift-analyzer-acceptance-fixture-hardening-r2-plan.md`
     - `docs/specs/agent-drift-analyzer-acceptance-fixture-hardening-r2-tasks.md`
 
-- [ ] Task: Add analyzer test support for checked-in acceptance cases
+- [x] Task: Add analyzer test support for checked-in acceptance cases
   - Acceptance:
     - analyzer test helpers can load one named acceptance case from disk
     - helpers materialize a temp output directory without depending on `target/` or `~/.codex`
@@ -39,7 +39,7 @@ This task list implements:
     - `crates/agent-drift-analyzer/tests/support/mod.rs`
     - `crates/agent-drift-analyzer/tests/acceptance_fixtures.rs`
 
-- [ ] Task: Freeze cleared control fixture `019e93fa-60d4-73d1-9092-014130b60e14`
+- [x] Task: Freeze cleared control fixture `019e93fa-60d4-73d1-9092-014130b60e14`
   - Acceptance:
     - one checked-in case exists for session `019e93fa-60d4-73d1-9092-014130b60e14`
     - the case contains analyzer input files plus `expected.json`
@@ -51,7 +51,7 @@ This task list implements:
   - Files:
     - `crates/agent-drift-analyzer/tests/fixtures/acceptance/019e93fa-60d4-73d1-9092-014130b60e14/`
 
-- [ ] Task: Freeze cleared control fixture `019e940c-a91b-7fe0-a967-b0bdd595b581`
+- [x] Task: Freeze cleared control fixture `019e940c-a91b-7fe0-a967-b0bdd595b581`
   - Acceptance:
     - one checked-in case exists for session `019e940c-a91b-7fe0-a967-b0bdd595b581`
     - the case contains analyzer input files plus `expected.json`
@@ -63,7 +63,7 @@ This task list implements:
   - Files:
     - `crates/agent-drift-analyzer/tests/fixtures/acceptance/019e940c-a91b-7fe0-a967-b0bdd595b581/`
 
-- [ ] Task: Freeze cleared control fixture `019e943c-668e-7a03-992b-6a98cf3055da`
+- [x] Task: Freeze cleared control fixture `019e943c-668e-7a03-992b-6a98cf3055da`
   - Acceptance:
     - one checked-in case exists for session `019e943c-668e-7a03-992b-6a98cf3055da`
     - the case contains analyzer input files plus `expected.json`
@@ -75,7 +75,7 @@ This task list implements:
   - Files:
     - `crates/agent-drift-analyzer/tests/fixtures/acceptance/019e943c-668e-7a03-992b-6a98cf3055da/`
 
-- [ ] Task: Freeze recovered sticky fixture `019e894a-86c9-71e3-b57b-e3d3285f0988`
+- [x] Task: Freeze recovered sticky fixture `019e894a-86c9-71e3-b57b-e3d3285f0988`
   - Acceptance:
     - one checked-in case exists for session `019e894a-86c9-71e3-b57b-e3d3285f0988`
     - the case contains analyzer input files plus `expected.json`
@@ -87,7 +87,7 @@ This task list implements:
   - Files:
     - `crates/agent-drift-analyzer/tests/fixtures/acceptance/019e894a-86c9-71e3-b57b-e3d3285f0988/`
 
-- [ ] Task: Add the analyzer acceptance wall over the frozen corpus
+- [x] Task: Add the analyzer acceptance wall over the frozen corpus
   - Acceptance:
     - analyzer acceptance tests assert the final `dead_end_thrash` state, `flagged` bit, and
       `raw_score` for each frozen case
@@ -105,7 +105,7 @@ This task list implements:
     - `crates/agent-drift-analyzer/tests/support/mod.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/acceptance/`
 
-- [ ] Task: Lock fixture maintenance and exclusion rules near the acceptance seam
+- [x] Task: Lock fixture maintenance and exclusion rules near the acceptance seam
   - Acceptance:
     - the acceptance seam documents that delegated sessions remain excluded
     - the acceptance seam documents that `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside
@@ -130,3 +130,24 @@ Packet `R2` exit condition:
 - delegated and non-success-tail sessions stay explicitly excluded from the success-tail corpus
 - the acceptance wall runs without mutable live artifacts and without reopening bounded replay
   proof ownership
+
+Packet `R2` closeout status:
+
+- `2026-06-06`: Packet `R2` landed and review validation confirmed it is complete for its
+  analyzer-local scope:
+  - committed acceptance corpus includes exactly the four screened `R1E` success-tail cases
+  - committed bundle artifacts match their `target/hybrid-drift-evals/*-r1e/compactor` sources
+  - acceptance helpers fail closed and do not fall back to `target/` or `~/.codex`
+  - analyzer acceptance tests assert final `dead_end_thrash` posture directly:
+    - cleared controls:
+      - `019e93fa-60d4-73d1-9092-014130b60e14`
+      - `019e940c-a91b-7fe0-a967-b0bdd595b581`
+      - `019e943c-668e-7a03-992b-6a98cf3055da`
+    - recovered sticky case:
+      - `019e894a-86c9-71e3-b57b-e3d3285f0988`
+  - delegated sessions and `019e9401-9d69-7190-a43e-9ee3be08b369` remain explicitly excluded
+  - verification passed:
+    - `cargo test -p agent-drift-analyzer acceptance_fixtures -- --nocapture`
+    - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
+    - `cargo test -p agent-drift-analyzer export_bundle -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`

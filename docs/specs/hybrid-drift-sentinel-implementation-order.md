@@ -594,6 +594,19 @@ Packet 18 note:
   - delegated sessions remain excluded by `multi_agent_v1` markers, and
     `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the successful-output proof corpus
     because its rollout includes `Exit code: 1` tool-output rows
+- `2026-06-06`: Packet `R2` acceptance-fixture hardening is now landed as the analyzer-local
+  durability follow-on after `R1E`:
+  - `crates/agent-drift-analyzer/tests/fixtures/acceptance/` freezes the screened `R1E`
+    success-tail corpus as committed compactor-bundle inputs plus Packet `R2` `expected.json`
+    metadata
+  - `crates/agent-drift-analyzer/tests/acceptance_fixtures.rs` asserts final
+    `dead_end_thrash` posture directly from analyzer output for the three cleared controls and the
+    one recovered sticky case
+  - the acceptance helpers fail closed if a committed case is missing and do not fall back to
+    `target/` or `~/.codex`
+  - delegated sessions remain excluded, and
+    `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the successful-output acceptance corpus
+  - the next open packet after `R2` is `R3` turn-context promotion
 
 ## If You Want Fewer Packets
 

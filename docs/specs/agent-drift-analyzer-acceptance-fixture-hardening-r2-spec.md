@@ -241,12 +241,14 @@ Required test layers:
 
 ## Open Questions
 
-None for Packet `R2`. Later corpus changes, expected-posture changes, or fixture-reduction work
-require new packet authority rather than silent acceptance-seam drift.
+No blocking questions remain for Packet `R2`. Later corpus changes, expected-posture changes, or
+fixture-reduction work require new packet authority rather than silent acceptance-seam drift.
+
+Future follow-up questions outside Packet `R2`:
 
 1. Should the excluded non-success-tail session `019e9401-9d69-7190-a43e-9ee3be08b369` become a
    later negative acceptance fixture for a different packet, or remain cited-only until a packet
    explicitly needs mixed success/failure tails?
-2. If a reduced per-case bundle cannot reproduce the landed final posture honestly, should `R2`
-   allow a full per-case compactor bundle fixture for that session instead of forcing further
-   reduction?
+2. If a reduced per-case bundle cannot reproduce the landed final posture honestly, should a
+   later packet allow a full per-case compactor bundle fixture for that session instead of forcing
+   further reduction?

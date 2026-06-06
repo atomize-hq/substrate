@@ -496,6 +496,24 @@ guard in place for later packets.
   on already-screened success-tail shapes
 - `R1E` remains the sole owner of screened bounded replay proof claims and continuity-note refresh
 
+R2 continuity notes:
+
+- `2026-06-06`: `R2` is now landed and closes as analyzer-local acceptance hardening:
+  - committed analyzer fixtures freeze the screened `R1E` success-tail corpus rather than reading
+    mutable `target/` or `~/.codex` state at test time
+  - the committed corpus contains exactly the three cleared controls plus the one recovered sticky
+    case:
+    `019e93fa-60d4-73d1-9092-014130b60e14`,
+    `019e940c-a91b-7fe0-a967-b0bdd595b581`,
+    `019e943c-668e-7a03-992b-6a98cf3055da`,
+    `019e894a-86c9-71e3-b57b-e3d3285f0988`
+  - delegated sessions remain excluded by policy, and
+    `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the success-tail corpus because it is
+    not a successful-output-only tail
+  - the acceptance wall now asserts final analyzer `dead_end_thrash` posture directly from the
+    frozen bundle inputs instead of routing through sentinel output
+  - conclusion: the next open packet after `R2` is `R3`, not more `R2` replay/fixture work
+
 ## Packet R3: Per-Checkpoint Turn Context
 
 ### Objective
