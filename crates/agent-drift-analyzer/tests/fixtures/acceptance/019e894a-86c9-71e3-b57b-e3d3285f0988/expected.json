@@ -1,0 +1,9 @@
+{
+  "session_id": "019e894a-86c9-71e3-b57b-e3d3285f0988",
+  "source_artifact": "target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1e/compactor",
+  "final_dead_end_thrash": {
+    "state": "recovered",
+    "flagged": false,
+    "raw_score": 20
+  }
+}

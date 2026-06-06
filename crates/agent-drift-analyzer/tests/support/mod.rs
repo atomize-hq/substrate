@@ -3,7 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, Checkpoint, DriftClass, InputBundle};
+use agent_drift_analyzer::{
+    analyze_bundle, AnalyzeRequest, AnalyzeResult, Checkpoint, DriftClass, DriftScore, DriftState,
+    InputBundle,
+};
 use agent_session_compactor::{
     BundleFileV0_2, BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DedupeGroupV0_2,
     ExportRowV0_2, RowRef, RowRefV0_2, SourceKind, UserMessageRole,
@@ -11,10 +14,56 @@ use agent_session_compactor::{
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 
+pub const ACCEPTANCE_CASE_IDS: [&str; 4] = [
+    "019e93fa-60d4-73d1-9092-014130b60e14",
+    "019e940c-a91b-7fe0-a967-b0bdd595b581",
+    "019e943c-668e-7a03-992b-6a98cf3055da",
+    "019e894a-86c9-71e3-b57b-e3d3285f0988",
+];
+
+pub const ACCEPTANCE_EXCLUDED_CASES: [(&str, &str); 3] = [
+    (
+        "019e93f8-a5e9-7490-ac1a-955b74c92ad0",
+        "delegated session remains outside the analyzer-local success-tail corpus",
+    ),
+    (
+        "019e9406-6736-79a2-946b-8a603e557422",
+        "delegated session remains outside the analyzer-local success-tail corpus",
+    ),
+    (
+        "019e9401-9d69-7190-a43e-9ee3be08b369",
+        "non-success-tail session remains outside the analyzer-local success-tail corpus",
+    ),
+];
+
+const ACCEPTANCE_FIXTURE_ROOT: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/acceptance");
+
 pub struct BundleFixture {
     pub _temp_dir: TempDir,
     pub input_dir: Utf8PathBuf,
     pub output_dir: Utf8PathBuf,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+pub struct AcceptanceExpectedScore {
+    pub state: DriftState,
+    pub flagged: bool,
+    pub raw_score: u8,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+pub struct AcceptanceExpected {
+    pub session_id: String,
+    pub source_artifact: String,
+    pub final_dead_end_thrash: AcceptanceExpectedScore,
+}
+
+pub struct AcceptanceFixture {
+    pub _temp_dir: TempDir,
+    pub input_dir: Utf8PathBuf,
+    pub output_dir: Utf8PathBuf,
+    pub expected: AcceptanceExpected,
 }
 
 impl BundleFixture {
@@ -127,6 +176,54 @@ pub fn assert_score_flagged(checkpoint: &Checkpoint, class: DriftClass) {
     );
 }
 
+impl AcceptanceFixture {
+    pub fn load(case_id: &str) -> Self {
+        let input_dir = acceptance_fixture_dir(case_id);
+        let expected = read_json(input_dir.join("expected.json").as_ref());
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+        let output_dir = root.join("output");
+        fs::create_dir_all(&output_dir).expect("create output dir");
+
+        Self {
+            _temp_dir: temp_dir,
+            input_dir,
+            output_dir,
+            expected,
+        }
+    }
+
+    pub fn request(&self) -> AnalyzeRequest {
+        AnalyzeRequest {
+            input_dir: self.input_dir.clone(),
+            output_dir: self.output_dir.clone(),
+        }
+    }
+
+    pub fn analyze(&self) -> AnalyzeResult {
+        analyze_bundle(&self.request()).expect("analyze acceptance case")
+    }
+
+    pub fn final_dead_end_thrash<'a>(&self, result: &'a AnalyzeResult) -> &'a DriftScore {
+        result
+            .sessions
+            .iter()
+            .find(|session| session.session_id == self.expected.session_id)
+            .and_then(|session| session.checkpoints.last())
+            .and_then(|checkpoint| {
+                checkpoint
+                    .drift_scores
+                    .iter()
+                    .find(|score| score.class == DriftClass::DeadEndThrash)
+            })
+            .expect("final dead_end_thrash score")
+    }
+}
+
+pub fn load_acceptance_case(case_id: &str) -> AcceptanceFixture {
+    AcceptanceFixture::load(case_id)
+}
+
 fn write_jsonl<T: serde::Serialize>(path: Utf8PathBuf, items: &[T]) {
     let body = items
         .iter()
@@ -134,6 +231,20 @@ fn write_jsonl<T: serde::Serialize>(path: Utf8PathBuf, items: &[T]) {
         .collect::<Vec<_>>()
         .join("\n");
     fs::write(path, format!("{body}\n")).expect("write jsonl");
+}
+
+fn acceptance_fixture_dir(case_id: &str) -> Utf8PathBuf {
+    let input_dir = Utf8PathBuf::from(ACCEPTANCE_FIXTURE_ROOT).join(case_id);
+    assert!(
+        input_dir.is_dir(),
+        "missing acceptance fixture {case_id}; Packet R2 tests must not fall back to target/ or ~/.codex"
+    );
+    input_dir
+}
+
+fn read_json<T: serde::de::DeserializeOwned>(path: &Utf8Path) -> T {
+    serde_json::from_str(&fs::read_to_string(path).expect("read json artifact"))
+        .expect("parse json artifact")
 }
 
 struct TestFileRegistry {
