@@ -143,6 +143,27 @@ fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurren
     &TRACKER
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn active_ephemeral_world_task_tracker(
+) -> &'static Mutex<BTreeMap<String, ActiveEphemeralWorldTaskRecord>> {
+    static TRACKER: LazyLock<Mutex<BTreeMap<String, ActiveEphemeralWorldTaskRecord>>> =
+        LazyLock::new(|| Mutex::new(BTreeMap::new()));
+    &TRACKER
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn register_active_ephemeral_world_task(
+    task_run_id: impl Into<String>,
+    record: ActiveEphemeralWorldTaskRecord,
+) -> ActiveEphemeralWorldTaskGuard {
+    let task_run_id = task_run_id.into();
+    let mut tracker = active_ephemeral_world_task_tracker()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    tracker.insert(task_run_id.clone(), record);
+    ActiveEphemeralWorldTaskGuard { task_run_id }
+}
+
 #[allow(dead_code)]
 pub(crate) fn prepare_orchestrator_world_dispatch(
     store: &AgentRuntimeStateStore,
@@ -515,6 +536,135 @@ struct RunWorldTaskStreamResult {
     task_run_id: Option<String>,
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ActiveEphemeralWorldTaskRecord {
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug)]
+struct ActiveEphemeralWorldTaskGuard {
+    task_run_id: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl Drop for ActiveEphemeralWorldTaskGuard {
+    fn drop(&mut self) {
+        let mut tracker = active_ephemeral_world_task_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        tracker.remove(&self.task_run_id);
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+struct ResolvedActiveEphemeralInspectTarget {
+    task_run_id: String,
+    session: OrchestrationSessionRecord,
+    caller_participant: AgentRuntimeParticipantRecord,
+    target_backend_id: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ResolvedActiveEphemeralInspectTarget {
+    fn project_snapshot(
+        &self,
+    ) -> crate::execution::agent_runtime::dispatch_contract::RetainedWorkerInspectSnapshotV1 {
+        crate::execution::agent_runtime::dispatch_contract::RetainedWorkerInspectSnapshotV1 {
+            participant_state: crate::execution::agent_runtime::AgentRuntimeSessionState::Running,
+            session_state: self.session.state.clone(),
+            session_posture: self.session.posture,
+            authoritative_live: true,
+            attention_required: self.session.posture
+                == crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::AwaitingAttention
+                || self.session.pending_inbox_count > 0,
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_active_ephemeral_inspect_target(
+    prepared: &PreparedOrchestratorWorldDispatch,
+) -> Result<ResolvedActiveEphemeralInspectTarget> {
+    let task_run_id = prepared
+        .request
+        .task_run_id
+        .as_deref()
+        .expect("validated inspect request must include task_run_id");
+    let world_id = prepared.session.world_id.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing_world_binding: orchestration session {} has no authoritative world binding",
+            prepared.session.orchestration_session_id
+        )
+    })?;
+    let world_generation = prepared.session.world_generation.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing_world_binding: orchestration session {} has no authoritative world binding",
+            prepared.session.orchestration_session_id
+        )
+    })?;
+    let record = {
+        let tracker = active_ephemeral_world_task_tracker()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        tracker.get(task_run_id).cloned()
+    }
+    .ok_or_else(|| {
+        anyhow::anyhow!(
+            "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+            prepared.session.orchestration_session_id,
+            task_run_id
+        )
+    })?;
+
+    if record.orchestration_session_id != prepared.session.orchestration_session_id {
+        anyhow::bail!(
+            "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+            prepared.session.orchestration_session_id,
+            task_run_id
+        );
+    }
+    if record.caller_participant_id != prepared.caller_participant.participant_id() {
+        anyhow::bail!(
+            "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
+            prepared.session.orchestration_session_id,
+            task_run_id,
+            prepared.caller_participant.participant_id()
+        );
+    }
+    if record.target_backend_id != prepared.request.target_backend_id {
+        anyhow::bail!(
+            "backend_mismatch: orchestration session {} active ephemeral task {} backend is {} not {}",
+            prepared.session.orchestration_session_id,
+            task_run_id,
+            record.target_backend_id,
+            prepared.request.target_backend_id
+        );
+    }
+    if record.world_id != world_id || record.world_generation != world_generation {
+        anyhow::bail!(
+            "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
+            prepared.session.orchestration_session_id,
+            task_run_id
+        );
+    }
+
+    Ok(ResolvedActiveEphemeralInspectTarget {
+        task_run_id: task_run_id.to_string(),
+        session: prepared.session.clone(),
+        caller_participant: prepared.caller_participant.clone(),
+        target_backend_id: record.target_backend_id,
+    })
+}
+
 #[cfg(target_os = "linux")]
 struct ContinueWorldWorkerStreamResult {
     exit_code: i32,
@@ -575,8 +725,24 @@ async fn run_world_task(
             err.reason
         )
     })?;
+    let active_task_record = ActiveEphemeralWorldTaskRecord {
+        orchestration_session_id: prepared.request.orchestration_session_id.clone(),
+        caller_participant_id: prepared.request.caller_participant_id.clone(),
+        target_backend_id: prepared.request.target_backend_id.clone(),
+        world_id: prepared
+            .session
+            .world_id
+            .clone()
+            .unwrap_or_else(|| prepared.request.world_id.clone()),
+        world_generation: prepared
+            .session
+            .world_generation
+            .unwrap_or(prepared.request.world_generation),
+    };
     let transport_request = build_run_world_task_transport_request(&prepared.request, &descriptor)?;
-    let stream_result = execute_run_world_task_stream(&workspace_root, &transport_request).await?;
+    let stream_result =
+        execute_run_world_task_stream(&workspace_root, &transport_request, active_task_record)
+            .await?;
     let state = world_task_terminal_state_from_exit_code(stream_result.exit_code);
     let summary = summarize_run_world_task_result(
         &prepared.request.target_backend_id,
@@ -1244,44 +1410,100 @@ async fn inspect_world_worker(
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
 
-    let resolved = prepared
-        .store
-        .resolve_internal_inspect_world_dispatch_target(
-            &prepared.request.orchestration_session_id,
-            &prepared.request.caller_participant_id,
-            prepared
-                .request
-                .target_participant_id
-                .as_deref()
-                .expect("validated inspect request must include target_participant_id"),
-            &prepared.request.target_backend_id,
-        )
-        .map_err(map_world_dispatch_resolution_error)?;
+    let (
+        orchestration_session_id,
+        orchestrator_participant_id,
+        target_participant_id,
+        target_backend_id,
+        world_id,
+        world_generation,
+        snapshot,
+        summary,
+    ) = match prepared.request.mode {
+        WorldDispatchModeV1::Retained => {
+            let resolved = prepared
+                .store
+                .resolve_internal_inspect_world_dispatch_target(
+                    &prepared.request.orchestration_session_id,
+                    &prepared.request.caller_participant_id,
+                    prepared
+                        .request
+                        .target_participant_id
+                        .as_deref()
+                        .expect("validated inspect request must include target_participant_id"),
+                    &prepared.request.target_backend_id,
+                )
+                .map_err(map_world_dispatch_resolution_error)?;
 
-    let target_participant_id = resolved.target_participant.participant_id().to_string();
-    let target_backend_id = resolved.target_participant.handle.backend_id.clone();
-    let world_id = resolved.session.world_id.clone().ok_or_else(|| {
-        anyhow::anyhow!(
-            "missing_world_binding: orchestration session {} has no authoritative world binding",
-            resolved.session.orchestration_session_id
-        )
-    })?;
-    let world_generation = resolved.session.world_generation.ok_or_else(|| {
-        anyhow::anyhow!(
-            "missing_world_binding: orchestration session {} has no authoritative world binding",
-            resolved.session.orchestration_session_id
-        )
-    })?;
-    let snapshot = resolved.project_snapshot();
-    let summary = summarize_inspect_world_worker_result(&target_participant_id, &target_backend_id);
+            let target_participant_id = resolved.target_participant.participant_id().to_string();
+            let target_backend_id = resolved.target_participant.handle.backend_id.clone();
+            let world_id = resolved.session.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_world_binding: orchestration session {} has no authoritative world binding",
+                    resolved.session.orchestration_session_id
+                )
+            })?;
+            let world_generation = resolved.session.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_world_binding: orchestration session {} has no authoritative world binding",
+                    resolved.session.orchestration_session_id
+                )
+            })?;
+            let snapshot = resolved.project_snapshot();
+            let summary =
+                summarize_inspect_world_worker_result(&target_participant_id, &target_backend_id);
+
+            (
+                resolved.session.orchestration_session_id.clone(),
+                resolved.caller_participant.participant_id().to_string(),
+                target_participant_id,
+                target_backend_id,
+                world_id,
+                world_generation,
+                snapshot,
+                summary,
+            )
+        }
+        WorldDispatchModeV1::Ephemeral => {
+            let resolved = resolve_active_ephemeral_inspect_target(&prepared)?;
+            let world_id = resolved.session.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_world_binding: orchestration session {} has no authoritative world binding",
+                    resolved.session.orchestration_session_id
+                )
+            })?;
+            let world_generation = resolved.session.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_world_binding: orchestration session {} has no authoritative world binding",
+                    resolved.session.orchestration_session_id
+                )
+            })?;
+            let snapshot = resolved.project_snapshot();
+            let summary = summarize_active_ephemeral_inspect_world_task_result(
+                &resolved.task_run_id,
+                &resolved.target_backend_id,
+            );
+
+            (
+                resolved.session.orchestration_session_id.clone(),
+                resolved.caller_participant.participant_id().to_string(),
+                resolved.task_run_id,
+                resolved.target_backend_id,
+                world_id,
+                world_generation,
+                snapshot,
+                summary,
+            )
+        }
+    };
 
     Ok(WorldDispatchOutcomeV1::InspectWorldWorker(
         InspectWorldWorkerOutcomeV1 {
             request_id: prepared.request.request_id,
-            orchestration_session_id: resolved.session.orchestration_session_id.clone(),
+            orchestration_session_id,
             action: WorldDispatchActionV1::InspectWorldWorker,
             mode: prepared.request.mode,
-            orchestrator_participant_id: resolved.caller_participant.participant_id().to_string(),
+            orchestrator_participant_id,
             target_participant_id,
             target_backend_id,
             world_id,
@@ -1981,6 +2203,7 @@ fn member_runtime_backend_kind(
 async fn execute_run_world_task_stream(
     workspace_root: &Path,
     request: &MemberDispatchTransportRequest,
+    active_task_record: ActiveEphemeralWorldTaskRecord,
 ) -> Result<RunWorldTaskStreamResult> {
     use http_body_util::BodyExt as _;
     use substrate_common::agent_events::AgentEventKind;
@@ -1997,6 +2220,7 @@ async fn execute_run_world_task_stream(
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut active_span_id = None::<String>;
+    let mut active_task_guard = None::<ActiveEphemeralWorldTaskGuard>;
     let mut saw_registered_event = false;
     let mut exit_code = None::<i32>;
 
@@ -2025,6 +2249,12 @@ async fn execute_run_world_task_stream(
 
             match frame {
                 ExecuteStreamFrame::Start { span_id } => {
+                    if active_task_guard.is_none() {
+                        active_task_guard = Some(register_active_ephemeral_world_task(
+                            span_id.clone(),
+                            active_task_record.clone(),
+                        ));
+                    }
                     active_span_id = Some(span_id);
                 }
                 ExecuteStreamFrame::Event { event } => {
@@ -3118,6 +3348,16 @@ fn summarize_inspect_world_worker_result(participant_id: &str, backend_id: &str)
 }
 
 #[cfg(target_os = "linux")]
+fn summarize_active_ephemeral_inspect_world_task_result(
+    task_run_id: &str,
+    backend_id: &str,
+) -> String {
+    format!(
+        "inspect_world_worker returned an authoritative active snapshot for task {task_run_id} on backend {backend_id} without mutating in-flight execution state"
+    )
+}
+
+#[cfg(target_os = "linux")]
 async fn wait_for_stop_world_worker_closeout(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -3861,6 +4101,26 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_ephemeral_inspect_world_dispatch_request(
+        task_run_id: &str,
+    ) -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_inspect_ephemeral".to_string()),
+            idempotency_key: Some("idem_inspect_ephemeral".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::InspectWorldWorker,
+            mode: WorldDispatchModeV1::Ephemeral,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            task_run_id: Some(task_run_id.to_string()),
+            target_participant_id: None,
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_stop_world_dispatch_request() -> WorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_stop".to_string()),
@@ -4339,12 +4599,12 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    async fn dispatch_real_inspect_world_worker_request(
+    async fn dispatch_real_inspect_world_worker_request_with_request(
         store: &AgentRuntimeStateStore,
+        request: WorldDispatchRequestV1,
     ) -> InspectWorldWorkerOutcomeV1 {
-        let prepared =
-            prepare_orchestrator_world_dispatch(store, sample_inspect_world_dispatch_request())
-                .expect("prepare inspect dispatch request");
+        let prepared = prepare_orchestrator_world_dispatch(store, request)
+            .expect("prepare inspect dispatch request");
         let outcome = dispatch_prepared_orchestrator_world_request(prepared)
             .await
             .expect("dispatch prepared inspect request");
@@ -4353,6 +4613,17 @@ mod tests {
             panic!("expected inspect_world_worker outcome envelope");
         };
         outcome
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn dispatch_real_inspect_world_worker_request(
+        store: &AgentRuntimeStateStore,
+    ) -> InspectWorldWorkerOutcomeV1 {
+        dispatch_real_inspect_world_worker_request_with_request(
+            store,
+            sample_inspect_world_dispatch_request(),
+        )
+        .await
     }
 
     #[cfg(target_os = "linux")]
@@ -9426,6 +9697,188 @@ agents:
         assert_eq!(session_after.session, session_before.session);
         assert_eq!(session_after.participants, session_before.participants);
         assert_eq!(participant_after, participant_before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_inspect_world_worker_ephemeral_returns_authoritative_snapshot_without_mutation(
+    ) {
+        active_ephemeral_world_task_tracker()
+            .lock()
+            .expect("lock active task tracker")
+            .clear();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["inspect_world_worker"],
+            &["ephemeral"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let session_before = store
+            .load_session("sess_dispatch")
+            .expect("load session before inspect")
+            .expect("authoritative session before inspect");
+        let participant_before = store
+            .load_participant("ash_member")
+            .expect("load participant before inspect")
+            .expect("retained participant before inspect");
+
+        let _guard = register_active_ephemeral_world_task(
+            "task-run-47",
+            ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_dispatch".to_string(),
+                caller_participant_id: "orch_dispatch".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            },
+        );
+
+        let outcome = dispatch_real_inspect_world_worker_request_with_request(
+            &store,
+            sample_ephemeral_inspect_world_dispatch_request("task-run-47"),
+        )
+        .await;
+
+        assert_eq!(outcome.request_id, "req_inspect_ephemeral");
+        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+        assert_eq!(outcome.action, WorldDispatchActionV1::InspectWorldWorker);
+        assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(outcome.target_participant_id, "task-run-47");
+        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+        assert_eq!(
+            outcome.snapshot.participant_state,
+            AgentRuntimeSessionState::Running
+        );
+        assert_eq!(
+            outcome.snapshot.session_state,
+            OrchestrationSessionState::Active
+        );
+        assert_eq!(
+            outcome.snapshot.session_posture,
+            OrchestrationSessionPosture::ActiveAttached
+        );
+        assert!(outcome.snapshot.authoritative_live);
+        assert!(!outcome.snapshot.attention_required);
+        assert_eq!(outcome.snapshot.parent_participant_id, None);
+        assert_eq!(outcome.snapshot.resumed_from_participant_id, None);
+        assert!(
+            outcome.summary.contains("authoritative active snapshot"),
+            "ephemeral inspect should stay explicit about active snapshot truth: {}",
+            outcome.summary
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("without mutating in-flight execution state"),
+            "ephemeral inspect should stay explicit about non-mutation: {}",
+            outcome.summary
+        );
+
+        let session_after = store
+            .load_session("sess_dispatch")
+            .expect("load session after inspect")
+            .expect("authoritative session after inspect");
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load participant after inspect")
+            .expect("retained participant after inspect");
+
+        assert_eq!(session_after.session, session_before.session);
+        assert_eq!(session_after.participants, session_before.participants);
+        assert_eq!(participant_after, participant_before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_unknown_task_run_id()
+    {
+        active_ephemeral_world_task_tracker()
+            .lock()
+            .expect("lock active task tracker")
+            .clear();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["inspect_world_worker"],
+            &["ephemeral"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_ephemeral_inspect_world_dispatch_request("task-run-missing"),
+        )
+        .await
+        .expect_err("unknown active task must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "active_task_not_found: orchestration session sess_dispatch has no exact active ephemeral task task-run-missing"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_inspect_world_worker_ephemeral_teardown_removes_routability() {
+        active_ephemeral_world_task_tracker()
+            .lock()
+            .expect("lock active task tracker")
+            .clear();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["inspect_world_worker"],
+            &["ephemeral"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        {
+            let _guard = register_active_ephemeral_world_task(
+                "task-run-terminal",
+                ActiveEphemeralWorldTaskRecord {
+                    orchestration_session_id: "sess_dispatch".to_string(),
+                    caller_participant_id: "orch_dispatch".to_string(),
+                    target_backend_id: "cli:codex_world".to_string(),
+                    world_id: "world-17".to_string(),
+                    world_generation: 2,
+                },
+            );
+        }
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_ephemeral_inspect_world_dispatch_request("task-run-terminal"),
+        )
+        .await
+        .expect_err("terminal active task teardown must remove routability");
+
+        assert_eq!(
+            err.to_string(),
+            "active_task_not_found: orchestration session sess_dispatch has no exact active ephemeral task task-run-terminal"
+        );
     }
 
     #[cfg(target_os = "linux")]
