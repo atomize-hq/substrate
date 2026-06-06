@@ -9,14 +9,18 @@ This task list implements:
 
 ## Packet R1A: Lock The Family Boundary And Land The Analyzer Outcome-Evidence Seam
 
-- [x] Task: Lock the `R1A` / `R1B` / `R1C` packet-family boundary in repo docs
+- [x] Task: Lock the `R1A` / `R1B` / `R1C` / `R1D` / `R1E` packet-family boundary in repo docs
   - Acceptance: the docs explicitly define:
     - `R1A` as docs lock plus analyzer-only outcome-evidence classification and repeated-failure
       cutover
-    - `R1B` as recovery/export semantic proof on top of the landed narrower evidence surface
-    - `R1C` as bounded non-subagent replay proof plus continuity-note refresh
+    - `R1B` as recovery/export semantic proof on top of the landed narrower repeated-failure
+      surface
+    - `R1C` as bounded non-subagent replay diagnosis plus honest status correction when the first
+      proof still fails
+    - `R1D` as the analyzer-owned repeated verification-loop semantics fix
+    - `R1E` as the final bounded replay re-proof plus continuity-note refresh
     - repeated successful `ToolOutput` as non-failure by default
-    - exclusion of delegated / subagent sessions from the `R1C` proof corpus
+    - exclusion of delegated / subagent sessions from the `R1C` and `R1E` proof corpus
     - only a tiny acceptance-selection classifier such as `subagent_observed` if rollout-text
       screening proves unreliable
     - turn context, archetype, progress, broader scorer redesign, and sentinel cleanup as later
@@ -49,20 +53,23 @@ This task list implements:
 
 Packet `R1A` exit condition:
 
-- repo docs define the `R1A` / `R1B` / `R1C` split clearly
+- repo docs define the `R1A` / `R1B` / `R1C` / `R1D` / `R1E` split clearly
 - analyzer owns one explicit outcome-evidence seam instead of raw `ToolOutput == failure`
 - repeated-failure history excludes successful tool output by default
 - repeated verification loop collection is unchanged
 
-## Packet R1B: Preserve Honest Recovery And Export Semantics
+## Packet R1B: Preserve Honest Recovery And Export Semantics For The Narrower Failure Surface
 
 - [x] Task: Preserve honest recovery and `dead_end_thrash` state semantics after the evidence cutover
   - Acceptance: analyzer semantics prove that:
     - repeated successful output no longer manufactures repeated-failure loops
     - clean verification intervals are not blocked by neutral bookkeeping or success-only output
+      when the only remaining issue was the old repeated-failure surface
     - `dead_end_thrash` remains active on real repeated explicit failures
     - `dead_end_thrash` still downgrades to `recovered` and later `historical_only` when recovery
       is honest
+    - repeated verification-loop collection and scoring remain unchanged and are not silently
+      broadened inside `R1B`
     - exported checkpoint behavior remains deterministic after the narrower failure surface lands
   - Verify:
     - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
@@ -90,12 +97,14 @@ Packet `R1A` exit condition:
 
 Packet `R1B` exit condition:
 
-- `dead_end_thrash` stays active on real explicit failures but clears or downgrades on
-  successful-output-only tails
-- clean verification intervals are not blocked by neutral bookkeeping output
+- `dead_end_thrash` stays active on real explicit failures and no longer treats neutral tool
+  output as repeated failure evidence
+- clean verification intervals are not blocked by neutral bookkeeping output from the repeated-
+  failure surface alone
 - export/checkpoint behavior remains deterministic after the cutover
+- repeated verification-loop semantics remain unchanged and explicitly deferred to `R1D`
 
-## Packet R1C: Prove The Family On A Screened Non-Subagent Replay Corpus
+## Packet R1C: Bounded Replay Diagnosis And Honest Status Correction
 
 - [x] Task: Screen a small proof corpus and exclude delegated / subagent sessions
   - Acceptance: proof-session selection proves that:
@@ -120,13 +129,14 @@ Packet `R1B` exit condition:
     - `crates/agent-drift-analyzer/tests/support/mod.rs`
     - `/Users/spensermcconnell/.codex/sessions/`
 
-- [ ] Task: Prove `R1C` on a small handful of completed non-subagent sessions and refresh continuity notes
-  - Acceptance: bounded proof shows that:
+- [x] Task: Run the first bounded replay proof honestly and route the remaining seam
+  - Acceptance: bounded replay work shows that:
     - the compactor -> analyzer -> sentinel replay path runs on the final screened session set
-    - final checkpoints no longer end in active `dead_end_thrash` for successful-output-only tails
+    - the clean control corpus and the representative sticky replay are both compared against their
+      source rollout tails
     - proof claims stay clearly labeled as bounded replay proof rather than true live proof
-    - continuity notes are refreshed if the final proof corpus, verifier shape, or packet-routing
-      language changed materially during `R1A` / `R1B`
+    - if the representative sticky replay still ends active, the remaining analyzer-owned seam is
+      named precisely enough to scope `R1D` / `R1E`
   - Result:
     - rerun control corpus that still ends with final `dead_end_thrash.state=cleared` and
       `raw_score=0`:
@@ -146,8 +156,81 @@ Packet `R1B` exit condition:
     - current status:
       - corpus screening is still valid
       - clean non-subagent control replays still stay clear
-      - the bounded honesty proof itself is not landed yet because the representative sticky live
-        session still ends active under the current analyzer replay
+      - the representative sticky non-subagent replay still ends active under the current analyzer
+        replay
+      - the remaining live blocker is repeated verification-loop semantics plus recovery, not the
+        old generic `ToolOutput == failure` rule
+  - Verify:
+    - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer export_bundle -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+    - for each screened proof session:
+      - `cargo run -p agent-session-compactor -- --codex-home "$CODEX_HOME" --session-id "$SESSION_ID" --output-dir "target/hybrid-drift-evals/$SESSION_ID/compactor"`
+      - `cargo run -p agent-drift-analyzer -- --input-dir "target/hybrid-drift-evals/$SESSION_ID/compactor" --output-dir "target/hybrid-drift-evals/$SESSION_ID/analyzer"`
+      - `cargo run -p agent-drift-sentinel -- --checkpoint-dir "target/hybrid-drift-evals/$SESSION_ID/analyzer"`
+  - Files:
+    - `.codex/handoffs/2026-06-06-080214-r1c-verification-loop-root-cause.md`
+    - `target/hybrid-drift-evals/`
+
+Packet `R1C` exit condition:
+
+- bounded replay covers a small handful of completed non-subagent sessions
+- the family status is corrected honestly even if the representative sticky replay still fails
+- any subagent screening added for proof selection stays minimal and does not become a broader
+  supported analyzer seam
+- the remaining analyzer-owned seam is precise enough to scope `R1D` and `R1E`
+
+## Packet R1D: Land The Repeated Verification-Loop Semantics Fix
+
+- [ ] Task: Update analyzer semantics so repeated successful verification does not stay active by itself
+  - Acceptance: analyzer semantics prove that:
+    - repeated verification evidence remains visible as historical context
+    - completed in-scope success tails do not stay `dead_end_thrash=active` solely because
+      verification commands repeated while converging
+    - out-of-scope verification still blocks recovery
+    - repeated explicit failure evidence still keeps `dead_end_thrash` active
+    - the fix stays analyzer-local and does not require a compactor schema change first
+  - Verify:
+    - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
+    - `cargo test -p agent-drift-analyzer export_bundle -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+    - `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`
+    - `crates/agent-drift-analyzer/src/context/working_set.rs`
+    - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
+
+- [ ] Task: Add focused regressions for repeated verification success tails and out-of-scope verifier loops
+  - Acceptance: regression coverage explicitly proves that:
+    - repeated successful `cargo fmt`, `cargo clippy`, and `cargo test`-style verification does
+      not by itself end a completed in-scope success tail as active thrash
+    - repeated verification still stays active when the current interval is out of scope
+    - recovered and historical-only transitions remain deterministic after the fix
+  - Verify:
+    - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
+    - `crates/agent-drift-analyzer/tests/support/mod.rs`
+
+Packet `R1D` exit condition:
+
+- repeated successful verification loops no longer keep completed in-scope success tails active by
+  themselves
+- out-of-scope verification and repeated explicit failures still flag honestly
+- analyzer export/checkpoint behavior remains deterministic after the verifier-loop fix
+
+## Packet R1E: Re-Prove The Family On The Screened Non-Subagent Replay Corpus
+
+- [ ] Task: Rerun the bounded replay proof after `R1D` and refresh continuity notes
+  - Acceptance: bounded replay re-proof shows that:
+    - the compactor -> analyzer -> sentinel replay path runs on the final screened session set
+    - the representative sticky non-subagent replay no longer ends falsely active from repeated
+      verification loops
+    - the clean control corpus still ends cleared
+    - proof claims stay clearly labeled as bounded replay proof rather than true live proof
+    - continuity notes are refreshed if the final proof corpus, verifier shape, or packet-routing
+      language changed materially during `R1D`
   - Verify:
     - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
@@ -162,10 +245,11 @@ Packet `R1B` exit condition:
     - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
     - `target/hybrid-drift-evals/`
 
-Packet `R1C` exit condition:
+Packet `R1E` exit condition:
 
-- bounded proof covers a small handful of completed non-subagent sessions
-- final checkpoints no longer stay falsely active on successful-output-only tails
+- bounded replay covers a small handful of completed non-subagent sessions after `R1D`
+- the representative sticky replay and the clean controls both avoid a false final
+  `dead_end_thrash=active` result
 - any subagent screening added for proof selection stays minimal and does not become a broader
   supported analyzer seam
 - continuity notes reflect the final packet family and bounded-proof story honestly
@@ -173,8 +257,11 @@ Packet `R1C` exit condition:
 ## Family Exit Condition
 
 - `R1A` landed the analyzer outcome-evidence seam and repeated-failure cutover
-- `R1B` landed the honest recovery/export semantics and focused regressions
-- `R1C` remains open until the screened bounded replay proof is honest on a representative
+- `R1B` landed the honest recovery/export semantics for the narrower repeated-failure surface
+- `R1C` landed the honest bounded replay diagnosis and routed the remaining analyzer seam
+- `R1D` remains open until repeated verification-loop semantics are fixed on focused analyzer
+  regressions
+- `R1E` remains open until the screened bounded replay re-proof is honest on a representative
   non-subagent recovery tail as well as the clean control corpus
 - the family stayed inside analyzer outcome evidence plus `dead_end_thrash` semantics and did not
   widen into turn context, archetype, progress, or sentinel cleanup

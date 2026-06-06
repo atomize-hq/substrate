@@ -5,25 +5,33 @@
 This plan implements
 `docs/specs/agent-drift-analyzer-outcome-evidence-r1-spec.md`.
 
-The old single-packet `R1` shape is intentionally split into three packets:
+The old single-packet `R1` shape was first split into three packets, and is now expanded to five
+after bounded replay exposed a second analyzer seam:
 
 - `R1A`: docs lock, analyzer outcome-evidence seam, and repeated-failure cutover
 - `R1B`: recovery/export semantics plus focused regressions for honest downgrade behavior
-- `R1C`: bounded replay proof over screened non-subagent sessions plus continuity-note refresh
+- `R1C`: bounded replay diagnosis plus honest status correction when the proof still fails
+- `R1D`: analyzer repeated verification-loop semantics and honest recovery fix
+- `R1E`: bounded replay re-proof over screened non-subagent sessions plus continuity-note refresh
 
-The family goal remains the same: correct the analyzer evidence surface that still treats generic
-`ToolOutput` as failure evidence and thereby keeps `dead_end_thrash` sticky through successful
-session tails. The split exists to keep each landing unit reviewable and checkpoint-green.
+The family goal remains the same: make `dead_end_thrash` honest on completed successful tails
+without widening into broader analyzer or sentinel redesign. Live repo truth now shows that the
+family has two distinct analyzer seams:
+
+- the landed outcome-evidence cutover that stopped generic `ToolOutput` from counting as failure
+- the still-open repeated verification-loop semantics that can keep completed success tails falsely
+  active
 
 This family should:
 
 - add one analyzer-owned outcome-evidence classification seam over `CompactionRow`
 - narrow repeated-failure loop construction to explicit failure evidence
-- keep repeated verification loops unchanged
-- keep `dead_end_thrash` active on real repeated failures while allowing honest downgrade on
-  successful-output-only tails
-- add bounded analyzer regressions first, then a small handful of real-session-style acceptance
-  runs after the analyzer semantics are already landed
+- use bounded replay to verify the family status honestly, even when that proof exposes a remaining
+  analyzer seam
+- fix repeated verification-loop recovery semantics without first changing compactor schema
+- keep `dead_end_thrash` active on real repeated failures and out-of-scope verification while
+  allowing honest downgrade on completed in-scope success tails
+- add focused analyzer regressions before the final real-session-style replay re-proof
 - exclude subagent/delegated sessions from that proof corpus unless a minimal screening classifier
   is first added to identify them reliably
 
@@ -37,17 +45,21 @@ This family should not:
 
 ## Why This Family Comes Next
 
-The live stack already has analyzer-owned `DriftState` and sentinel `v0.3` checkpoint consumption,
-but semantic honesty is still wrong because the analyzer builds repeated-failure history from a
-coarse row-kind rule:
+The live stack already has analyzer-owned `DriftState`, sentinel `v0.3` checkpoint consumption,
+and the landed `R1A`/`R1B` outcome-evidence cutover. But bounded replay proved semantic honesty is
+still wrong because repeated verification loops remain a direct `dead_end_thrash` input:
 
-- `repetition_slice(...)` still filters archival rows through `is_failure_row(...)`
-- `is_failure_row(...)` still treats `CompactionKind::ToolOutput` as failure
-- `dead_end_thrash` consumes those repeated-failure loops directly
+- `collect_command_observations(...)` still marks `cargo`, `pnpm`, and `npm` families as
+  `verification_like`
+- `repetition_slice(...)` still builds repeated verification history from those commands
+- `recovery_state(...)` still blocks recovery when the current interval touches repeated
+  verification loops
+- `score_dead_end_thrash(...)` still lets repeated verification loops force active thrash by
+  themselves
 
-That means the highest-leverage next work is still the evidence-surface correction. The only
-change here is packet sizing: the real-session proof is valuable, but it should not be bundled
-into the first code-change landing if that makes the packet too large to execute cleanly.
+That means the highest-leverage next work is no longer a new `ToolOutput` cutover. It is the
+verification-loop semantics fix exposed by the bounded replay diagnosis. The new `R1D`/`R1E` split
+exists to keep that fix and its replay re-proof reviewable and checkpoint-green.
 
 ## Packet Strategy
 
@@ -55,7 +67,7 @@ into the first code-change landing if that makes the packet too large to execute
 
 Deliver first:
 
-- lock the `R1A`/`R1B`/`R1C` family split in repo docs
+- lock the `R1A`/`R1B`/`R1C`/`R1D`/`R1E` family split in repo docs
 - define one analyzer-local outcome-evidence type or helper
 - classify `CompactionKind::Error` as explicit failure
 - classify generic `CompactionKind::ToolOutput` as neutral by default
@@ -84,21 +96,59 @@ Why second:
 - the family should fix the false positive by improving inputs and then proving the recovery
   semantics, not by jumping straight to replay proof while core analyzer behavior is still moving
 
-### Packet R1C: Bounded Replay Proof And Continuity Refresh
+### Packet R1C: Bounded Replay Diagnosis And Honest Status Correction
 
 Deliver third:
 
 - screen candidate proof sessions to exclude delegated/subagent runs
-- add bounded replay acceptance across a small handful of completed non-subagent sessions that
-  match the reproduced false-positive tail shape
+- run bounded replay across a small handful of completed non-subagent sessions that match the
+  reproduced false-positive tail shape
+- compare the clean controls and representative sticky replay against their rollout tails
+- if the representative sticky replay still ends active, capture that state honestly and route the
+  family to the precise remaining analyzer seam
 - add only the smallest acceptance-only helper such as `subagent_observed` if rollout-text
   screening proves unreliable
-- refresh continuity notes only if the final proof surface or verifier list changes materially
+- refresh continuity notes only enough to correct the packet route and current family status
 
 Why third:
 
-- the family is only complete once it proves semantic honesty on real-session-style tails, but that
-  proof is a better fit after the code semantics are already stable
+- the first replay proof is where the family proves whether the analyzer semantics are actually
+  sufficient; if they are not, the honest move is to stop and split the remaining seam instead of
+  overclaiming completion
+
+### Packet R1D: Repeated Verification-Loop Semantics And Honest Recovery Fix
+
+Deliver fourth:
+
+- adjust `collect_command_observations(...)`, `recovery_state(...)`, and
+  `score_dead_end_thrash(...)` so repeated verification stays historical unless the current
+  interval is still out of scope or still carries repeated explicit failure evidence
+- keep repeated verification evidence visible without letting it force active thrash by itself on
+  completed in-scope success tails
+- narrow `verification_like` tagging only if the smallest deterministic analyzer-local rule is
+  needed to clear the reproduced false positive
+- add focused regressions for repeated successful verification loops, out-of-scope verification,
+  and recovered/historical transitions
+
+Why fourth:
+
+- `R1C` already proved the remaining seam is analyzer-owned, so the next honest step is a narrow
+  analyzer fix, not more replay paperwork
+
+### Packet R1E: Bounded Replay Re-Proof And Continuity Refresh
+
+Deliver fifth:
+
+- rerun the final screened non-subagent replay corpus after `R1D`
+- prove the representative sticky session now clears or downgrades honestly instead of ending
+  active from repeated verification loops
+- confirm clean controls remain cleared
+- refresh continuity notes if the final proof corpus or verifier surface changed materially
+
+Why fifth:
+
+- the family is only complete once the real-session-style bounded replay proof passes on top of
+  the landed verification-loop fix
 
 ## Sequencing
 
@@ -106,23 +156,27 @@ Sequential work:
 
 1. land `R1A` docs plus classifier contract and repeated-failure cutover
 2. verify `R1A` with focused analyzer tests and stop there
-3. land `R1B` recovery/export semantics and focused regressions
+3. land `R1B` recovery/export semantics for the narrower repeated-failure surface
 4. verify `R1B` with focused analyzer tests and stop there
 5. screen a small proof corpus for non-subagent sessions using current rollout markers
-6. land `R1C` bounded replay proof and any continuity-note refresh
-7. run the analyzer wall and then the bounded replay proof set
+6. land `R1C` bounded replay diagnosis and honest status correction
+7. land `R1D` repeated verification-loop semantics and focused regressions
+8. verify `R1D` with focused analyzer tests and stop there
+9. land `R1E` bounded replay re-proof and any continuity-note refresh
+10. run the analyzer wall and then the final bounded replay proof set
 
 Parallel-safe work after `R1A` lands:
 
-- focused `R1B` regression drafting in `dead_end_thrash.rs` and `export_bundle.rs`
-- screening candidate real sessions for subagent markers for later `R1C`
-- drafting continuity-note updates while replay acceptance is executing
+- focused `R1B` and later `R1D` regression drafting in `dead_end_thrash.rs` and
+  `export_bundle.rs`
+- screening candidate real sessions for subagent markers for later `R1C`/`R1E`
+- drafting continuity-note updates while replay diagnosis or re-proof is executing
 
 Not parallel-safe:
 
 - classifier design and repeated-failure cutover
 - recovery semantic changes before `R1A` lands
-- replay-proof claims before `R1B` semantic behavior is locked
+- replay-proof claims before `R1D` verification-loop behavior is locked
 
 ## Major Risks And Mitigations
 
@@ -153,26 +207,34 @@ Mitigation:
 - keep open the later option for richer compactor structure if current text-only evidence proves
   insufficient
 
-### Risk 4: The Replay Proof Still Dominates Session Size
+### Risk 4: The Verification-Loop Fix Hides Real Thrash By Overcorrecting
 
 Mitigation:
 
-- keep `R1C` separate from the analyzer-semantic packets
-- treat replay proof as the first ejectable step if `R1B` uncovers deeper analyzer work
-- avoid mixing proof-corpus plumbing into `R1A` or `R1B` unless it is the smallest route to a
-  passing focused regression
+- keep repeated explicit failures and out-of-scope verification as active thrash inputs
+- preserve repeated verification evidence as historical context even when it stops forcing `Active`
+- add regressions that prove out-of-scope verification and explicit repeated failure still flag
 
-### Risk 5: Proof Sessions Are Contaminated By Subagent Delegation
+### Risk 5: The Replay Proof Still Dominates Session Size
+
+Mitigation:
+
+- keep `R1C` and `R1E` separate from the analyzer-semantic packets
+- treat replay re-proof as the first ejectable step if `R1D` uncovers deeper analyzer work
+- avoid mixing proof-corpus plumbing into `R1A`, `R1B`, or `R1D` unless it is the smallest route
+  to a passing focused regression
+
+### Risk 6: Proof Sessions Are Contaminated By Subagent Delegation
 
 Mitigation:
 
 - screen candidate sessions for `multi_agent_v1` activity such as `spawn_agent`, `wait_agent`, and
-  `close_agent` before treating them as `R1C` proof
-- treat delegated sessions as out of corpus for `R1C`
+  `close_agent` before treating them as `R1C` or `R1E` proof
+- treat delegated sessions as out of corpus for `R1C` and `R1E`
 - if text screening proves unreliable, add only a tiny acceptance-selection classifier such as
   `subagent_observed`; do not broaden into a general supported subagent seam
 
-### Risk 6: Scope Drifts Into R2-R7 Work
+### Risk 7: Scope Drifts Into R2-R7 Work
 
 Mitigation:
 
@@ -227,6 +289,34 @@ The replay proof is successful only if the final analyzer/sentinel state is comp
 known completed non-subagent rollout tail and no longer ends with active `dead_end_thrash` for a
 successful-output-only tail.
 
+### Packet R1D
+
+```bash
+cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
+cargo test -p agent-drift-analyzer export_bundle -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
+```
+
+### Packet R1E
+
+```bash
+export SESSION_ID="<completed-session-id>"
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export OUTPUT_DIR="target/hybrid-drift-evals/$SESSION_ID"
+
+cargo run -p agent-session-compactor -- \
+  --codex-home "$CODEX_HOME" \
+  --session-id "$SESSION_ID" \
+  --output-dir "$OUTPUT_DIR/compactor"
+
+cargo run -p agent-drift-analyzer -- \
+  --input-dir "$OUTPUT_DIR/compactor" \
+  --output-dir "$OUTPUT_DIR/analyzer"
+
+cargo run -p agent-drift-sentinel -- \
+  --checkpoint-dir "$OUTPUT_DIR/analyzer"
+```
+
 ## Verification Checkpoints
 
 ### Checkpoint VR1-A: `R1A` Classifier Contract Is Locked
@@ -262,11 +352,14 @@ cargo test -p agent-drift-analyzer export_bundle -- --nocapture
 cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
-### Checkpoint VR1-C: `R1C` Bounded Honesty Proof Passes
+### Checkpoint VR1-C: `R1C` Bounded Replay Status Is Honest
 
 Must be true:
 
-- a small handful of bounded real-session-style tails no longer end in active `dead_end_thrash`
+- a small handful of bounded real-session-style tails were replayed and compared against their
+  rollout tails
+- if the representative sticky replay still ends active, the remaining analyzer-owned seam is
+  named precisely and routed to the next packet instead of being hand-waved away
 - each proof session has been screened to exclude subagent/delegation usage, or a tiny explicit
   screening classifier exists to mark that usage for proof selection
 - the proof remains analyzer-rooted rather than relying on a sentinel-only presentation tweak
@@ -277,9 +370,43 @@ Verify:
 - run the bounded replay proof commands above for each screened session
 - inspect the final checkpoint output against the source rollout tail
 
+### Checkpoint VR1-D: `R1D` Verification-Loop Semantics Are Honest
+
+Must be true:
+
+- repeated successful verification loops do not by themselves keep completed in-scope success
+  tails active
+- out-of-scope verification still blocks recovery
+- repeated explicit failures still keep `dead_end_thrash` active
+- recovered and historical-only transitions remain deterministic after the fix
+
+Verify:
+
+```bash
+cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
+cargo test -p agent-drift-analyzer export_bundle -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
+```
+
+### Checkpoint VR1-E: `R1E` Final Bounded Honesty Proof Passes
+
+Must be true:
+
+- the representative sticky non-subagent replay no longer ends falsely active from repeated
+  verification loops
+- clean controls remain cleared
+- each proof session has been screened to exclude subagent/delegation usage, or a tiny explicit
+  screening classifier exists to mark that usage for proof selection
+- continuity notes describe the final packet route and bounded-proof result honestly
+
+Verify:
+
+- run the bounded replay proof commands above for each final screened session
+- inspect the final checkpoint output against the source rollout tail
+
 ## Review Notes
 
-The main review question for this plan is whether `R1B` stays comfortably bounded once `R1A` lands.
-If recovery/export verification starts dragging in proof-corpus or broader analyzer redesign work,
-the honest move is to stop and re-scope instead of silently re-merging `R1B` and `R1C` into one
-oversized session.
+The main review question for this plan is whether `R1D` stays comfortably bounded once `R1C`
+pinpoints the remaining seam. If the verification-loop fix starts dragging in richer compactor
+structure or broader analyzer redesign work, the honest move is to stop and re-scope instead of
+silently re-merging `R1D` and `R1E` into one oversized session.

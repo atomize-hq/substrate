@@ -5,9 +5,9 @@
 1. Live repo truth is the authority: analyzer checkpoint state `v0.6A` and sentinel cutover
    `v0.6B` are already landed, so this is the next follow-on family rather than a reopening of
    checkpoint-state ownership.
-2. The work still belongs to one semantic family, but it is too wide for one clean landing
-   session if it combines doc locking, analyzer seam work, recovery/export semantics, and bounded
-   replay proof.
+2. The work still belongs to one semantic family, but the original three-packet split proved too
+   narrow once bounded replay exposed a second analyzer seam in repeated verification-loop
+   semantics.
 3. The compactor bundle contract remains `v0.2` and does not grow new fields first. The analyzer
    must classify outcome evidence from the current `CompactionRow` surface (`kind`, `text`,
    stable row refs, timestamps) rather than requiring an upstream schema change.
@@ -30,13 +30,14 @@
 
 ## Objective
 
-Implementation target on `2026-06-05`:
+Implementation target on `2026-06-06`:
 
-- split the typed outcome-evidence follow-on into three focused packets
+- split the typed outcome-evidence follow-on into five focused packets
 - land the analyzer-owned outcome-evidence seam before the replay-proof work
-- preserve honest `dead_end_thrash` recovery semantics after the evidence cutover
-- prove the fix against a small non-subagent replay corpus only after the analyzer semantics are
-  already landed and stable
+- preserve honest `dead_end_thrash` recovery semantics after the repeated-failure cutover
+- use bounded replay to prove the live family status honestly, even if that proof exposes another
+  analyzer-owned seam
+- land the repeated verification-loop fix before the final bounded replay re-proof
 
 Primary users:
 
@@ -50,12 +51,15 @@ Success means:
 - `R1A` lands the analyzer-owned outcome-evidence seam plus repeated-failure cutover
 - `R1B` lands the honest recovery/export semantics and focused regressions needed to trust the
   narrower failure surface
-- `R1C` lands the bounded non-subagent replay proof and continuity-note refresh without widening
-  into broader analyzer or sentinel work
+- `R1C` lands the bounded non-subagent replay diagnosis and honest status correction when the
+  original replay proof still fails
+- `R1D` lands the analyzer-owned repeated verification-loop and recovery fix exposed by `R1C`
+- `R1E` lands the final bounded non-subagent replay re-proof and continuity-note refresh without
+  widening into broader analyzer or sentinel work
 
 ## Packet Family Boundary
 
-This spec defines the `R1` packet family, split into `R1A`, `R1B`, and `R1C`.
+This spec defines the `R1` packet family, split into `R1A`, `R1B`, `R1C`, `R1D`, and `R1E`.
 
 ### Packet R1A: Outcome-Evidence Seam And Repeated-Failure Cutover
 
@@ -89,7 +93,7 @@ Out of scope:
 - compactor -> analyzer -> sentinel replay proof
 - continuity-note refresh driven only by the real-session proof set
 
-### Packet R1C: Bounded Replay Proof And Continuity Refresh
+### Packet R1C: Bounded Replay Diagnosis And Honest Status Correction
 
 In scope:
 
@@ -97,16 +101,56 @@ In scope:
 - add or use only the smallest acceptance-only screening helper if rollout-text screening proves
   unreliable
 - run the bounded compactor -> analyzer -> sentinel replay flow on the screened session set
-- refresh continuity notes if the final proof corpus, verifier shape, or packet-routing language
-  changed materially during `R1A`/`R1B`
+- compare the control corpus and representative sticky replay against the real rollout tails
+- record the honest family state if the representative sticky replay still fails after `R1A`/`R1B`
+  and name the remaining analyzer-owned seam precisely enough to scope the follow-on packet
 
 Out of scope:
 
-- changing analyzer semantics beyond the minimum needed to make already-landed `R1A`/`R1B`
-  behavior verifiable
+- landing the repeated verification-loop semantics fix itself
 - changing sentinel scheduler policy, operator presentation, or live runtime behavior
 - adding a general-purpose subagent semantics or scoring seam beyond the minimal proof-session
   screening needed to exclude delegated runs
+
+### Packet R1D: Repeated Verification-Loop Semantics And Honest Recovery Fix
+
+In scope:
+
+- update analyzer-owned verification-loop semantics after `R1C` proved the remaining sticky
+  `dead_end_thrash` false positive
+- keep repeated verification evidence visible as historical context while preventing it from
+  forcing active thrash by itself on completed in-scope success tails
+- tighten `recovery_state(...)`, `repetition_slice(...)`, and `score_dead_end_thrash(...)` so
+  repeated successful verification only stays active when the current interval is still out of
+  scope or still carries repeated explicit failure evidence
+- narrow `verification_like` classification if needed, but only with deterministic analyzer-local
+  rules over the existing `CompactionRow` surface
+- add focused regressions for repeated successful verification loops, out-of-scope verification,
+  and honest recovered/historical transitions
+
+Out of scope:
+
+- changing compactor bundle schema or adding richer upstream typed command/outcome structure first
+- re-proving the real-session corpus
+- changing sentinel runtime or operator-surface logic
+
+### Packet R1E: Bounded Replay Re-Proof And Continuity Refresh
+
+In scope:
+
+- rerun the bounded compactor -> analyzer -> sentinel replay flow on the screened non-subagent
+  proof set after `R1D`
+- prove the representative sticky session now clears or downgrades honestly instead of ending
+  falsely active from repeated verification loops
+- refresh continuity notes if the final proof corpus, verifier shape, or packet-routing language
+  changed materially during `R1D`
+- keep proof claims labeled as bounded replay proof rather than live proof
+
+Out of scope:
+
+- new analyzer semantics beyond what `R1D` already landed
+- changing sentinel scheduler policy, operator presentation, or live runtime behavior
+- widening into richer turn-context, archetype, or progress packets
 
 ## Family-Wide Out Of Scope
 
@@ -114,7 +158,8 @@ Out of scope:
 - adding per-checkpoint turn-context fields
 - adding `session_archetype` or `session_progress`
 - retuning other drift classes unless a shared helper must move mechanically with this family
-- broadening into replay/live operator docs beyond what is needed to describe the bounded proof
+- broadening into replay/live operator docs beyond what is needed to describe the bounded replay
+  diagnosis and re-proof
 - changing sentinel scheduler, runtime, or presentation logic
 
 ## Tech Stack
@@ -128,6 +173,7 @@ Out of scope:
   - analyzer checkpoint schema `v0.3`
 - Existing scorer surface:
   - `CheckpointAnalysis.repetition.repeated_failure_loops`
+  - `CheckpointAnalysis.repetition.repeated_verification_loops`
 
 Dependency posture:
 
@@ -152,7 +198,7 @@ cargo test -p agent-drift-analyzer export_bundle -- --nocapture
 cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
-### Packet R1C bounded replay proof
+### Packet R1C bounded replay diagnosis
 
 ```bash
 export SESSION_ID="<completed-session-id>"
@@ -180,20 +226,59 @@ That proof is bounded replay evidence, not live proof. It is honest only if the 
 known completed non-subagent sessions whose tails can be compared against the cited analyzer
 evidence.
 
+### Packet R1D validation
+
+```bash
+cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
+cargo test -p agent-drift-analyzer export_bundle -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
+```
+
+### Packet R1E bounded replay re-proof
+
+```bash
+export SESSION_ID="<completed-session-id>"
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export OUTPUT_DIR="target/hybrid-drift-evals/$SESSION_ID"
+
+cargo run -p agent-session-compactor -- \
+  --codex-home "$CODEX_HOME" \
+  --session-id "$SESSION_ID" \
+  --output-dir "$OUTPUT_DIR/compactor"
+
+cargo run -p agent-drift-analyzer -- \
+  --input-dir "$OUTPUT_DIR/compactor" \
+  --output-dir "$OUTPUT_DIR/analyzer"
+
+cargo run -p agent-drift-sentinel -- \
+  --checkpoint-dir "$OUTPUT_DIR/analyzer"
+```
+
+Run that flow for the final screened non-subagent proof set after `R1D` lands. The re-proof is
+successful only if the representative sticky session and the clean control corpus both avoid a
+false final `dead_end_thrash=active` result.
+
 ## Project Structure
 
 ```text
 crates/agent-drift-analyzer/src/checkpoint/mod.rs
   Owns checkpoint analysis, repetition slicing, and recovery-state inputs. `R1A` should add the
-  typed outcome-evidence seam here or in a closely related analyzer-local helper module.
+  typed outcome-evidence seam here or in a closely related analyzer-local helper module. `R1D`
+  should land the repeated verification-loop and recovery adjustments here as well.
 
 crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs
   Owns thrash scoring. `R1B` should confirm it consumes explicit failure evidence rather than raw
-  row-kind groupings.
+  row-kind groupings, and `R1D` should keep repeated verification history from forcing active
+  thrash on completed in-scope success tails.
+
+crates/agent-drift-analyzer/src/context/working_set.rs
+  Owns `collect_command_observations(...)` and `verification_like` tagging. `R1D` may narrow that
+  tagging if family-only command classification proves too coarse for honest verification-loop
+  recovery.
 
 crates/agent-drift-analyzer/tests/dead_end_thrash.rs
   Primary regression coverage for repeated failure, successful-output recovery, and historical-only
-  transitions across `R1A` and `R1B`.
+  transitions across `R1A`, `R1B`, and `R1D`.
 
 crates/agent-drift-analyzer/tests/export_bundle.rs
 crates/agent-drift-analyzer/tests/checkpoints.rs
@@ -204,8 +289,12 @@ crates/agent-drift-analyzer/tests/support/mod.rs
   Shared fixture helpers for building bounded analyzer bundles and real-session-style test inputs.
 
 /Users/spensermcconnell/.codex/sessions/
-  Source rollout corpus for `R1C` bounded replay proof and for screening whether a candidate proof
-  session used subagents.
+  Source rollout corpus for `R1C` replay diagnosis and `R1E` bounded replay re-proof, plus
+  screening whether a candidate proof session used subagents.
+
+target/hybrid-drift-evals/
+  Local bounded-replay evidence artifacts used during `R1C` diagnosis and `R1E` re-proof. These
+  are proof artifacts, not committed code by themselves.
 
 HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md
   Repo-root planning authority that declares the `R1` packet family the next landing step and
@@ -274,14 +363,32 @@ Conventions:
 ### Packet R1C
 
 5. Bounded real-session-style acceptance
-   - screen a small handful of completed proof sessions and exclude any session with subagent /
+  - screen a small handful of completed proof sessions and exclude any session with subagent /
      delegation markers already visible in the rollout
-   - if the current rollout text proves too weak to screen subagent usage reliably, add only the
+  - if the current rollout text proves too weak to screen subagent usage reliably, add only the
      smallest classifier needed to label `subagent_observed` for proof selection; do not broaden
      into a general supported subagent seam
-   - run the current compactor -> analyzer -> sentinel replay flow on that non-subagent session set
-   - prove the final checkpoint does not end with active `dead_end_thrash` when each cited tail is
-     only successful tool output plus normal completion
+  - run the current compactor -> analyzer -> sentinel replay flow on that non-subagent session set
+  - if the representative sticky session still ends active, capture that result honestly and name
+    the remaining analyzer-owned seam precisely enough to route the follow-on packet
+
+### Packet R1D
+
+6. Repeated verification-loop regression coverage
+   - verify repeated successful verification commands such as `cargo fmt`, `cargo clippy`, and
+     `cargo test` do not by themselves keep completed in-scope success tails active
+   - verify repeated verification still stays active when the current interval is out of scope
+   - verify repeated explicit failure evidence still keeps `dead_end_thrash` active
+   - verify historical and recovered transitions remain deterministic after the verifier-loop fix
+
+### Packet R1E
+
+7. Bounded replay re-proof
+   - rerun the screened non-subagent proof corpus after `R1D`
+   - verify the representative sticky replay no longer ends falsely active from repeated
+     verification loops
+   - verify clean control replays stay cleared
+   - refresh continuity notes if the final verifier list or packet routing changed materially
 
 ## Boundaries
 
@@ -291,8 +398,8 @@ Conventions:
   - keep failure attribution separate from turn-context, archetype, and progress semantics
   - classify ambiguous `ToolOutput` rows as neutral
   - update analyzer regressions in the same packet as the code change they defend
-  - screen real-session proof candidates for subagent usage before treating them as `R1C`
-    evidence
+- screen real-session proof candidates for subagent usage before treating them as `R1C` or `R1E`
+  evidence
 - Ask first:
   - changing compactor schema or upstream normalization to expose richer tool-output structure
   - widening analyzer checkpoint schema beyond the already-landed `v0.3`
@@ -307,13 +414,18 @@ Conventions:
 ## Success Criteria
 
 1. `R1A` lands an analyzer-local outcome-evidence seam and repeated-failure cutover that no longer
-   treat generic `CompactionKind::ToolOutput` rows as failure by default.
-2. `R1B` proves `dead_end_thrash` still stays active on real repeated explicit failures, but
-   clears or downgrades on successful-tool-output-only tails.
-3. `R1C` proves on a small handful of screened non-subagent sessions that completed rollout tails
-   no longer end in active `dead_end_thrash` just because repeated `ToolOutput` rows occurred.
-4. The family does not broaden into turn-context, session-archetype, or progress semantics; those
-   remain separate planned work after `R1C`.
+   treats generic `CompactionKind::ToolOutput` rows as failure by default.
+2. `R1B` proves the narrower repeated-failure surface clears or downgrades honestly when only
+   neutral/successful tool output remains, without yet retuning repeated verification loops.
+3. `R1C` proves the bounded replay status honestly by showing whether the representative sticky
+   non-subagent session still fails after `R1A`/`R1B`, and names the remaining analyzer-owned seam
+   precisely if it does.
+4. `R1D` lands the repeated verification-loop semantics fix so completed in-scope success tails no
+   longer stay active merely because verification commands repeated while converging.
+5. `R1E` proves on a small handful of screened non-subagent sessions that completed rollout tails
+   no longer end falsely active from repeated verification loops.
+6. The family does not broaden into turn-context, session-archetype, or progress semantics; those
+   remain separate planned work after `R1E`.
 
 ## Open Questions
 
@@ -332,7 +444,12 @@ Conventions:
    - Assumed default for this family: prefer the smallest fixture that still preserves the false-
      positive tail shape and row kinds seen in the reproduced sessions.
 4. Subagent screening seam: is rollout-text screening for `multi_agent_v1` activity sufficient for
-   excluding delegated sessions from the proof set, or does `R1C` need a tiny explicit
+   excluding delegated sessions from the proof set, or does `R1C`/`R1E` need a tiny explicit
    `subagent_observed` classifier purely for acceptance selection?
    - Assumed default for this family: use rollout-text screening first and add only the smallest
      acceptance-only classifier if that screening proves unreliable during implementation.
+5. Verification command taxonomy: should `verification_like` remain a family-level classifier
+   (`cargo`, `pnpm`, `npm`) during `R1D`, or does honest replay behavior require a slightly
+   narrower analyzer-local rule over known verification subcommands?
+   - Assumed default for this family: keep the smallest deterministic analyzer-local rule that
+     clears the reproduced false positive without adding new compactor structure first.
