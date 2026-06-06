@@ -3681,6 +3681,12 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
         guard.execute_cancel_requests[0].sig, "TERM",
         "ephemeral cancel must preserve the exact graceful=false signal mapping: {guard:#?}"
     );
+    assert!(
+        guard.execute_cancel_requests
+            .iter()
+            .all(|request| request.span_id == task_run_id),
+        "ephemeral cancel retries must stay pinned to the authoritative in-flight task_run_id: {guard:#?}"
+    );
     drop(guard);
 
     let run_response = read_internal_toolbox_world_dispatch_result(&mut run_response_reader);
