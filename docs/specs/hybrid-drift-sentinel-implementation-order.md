@@ -588,7 +588,7 @@ Packet 18 note:
     `019e940c-a91b-7fe0-a967-b0bdd595b581`, and `019e943c-668e-7a03-992b-6a98cf3055da` still end
     with final `dead_end_thrash.state=cleared`, `raw_score=0`, and `flagged=false`
   - representative non-subagent sticky rerun `019e894a-86c9-71e3-b57b-e3d3285f0988` now ends with
-    final `dead_end_thrash.state=recovered`, `raw_score=20`, and `flagged=false`
+    final `dead_end_thrash.state=recovered`, `raw_score=20`, and `dead_end_thrash.flagged=false`
   - replay artifacts for the passing bounded proof live under
     `target/hybrid-drift-evals/*-r1e/`
   - delegated sessions remain excluded by `multi_agent_v1` markers, and

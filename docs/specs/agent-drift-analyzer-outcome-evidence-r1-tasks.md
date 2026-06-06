@@ -266,7 +266,7 @@ Packet `R1D` exit condition:
       - `019e943c-668e-7a03-992b-6a98cf3055da` ->
         `target/hybrid-drift-evals/019e943c-668e-7a03-992b-6a98cf3055da-r1e/`
     - representative sticky non-subagent rerun now ends with final
-      `dead_end_thrash.state=recovered`, `raw_score=20`, and `flagged=false`:
+      `dead_end_thrash.state=recovered`, `raw_score=20`, and `dead_end_thrash.flagged=false`:
       - `019e894a-86c9-71e3-b57b-e3d3285f0988` ->
         `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1e/`
     - delegated sessions remain excluded by rollout `multi_agent_v1` markers:

@@ -464,7 +464,7 @@ R1 family continuity notes:
     `019e940c-a91b-7fe0-a967-b0bdd595b581`,
     `019e943c-668e-7a03-992b-6a98cf3055da`
   - representative sticky rerun `019e894a-86c9-71e3-b57b-e3d3285f0988` now ends with final
-    `dead_end_thrash.state=recovered`, `raw_score=20`, and `flagged=false` in
+    `dead_end_thrash.state=recovered`, `raw_score=20`, and `dead_end_thrash.flagged=false` in
     `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1e/`
   - the final proof corpus did not widen, delegated sessions remain excluded, and
     `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the successful-output-only proof set
