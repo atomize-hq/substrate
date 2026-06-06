@@ -354,8 +354,9 @@ follow-on after checkpoint-state.
 
 ### Objective
 
-Stop treating generic `ToolOutput` as failure evidence and establish one explicit outcome-evidence
-seam, but do it as three tighter packets rather than one oversized landing session.
+Stop treating generic `ToolOutput` as failure evidence, fix the follow-on repeated
+verification-loop honesty gap that bounded replay exposed, and keep the proof and downstream
+sentinel cleanup split into reviewable packets.
 
 ### Why First
 
@@ -367,7 +368,7 @@ family, but it should follow the analyzer-semantic cutover instead of sharing th
 
 #### Packet R1A
 
-- docs lock for the `R1A` / `R1B` / `R1C` family boundary
+- docs lock for the `R1A` / `R1B` / `R1C` / `R1D` / `R1E` / `R1F` family boundary
 - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
 - analyzer tests for classification and repeated-failure grouping
 
@@ -380,7 +381,21 @@ family, but it should follow the analyzer-semantic cutover instead of sharing th
 #### Packet R1C
 
 - screened bounded replay proof over a small non-subagent corpus
+- honest status correction when the representative sticky replay still fails
+
+#### Packet R1D
+
+- analyzer-owned repeated verification-loop semantics and recovery fix
+- focused regressions for successful verification tails and out-of-scope verifier loops
+
+#### Packet R1E
+
+- rerun the bounded non-subagent replay proof after `R1D`
 - continuity-note refresh if the final proof surface changed materially
+
+#### Packet R1F
+
+- narrow sentinel trigger/presentation cleanup after the analyzer proof is already honest
 
 ### Intentionally Left Out Of The R1 Family
 
@@ -398,43 +413,63 @@ The following work is intentionally not part of the `R1` family as currently sco
 - broader drift-scorer redesign that combines typed outcome evidence with turn context, archetype,
   and progress modules
   - falls under `R6`
-- replay/live checkpoint interpretation cleanup inside sentinel
+- broader replay/live checkpoint interpretation redesign inside sentinel
   - falls under `R7`
 
-The `R1` family is only the evidence-surface correction needed to stop generic `ToolOutput` from
-polluting repeated-failure history and `dead_end_thrash`, plus the bounded proof needed to show
-that narrower analyzer semantics behave honestly on completed non-subagent tails.
+The `R1` family is only the analyzer-local evidence-surface correction, the repeated
+verification-loop honesty fix it exposed, the bounded replay proof needed to show those narrower
+analyzer semantics behave honestly on completed non-subagent tails, and the narrow sentinel
+trigger/presentation cleanup that follows that proof.
 
 ### Acceptance
 
 - `R1A` lands the analyzer-owned outcome-evidence seam and repeated-failure cutover
 - `R1B` proves honest recovery/export semantics on the narrower failure surface
-- `R1C` proves the fix on a small handful of completed non-subagent sessions rather than a single
+- `R1C` proves the remaining sticky case is real, names the analyzer-owned follow-on seam
+  precisely, and keeps the proof status honest
+- `R1D` fixes repeated verification-loop semantics on focused analyzer regressions
+- `R1E` proves the fix on a small handful of completed non-subagent sessions rather than a single
   spot-check
+- `R1F` keeps sentinel trigger/presentation labels from overstating analyzer posture after the
+  proof lands
 - those proof sessions exclude subagent / delegated runs, or are explicitly screened to prove no
   subagent usage was present
 - the family still does not widen into turn context, session archetype, progress semantics, or
-  sentinel cleanup
+  broader sentinel redesign
 
-R1C rerun note on `2026-06-05`:
+R1 family continuity notes:
 
-- screened delegated sessions `019e93f8-a5e9-7490-ac1a-955b74c92ad0` and
-  `019e9406-6736-79a2-946b-8a603e557422` remain excluded by `multi_agent_v1`
-  `spawn_agent` / `wait_agent` / `close_agent` markers
-- clean non-subagent control replays still end with final `dead_end_thrash.state=cleared` and
-  `raw_score=0`:
-  `019e93fa-60d4-73d1-9092-014130b60e14`,
-  `019e940c-a91b-7fe0-a967-b0bdd595b581`,
-  `019e943c-668e-7a03-992b-6a98cf3055da`
-- screened session `019e9401-9d69-7190-a43e-9ee3be08b369` remains excluded from the
-  successful-output-only control corpus because its rollout includes `Exit code: 1` tool-output
-  rows, and its rerun still ends with active `dead_end_thrash`
-- representative non-subagent sticky live session `019e894a-86c9-71e3-b57b-e3d3285f0988` still
-  ends with final `dead_end_thrash.state=active` and `raw_score=100` when rerun into
-  `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1c-refresh/`
-- conclusion: `R1C` screening and control-corpus notes are current, but the bounded honesty proof
-  is not landed yet because the representative sticky recovery case still fails under current
-  replay
+- `2026-06-05`: `R1C` screening was grounded, but the first bounded replay proof did not land:
+  - screened delegated sessions `019e93f8-a5e9-7490-ac1a-955b74c92ad0` and
+    `019e9406-6736-79a2-946b-8a603e557422` remained excluded by `multi_agent_v1`
+    `spawn_agent` / `wait_agent` / `close_agent` markers
+  - clean non-subagent control replays still ended with final `dead_end_thrash.state=cleared` and
+    `raw_score=0`:
+    `019e93fa-60d4-73d1-9092-014130b60e14`,
+    `019e940c-a91b-7fe0-a967-b0bdd595b581`,
+    `019e943c-668e-7a03-992b-6a98cf3055da`
+  - screened session `019e9401-9d69-7190-a43e-9ee3be08b369` remained excluded from the
+    successful-output-only control corpus because its rollout included `Exit code: 1` tool-output
+    rows, and its rerun still ended with active `dead_end_thrash`
+  - representative non-subagent sticky live session `019e894a-86c9-71e3-b57b-e3d3285f0988` still
+    ended with final `dead_end_thrash.state=active` and `raw_score=100` when rerun into
+    `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1c-refresh/`
+  - conclusion: `R1C` honestly routed the family to `R1D` / `R1E`; the bounded replay proof was
+    not landed yet
+- `2026-06-06`: `R1D` and `R1E` closed the analyzer-owned replay gap on the same screened
+  non-subagent corpus:
+  - clean control reruns still end with final `dead_end_thrash.state=cleared`, `raw_score=0`, and
+    `flagged=false`:
+    `019e93fa-60d4-73d1-9092-014130b60e14`,
+    `019e940c-a91b-7fe0-a967-b0bdd595b581`,
+    `019e943c-668e-7a03-992b-6a98cf3055da`
+  - representative sticky rerun `019e894a-86c9-71e3-b57b-e3d3285f0988` now ends with final
+    `dead_end_thrash.state=recovered`, `raw_score=20`, and `flagged=false` in
+    `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1e/`
+  - the final proof corpus did not widen, delegated sessions remain excluded, and
+    `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the successful-output-only proof set
+    because its rollout includes `Exit code: 1` tool-output rows
+  - conclusion: the bounded replay proof is now landed as bounded replay proof, not live proof
 
 ## Packet R2: Analyzer Acceptance Fixture Hardening
 
@@ -445,9 +480,9 @@ reappearing after the `R1` family is fully landed.
 
 ### Why Second
 
-`R1C` still owns the screened bounded replay proof and any continuity/proof-language refresh tied
-to that proof surface. `R2` starts only after that proof actually lands and focuses on keeping a
-durable analyzer-local acceptance guard in place for later packets.
+`R1E` owns the final screened bounded replay proof and continuity refresh for the analyzer fix.
+`R2` starts only after that proof lands and focuses on keeping a durable analyzer-local acceptance
+guard in place for later packets.
 
 ### Scope
 
@@ -459,7 +494,7 @@ durable analyzer-local acceptance guard in place for later packets.
 
 - analyzer acceptance coverage keeps the final checkpoint from regressing back to falsely active
   on already-screened success-tail shapes
-- `R1C` remains the sole owner of screened bounded replay proof claims and continuity-note refresh
+- `R1E` remains the sole owner of screened bounded replay proof claims and continuity-note refresh
 
 ## Packet R3: Per-Checkpoint Turn Context
 

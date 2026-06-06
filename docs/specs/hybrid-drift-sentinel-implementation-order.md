@@ -566,7 +566,10 @@ Packet 18 note:
   sessions:
   - `R1A`: docs lock, analyzer outcome-evidence seam, and repeated-failure cutover
   - `R1B`: recovery/export semantics plus focused downgrade regressions
-  - `R1C`: screened bounded replay proof and continuity-note refresh
+  - `R1C`: screened bounded replay diagnosis and honest status correction
+  - `R1D`: analyzer repeated verification-loop semantics and recovery fix
+  - `R1E`: screened bounded replay re-proof and continuity-note refresh
+  - `R1F`: narrow sentinel trigger/presentation cleanup after bounded replay proof closes
 - `2026-06-05`: `R1C` screening is grounded, but the bounded replay proof is not landed yet:
   - clean non-subagent control replays `019e93fa-60d4-73d1-9092-014130b60e14`,
     `019e940c-a91b-7fe0-a967-b0bdd595b581`, and `019e943c-668e-7a03-992b-6a98cf3055da` still end
@@ -580,6 +583,17 @@ Packet 18 note:
   - representative non-subagent sticky live session `019e894a-86c9-71e3-b57b-e3d3285f0988` still
     ends with final `dead_end_thrash.state=active` and `raw_score=100` when rerun, so the
     successful-output-only honesty claim remains open
+- `2026-06-06`: `R1E` bounded replay re-proof now lands on the same screened non-subagent corpus:
+  - clean control reruns `019e93fa-60d4-73d1-9092-014130b60e14`,
+    `019e940c-a91b-7fe0-a967-b0bdd595b581`, and `019e943c-668e-7a03-992b-6a98cf3055da` still end
+    with final `dead_end_thrash.state=cleared`, `raw_score=0`, and `flagged=false`
+  - representative non-subagent sticky rerun `019e894a-86c9-71e3-b57b-e3d3285f0988` now ends with
+    final `dead_end_thrash.state=recovered`, `raw_score=20`, and `flagged=false`
+  - replay artifacts for the passing bounded proof live under
+    `target/hybrid-drift-evals/*-r1e/`
+  - delegated sessions remain excluded by `multi_agent_v1` markers, and
+    `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the successful-output proof corpus
+    because its rollout includes `Exit code: 1` tool-output rows
 
 ## If You Want Fewer Packets
 

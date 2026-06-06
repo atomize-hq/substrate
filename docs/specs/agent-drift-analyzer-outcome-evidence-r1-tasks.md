@@ -184,7 +184,7 @@ Packet `R1C` exit condition:
 
 ## Packet R1D: Land The Repeated Verification-Loop Semantics Fix
 
-- [ ] Task: Update analyzer semantics so repeated successful verification does not stay active by itself
+- [x] Task: Update analyzer semantics so repeated successful verification does not stay active by itself
   - Acceptance: analyzer semantics prove that:
     - repeated verification evidence remains visible as historical context
     - completed in-scope success tails do not stay `dead_end_thrash=active` solely because
@@ -201,7 +201,7 @@ Packet `R1C` exit condition:
     - `crates/agent-drift-analyzer/src/context/working_set.rs`
     - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
 
-- [ ] Task: Add focused regressions for repeated verification success tails and out-of-scope verifier loops
+- [x] Task: Add focused regressions for repeated verification success tails and out-of-scope verifier loops
   - Acceptance: regression coverage explicitly proves that:
     - repeated successful `cargo fmt`, `cargo clippy`, and `cargo test`-style verification does
       not by itself end a completed in-scope success tail as active thrash
@@ -214,6 +214,15 @@ Packet `R1C` exit condition:
     - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
     - `crates/agent-drift-analyzer/tests/support/mod.rs`
 
+  - Result:
+    - repeated successful verification loops now remain historical context on completed in-scope
+      success tails instead of forcing final active thrash on their own
+    - out-of-scope verification intervals still keep `dead_end_thrash` active, and repeated
+      explicit failure evidence still flags actively
+    - focused regression coverage now includes successful `cargo fmt`, `cargo clippy`, and
+      `cargo test` verification tails plus the replay-shaped memsrc verifier tail that previously
+      stayed sticky
+
 Packet `R1D` exit condition:
 
 - repeated successful verification loops no longer keep completed in-scope success tails active by
@@ -223,7 +232,7 @@ Packet `R1D` exit condition:
 
 ## Packet R1E: Re-Prove The Family On The Screened Non-Subagent Replay Corpus
 
-- [ ] Task: Rerun the bounded replay proof after `R1D` and refresh continuity notes
+- [x] Task: Rerun the bounded replay proof after `R1D` and refresh continuity notes
   - Acceptance: bounded replay re-proof shows that:
     - the compactor -> analyzer -> sentinel replay path runs on the final screened session set
     - the representative sticky non-subagent replay no longer ends falsely active from repeated
@@ -245,6 +254,28 @@ Packet `R1D` exit condition:
     - `docs/specs/hybrid-drift-sentinel-implementation-order.md`
     - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
     - `target/hybrid-drift-evals/`
+
+  - Result:
+    - the bounded replay proof corpus stayed the same screened non-subagent set from `R1C`
+    - clean control reruns still end with final `dead_end_thrash.state=cleared`, `raw_score=0`,
+      and `flagged=false`:
+      - `019e93fa-60d4-73d1-9092-014130b60e14` ->
+        `target/hybrid-drift-evals/019e93fa-60d4-73d1-9092-014130b60e14-r1e/`
+      - `019e940c-a91b-7fe0-a967-b0bdd595b581` ->
+        `target/hybrid-drift-evals/019e940c-a91b-7fe0-a967-b0bdd595b581-r1e/`
+      - `019e943c-668e-7a03-992b-6a98cf3055da` ->
+        `target/hybrid-drift-evals/019e943c-668e-7a03-992b-6a98cf3055da-r1e/`
+    - representative sticky non-subagent rerun now ends with final
+      `dead_end_thrash.state=recovered`, `raw_score=20`, and `flagged=false`:
+      - `019e894a-86c9-71e3-b57b-e3d3285f0988` ->
+        `target/hybrid-drift-evals/019e894a-86c9-71e3-b57b-e3d3285f0988-r1e/`
+    - delegated sessions remain excluded by rollout `multi_agent_v1` markers:
+      - `019e93f8-a5e9-7490-ac1a-955b74c92ad0`
+      - `019e9406-6736-79a2-946b-8a603e557422`
+    - screened session `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the
+      successful-output-only proof corpus because its rollout includes `Exit code: 1` tool-output
+      rows
+    - proof claims remain bounded replay proof only, not live proof
 
 Packet `R1E` exit condition:
 
@@ -306,10 +337,9 @@ Packet `R1F` exit condition:
 - `R1A` landed the analyzer outcome-evidence seam and repeated-failure cutover
 - `R1B` landed the honest recovery/export semantics for the narrower repeated-failure surface
 - `R1C` landed the honest bounded replay diagnosis and routed the remaining analyzer seam
-- `R1D` remains open until repeated verification-loop semantics are fixed on focused analyzer
-  regressions
-- `R1E` remains open until the screened bounded replay re-proof is honest on a representative
-  non-subagent recovery tail as well as the clean control corpus
+- `R1D` landed the repeated verification-loop semantics fix on focused analyzer regressions
+- `R1E` landed the screened bounded replay re-proof on the representative non-subagent recovery
+  tail as well as the clean control corpus
 - `R1F` remains open until sentinel replay/live trigger labeling no longer overstates analyzer
   repeated-failure activity after the analyzer fix has recovered
 - the family stayed inside analyzer outcome evidence, `dead_end_thrash` semantics, bounded replay
