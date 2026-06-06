@@ -8,9 +8,13 @@ use serial_test::serial;
 #[cfg(target_os = "linux")]
 use std::collections::VecDeque;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
-#[cfg(unix)]
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::io::Write;
+#[cfg(target_os = "linux")]
+use std::io::{BufRead, BufReader, Read};
+#[cfg(target_os = "linux")]
+use std::os::unix::net::UnixListener;
+#[cfg(target_os = "linux")]
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -361,7 +365,7 @@ fn write_orchestrator_and_world_member_runtime_world_config(
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
     home_substrate: &Path,
     fake_orchestrator: &Path,
@@ -811,7 +815,7 @@ fn read_invocation_count(path: &Path) -> usize {
         .unwrap_or(0)
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn wait_for_socket_path(path: &Path, timeout: Duration) {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
@@ -823,7 +827,7 @@ fn wait_for_socket_path(path: &Path, timeout: Duration) {
     panic!("timed out waiting for socket {}", path.display());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn toolbox_transport_path_for_home(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -841,7 +845,7 @@ fn toolbox_transport_path_for_home(
     preferred
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn start_internal_toolbox_world_dispatch_request(
     path: &Path,
     request: &serde_json::Value,
@@ -863,7 +867,7 @@ fn start_internal_toolbox_world_dispatch_request(
     BufReader::new(stream)
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn read_internal_toolbox_world_dispatch_response_frame(
     reader: &mut BufReader<UnixStream>,
 ) -> serde_json::Value {
@@ -878,7 +882,7 @@ fn read_internal_toolbox_world_dispatch_response_frame(
     serde_json::from_str(line.trim()).expect("parse internal toolbox response")
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn read_internal_toolbox_world_dispatch_started_task_run_id(
     reader: &mut BufReader<UnixStream>,
 ) -> String {
@@ -908,7 +912,7 @@ fn read_internal_toolbox_world_dispatch_started_task_run_id(
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn read_internal_toolbox_world_dispatch_result(
     reader: &mut BufReader<UnixStream>,
 ) -> serde_json::Value {
@@ -922,7 +926,7 @@ fn read_internal_toolbox_world_dispatch_result(
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn send_internal_toolbox_world_dispatch_request(
     path: &Path,
     request: &serde_json::Value,
@@ -931,7 +935,7 @@ fn send_internal_toolbox_world_dispatch_request(
     read_internal_toolbox_world_dispatch_result(&mut reader)
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn send_execute_cancel_request(path: &Path, span_id: &str) {
     let request = transport_api_types::ExecuteCancelRequestV1 {
         span_id: span_id.to_string(),
@@ -961,7 +965,7 @@ fn send_execute_cancel_request(path: &Path, span_id: &str) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn read_http_request(stream: &mut UnixStream) -> Option<(Vec<u8>, String, Vec<u8>)> {
     let mut buffer = Vec::new();
     let mut header_end = None;
@@ -1007,7 +1011,7 @@ fn read_http_request(stream: &mut UnixStream) -> Option<(Vec<u8>, String, Vec<u8
     None
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_http_stream_start(stream: &mut UnixStream) {
     stream
         .write_all(
@@ -1017,7 +1021,7 @@ fn write_http_stream_start(stream: &mut UnixStream) {
     stream.flush().expect("flush stream response headers");
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_chunked_frame(stream: &mut UnixStream, frame: &transport_api_types::ExecuteStreamFrame) {
     let mut payload = serde_json::to_vec(frame).expect("serialize stream frame");
     payload.push(b'\n');
@@ -1030,7 +1034,7 @@ fn write_chunked_frame(stream: &mut UnixStream, frame: &transport_api_types::Exe
     stream.flush().expect("flush chunked frame");
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn finish_chunked_stream(stream: &mut UnixStream) {
     stream
         .write_all(b"0\r\n\r\n")
@@ -1520,7 +1524,7 @@ fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &
         .join("participants")
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn canonical_obligations_dir(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
     sessions_dir(substrate_home)
         .join(orchestration_session_id)

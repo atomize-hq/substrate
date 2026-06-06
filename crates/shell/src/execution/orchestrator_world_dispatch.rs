@@ -13,7 +13,9 @@ use anyhow::Result;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
-use tokio::sync::{mpsc::UnboundedSender, watch};
+use tokio::sync::mpsc::UnboundedSender;
+#[cfg(target_os = "linux")]
+use tokio::sync::watch;
 #[cfg(target_os = "linux")]
 use uuid::Uuid;
 
@@ -146,14 +148,14 @@ fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurren
     &TRACKER
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 #[derive(Clone)]
 struct ActiveEphemeralTerminalWaitEntry {
     waiter_count: usize,
     state_tx: watch::Sender<Option<WorldTaskTerminalStateV1>>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 impl Default for ActiveEphemeralTerminalWaitEntry {
     fn default() -> Self {
         let (state_tx, _state_rx) = watch::channel(None);
@@ -164,13 +166,13 @@ impl Default for ActiveEphemeralTerminalWaitEntry {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 #[derive(Default)]
 struct ActiveEphemeralTerminalWaitTracker {
     by_task: BTreeMap<String, ActiveEphemeralTerminalWaitEntry>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 #[derive(Debug)]
 struct ActiveEphemeralTerminalWaitRegistrationGuard {
     orchestration_session_id: String,
@@ -178,7 +180,7 @@ struct ActiveEphemeralTerminalWaitRegistrationGuard {
     armed: bool,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 impl ActiveEphemeralTerminalWaitRegistrationGuard {
     fn new(orchestration_session_id: &str, task_run_id: &str) -> Self {
         register_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
@@ -194,7 +196,7 @@ impl ActiveEphemeralTerminalWaitRegistrationGuard {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 impl Drop for ActiveEphemeralTerminalWaitRegistrationGuard {
     fn drop(&mut self) {
         if !self.armed {
@@ -207,19 +209,19 @@ impl Drop for ActiveEphemeralTerminalWaitRegistrationGuard {
 #[cfg(target_os = "linux")]
 const ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 fn active_ephemeral_terminal_wait_tracker() -> &'static Mutex<ActiveEphemeralTerminalWaitTracker> {
     static TRACKER: LazyLock<Mutex<ActiveEphemeralTerminalWaitTracker>> =
         LazyLock::new(|| Mutex::new(ActiveEphemeralTerminalWaitTracker::default()));
     &TRACKER
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 fn active_ephemeral_terminal_wait_key(orchestration_session_id: &str, task_run_id: &str) -> String {
     format!("{orchestration_session_id}:{task_run_id}")
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 fn register_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
     let mut tracker = active_ephemeral_terminal_wait_tracker()
         .lock()
@@ -234,7 +236,7 @@ fn register_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_
     entry.waiter_count = entry.waiter_count.saturating_add(1);
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 fn release_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
     let key = active_ephemeral_terminal_wait_key(orchestration_session_id, task_run_id);
     let mut tracker = active_ephemeral_terminal_wait_tracker()
@@ -252,7 +254,7 @@ fn release_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_r
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 fn publish_active_ephemeral_terminal_truth(
     orchestration_session_id: &str,
     task_run_id: &str,
@@ -884,8 +886,7 @@ struct RunWorldTaskStreamResult {
     task_run_id: Option<String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 #[derive(Clone, Debug)]
 struct ResolvedActiveEphemeralInspectTarget {
     task_run_id: String,
@@ -894,7 +895,7 @@ struct ResolvedActiveEphemeralInspectTarget {
     target_backend_id: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 impl ResolvedActiveEphemeralInspectTarget {
     fn project_snapshot(
         &self,

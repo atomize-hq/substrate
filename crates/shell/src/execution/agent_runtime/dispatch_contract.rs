@@ -293,6 +293,7 @@ impl ControlDirectiveKindV1 {
         }
     }
 
+    #[cfg(any(target_os = "linux", test))]
     fn canonical_instruction(self) -> &'static str {
         match self {
             Self::Pause => "Pause the current line of work and wait for further host guidance.",
@@ -311,6 +312,7 @@ impl ControlDirectiveKindV1 {
         }
     }
 
+    #[cfg(any(target_os = "linux", test))]
     fn detail_label(self) -> &'static str {
         match self {
             Self::Pause => "pause",

@@ -1894,6 +1894,7 @@ struct InternalToolboxTransport {
     path: PathBuf,
 }
 
+#[cfg(target_os = "linux")]
 fn internal_toolbox_run_world_task_started_frame(
     task_run_id: impl Into<String>,
 ) -> serde_json::Value {
