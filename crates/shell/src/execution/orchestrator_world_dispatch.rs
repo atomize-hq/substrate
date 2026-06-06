@@ -4627,6 +4627,29 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    async fn wait_for_active_ephemeral_task_run_id(orchestration_session_id: &str) -> String {
+        timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(task_run_id) = {
+                    let tracker = active_ephemeral_world_task_tracker()
+                        .lock()
+                        .expect("lock active task tracker");
+                    tracker.iter().find_map(|(task_run_id, record)| {
+                        (record.orchestration_session_id == orchestration_session_id)
+                            .then(|| task_run_id.clone())
+                    })
+                } {
+                    break task_run_id;
+                }
+
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .expect("timed out waiting for active task registration")
+    }
+
+    #[cfg(target_os = "linux")]
     fn write_fake_continue_world_worker_runtime(temp: &Path) -> std::path::PathBuf {
         let path = temp.join("fake-continue-world-worker-runtime.sh");
         let state_file = temp.join("continue-world-worker.count");
@@ -9697,6 +9720,191 @@ agents:
         assert_eq!(session_after.session, session_before.session);
         assert_eq!(session_after.participants, session_before.participants);
         assert_eq!(participant_after, participant_before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_run_world_task_registers_live_task_for_ephemeral_inspect() {
+        active_ephemeral_world_task_tracker()
+            .lock()
+            .expect("lock active task tracker")
+            .clear();
+        let _env_guard = world_env_guard();
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["run_world_task", "inspect_world_worker"],
+            &["ephemeral"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex_world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            let mut release_rx = Some(release_rx);
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("member dispatch execute request");
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("member dispatch request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "spn_live_task".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: substrate_common::agent_events::AgentEvent {
+                                ts: chrono::Utc::now(),
+                                kind: AgentEventKind::Registered,
+                                data: json!({}),
+                                agent_id: execute_request.agent_id,
+                                orchestration_session_id: member_dispatch
+                                    .orchestration_session_id
+                                    .clone(),
+                                run_id: member_dispatch.run_id.clone(),
+                                parent_run_id: None,
+                                participant_id: None,
+                                parent_participant_id: None,
+                                resumed_from_participant_id: None,
+                                backend_id: Some(member_dispatch.backend_id.clone()),
+                                thread_id: None,
+                                role: Some("member".to_string()),
+                                world_id: Some(member_dispatch.world_id.clone()),
+                                world_generation: Some(member_dispatch.world_generation),
+                                cmd_id: None,
+                                span_id: Some("spn_live_task".to_string()),
+                                channel: None,
+                                identity_tuple: None,
+                                placement_posture: None,
+                                project: None,
+                            },
+                        },
+                    )
+                    .await;
+                    release_rx
+                        .take()
+                        .expect("release receiver should exist once")
+                        .await
+                        .expect("release run_world_task exit");
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "spn_live_task".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let store_for_run = store.clone();
+        let run_handle = tokio::spawn(async move {
+            dispatch_orchestrator_world_request(
+                &store_for_run,
+                WorldDispatchRequestV1 {
+                    request_id: Some("req_live_task".to_string()),
+                    idempotency_key: Some("idem_live_task".to_string()),
+                    orchestration_session_id: Some("sess_dispatch".to_string()),
+                    caller_participant_id: Some("orch_dispatch".to_string()),
+                    action: WorldDispatchActionV1::RunWorldTask,
+                    mode: WorldDispatchModeV1::Ephemeral,
+                    target_backend_id: Some("cli:codex_world".to_string()),
+                    task_run_id: None,
+                    target_participant_id: None,
+                    world_id: Some("world-17".to_string()),
+                    world_generation: Some(2),
+                    payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                        prompt: "hold this task live".to_string(),
+                    }),
+                },
+            )
+            .await
+        });
+
+        let task_run_id = wait_for_active_ephemeral_task_run_id("sess_dispatch").await;
+        assert_eq!(task_run_id, "spn_live_task");
+
+        let inspect = dispatch_real_inspect_world_worker_request_with_request(
+            &store,
+            sample_ephemeral_inspect_world_dispatch_request(&task_run_id),
+        )
+        .await;
+        assert_eq!(inspect.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(inspect.target_participant_id, "spn_live_task");
+        assert_eq!(inspect.target_backend_id, "cli:codex_world");
+        assert_eq!(inspect.world_id, "world-17");
+        assert_eq!(inspect.world_generation, 2);
+        assert_eq!(
+            inspect.snapshot.participant_state,
+            AgentRuntimeSessionState::Running
+        );
+
+        release_tx
+            .send(())
+            .expect("release run_world_task after inspect");
+        let run_outcome = run_handle
+            .await
+            .expect("join run_world_task future")
+            .expect("run_world_task should succeed");
+        let WorldDispatchOutcomeV1::RunWorldTask(run_outcome) = run_outcome else {
+            panic!("expected run_world_task outcome envelope");
+        };
+        assert_eq!(run_outcome.task_run_id.as_deref(), Some("spn_live_task"));
+
+        assert!(
+            active_ephemeral_world_task_tracker()
+                .lock()
+                .expect("lock active task tracker")
+                .is_empty(),
+            "terminal run_world_task completion must tear down active-task routability"
+        );
+
+        server.abort();
     }
 
     #[cfg(target_os = "linux")]
