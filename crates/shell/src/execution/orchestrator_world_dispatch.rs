@@ -32,7 +32,7 @@ use crate::execution::agent_runtime::dispatch_contract::{
     CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventClassV1,
     ContinueWorldWorkerEventV1, ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1,
     InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1, RetainedWorkerStopCloseoutV1,
-    StopWorldWorkerOutcomeV1, WorkerForkPayloadV1,
+    StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1, WorkerForkPayloadV1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -367,102 +367,193 @@ async fn cancel_world_work(
 
     #[cfg(target_os = "linux")]
     {
-        let resolved = prepared
-            .store
-            .resolve_internal_cancel_world_dispatch_target(
-                &prepared.request.orchestration_session_id,
-                &prepared.request.caller_participant_id,
-                prepared
-                    .request
-                    .target_participant_id
-                    .as_deref()
-                    .expect("validated cancel request must include target_participant_id"),
-                &prepared.request.target_backend_id,
-            )
-            .map_err(map_world_dispatch_resolution_error)?;
         let payload = match &prepared.request.payload {
             WorldDispatchPayloadV1::WorkerCancel(payload) => payload,
             _ => anyhow::bail!(
                 "invalid_dispatch_payload: action cancel_world_work requires matching typed payload"
             ),
         };
-        let transport_path = private_cancel_transport_path(
-            &prepared.store,
-            &resolved.session.orchestration_session_id,
-            resolved.target_participant.participant_id(),
-        );
-        let transport_result = request_private_cancel(&transport_path, payload).await;
-        let closeout = wait_for_cancel_world_work_closeout(
-            &prepared.store,
-            &resolved.session.orchestration_session_id,
-            resolved.target_participant.participant_id(),
-        )
-        .await;
-        let closeout = match (transport_result, closeout) {
-            (
-                Ok(PrivateCancelOutcome::Accepted | PrivateCancelOutcome::AlreadyTerminal),
-                Ok(closeout),
-            ) => closeout,
-            (Ok(PrivateCancelOutcome::OwnerUnreachable), Ok(closeout))
-            | (Ok(PrivateCancelOutcome::ProtocolError), Ok(closeout))
-            | (Err(_), Ok(closeout)) => closeout,
-            (
-                Ok(PrivateCancelOutcome::Accepted | PrivateCancelOutcome::AlreadyTerminal),
-                Err(err),
-            ) => return Err(err),
-            (Ok(PrivateCancelOutcome::OwnerUnreachable), Err(err)) => {
-                return Err(anyhow::anyhow!(
-                    "owner_unreachable: private cancel transport for retained worker {} did not stay reachable until durable cancel closeout completed: {err}",
-                    resolved.target_participant.participant_id()
-                ));
-            }
-            (Ok(PrivateCancelOutcome::ProtocolError), Err(err)) => {
-                return Err(anyhow::anyhow!(
-                    "owner_unreachable: private cancel transport for retained worker {} returned a protocol error before durable cancel closeout completed: {err}",
-                    resolved.target_participant.participant_id()
-                ));
-            }
-            (Err(connect_err), Err(closeout_err)) => {
-                return Err(anyhow::anyhow!(
-                    "owner_unreachable: failed to deliver cancel_world_work to retained worker {} and durable cancel closeout was not observed ({connect_err:#}; {closeout_err})",
-                    resolved.target_participant.participant_id()
-                ));
-            }
-        };
-        let summary = summarize_cancel_world_work_result(
-            resolved.target_participant.participant_id(),
-            &resolved.target_participant.handle.backend_id,
-        );
+        match prepared.request.mode {
+            WorldDispatchModeV1::Retained => {
+                let resolved = prepared
+                    .store
+                    .resolve_internal_cancel_world_dispatch_target(
+                        &prepared.request.orchestration_session_id,
+                        &prepared.request.caller_participant_id,
+                        prepared
+                            .request
+                            .target_participant_id
+                            .as_deref()
+                            .expect("validated cancel request must include target_participant_id"),
+                        &prepared.request.target_backend_id,
+                    )
+                    .map_err(map_world_dispatch_resolution_error)?;
+                let transport_path = private_cancel_transport_path(
+                    &prepared.store,
+                    &resolved.session.orchestration_session_id,
+                    resolved.target_participant.participant_id(),
+                );
+                let transport_result = request_private_cancel(&transport_path, payload).await;
+                let closeout = wait_for_cancel_world_work_closeout(
+                    &prepared.store,
+                    &resolved.session.orchestration_session_id,
+                    resolved.target_participant.participant_id(),
+                )
+                .await;
+                let closeout = match (transport_result, closeout) {
+                    (
+                        Ok(PrivateCancelOutcome::Accepted | PrivateCancelOutcome::AlreadyTerminal),
+                        Ok(closeout),
+                    ) => closeout,
+                    (Ok(PrivateCancelOutcome::OwnerUnreachable), Ok(closeout))
+                    | (Ok(PrivateCancelOutcome::ProtocolError), Ok(closeout))
+                    | (Err(_), Ok(closeout)) => closeout,
+                    (
+                        Ok(PrivateCancelOutcome::Accepted | PrivateCancelOutcome::AlreadyTerminal),
+                        Err(err),
+                    ) => return Err(err),
+                    (Ok(PrivateCancelOutcome::OwnerUnreachable), Err(err)) => {
+                        return Err(anyhow::anyhow!(
+                            "owner_unreachable: private cancel transport for retained worker {} did not stay reachable until durable cancel closeout completed: {err}",
+                            resolved.target_participant.participant_id()
+                        ));
+                    }
+                    (Ok(PrivateCancelOutcome::ProtocolError), Err(err)) => {
+                        return Err(anyhow::anyhow!(
+                            "owner_unreachable: private cancel transport for retained worker {} returned a protocol error before durable cancel closeout completed: {err}",
+                            resolved.target_participant.participant_id()
+                        ));
+                    }
+                    (Err(connect_err), Err(closeout_err)) => {
+                        return Err(anyhow::anyhow!(
+                            "owner_unreachable: failed to deliver cancel_world_work to retained worker {} and durable cancel closeout was not observed ({connect_err:#}; {closeout_err})",
+                            resolved.target_participant.participant_id()
+                        ));
+                    }
+                };
+                let summary = summarize_cancel_world_work_result(
+                    resolved.target_participant.participant_id(),
+                    &resolved.target_participant.handle.backend_id,
+                );
 
-        Ok(WorldDispatchOutcomeV1::CancelWorldWork(
-            CancelWorldWorkOutcomeV1 {
-                request_id: prepared.request.request_id,
-                orchestration_session_id: resolved.session.orchestration_session_id.clone(),
-                action: WorldDispatchActionV1::CancelWorldWork,
-                mode: prepared.request.mode,
-                orchestrator_participant_id: resolved
-                    .caller_participant
-                    .participant_id()
-                    .to_string(),
-                target_participant_id: resolved.target_participant.participant_id().to_string(),
-                target_backend_id: resolved.target_participant.handle.backend_id.clone(),
-                world_id: resolved.session.world_id.clone().ok_or_else(|| {
+                Ok(WorldDispatchOutcomeV1::CancelWorldWork(
+                    CancelWorldWorkOutcomeV1 {
+                        request_id: prepared.request.request_id,
+                        orchestration_session_id: resolved.session.orchestration_session_id.clone(),
+                        action: WorldDispatchActionV1::CancelWorldWork,
+                        mode: prepared.request.mode,
+                        orchestrator_participant_id: resolved
+                            .caller_participant
+                            .participant_id()
+                            .to_string(),
+                        target_participant_id: resolved
+                            .target_participant
+                            .participant_id()
+                            .to_string(),
+                        target_backend_id: resolved.target_participant.handle.backend_id.clone(),
+                        world_id: resolved.session.world_id.clone().ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "missing_world_binding: orchestration session {} has no authoritative world binding",
+                                resolved.session.orchestration_session_id
+                            )
+                        })?,
+                        world_generation: resolved.session.world_generation.ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "missing_world_binding: orchestration session {} has no authoritative world binding",
+                                resolved.session.orchestration_session_id
+                            )
+                        })?,
+                        state: CancelWorldWorkTerminalStateV1::Cancelled,
+                        closeout,
+                        summary,
+                    },
+                ))
+            }
+            WorldDispatchModeV1::Ephemeral => {
+                let resolved = resolve_active_ephemeral_inspect_target(&prepared)?;
+                let context = resolve_internal_dispatch_context(&workspace_root)?;
+                let dispatch_contract = resolve_world_dispatch_contract(
+                    &workspace_root,
+                    &context,
+                    &prepared.request,
+                    "cancel_world_work",
+                )?;
+                let descriptor = materialize_runtime_descriptor(&dispatch_contract).map_err(
+                    |err| {
+                        anyhow::anyhow!(
+                            "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+                            dispatch_contract.agent_id,
+                            err.reason
+                        )
+                    },
+                )?;
+                let transport_request =
+                    build_active_ephemeral_cancel_transport_request(&prepared.request, &descriptor);
+                let (client, _, _) = build_agent_client_and_member_dispatch_request_for_cwd(
+                    &transport_request,
+                    &workspace_root,
+                )
+                .context(
+                    "failed to build member dispatch cancel request for active ephemeral cancel_world_work",
+                )?;
+                let delivered = client
+                    .cancel_execute(ExecuteCancelRequestV1 {
+                        span_id: resolved.task_run_id.clone(),
+                        sig: active_ephemeral_cancel_signal(payload).to_string(),
+                    })
+                    .await
+                    .context(
+                        "failed to deliver active ephemeral cancel_world_work over /v1/execute/cancel",
+                    )?;
+                if !delivered.delivered {
+                    anyhow::bail!(
+                        "target_already_terminal: orchestration session {} active ephemeral task {} is already terminal or no longer live",
+                        resolved.session.orchestration_session_id,
+                        resolved.task_run_id
+                    );
+                }
+
+                let world_id = resolved.session.world_id.clone().ok_or_else(|| {
                     anyhow::anyhow!(
                         "missing_world_binding: orchestration session {} has no authoritative world binding",
                         resolved.session.orchestration_session_id
                     )
-                })?,
-                world_generation: resolved.session.world_generation.ok_or_else(|| {
+                })?;
+                let world_generation = resolved.session.world_generation.ok_or_else(|| {
                     anyhow::anyhow!(
                         "missing_world_binding: orchestration session {} has no authoritative world binding",
                         resolved.session.orchestration_session_id
                     )
-                })?,
-                state: CancelWorldWorkTerminalStateV1::Cancelled,
-                closeout,
-                summary,
-            },
-        ))
+                })?;
+                let summary = summarize_active_ephemeral_cancel_world_task_result(
+                    &resolved.task_run_id,
+                    &resolved.target_backend_id,
+                );
+
+                Ok(WorldDispatchOutcomeV1::CancelWorldWork(
+                    CancelWorldWorkOutcomeV1 {
+                        request_id: prepared.request.request_id,
+                        orchestration_session_id: resolved.session.orchestration_session_id.clone(),
+                        action: WorldDispatchActionV1::CancelWorldWork,
+                        mode: prepared.request.mode,
+                        orchestrator_participant_id: resolved
+                            .caller_participant
+                            .participant_id()
+                            .to_string(),
+                        target_participant_id: resolved.task_run_id,
+                        target_backend_id: resolved.target_backend_id,
+                        world_id,
+                        world_generation,
+                        state: CancelWorldWorkTerminalStateV1::Cancelled,
+                        closeout: RetainedWorkerCancelCloseoutV1 {
+                            participant_state: None,
+                            session_state: None,
+                        },
+                        summary,
+                    },
+                ))
+            }
+        }
     }
 }
 
@@ -2074,6 +2165,28 @@ fn build_spawn_world_worker_transport_request(
 }
 
 #[cfg(target_os = "linux")]
+fn build_active_ephemeral_cancel_transport_request(
+    request: &ValidatedWorldDispatchRequestV1,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> MemberDispatchTransportRequest {
+    MemberDispatchTransportRequest {
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        participant_id: format!("awm_cancel_{}", Uuid::now_v7()),
+        orchestrator_participant_id: request.caller_participant_id.clone(),
+        parent_participant_id: None,
+        resumed_from_participant_id: None,
+        backend_id: descriptor.backend_id.clone(),
+        protocol: descriptor.protocol.clone(),
+        run_id: request.request_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        initial_prompt: None,
+        backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
+        binary_path: descriptor.binary_path.display().to_string(),
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn build_fork_world_worker_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
     source_participant: &AgentRuntimeParticipantRecord,
@@ -3459,6 +3572,25 @@ fn summarize_cancel_world_work_result(participant_id: &str, backend_id: &str) ->
 }
 
 #[cfg(target_os = "linux")]
+fn summarize_active_ephemeral_cancel_world_task_result(
+    task_run_id: &str,
+    backend_id: &str,
+) -> String {
+    format!(
+        "cancel_world_work interrupted active ephemeral task {task_run_id} on backend {backend_id} via the existing /v1/execute/cancel surface without reopening retained worker lifecycle state"
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn active_ephemeral_cancel_signal(payload: &WorkerCancelPayloadV1) -> &'static str {
+    if payload.graceful == Some(false) {
+        "TERM"
+    } else {
+        "INT"
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn agent_runtime_session_state_label(state: &AgentRuntimeSessionState) -> &'static str {
     match state {
         AgentRuntimeSessionState::Allocating => "allocating",
@@ -4147,6 +4279,27 @@ mod tests {
             payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
                 reason: Some("operator requested cancel".to_string()),
                 graceful: Some(true),
+            }),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_ephemeral_cancel_world_dispatch_request(task_run_id: &str) -> WorldDispatchRequestV1 {
+        WorldDispatchRequestV1 {
+            request_id: Some("req_cancel_ephemeral".to_string()),
+            idempotency_key: Some("idem_cancel_ephemeral".to_string()),
+            orchestration_session_id: Some("sess_dispatch".to_string()),
+            caller_participant_id: Some("orch_dispatch".to_string()),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Ephemeral,
+            target_backend_id: Some("cli:codex_world".to_string()),
+            task_run_id: Some(task_run_id.to_string()),
+            target_participant_id: None,
+            world_id: Some("world-17".to_string()),
+            world_generation: Some(2),
+            payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
+                reason: Some("operator requested cancel".to_string()),
+                graceful: Some(false),
             }),
         }
     }
@@ -10294,6 +10447,201 @@ agents:
                 "steering denial must not leak cancel target resolution truth first: {message}"
             );
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_cancel_world_work_ephemeral_routes_exact_active_task_over_execute_cancel(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["cancel_world_work"],
+            &["ephemeral"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex_world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-cancel-live".to_string(),
+                caller_participant_id: "orch_dispatch".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            })
+            .expect("register active ephemeral task");
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("execute cancel request");
+                    assert_eq!(parsed.span_id, "task-run-cancel-live");
+                    assert_eq!(parsed.sig, "TERM");
+                    let body = serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                        schema_version: 1,
+                        delivered: true,
+                    })
+                    .expect("serialize execute cancel response");
+                    write_http_json(&mut stream, "200 OK", &body).await;
+                    continue;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let prepared = prepare_orchestrator_world_dispatch(
+            &store,
+            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-live"),
+        )
+        .expect("prepare active cancel dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch prepared active cancel request");
+
+        let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
+            panic!("expected cancel_world_work outcome envelope");
+        };
+        assert_eq!(outcome.request_id, "req_cancel_ephemeral");
+        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+        assert_eq!(outcome.action, WorldDispatchActionV1::CancelWorldWork);
+        assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(outcome.target_participant_id, "task-run-cancel-live");
+        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+        assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
+        assert_eq!(outcome.closeout.participant_state, None);
+        assert_eq!(outcome.closeout.session_state, None);
+        assert!(
+            outcome.summary.contains("/v1/execute/cancel"),
+            "ephemeral cancel summary should stay explicit about the execute-cancel seam: {}",
+            outcome.summary
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("without reopening retained worker lifecycle state"),
+            "ephemeral cancel summary should stay explicit about non-retained closeout: {}",
+            outcome.summary
+        );
+
+        server.abort();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_cancel_world_work_ephemeral_fails_closed_when_execute_cancel_is_not_delivered(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex_world",
+            &["cancel_world_work"],
+            &["ephemeral"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex_world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-cancel-race".to_string(),
+                caller_participant_id: "orch_dispatch".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            })
+            .expect("register active ephemeral task");
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, _body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let body = serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                        schema_version: 1,
+                        delivered: false,
+                    })
+                    .expect("serialize execute cancel response");
+                    write_http_json(&mut stream, "200 OK", &body).await;
+                    continue;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let err = dispatch_orchestrator_world_request(
+            &store,
+            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-race"),
+        )
+        .await
+        .expect_err("late active cancel must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "target_already_terminal: orchestration session sess_dispatch active ephemeral task task-run-cancel-race is already terminal or no longer live"
+        );
+
+        server.abort();
     }
 
     #[cfg(target_os = "linux")]

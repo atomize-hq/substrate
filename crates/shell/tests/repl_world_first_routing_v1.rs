@@ -3467,6 +3467,250 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
+fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_id_and_execute_cancel_surface(
+) {
+    let temp = temp_dir("substrate-c3-toolbox-run-world-task-cancel-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["run_world_task", "cancel_world_work"],
+            allowed_modes: &["ephemeral"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-run-world-task-cancel-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let mut server = Some(ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-run-world-task-cancel".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    ));
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.as_ref().expect("world stub should exist").records();
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &backend_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    let world_id = session
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("session world_id")
+        .to_string();
+    let world_generation = session
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("session world_generation");
+
+    let mut run_response_reader = start_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_run_world_task_cancel",
+            "idempotency_key": "idem_toolbox_run_world_task_cancel",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "run_world_task",
+            "mode": "ephemeral",
+            "target_backend_id": "cli:codex",
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "task",
+                "prompt": "hold the in-flight world task open until the host cancels it"
+            }
+        }),
+    );
+    let task_run_id =
+        read_internal_toolbox_world_dispatch_started_task_run_id(&mut run_response_reader);
+    assert!(
+        task_run_id.starts_with("member-span-"),
+        "run_world_task must surface the authoritative member dispatch span id: {task_run_id}"
+    );
+
+    let cancel = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_cancel_live_task",
+            "idempotency_key": "idem_toolbox_cancel_live_task",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id,
+            "action": "cancel_world_work",
+            "mode": "ephemeral",
+            "target_backend_id": "cli:codex",
+            "task_run_id": task_run_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_cancel",
+                "reason": "operator requested cancel",
+                "graceful": false
+            }
+        }),
+    );
+    assert_eq!(cancel.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        cancel
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("cancel_world_work")
+    );
+    assert_eq!(
+        cancel
+            .pointer("/outcome/mode")
+            .and_then(Value::as_str),
+        Some("ephemeral")
+    );
+    assert_eq!(
+        cancel
+            .pointer("/outcome/target_participant_id")
+            .and_then(Value::as_str),
+        Some(task_run_id.as_str())
+    );
+    assert_eq!(
+        cancel
+            .pointer("/outcome/target_backend_id")
+            .and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        cancel.pointer("/outcome/world_id").and_then(Value::as_str),
+        Some(world_id.as_str())
+    );
+    assert_eq!(
+        cancel
+            .pointer("/outcome/world_generation")
+            .and_then(Value::as_u64),
+        Some(world_generation)
+    );
+    assert_eq!(
+        cancel.pointer("/outcome/state").and_then(Value::as_str),
+        Some("cancelled")
+    );
+    assert_eq!(
+        cancel
+            .pointer("/outcome/closeout/participant_state")
+            .and_then(Value::as_str),
+        None
+    );
+    assert_eq!(
+        cancel
+            .pointer("/outcome/closeout/session_state")
+            .and_then(Value::as_str),
+        None
+    );
+
+    wait_for_min_execute_cancel_requests(&records, 1, Duration::from_secs(3));
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.execute_cancel_requests.len(),
+        1,
+        "ephemeral cancel must route exactly one execute-cancel request: {guard:#?}"
+    );
+    assert_eq!(
+        guard.execute_cancel_requests[0].span_id,
+        task_run_id,
+        "ephemeral cancel must target the authoritative in-flight task_run_id: {guard:#?}"
+    );
+    assert_eq!(
+        guard.execute_cancel_requests[0].sig,
+        "TERM",
+        "ephemeral cancel must preserve the exact graceful=false signal mapping: {guard:#?}"
+    );
+    drop(guard);
+
+    let run_response = read_internal_toolbox_world_dispatch_result(&mut run_response_reader);
+    assert_eq!(run_response.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        run_response
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("run_world_task")
+    );
+    assert_eq!(
+        run_response
+            .pointer("/outcome/task_run_id")
+            .and_then(Value::as_str),
+        Some(task_run_id.as_str())
+    );
+    assert_eq!(
+        run_response
+            .pointer("/outcome/state")
+            .and_then(Value::as_str),
+        Some("cancelled")
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    drop(server.take());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
 fn c3_internal_toolbox_run_world_task_fast_completion_still_streams_registered_task_run_id_before_terminal_result(
 ) {
     let temp = temp_dir("substrate-c3-toolbox-run-world-task-fast-");
