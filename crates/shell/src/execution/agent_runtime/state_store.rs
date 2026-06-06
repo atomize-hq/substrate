@@ -562,6 +562,56 @@ struct ResolvedAuthoritativeSessionControl {
     session_posture: PublicSessionPosture,
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct ActiveEphemeralWorldTaskRecord {
+    pub orchestration_session_id: String,
+    pub task_run_id: String,
+    pub caller_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ActiveEphemeralWorldTaskRecord {
+    fn validate(&self) -> Result<()> {
+        if self.orchestration_session_id.trim().is_empty() {
+            anyhow::bail!("active ephemeral task must include orchestration_session_id");
+        }
+        if self.task_run_id.trim().is_empty() {
+            anyhow::bail!("active ephemeral task must include task_run_id");
+        }
+        if self.caller_participant_id.trim().is_empty() {
+            anyhow::bail!("active ephemeral task must include caller_participant_id");
+        }
+        if self.target_backend_id.trim().is_empty() {
+            anyhow::bail!("active ephemeral task must include target_backend_id");
+        }
+        if self.world_id.trim().is_empty() {
+            anyhow::bail!("active ephemeral task must include world_id");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct ActiveEphemeralWorldTaskGuard {
+    store: AgentRuntimeStateStore,
+    orchestration_session_id: String,
+    task_run_id: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl Drop for ActiveEphemeralWorldTaskGuard {
+    fn drop(&mut self) {
+        let _ = self
+            .store
+            .remove_active_ephemeral_world_task(&self.orchestration_session_id, &self.task_run_id);
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct AgentRuntimeStateStore {
     substrate_home: PathBuf,
@@ -635,6 +685,15 @@ impl AgentRuntimeStateStore {
             .join("obligations")
     }
 
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn canonical_active_ephemeral_tasks_dir(
+        &self,
+        orchestration_session_id: &str,
+    ) -> PathBuf {
+        self.canonical_session_dir(orchestration_session_id)
+            .join("active-ephemeral-tasks")
+    }
+
     #[allow(dead_code)]
     pub(crate) fn canonical_inbox_item_path(
         &self,
@@ -653,6 +712,16 @@ impl AgentRuntimeStateStore {
     ) -> PathBuf {
         self.canonical_obligations_dir(orchestration_session_id)
             .join(format!("{obligation_id}.json"))
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn canonical_active_ephemeral_task_path(
+        &self,
+        orchestration_session_id: &str,
+        task_run_id: &str,
+    ) -> PathBuf {
+        self.canonical_active_ephemeral_tasks_dir(orchestration_session_id)
+            .join(format!("{task_run_id}.json"))
     }
 
     fn canonical_lease_path(
@@ -822,6 +891,136 @@ impl AgentRuntimeStateStore {
                 participant.handle.orchestration_session_id == orchestration_session_id
             })
             .collect())
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn register_active_ephemeral_world_task(
+        &self,
+        record: ActiveEphemeralWorldTaskRecord,
+    ) -> Result<ActiveEphemeralWorldTaskGuard> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        record.validate()?;
+
+        for session_id in self.canonical_session_root_ids()? {
+            let existing_path =
+                self.canonical_active_ephemeral_task_path(&session_id, &record.task_run_id);
+            if existing_path.exists() {
+                anyhow::bail!(
+                    "duplicate_active_task_run_id: active ephemeral task {} is already registered",
+                    record.task_run_id
+                );
+            }
+        }
+
+        write_atomic_json(
+            &self.canonical_active_ephemeral_task_path(
+                &record.orchestration_session_id,
+                &record.task_run_id,
+            ),
+            &record,
+        )?;
+
+        Ok(ActiveEphemeralWorldTaskGuard {
+            store: self.clone(),
+            orchestration_session_id: record.orchestration_session_id.clone(),
+            task_run_id: record.task_run_id.clone(),
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn load_active_ephemeral_world_task(
+        &self,
+        orchestration_session_id: &str,
+        task_run_id: &str,
+    ) -> Result<Option<ActiveEphemeralWorldTaskRecord>> {
+        let path = self.canonical_active_ephemeral_task_path(orchestration_session_id, task_run_id);
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let record: ActiveEphemeralWorldTaskRecord = serde_json::from_str(
+            &fs::read_to_string(&path)
+                .with_context(|| format!("failed to read {}", path.display()))?,
+        )
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+        record.validate()?;
+        if record.orchestration_session_id != orchestration_session_id {
+            anyhow::bail!(
+                "active_task_registry_mismatch: {} stored orchestration session {} not {}",
+                path.display(),
+                record.orchestration_session_id,
+                orchestration_session_id
+            );
+        }
+        if record.task_run_id != task_run_id {
+            anyhow::bail!(
+                "active_task_registry_mismatch: {} stored task_run_id {} not {}",
+                path.display(),
+                record.task_run_id,
+                task_run_id
+            );
+        }
+
+        Ok(Some(record))
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[allow(dead_code)]
+    pub(crate) fn list_active_ephemeral_world_tasks(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<ActiveEphemeralWorldTaskRecord>> {
+        let dir = self.canonical_active_ephemeral_tasks_dir(orchestration_session_id);
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut records = Vec::new();
+        for entry in
+            fs::read_dir(&dir).with_context(|| format!("failed to read {}", dir.display()))?
+        {
+            let entry = entry.with_context(|| format!("failed to iterate {}", dir.display()))?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+            let record: ActiveEphemeralWorldTaskRecord = serde_json::from_str(
+                &fs::read_to_string(&path)
+                    .with_context(|| format!("failed to read {}", path.display()))?,
+            )
+            .with_context(|| format!("failed to parse {}", path.display()))?;
+            record.validate()?;
+            if record.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!(
+                    "active_task_registry_mismatch: {} stored orchestration session {} not {}",
+                    path.display(),
+                    record.orchestration_session_id,
+                    orchestration_session_id
+                );
+            }
+            records.push(record);
+        }
+        records.sort_by(|left, right| left.task_run_id.cmp(&right.task_run_id));
+        Ok(records)
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn remove_active_ephemeral_world_task(
+        &self,
+        orchestration_session_id: &str,
+        task_run_id: &str,
+    ) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        let path = self.canonical_active_ephemeral_task_path(orchestration_session_id, task_run_id);
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err).with_context(|| format!("failed to remove {}", path.display())),
+        }
     }
 
     pub(crate) fn invalidate_stale_world_members_for_session(
@@ -4498,6 +4697,88 @@ mod tests {
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
         std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    #[serial_test::serial]
+    fn active_ephemeral_world_task_registry_round_trips_live_task_identity() {
+        with_store(|store| {
+            let record = ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_active".to_string(),
+                task_run_id: "task-run-47".to_string(),
+                caller_participant_id: "orch_active".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            };
+            let path = store.canonical_active_ephemeral_task_path("sess_active", "task-run-47");
+
+            let guard = store
+                .register_active_ephemeral_world_task(record.clone())
+                .expect("register active ephemeral task");
+
+            assert!(path.exists(), "active task registry path must exist");
+            assert_eq!(
+                store
+                    .load_active_ephemeral_world_task("sess_active", "task-run-47")
+                    .expect("load active ephemeral task"),
+                Some(record.clone())
+            );
+            assert_eq!(
+                store
+                    .list_active_ephemeral_world_tasks("sess_active")
+                    .expect("list active ephemeral tasks"),
+                vec![record]
+            );
+
+            drop(guard);
+
+            assert!(
+                !path.exists(),
+                "dropping the live-task guard must tear down active-task routability"
+            );
+            assert_eq!(
+                store
+                    .load_active_ephemeral_world_task("sess_active", "task-run-47")
+                    .expect("load active ephemeral task after teardown"),
+                None
+            );
+        });
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    #[serial_test::serial]
+    fn active_ephemeral_world_task_registry_rejects_duplicate_task_run_id() {
+        with_store(|store| {
+            let _guard = store
+                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
+                    orchestration_session_id: "sess_active_a".to_string(),
+                    task_run_id: "task-run-duplicate".to_string(),
+                    caller_participant_id: "orch_a".to_string(),
+                    target_backend_id: "cli:codex_world".to_string(),
+                    world_id: "world-17".to_string(),
+                    world_generation: 2,
+                })
+                .expect("register initial active ephemeral task");
+
+            let err = store
+                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
+                    orchestration_session_id: "sess_active_b".to_string(),
+                    task_run_id: "task-run-duplicate".to_string(),
+                    caller_participant_id: "orch_b".to_string(),
+                    target_backend_id: "cli:codex_world".to_string(),
+                    world_id: "world-18".to_string(),
+                    world_generation: 3,
+                })
+                .expect_err("duplicate active task ids must fail closed");
+
+            assert_eq!(
+                err.to_string(),
+                "duplicate_active_task_run_id: active ephemeral task task-run-duplicate is already registered"
+            );
+        });
     }
 
     #[test]

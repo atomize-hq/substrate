@@ -36,6 +36,7 @@ use crate::execution::agent_runtime::dispatch_contract::{
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
+    ActiveEphemeralWorldTaskGuard, ActiveEphemeralWorldTaskRecord,
     PreparedInternalApprovalResponseObligationCloseout,
     PreparedInternalClarificationResponseObligationCloseout,
 };
@@ -141,33 +142,6 @@ fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurren
     static TRACKER: LazyLock<Mutex<WorldDispatchConcurrencyTracker>> =
         LazyLock::new(|| Mutex::new(WorldDispatchConcurrencyTracker::default()));
     &TRACKER
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn active_ephemeral_world_task_tracker(
-) -> &'static Mutex<BTreeMap<String, ActiveEphemeralWorldTaskRecord>> {
-    static TRACKER: LazyLock<Mutex<BTreeMap<String, ActiveEphemeralWorldTaskRecord>>> =
-        LazyLock::new(|| Mutex::new(BTreeMap::new()));
-    &TRACKER
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn register_active_ephemeral_world_task(
-    task_run_id: impl Into<String>,
-    record: ActiveEphemeralWorldTaskRecord,
-) -> Result<ActiveEphemeralWorldTaskGuard> {
-    let task_run_id = task_run_id.into();
-    let mut tracker = active_ephemeral_world_task_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if tracker.contains_key(&task_run_id) {
-        anyhow::bail!(
-            "duplicate_active_task_run_id: active ephemeral task {} is already registered",
-            task_run_id
-        );
-    }
-    tracker.insert(task_run_id.clone(), record);
-    Ok(ActiveEphemeralWorldTaskGuard { task_run_id })
 }
 
 #[allow(dead_code)]
@@ -543,31 +517,6 @@ struct RunWorldTaskStreamResult {
 }
 
 #[cfg(any(target_os = "linux", test))]
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct ActiveEphemeralWorldTaskRecord {
-    orchestration_session_id: String,
-    caller_participant_id: String,
-    target_backend_id: String,
-    world_id: String,
-    world_generation: u64,
-}
-
-#[cfg(any(target_os = "linux", test))]
-#[derive(Debug)]
-struct ActiveEphemeralWorldTaskGuard {
-    task_run_id: String,
-}
-
-#[cfg(any(target_os = "linux", test))]
-impl Drop for ActiveEphemeralWorldTaskGuard {
-    fn drop(&mut self) {
-        let mut tracker = active_ephemeral_world_task_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        tracker.remove(&self.task_run_id);
-    }
-}
-
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Debug)]
 struct ResolvedActiveEphemeralInspectTarget {
@@ -617,19 +566,16 @@ fn resolve_active_ephemeral_inspect_target(
             prepared.session.orchestration_session_id
         )
     })?;
-    let record = {
-        let tracker = active_ephemeral_world_task_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        tracker.get(task_run_id).cloned()
-    }
-    .ok_or_else(|| {
-        anyhow::anyhow!(
-            "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
-            prepared.session.orchestration_session_id,
-            task_run_id
-        )
-    })?;
+    let record = prepared
+        .store
+        .load_active_ephemeral_world_task(&prepared.session.orchestration_session_id, task_run_id)?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+                prepared.session.orchestration_session_id,
+                task_run_id
+            )
+        })?;
 
     if record.orchestration_session_id != prepared.session.orchestration_session_id {
         anyhow::bail!(
@@ -733,6 +679,7 @@ async fn run_world_task(
     })?;
     let active_task_record = ActiveEphemeralWorldTaskRecord {
         orchestration_session_id: prepared.request.orchestration_session_id.clone(),
+        task_run_id: String::new(),
         caller_participant_id: prepared.request.caller_participant_id.clone(),
         target_backend_id: prepared.request.target_backend_id.clone(),
         world_id: prepared
@@ -746,9 +693,13 @@ async fn run_world_task(
             .unwrap_or(prepared.request.world_generation),
     };
     let transport_request = build_run_world_task_transport_request(&prepared.request, &descriptor)?;
-    let stream_result =
-        execute_run_world_task_stream(&workspace_root, &transport_request, active_task_record)
-            .await?;
+    let stream_result = execute_run_world_task_stream(
+        &prepared.store,
+        &workspace_root,
+        &transport_request,
+        active_task_record,
+    )
+    .await?;
     let state = world_task_terminal_state_from_exit_code(stream_result.exit_code);
     let summary = summarize_run_world_task_result(
         &prepared.request.target_backend_id,
@@ -2207,9 +2158,10 @@ fn member_runtime_backend_kind(
 
 #[cfg(target_os = "linux")]
 async fn execute_run_world_task_stream(
+    store: &AgentRuntimeStateStore,
     workspace_root: &Path,
     request: &MemberDispatchTransportRequest,
-    active_task_record: ActiveEphemeralWorldTaskRecord,
+    mut active_task_record: ActiveEphemeralWorldTaskRecord,
 ) -> Result<RunWorldTaskStreamResult> {
     use http_body_util::BodyExt as _;
     use substrate_common::agent_events::AgentEventKind;
@@ -2256,10 +2208,11 @@ async fn execute_run_world_task_stream(
             match frame {
                 ExecuteStreamFrame::Start { span_id } => {
                     if active_task_guard.is_none() {
-                        active_task_guard = Some(register_active_ephemeral_world_task(
-                            span_id.clone(),
-                            active_task_record.clone(),
-                        )?);
+                        active_task_record.task_run_id = span_id.clone();
+                        active_task_guard = Some(
+                            store
+                                .register_active_ephemeral_world_task(active_task_record.clone())?,
+                        );
                     }
                     active_span_id = Some(span_id);
                 }
@@ -4633,18 +4586,19 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    async fn wait_for_active_ephemeral_task_run_id(orchestration_session_id: &str) -> String {
+    async fn wait_for_active_ephemeral_task_run_id(
+        store: &AgentRuntimeStateStore,
+        orchestration_session_id: &str,
+    ) -> String {
         timeout(Duration::from_secs(5), async {
             loop {
-                if let Some(task_run_id) = {
-                    let tracker = active_ephemeral_world_task_tracker()
-                        .lock()
-                        .expect("lock active task tracker");
-                    tracker.iter().find_map(|(task_run_id, record)| {
-                        (record.orchestration_session_id == orchestration_session_id)
-                            .then(|| task_run_id.clone())
-                    })
-                } {
+                if let Some(task_run_id) = store
+                    .list_active_ephemeral_world_tasks(orchestration_session_id)
+                    .expect("list active ephemeral tasks")
+                    .into_iter()
+                    .map(|record| record.task_run_id)
+                    .next()
+                {
                     break task_run_id;
                 }
 
@@ -9732,10 +9686,6 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_run_world_task_registers_live_task_for_ephemeral_inspect() {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
         let _env_guard = world_env_guard();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -9872,7 +9822,7 @@ agents:
             .await
         });
 
-        let task_run_id = wait_for_active_ephemeral_task_run_id("sess_dispatch").await;
+        let task_run_id = wait_for_active_ephemeral_task_run_id(&store, "sess_dispatch").await;
         assert_eq!(task_run_id, "spn_live_task");
 
         let inspect = dispatch_real_inspect_world_worker_request_with_request(
@@ -9903,9 +9853,9 @@ agents:
         assert_eq!(run_outcome.task_run_id.as_deref(), Some("spn_live_task"));
 
         assert!(
-            active_ephemeral_world_task_tracker()
-                .lock()
-                .expect("lock active task tracker")
+            store
+                .list_active_ephemeral_world_tasks("sess_dispatch")
+                .expect("list active tasks after terminal completion")
                 .is_empty(),
             "terminal run_world_task completion must tear down active-task routability"
         );
@@ -9918,10 +9868,6 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_returns_authoritative_snapshot_without_mutation(
     ) {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -9944,17 +9890,16 @@ agents:
             .expect("load participant before inspect")
             .expect("retained participant before inspect");
 
-        let _guard = register_active_ephemeral_world_task(
-            "task-run-47",
-            ActiveEphemeralWorldTaskRecord {
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
                 orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-47".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
                 target_backend_id: "cli:codex_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
-            },
-        )
-        .expect("register active ephemeral task");
+            })
+            .expect("register active ephemeral task");
 
         let outcome = dispatch_real_inspect_world_worker_request_with_request(
             &store,
@@ -10019,10 +9964,6 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_unknown_task_run_id()
     {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -10053,10 +9994,6 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_stale_linkage() {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -10069,17 +10006,16 @@ agents:
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = register_active_ephemeral_world_task(
-            "task-run-stale",
-            ActiveEphemeralWorldTaskRecord {
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
                 orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-stale".to_string(),
                 caller_participant_id: "orch_other".to_string(),
                 target_backend_id: "cli:codex_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
-            },
-        )
-        .expect("register active ephemeral task");
+            })
+            .expect("register active ephemeral task");
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -10098,10 +10034,6 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_backend_mismatch() {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -10114,17 +10046,16 @@ agents:
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = register_active_ephemeral_world_task(
-            "task-run-backend",
-            ActiveEphemeralWorldTaskRecord {
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
                 orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-backend".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
                 target_backend_id: "cli:other_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
-            },
-        )
-        .expect("register active ephemeral task");
+            })
+            .expect("register active ephemeral task");
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -10144,10 +10075,6 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_world_binding_mismatch(
     ) {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -10160,17 +10087,16 @@ agents:
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = register_active_ephemeral_world_task(
-            "task-run-binding",
-            ActiveEphemeralWorldTaskRecord {
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
                 orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-binding".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
                 target_backend_id: "cli:codex_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 3,
-            },
-        )
-        .expect("register active ephemeral task");
+            })
+            .expect("register active ephemeral task");
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -10189,33 +10115,30 @@ agents:
     #[test]
     #[serial]
     fn register_active_ephemeral_world_task_rejects_duplicate_task_run_id() {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
-        let _guard = register_active_ephemeral_world_task(
-            "task-run-duplicate",
-            ActiveEphemeralWorldTaskRecord {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let _guard = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
                 orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-duplicate".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
                 target_backend_id: "cli:codex_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
-            },
-        )
-        .expect("register initial active task");
+            })
+            .expect("register initial active task");
 
-        let err = register_active_ephemeral_world_task(
-            "task-run-duplicate",
-            ActiveEphemeralWorldTaskRecord {
+        let err = store
+            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
                 orchestration_session_id: "sess_dispatch".to_string(),
+                task_run_id: "task-run-duplicate".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
                 target_backend_id: "cli:codex_world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
-            },
-        )
-        .expect_err("duplicate task ids must fail closed");
+            })
+            .expect_err("duplicate task ids must fail closed");
 
         assert_eq!(
             err.to_string(),
@@ -10227,10 +10150,6 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_teardown_removes_routability() {
-        active_ephemeral_world_task_tracker()
-            .lock()
-            .expect("lock active task tracker")
-            .clear();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -10245,17 +10164,16 @@ agents:
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
 
         {
-            let _guard = register_active_ephemeral_world_task(
-                "task-run-terminal",
-                ActiveEphemeralWorldTaskRecord {
+            let _guard = store
+                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
                     orchestration_session_id: "sess_dispatch".to_string(),
+                    task_run_id: "task-run-terminal".to_string(),
                     caller_participant_id: "orch_dispatch".to_string(),
                     target_backend_id: "cli:codex_world".to_string(),
                     world_id: "world-17".to_string(),
                     world_generation: 2,
-                },
-            )
-            .expect("register active ephemeral task");
+                })
+                .expect("register active ephemeral task");
         }
 
         let err = dispatch_orchestrator_world_request(
