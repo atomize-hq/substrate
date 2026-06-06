@@ -16,7 +16,7 @@ Related design stack:
 - [DESIGN-world-worker-lifecycle-model.md](./DESIGN-world-worker-lifecycle-model.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: drafted on `2026-06-05`
+Status: Slice `47` is landed through Packet `4` on `2026-06-06`
 
 ## Assumptions
 
@@ -30,6 +30,8 @@ ASSUMPTIONS I'M MAKING:
 6. `continue_world_worker`, `stop_world_worker`, retained `fork_world_worker`, worker autonomy widening, durable obligation redesign, and Family-2 router/attach execution remain later work and must stay out of scope here.
 
 If any of these are wrong, correct them before implementation.
+
+The current tree now has this slice landed end to end: exact active `task_run_id` truth is surfaced for in-flight `run_world_task`, `inspect_world_worker` and `cancel_world_work` both admit `mode=ephemeral` only with that exact identity, terminal one-shot outcomes remain non-durable, docs/config truth matches the live behavior, and the Packet `4` validation wall is green.
 
 ## Objective
 

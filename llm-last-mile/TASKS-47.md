@@ -5,7 +5,7 @@ Source plan: [PLAN-47.md](./PLAN-47.md)
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
-Status: drafted on `2026-06-05`
+Status: Packets `1`-`4` are complete and green on the current tree as of `2026-06-06`
 
 ## Phase Gate
 
@@ -15,9 +15,9 @@ These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `47` have been r
 
 This slice should be implemented as four sequential `/incremental-implementation` sessions.
 
-- Packet 1 freezes exact active-task identity and the dual-target contract surface.
-- Packet 2 lands authoritative active-task tracking and inspect snapshot truth.
-- Packet 3 routes active-ephemeral inspect/cancel over that exact identity.
+- Packet 1 froze exact active-task identity and the dual-target contract surface on the live tree.
+- Packet 2 landed authoritative active-task tracking and inspect snapshot truth on the live tree.
+- Packet 3 landed routed active-ephemeral inspect/cancel over that exact identity on the live tree.
 - Packet 4 aligns docs truth and runs the final validation wall.
 
 Do not start a later packet until the prior packet checkpoint is green.
@@ -32,14 +32,14 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add typed active-task identity to the dispatch contract
+- [x] Task 1.1: Add typed active-task identity to the dispatch contract
   - Acceptance: active `run_world_task` runtime truth can surface typed `task_run_id`, and the internal outcome/contract surface has one exact field for active-ephemeral identity rather than reusing prompt text, request aliases, or fuzzy selectors.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
   - Files:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
 
-- [ ] Task 1.2: Widen inspect/cancel validation to admit `mode=ephemeral` only with exact task identity
+- [x] Task 1.2: Widen inspect/cancel validation to admit `mode=ephemeral` only with exact task identity
   - Acceptance: `inspect_world_worker` and `cancel_world_work` accept `mode=ephemeral` only when `task_run_id` is present and exact; retained requests still require exact `target_participant_id`; malformed or mixed-target requests fail closed before resolution.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -69,7 +69,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Add authoritative active-task tracking for in-flight ephemeral work
+- [x] Task 2.1: Add authoritative active-task tracking for in-flight ephemeral work
   - Acceptance: active ephemeral work is tracked by exact `task_run_id`, session, backend, and world binding while in flight, and terminal teardown removes the task from routable active state.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
@@ -78,7 +78,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs) if a narrow helper or registry is required
 
-- [ ] Task 2.2: Add authoritative active-ephemeral inspect snapshot projection
+- [x] Task 2.2: Add authoritative active-ephemeral inspect snapshot projection
   - Acceptance: allowed `inspect_world_worker` requests with `mode=ephemeral` return a typed active snapshot for one exact active task, remain non-mutating, and fail closed for terminal or unknown task ids.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -108,7 +108,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add routed active-ephemeral inspect behavior
+- [x] Task 3.1: Add routed active-ephemeral inspect behavior
   - Acceptance: the orchestrator dispatch layer evaluates exact active-task identity and returns a typed authoritative inspect outcome for one active ephemeral task without invoking retained-worker snapshot logic.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -116,7 +116,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - targeted shell tests adjacent to the touched implementation files
 
-- [ ] Task 3.2: Add exact active-ephemeral cancel routing and closeout
+- [x] Task 3.2: Add exact active-ephemeral cancel routing and closeout
   - Acceptance: allowed `cancel_world_work` requests with `mode=ephemeral` interrupt one exact active task, return truthful closeout distinct from retained-worker cancel and stop, and fail closed on late/terminal races without reopening one-shot lifecycle semantics.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -150,7 +150,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align planning and config truth without widening the slice
+- [x] Task 4.1: Align planning and config truth without widening the slice
   - Acceptance: repo-local docs describe Slice `47` as exact active-ephemeral `task_run_id` plus dual-target inspect/cancel widening; no wording implies retained promotion, public control UX, stop/fork redesign, or Family-2 router execution have landed.
   - Verify:
     - manual diff review
@@ -160,7 +160,7 @@ Session goal:
     - [`llm-last-mile/PLAN-47.md`](./PLAN-47.md)
     - [`llm-last-mile/TASKS-47.md`](./TASKS-47.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, transport/world-service tests if touched, and full workspace tests are green against the bounded Slice `47` file set; this task validates the implementation and does not serve as an open-ended cleanup bucket.
   - Verify:
     - `cargo fmt --all -- --check`

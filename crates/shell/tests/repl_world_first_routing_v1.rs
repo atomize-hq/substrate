@@ -882,33 +882,29 @@ fn read_internal_toolbox_world_dispatch_response_frame(
 fn read_internal_toolbox_world_dispatch_started_task_run_id(
     reader: &mut BufReader<UnixStream>,
 ) -> String {
-    loop {
-        let payload = read_internal_toolbox_world_dispatch_response_frame(reader);
-        match payload.pointer("/frame_kind").and_then(Value::as_str) {
-            Some("event") => {
-                assert_eq!(
-                    payload.pointer("/event_kind").and_then(Value::as_str),
-                    Some("task_run_id_registered"),
-                    "unexpected internal toolbox event frame: {payload:?}"
-                );
-                assert_eq!(
-                    payload.pointer("/action").and_then(Value::as_str),
-                    Some("run_world_task"),
-                    "unexpected internal toolbox event action: {payload:?}"
-                );
-                return payload
-                    .pointer("/task_run_id")
-                    .and_then(Value::as_str)
-                    .expect("task_run_id_registered event must include task_run_id")
-                    .to_string();
-            }
-            Some("result") | None => {
-                panic!(
-                    "expected internal toolbox started event before terminal result: {payload:?}"
-                )
-            }
-            Some(other) => panic!("unexpected internal toolbox frame_kind {other}: {payload:?}"),
+    let payload = read_internal_toolbox_world_dispatch_response_frame(reader);
+    match payload.pointer("/frame_kind").and_then(Value::as_str) {
+        Some("event") => {
+            assert_eq!(
+                payload.pointer("/event_kind").and_then(Value::as_str),
+                Some("task_run_id_registered"),
+                "unexpected internal toolbox event frame: {payload:?}"
+            );
+            assert_eq!(
+                payload.pointer("/action").and_then(Value::as_str),
+                Some("run_world_task"),
+                "unexpected internal toolbox event action: {payload:?}"
+            );
+            payload
+                .pointer("/task_run_id")
+                .and_then(Value::as_str)
+                .expect("task_run_id_registered event must include task_run_id")
+                .to_string()
         }
+        Some("result") | None => {
+            panic!("expected internal toolbox started event before terminal result: {payload:?}")
+        }
+        Some(other) => panic!("unexpected internal toolbox frame_kind {other}: {payload:?}"),
     }
 }
 

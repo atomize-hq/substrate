@@ -279,13 +279,10 @@ async fn wait_for_active_ephemeral_terminal_truth(
         let tracker = active_ephemeral_terminal_wait_tracker()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(entry) = tracker
-            .by_task
-            .get(&active_ephemeral_terminal_wait_key(
-                orchestration_session_id,
-                task_run_id,
-            ))
-        else {
+        let Some(entry) = tracker.by_task.get(&active_ephemeral_terminal_wait_key(
+            orchestration_session_id,
+            task_run_id,
+        )) else {
             anyhow::bail!(
                 "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
                 task_run_id,

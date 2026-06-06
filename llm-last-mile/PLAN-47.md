@@ -3,7 +3,7 @@
 Source spec: [SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md](./SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md)  
 Source validation note: [NOTE-37-family-1-ordering-after-cancel-closeout.md](./NOTE-37-family-1-ordering-after-cancel-closeout.md)  
 Plan type: post-Slice-46 identity-model widening slice  
-Status: drafted on `2026-06-05`
+Status: Packets `1`-`4` are complete on the current tree as of `2026-06-06`
 
 ## Objective
 
@@ -22,6 +22,13 @@ This slice is complete only when all of the following are true:
 ## Phase Gate
 
 This plan assumes the `SPECIFY` phase artifact in [SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md](./SPEC-47-internal-active-ephemeral-task-identity-and-inspect-cancel-widening.md) has been reviewed and is the source of truth for scope before implementation planning advances.
+
+Packet status on the current tree:
+
+1. Packet `1` exact `task_run_id` contract and dual-target validation work is landed.
+2. Packet `2` authoritative active-task tracking and inspect snapshot truth is landed.
+3. Packet `3` routed active-ephemeral inspect/cancel behavior is landed.
+4. Packet `4` doc alignment and the final validation wall are landed and green.
 
 ## Major Components And Dependencies
 
@@ -61,6 +68,8 @@ The narrowest honest implementation order is therefore:
 2. add authoritative active-task tracking and snapshot truth second,
 3. wire active-ephemeral inspect/cancel over that exact identity third,
 4. finish with docs and the validation wall.
+
+That implementation order is now complete through Packet `4`, and no broader Slice `47` scope widening was required to close the slice.
 
 ## Locked Decisions
 
