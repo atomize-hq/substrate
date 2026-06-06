@@ -4,6 +4,31 @@ mod support;
 
 use support::{load_acceptance_case, ACCEPTANCE_CASE_IDS, ACCEPTANCE_EXCLUDED_CASES};
 
+fn sorted_entry_names(path: &std::path::Path) -> Vec<String> {
+    let mut entries = std::fs::read_dir(path)
+        .unwrap_or_else(|error| panic!("read fixture directory {}: {error}", path.display()))
+        .map(|entry| {
+            entry
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "read fixture directory entry in {}: {error}",
+                        path.display()
+                    )
+                })
+                .file_name()
+                .into_string()
+                .unwrap_or_else(|name| {
+                    panic!(
+                        "fixture directory entry {} must be valid UTF-8",
+                        std::path::Path::new(&name).display()
+                    )
+                })
+        })
+        .collect::<Vec<_>>();
+    entries.sort();
+    entries
+}
+
 fn assert_acceptance_case(case_id: &str) {
     let case = load_acceptance_case(case_id);
     let result = case.analyze();
@@ -25,6 +50,31 @@ fn assert_acceptance_case(case_id: &str) {
 
 #[test]
 fn acceptance_fixtures_corpus_stays_screened_and_excluded_sessions_stay_out() {
+    let fixture_root =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/acceptance");
+    let mut expected_root_entries = ACCEPTANCE_CASE_IDS
+        .iter()
+        .map(|case_id| (*case_id).to_owned())
+        .collect::<Vec<_>>();
+    expected_root_entries.push("README.md".to_owned());
+    expected_root_entries.sort();
+    assert_eq!(
+        sorted_entry_names(&fixture_root),
+        expected_root_entries,
+        "Packet R2 acceptance corpus must contain only README.md and the four allowed case directories"
+    );
+
+    let expected_case_entries = [
+        "dedupe-audit.jsonl",
+        "expected.json",
+        "manifest.json",
+        "rows.archival.jsonl",
+        "rows.compact.jsonl",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<Vec<_>>();
+
     for case_id in ACCEPTANCE_CASE_IDS {
         let case = load_acceptance_case(case_id);
         assert_eq!(case.expected.session_id, case_id);
@@ -32,12 +82,15 @@ fn acceptance_fixtures_corpus_stays_screened_and_excluded_sessions_stay_out() {
             case.expected.source_artifact,
             format!("target/hybrid-drift-evals/{case_id}-r1e/compactor")
         );
+        assert_eq!(
+            sorted_entry_names(&fixture_root.join(case_id)),
+            expected_case_entries,
+            "acceptance case {case_id} must contain exactly the Packet R2 fixture contract files"
+        );
     }
 
     for (excluded_case_id, reason) in ACCEPTANCE_EXCLUDED_CASES {
-        let excluded_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/acceptance")
-            .join(excluded_case_id);
+        let excluded_dir = fixture_root.join(excluded_case_id);
         assert!(
             !excluded_dir.exists(),
             "excluded session {excluded_case_id} must stay out of the frozen acceptance corpus: {reason}"
