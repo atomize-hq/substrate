@@ -353,7 +353,13 @@ fn preserves_out_of_scope_thrash(current: &CheckpointSlice, interval: &IntervalS
             .context
             .working_set_paths
             .iter()
-            .filter(|path| path.source != "observed_command")
+            .filter(|path| {
+                path.source != "observed_command"
+                    || path
+                        .evidence
+                        .iter()
+                        .any(|evidence| !interval_contains_evidence(interval, evidence))
+            })
             .map(|path| path.path.clone()),
     );
     expected.sort();

@@ -530,6 +530,99 @@ fn dead_end_thrash_keeps_repeated_successful_verification_as_historical_context(
     }));
 }
 
+#[test]
+fn dead_end_thrash_clears_replay_shaped_memsrc_verifier_tail() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Finish the memsrc analyzer work and rerun the verification wall before closeout.",
+        ),
+        tool_row(1, "sed -n '1,220p' crates/memsrc/src/compare/mod.rs"),
+        tool_row(2, "sed -n '1,220p' crates/memsrc/tests/extraction_golden.rs"),
+        tool_row(
+            3,
+            "tmpdir=$(mktemp -d); cargo run -p memsrc -- compare-yaml --package memory.source.json --baseline baseline-memory --out \"$tmpdir/root-compare.json\" >/dev/null && sed -n '1,220p' \"$tmpdir/root-compare.json\"",
+        ),
+        tool_row(
+            4,
+            "tmpdir=$(mktemp -d); cargo run -p memsrc -- compare-yaml --package eval-corpus/ts-memory/memory.source.json --baseline baseline-memory --out \"$tmpdir/eval-compare.json\" >/dev/null && sed -n '1,220p' \"$tmpdir/eval-compare.json\"",
+        ),
+        tool_row(
+            5,
+            "cargo run -p memsrc -- check --package crates/memsrc/fixtures/adversarial/memory.source.json",
+        ),
+        row(6, CompactionKind::AssistantMessage, "Need one more verification pass."),
+        tool_row(7, "cargo check -p memsrc"),
+        tool_row(8, "cargo check -p memsrc"),
+        tool_row(9, "cargo check -p memsrc"),
+        tool_row(10, "cargo clippy -p memsrc -- -D warnings"),
+        tool_row(11, "cargo clippy -p memsrc -- -D warnings"),
+        tool_row(12, "cargo clippy -p memsrc -- -D warnings"),
+        tool_row(
+            13,
+            "tmpdir=$(mktemp -d); cargo run -p memsrc -- compare-yaml --package memory.source.json --baseline baseline-memory --out \"$tmpdir/root-compare.json\" >/dev/null && sed -n '1,220p' \"$tmpdir/root-compare.json\"",
+        ),
+        tool_row(
+            14,
+            "tmpdir=$(mktemp -d); cargo run -p memsrc -- compare-yaml --package eval-corpus/ts-memory/memory.source.json --baseline baseline-memory --out \"$tmpdir/eval-compare.json\" >/dev/null && sed -n '1,220p' \"$tmpdir/eval-compare.json\"",
+        ),
+        tool_row(
+            15,
+            "cargo run -p memsrc -- check --package crates/memsrc/fixtures/adversarial/memory.source.json",
+        ),
+        row(16, CompactionKind::AssistantMessage, "Verification completed successfully."),
+    ];
+    let archival_rows = rows.clone();
+    let compact_rows = rows
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| !matches!(index, 8 | 11))
+        .map(|(_, row)| row)
+        .collect();
+    let dedupe_groups = vec![
+        DedupeGroup {
+            kind: CompactionKind::ToolCall,
+            canonical_text_hash_hex: "dup-hash-replay-shaped-check".to_string(),
+            representative: RowRef::from_row(&archival_rows[7]),
+            duplicates: vec![RowRef::from_row(&archival_rows[8])],
+        },
+        DedupeGroup {
+            kind: CompactionKind::ToolCall,
+            canonical_text_hash_hex: "dup-hash-replay-shaped-clippy".to_string(),
+            representative: RowRef::from_row(&archival_rows[10]),
+            duplicates: vec![RowRef::from_row(&archival_rows[11])],
+        },
+    ];
+    let fixture = BundleFixture::from_rows(archival_rows, compact_rows, dedupe_groups);
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze replay-shaped memsrc verifier bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints
+        .last()
+        .expect("final checkpoint")
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert!(!thrash.flagged);
+    assert_eq!(thrash.raw_score, 20);
+    assert_eq!(thrash.state, DriftState::HistoricalOnly);
+    assert!(thrash.evidence.iter().any(|item| {
+        item.reason
+            == "historical repeated verification evidence: repeated verification command: cargo check -p memsrc"
+    }));
+    assert!(thrash.evidence.iter().any(|item| {
+        item.reason
+            == "historical repeated verification evidence: repeated verification command: cargo clippy -p memsrc -- -D warnings"
+    }));
+}
+
 fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
     CompactionRow {
         source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
