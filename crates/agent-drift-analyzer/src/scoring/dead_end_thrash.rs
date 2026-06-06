@@ -13,7 +13,9 @@ const HISTORICAL_REPEATED_FAILURE_REASON_PREFIX: &str = "historical repeated fai
 pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> ScoredDrift {
     let has_history = !analysis.repetition.repeated_verification_loops.is_empty()
         || !analysis.repetition.repeated_failure_loops.is_empty();
-    let flagged = has_history && !analysis.recovery.recovered_from_thrash;
+    let flagged = has_history
+        && (analysis.recovery.active_repeated_failure
+            || analysis.recovery.active_repeated_verification);
     let raw_score = if flagged {
         active_raw_score(analysis)
     } else if has_history {

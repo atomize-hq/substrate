@@ -85,6 +85,8 @@ pub(crate) struct RecoveryState {
     pub interval_verification_command_count: usize,
     pub clean_verification_interval: bool,
     pub recovered_from_thrash: bool,
+    pub active_repeated_verification: bool,
+    pub active_repeated_failure: bool,
 }
 
 pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnalysis> {
@@ -324,10 +326,12 @@ fn recovery_state(
         .iter()
         .filter(|command| command.verification_like)
         .count();
+    let preserves_out_of_scope = preserves_out_of_scope_thrash(current, interval);
+    let failure_touches_interval =
+        failure_loops_touch_interval(&repetition.repeated_failure_loops, interval);
     let clean_verification_interval = interval_verification_command_count > 0
-        && !preserves_out_of_scope_thrash(current, interval)
-        && !verification_loops_touch_interval(&repetition.repeated_verification_loops, interval)
-        && !failure_loops_touch_interval(&repetition.repeated_failure_loops, interval);
+        && !preserves_out_of_scope
+        && !failure_touches_interval;
 
     RecoveryState {
         interval_verification_command_count,
@@ -335,6 +339,10 @@ fn recovery_state(
         recovered_from_thrash: clean_verification_interval
             && (!repetition.repeated_verification_loops.is_empty()
                 || !repetition.repeated_failure_loops.is_empty()),
+        active_repeated_verification: interval_verification_command_count > 0
+            && !repetition.repeated_verification_loops.is_empty()
+            && preserves_out_of_scope,
+        active_repeated_failure: failure_touches_interval,
     }
 }
 
@@ -363,18 +371,6 @@ fn preserves_out_of_scope_thrash(current: &CheckpointSlice, interval: &IntervalS
                     || expected_path.starts_with(path)
             })
         })
-    })
-}
-
-fn verification_loops_touch_interval(
-    loops: &[RepeatedCommandLoop],
-    interval: &IntervalSlice,
-) -> bool {
-    loops.iter().any(|command_loop| {
-        command_loop
-            .evidence
-            .iter()
-            .any(|evidence| interval_contains_evidence(interval, evidence))
     })
 }
 

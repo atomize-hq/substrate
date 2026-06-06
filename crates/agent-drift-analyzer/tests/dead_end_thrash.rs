@@ -452,8 +452,9 @@ fn dead_end_thrash_ignores_repeated_neutral_tool_output_evidence() {
         .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
         .expect("dead end thrash score");
 
-    assert!(thrash.flagged);
-    assert_eq!(thrash.raw_score, 40);
+    assert!(!thrash.flagged);
+    assert_eq!(thrash.raw_score, 20);
+    assert_eq!(thrash.state, DriftState::HistoricalOnly);
     assert!(thrash
         .evidence
         .iter()
@@ -461,7 +462,72 @@ fn dead_end_thrash_ignores_repeated_neutral_tool_output_evidence() {
     assert!(thrash
         .evidence
         .iter()
-        .any(|item| item.reason.starts_with("repeated verification command:")));
+        .any(|item| item
+            .reason
+            .starts_with("historical repeated verification evidence:")));
+}
+
+#[test]
+fn dead_end_thrash_keeps_repeated_successful_verification_as_historical_context() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Finish the analyzer work and verify with cargo fmt, cargo clippy, and cargo test.",
+        ),
+        tool_row(1, "cargo fmt --all -- --check"),
+        tool_row(2, "cargo fmt --all -- --check"),
+        tool_row(3, "cargo fmt --all -- --check"),
+        tool_row(4, "cargo clippy --workspace --all-targets -- -D warnings"),
+        tool_row(5, "cargo clippy --workspace --all-targets -- -D warnings"),
+        tool_row(6, "cargo clippy --workspace --all-targets -- -D warnings"),
+        tool_row(7, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        tool_row(8, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        tool_row(9, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        row(10, CompactionKind::AssistantMessage, "Verification completed successfully."),
+    ];
+    let archival_rows = rows.clone();
+    let compact_rows = rows
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| !matches!(index, 2 | 5 | 8))
+        .map(|(_, row)| row)
+        .collect();
+    let dedupe_groups = vec![DedupeGroup {
+        kind: CompactionKind::ToolCall,
+        canonical_text_hash_hex: "dup-hash-successful-verification".to_string(),
+        representative: RowRef::from_row(&archival_rows[1]),
+        duplicates: vec![RowRef::from_row(&archival_rows[2])],
+    }];
+    let fixture = BundleFixture::from_rows(archival_rows, compact_rows, dedupe_groups);
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze repeated successful verification bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints[0]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert!(!thrash.flagged);
+    assert_eq!(thrash.raw_score, 20);
+    assert_eq!(thrash.state, DriftState::HistoricalOnly);
+    assert!(thrash.evidence.iter().any(|item| {
+        item.reason
+            == "historical repeated verification evidence: repeated verification command: cargo fmt --all -- --check"
+    }));
+    assert!(thrash.evidence.iter().any(|item| {
+        item.reason
+            == "historical repeated verification evidence: repeated verification command: cargo clippy --workspace --all-targets -- -D warnings"
+    }));
+    assert!(thrash.evidence.iter().any(|item| {
+        item.reason
+            == "historical repeated verification evidence: repeated verification command: cargo test -p agent-drift-analyzer -- --nocapture"
+    }));
 }
 
 fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
