@@ -9,7 +9,7 @@ This task list implements:
 
 ## Packet R1A: Lock The Family Boundary And Land The Analyzer Outcome-Evidence Seam
 
-- [x] Task: Lock the `R1A` / `R1B` / `R1C` / `R1D` / `R1E` packet-family boundary in repo docs
+- [x] Task: Lock the `R1A` / `R1B` / `R1C` / `R1D` / `R1E` / `R1F` packet-family boundary in repo docs
   - Acceptance: the docs explicitly define:
     - `R1A` as docs lock plus analyzer-only outcome-evidence classification and repeated-failure
       cutover
@@ -19,6 +19,7 @@ This task list implements:
       proof still fails
     - `R1D` as the analyzer-owned repeated verification-loop semantics fix
     - `R1E` as the final bounded replay re-proof plus continuity-note refresh
+    - `R1F` as the narrow sentinel trigger/presentation cleanup after bounded replay proof closes
     - repeated successful `ToolOutput` as non-failure by default
     - exclusion of delegated / subagent sessions from the `R1C` and `R1E` proof corpus
     - only a tiny acceptance-selection classifier such as `subagent_observed` if rollout-text
@@ -254,6 +255,52 @@ Packet `R1E` exit condition:
   supported analyzer seam
 - continuity notes reflect the final packet family and bounded-proof story honestly
 
+## Packet R1F: Clean Up Sentinel Trigger And Presentation Labels
+
+- [ ] Task: Separate scheduler trigger labeling from analyzer drift-class outcomes in sentinel replay/live output
+  - Acceptance: sentinel presentation proves that:
+    - scheduler fast-path trigger labels are not rendered in a way that can be mistaken for an
+      active analyzer repeated-failure classification
+    - analyzer checkpoint state remains the source of truth for active, recovered, and
+      historical-only posture
+    - replay and live surfaces stay aligned after the label cleanup
+    - the fix stays sentinel-local and does not require analyzer schema changes
+  - Verify:
+    - `cargo test -p agent-drift-sentinel operator_surface -- --nocapture`
+    - `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`
+    - `cargo test -p agent-drift-sentinel operator_sink -- --nocapture`
+  - Files:
+    - `crates/agent-drift-sentinel/src/operator_surface.rs`
+    - `crates/agent-drift-sentinel/src/operator_sink.rs`
+    - `crates/agent-drift-sentinel/src/live_input.rs`
+    - `crates/agent-drift-sentinel/tests/operator_surface.rs`
+    - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
+    - `crates/agent-drift-sentinel/tests/operator_sink.rs`
+
+- [ ] Task: Add focused sentinel regressions for recovered and historical-only checkpoints reached through scheduler fast paths
+  - Acceptance: regression coverage explicitly proves that:
+    - a checkpoint can carry a scheduler fast-path trigger while still rendering recovered posture
+      from analyzer checkpoint state
+    - historical-only analyzer state is not mislabeled as active repeated failure
+    - replay and live parity remain deterministic after the trigger/presentation cleanup
+  - Verify:
+    - `cargo test -p agent-drift-sentinel operator_surface -- --nocapture`
+    - `cargo test -p agent-drift-sentinel live_checkpoint_compatibility -- --nocapture`
+    - `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`
+  - Files:
+    - `crates/agent-drift-sentinel/tests/operator_surface.rs`
+    - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
+    - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
+
+Packet `R1F` exit condition:
+
+- replay/live sentinel output no longer uses a scheduler-trigger label that overstates analyzer
+  repeated-failure activity
+- analyzer checkpoint state and checkpoint posture remain clearly readable as the operator-facing
+  truth source
+- the cleanup stays sentinel-local and does not reopen analyzer semantics or bounded replay corpus
+  work
+
 ## Family Exit Condition
 
 - `R1A` landed the analyzer outcome-evidence seam and repeated-failure cutover
@@ -263,5 +310,8 @@ Packet `R1E` exit condition:
   regressions
 - `R1E` remains open until the screened bounded replay re-proof is honest on a representative
   non-subagent recovery tail as well as the clean control corpus
-- the family stayed inside analyzer outcome evidence plus `dead_end_thrash` semantics and did not
-  widen into turn context, archetype, progress, or sentinel cleanup
+- `R1F` remains open until sentinel replay/live trigger labeling no longer overstates analyzer
+  repeated-failure activity after the analyzer fix has recovered
+- the family stayed inside analyzer outcome evidence, `dead_end_thrash` semantics, bounded replay
+  proof, and the narrow sentinel trigger/presentation cleanup without widening into turn context,
+  archetype, progress, or broader sentinel redesign

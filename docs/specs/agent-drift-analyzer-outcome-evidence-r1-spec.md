@@ -56,10 +56,13 @@ Success means:
 - `R1D` lands the analyzer-owned repeated verification-loop and recovery fix exposed by `R1C`
 - `R1E` lands the final bounded non-subagent replay re-proof and continuity-note refresh without
   widening into broader analyzer or sentinel work
+- `R1F` lands the narrow sentinel trigger/presentation cleanup so replay output does not use a
+  scheduler fast-path label that overstates analyzer repeated-failure activity
 
 ## Packet Family Boundary
 
-This spec defines the `R1` packet family, split into `R1A`, `R1B`, `R1C`, `R1D`, and `R1E`.
+This spec defines the `R1` packet family, split into `R1A`, `R1B`, `R1C`, `R1D`, `R1E`, and
+`R1F`.
 
 ### Packet R1A: Outcome-Evidence Seam And Repeated-Failure Cutover
 
@@ -152,6 +155,26 @@ Out of scope:
 - changing sentinel scheduler policy, operator presentation, or live runtime behavior
 - widening into richer turn-context, archetype, or progress packets
 
+### Packet R1F: Sentinel Trigger And Presentation Honesty Cleanup
+
+In scope:
+
+- clean up sentinel replay/live presentation so scheduler fast-path trigger labels are not confused
+  with analyzer drift-class outcomes
+- rename or reframe the current `repeated_failure` trigger label if needed so it reads as a
+  scheduler evaluation trigger rather than an analyzer claim
+- preserve analyzer checkpoint state as the source of truth for active, recovered, and
+  historical-only posture
+- keep replay and live operator surfaces aligned after the presentation cleanup
+- add focused sentinel tests covering checkpoints where the scheduler trigger, checkpoint posture,
+  and active analyzer classes no longer share the same label
+
+Out of scope:
+
+- new analyzer semantics or replay-proof corpus changes
+- changing compactor bundle schema or analyzer checkpoint schema
+- widening into broader sentinel runtime, policy, or coordinator redesign
+
 ## Family-Wide Out Of Scope
 
 - changing compactor bundle schema or normalization contracts
@@ -160,7 +183,8 @@ Out of scope:
 - retuning other drift classes unless a shared helper must move mechanically with this family
 - broadening into replay/live operator docs beyond what is needed to describe the bounded replay
   diagnosis and re-proof
-- changing sentinel scheduler, runtime, or presentation logic
+- changing sentinel scheduler, runtime, or presentation logic beyond the narrow `R1F`
+  trigger/presentation cleanup
 
 ## Tech Stack
 

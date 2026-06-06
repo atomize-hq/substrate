@@ -5,7 +5,7 @@
 This plan implements
 `docs/specs/agent-drift-analyzer-outcome-evidence-r1-spec.md`.
 
-The old single-packet `R1` shape was first split into three packets, and is now expanded to five
+The old single-packet `R1` shape was first split into three packets, and is now expanded to six
 after bounded replay exposed a second analyzer seam:
 
 - `R1A`: docs lock, analyzer outcome-evidence seam, and repeated-failure cutover
@@ -13,6 +13,8 @@ after bounded replay exposed a second analyzer seam:
 - `R1C`: bounded replay diagnosis plus honest status correction when the proof still fails
 - `R1D`: analyzer repeated verification-loop semantics and honest recovery fix
 - `R1E`: bounded replay re-proof over screened non-subagent sessions plus continuity-note refresh
+- `R1F`: sentinel trigger/presentation cleanup so replay output labels do not overstate analyzer
+  repeated-failure activity after `R1E`
 
 The family goal remains the same: make `dead_end_thrash` honest on completed successful tails
 without widening into broader analyzer or sentinel redesign. Live repo truth now shows that the
@@ -38,7 +40,8 @@ This family should:
 This family should not:
 
 - change compactor bundle schema or upstream normalization
-- change sentinel scheduler, runtime, or presentation logic
+- change sentinel scheduler, runtime, or presentation logic before `R1F`, or beyond the narrow
+  trigger/presentation cleanup owned by `R1F`
 - add turn-context, `session_archetype`, or `session_progress`
 - redesign drift scoring beyond the minimal `dead_end_thrash` input cutover
 - broaden into a general learned or hybrid monitor
@@ -150,6 +153,22 @@ Why fifth:
 - the family is only complete once the real-session-style bounded replay proof passes on top of
   the landed verification-loop fix
 
+### Packet R1F: Sentinel Trigger And Presentation Honesty Cleanup
+
+Deliver sixth:
+
+- update the sentinel replay/live presentation seam so scheduler trigger labels cannot be read as
+  analyzer drift-class outcomes
+- preserve analyzer checkpoint state and checkpoint posture as the operator-facing truth source
+- add focused replay/live parity tests for recovered and historical-only checkpoints reached via a
+  scheduler fast path
+
+Why sixth:
+
+- `R1E` can prove the analyzer fix honestly today, but it still leaves one downstream labeling seam
+  that is easy to misread in replay output; that cleanup belongs after the proof packet, not
+  inside it
+
 ## Sequencing
 
 Sequential work:
@@ -164,6 +183,7 @@ Sequential work:
 8. verify `R1D` with focused analyzer tests and stop there
 9. land `R1E` bounded replay re-proof and any continuity-note refresh
 10. run the analyzer wall and then the final bounded replay proof set
+11. land `R1F` sentinel trigger/presentation cleanup and focused sentinel parity tests
 
 Parallel-safe work after `R1A` lands:
 
@@ -171,12 +191,15 @@ Parallel-safe work after `R1A` lands:
   `export_bundle.rs`
 - screening candidate real sessions for subagent markers for later `R1C`/`R1E`
 - drafting continuity-note updates while replay diagnosis or re-proof is executing
+- drafting the narrow `R1F` operator-surface wording while `R1E` proof artifacts are being
+  finalized
 
 Not parallel-safe:
 
 - classifier design and repeated-failure cutover
 - recovery semantic changes before `R1A` lands
 - replay-proof claims before `R1D` verification-loop behavior is locked
+- sentinel trigger/presentation cleanup before `R1E` locks the bounded replay proof story
 
 ## Major Risks And Mitigations
 
@@ -242,6 +265,16 @@ Mitigation:
 - refuse to add turn context, archetype, progress, or sentinel cleanup in this family
 - if implementation pressure reveals one of those needs, stop and reclassify it under its owning
   `R*` packet rather than silently broadening the `R1` family
+
+### Risk 8: Replay Output Still Sounds Wrong Even After The Analyzer Fix Is Correct
+
+Mitigation:
+
+- keep `R1E` proof claims rooted in analyzer checkpoint state and posture, not scheduler trigger
+  names
+- isolate the downstream replay/live labeling cleanup into `R1F`
+- add focused sentinel tests proving scheduler triggers and analyzer-active classes are rendered as
+  distinct concepts after `R1F`
 
 ## Verification Wall
 
@@ -409,4 +442,6 @@ Verify:
 The main review question for this plan is whether `R1D` stays comfortably bounded once `R1C`
 pinpoints the remaining seam. If the verification-loop fix starts dragging in richer compactor
 structure or broader analyzer redesign work, the honest move is to stop and re-scope instead of
-silently re-merging `R1D` and `R1E` into one oversized session.
+silently re-merging `R1D` and `R1E` into one oversized session. A second review question now
+exists after `R1E`: keep the sentinel replay/live trigger/presentation cleanup in `R1F` narrow
+enough that it does not reopen analyzer semantics or broaden into a larger sentinel redesign.
