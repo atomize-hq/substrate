@@ -422,6 +422,7 @@ fn pcm1_world_dispatch_worker_event_autonomy_defaults_stay_fail_closed() {
     assert!(!policy.world_dispatch_progress_acks_allowed());
     assert!(!policy.world_dispatch_follow_up_allowed());
     assert!(!policy.world_dispatch_blocked_allowed());
+    assert!(!policy.workflow_router_enabled());
 }
 
 #[test]

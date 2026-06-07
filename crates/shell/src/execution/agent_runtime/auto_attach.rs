@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
+use substrate_broker::Policy;
 use uuid::Uuid;
 
 use super::control::{
@@ -120,6 +121,7 @@ pub(crate) fn execute_session_auto_attach(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
     router_identity: &str,
+    policy: &Policy,
     world: bool,
     no_world: bool,
 ) -> Result<SessionAutoAttachExecution> {
@@ -136,6 +138,28 @@ pub(crate) fn execute_session_auto_attach(
             attach_claim_owner,
         } => (obligation_id, attach_claim_owner),
     };
+    let obligation = match load_claimed_obligation(store, orchestration_session_id, &obligation_id)
+    {
+        Ok(obligation) => obligation,
+        Err(err) => {
+            let reason = err.to_string();
+            mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+            return Ok(SessionAutoAttachExecution::FailedClosed {
+                obligation_id,
+                attach_claim_owner,
+                reason,
+            });
+        }
+    };
+    if let Err(err) = ensure_router_auto_attach_allowed(policy, &obligation) {
+        let reason = err.to_string();
+        mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+        return Ok(SessionAutoAttachExecution::FailedClosed {
+            obligation_id,
+            attach_claim_owner,
+            reason,
+        });
+    }
     if let Err(err) = ensure_router_auto_attach_supported() {
         let reason = err.to_string();
         mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
@@ -187,6 +211,65 @@ pub(crate) fn execute_session_auto_attach(
         attach_claim_owner,
         receipt,
     })
+}
+
+fn load_claimed_obligation(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    obligation_id: &str,
+) -> Result<OrchestrationObligationRecord> {
+    store
+        .load_obligation(orchestration_session_id, obligation_id)?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing_claimed_obligation: claimed router auto-attach obligation {obligation_id} disappeared before policy evaluation"
+            )
+        })
+}
+
+fn ensure_router_auto_attach_allowed(
+    policy: &Policy,
+    obligation: &OrchestrationObligationRecord,
+) -> Result<()> {
+    if !policy.workflow_router_enabled() {
+        anyhow::bail!(
+            "router_auto_attach_disabled: workflow.router.enabled must be true before router-owned automatic attach may execute"
+        );
+    }
+
+    let (allowed, policy_key) = match obligation.kind {
+        OrchestrationObligationKind::ApprovalRequired => (
+            policy.world_dispatch_approval_requests_allowed(),
+            "agents.world_dispatch.obligations.approval_allowed",
+        ),
+        OrchestrationObligationKind::FollowUpRequired => (
+            policy.world_dispatch_follow_up_allowed(),
+            "agents.world_dispatch.obligations.follow_up_allowed",
+        ),
+        OrchestrationObligationKind::Blocked => (
+            policy.world_dispatch_blocked_allowed(),
+            "agents.world_dispatch.obligations.blocked_allowed",
+        ),
+        OrchestrationObligationKind::ForkRequest => (
+            policy.world_dispatch_fork_requests_allowed(),
+            "agents.world_dispatch.fork.requests_allowed",
+        ),
+        other => {
+            anyhow::bail!(
+                "router_auto_attach_unsupported_kind: obligation kind {other:?} is not eligible for router-owned automatic attach"
+            );
+        }
+    };
+    if !allowed {
+        anyhow::bail!(
+            "router_auto_attach_policy_denied: obligation {} of kind {:?} requires {}=true before router-owned automatic attach may execute",
+            obligation.obligation_id,
+            obligation.kind,
+            policy_key,
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -360,6 +443,7 @@ fn ensure_auto_attach_restored_session(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use substrate_broker::Policy;
 
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::obligation_ledger::{
@@ -436,6 +520,29 @@ mod tests {
         obligation
     }
 
+    fn router_auto_attach_policy(kind: OrchestrationObligationKind) -> Policy {
+        let mut policy = Policy {
+            workflow_router_enabled: true,
+            ..Policy::default()
+        };
+        match kind {
+            OrchestrationObligationKind::ApprovalRequired => {
+                policy.agents_world_dispatch_obligations_approval_allowed = true;
+            }
+            OrchestrationObligationKind::FollowUpRequired => {
+                policy.agents_world_dispatch_obligations_follow_up_allowed = true;
+            }
+            OrchestrationObligationKind::Blocked => {
+                policy.agents_world_dispatch_obligations_blocked_allowed = true;
+            }
+            OrchestrationObligationKind::ForkRequest => {
+                policy.agents_world_dispatch_fork_requests_allowed = true;
+            }
+            other => panic!("unexpected auto-attach kind in test helper: {other:?}"),
+        }
+        policy
+    }
+
     #[test]
     fn select_attach_candidate_preserves_packet_two_attach_eligibility_defaults() {
         let approval = eligible_obligation(
@@ -498,6 +605,119 @@ mod tests {
         let follow_up_candidate = select_attach_candidate(&follow_up_candidates)
             .expect("follow_up should remain eligible");
         assert_eq!(follow_up_candidate.obligation_id, "obl_follow_up");
+    }
+
+    #[test]
+    fn router_auto_attach_policy_is_deny_by_default_and_per_kind_gated() {
+        let router_disabled = Policy::default();
+        let approval = eligible_obligation(
+            "sess_auto_attach_policy_disabled",
+            "obl_approval",
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        let disabled_err = ensure_router_auto_attach_allowed(&router_disabled, &approval)
+            .expect_err("disabled router policy must fail closed");
+        assert!(
+            disabled_err
+                .to_string()
+                .contains("workflow.router.enabled must be true"),
+            "router-disabled error must point at workflow.router.enabled: {disabled_err:#}"
+        );
+
+        let cases = [
+            (
+                OrchestrationObligationKind::ApprovalRequired,
+                "agents.world_dispatch.obligations.approval_allowed",
+            ),
+            (
+                OrchestrationObligationKind::FollowUpRequired,
+                "agents.world_dispatch.obligations.follow_up_allowed",
+            ),
+            (
+                OrchestrationObligationKind::Blocked,
+                "agents.world_dispatch.obligations.blocked_allowed",
+            ),
+            (
+                OrchestrationObligationKind::ForkRequest,
+                "agents.world_dispatch.fork.requests_allowed",
+            ),
+        ];
+
+        for (kind, policy_key) in cases {
+            let obligation_id = format!("obl_{kind:?}").to_lowercase();
+            let obligation =
+                eligible_obligation("sess_auto_attach_policy_gate", &obligation_id, kind);
+            let router_enabled_but_denied = Policy {
+                workflow_router_enabled: true,
+                ..Policy::default()
+            };
+            let denied_err =
+                ensure_router_auto_attach_allowed(&router_enabled_but_denied, &obligation)
+                    .expect_err("per-kind router policy should stay deny-by-default");
+            assert!(
+                denied_err.to_string().contains(policy_key),
+                "denied error for {kind:?} must reference {policy_key}: {denied_err:#}"
+            );
+
+            ensure_router_auto_attach_allowed(&router_auto_attach_policy(kind), &obligation)
+                .expect("per-kind router gate should allow matching auto-attach kinds");
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn execute_session_auto_attach_fails_closed_before_launch_when_router_policy_is_disabled() {
+        with_store(|store| {
+            let (session, participant) = detached_orchestrator(
+                "sess_auto_attach_policy_disabled",
+                "ash_auto_attach_policy_disabled",
+            );
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist session");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let approval = eligible_obligation(
+                "sess_auto_attach_policy_disabled",
+                "obl_approval",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            store
+                .persist_obligation(&approval)
+                .expect("persist approval obligation");
+
+            let execution = execute_session_auto_attach(
+                store,
+                "sess_auto_attach_policy_disabled",
+                "router::local",
+                &Policy::default(),
+                false,
+                false,
+            )
+            .expect("policy-denied auto attach should fail closed, not error");
+            let SessionAutoAttachExecution::FailedClosed { reason, .. } = execution else {
+                panic!("expected policy-denied automatic attach to fail closed");
+            };
+            assert!(
+                reason.contains("workflow.router.enabled must be true"),
+                "policy denial should point at workflow.router.enabled: {reason}"
+            );
+
+            let obligation = store
+                .load_obligation("sess_auto_attach_policy_disabled", "obl_approval")
+                .expect("reload failed-closed obligation")
+                .expect("obligation exists after failed-close");
+            assert_eq!(
+                obligation.attach_state,
+                OrchestrationObligationAttachState::FailedClosed
+            );
+            assert_eq!(
+                obligation.attach_completion_reason.as_deref(),
+                Some(reason.as_str())
+            );
+        });
     }
 
     #[test]

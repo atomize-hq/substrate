@@ -89,6 +89,20 @@ pub(crate) enum OrchestrationObligationAttachState {
     Superseded,
 }
 
+impl OrchestrationObligationAttachState {
+    #[allow(dead_code)]
+    pub(crate) fn forward_design_state(self) -> &'static str {
+        match self {
+            Self::NotEligible => "not_requested",
+            Self::Eligible => "queued",
+            Self::Claimed => "claimed",
+            Self::Satisfied => "completed",
+            Self::FailedClosed => "dead_letter",
+            Self::Superseded => "cancelled",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct OrchestrationObligationRecord {
     pub orchestration_session_id: String,
@@ -472,6 +486,32 @@ mod tests {
         assert!(err.to_string().contains(
             "terminal orchestration attach states must include attach_completion_reason"
         ));
+    }
+
+    #[test]
+    fn attach_state_semantics_remain_mapped_to_forward_design_states_without_rename() {
+        let cases = [
+            (
+                OrchestrationObligationAttachState::NotEligible,
+                "not_requested",
+            ),
+            (OrchestrationObligationAttachState::Eligible, "queued"),
+            (OrchestrationObligationAttachState::Claimed, "claimed"),
+            (OrchestrationObligationAttachState::Satisfied, "completed"),
+            (
+                OrchestrationObligationAttachState::FailedClosed,
+                "dead_letter",
+            ),
+            (OrchestrationObligationAttachState::Superseded, "cancelled"),
+        ];
+
+        for (attach_state, expected_forward_state) in cases {
+            assert_eq!(
+                attach_state.forward_design_state(),
+                expected_forward_state,
+                "{attach_state:?} should keep its forward-design semantic mapping",
+            );
+        }
     }
 
     #[test]

@@ -2733,6 +2733,41 @@ fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {
     map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn packet_one_router_auto_attach_gates_apply_to_effective_policy() {
+        let patch = parse_policy_patch_yaml(
+            Path::new("policy.yaml"),
+            r#"
+agents:
+  world_dispatch:
+    fork:
+      requests_allowed: true
+    obligations:
+      approval_allowed: true
+      follow_up_allowed: false
+      blocked_allowed: true
+workflow:
+  router:
+    enabled: true
+"#,
+        )
+        .expect("packet-one router auto-attach gates should parse");
+
+        let mut effective = Policy::default();
+        apply_policy_patch_over(&mut effective, &patch);
+
+        assert!(effective.workflow_router_enabled);
+        assert!(effective.agents_world_dispatch_fork_requests_allowed);
+        assert!(effective.agents_world_dispatch_obligations_approval_allowed);
+        assert!(!effective.agents_world_dispatch_obligations_follow_up_allowed);
+        assert!(effective.agents_world_dispatch_obligations_blocked_allowed);
+    }
+}
+
 fn hashmap_to_btree(map: &HashMap<String, String>) -> BTreeMap<String, String> {
     map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }

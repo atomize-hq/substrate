@@ -5518,6 +5518,7 @@ mod tests {
                 claimed.attach_state,
                 OrchestrationObligationAttachState::Claimed
             );
+            assert_eq!(claimed.attach_state.forward_design_state(), "claimed");
             assert_eq!(claimed.attach_attempt_count, 1);
             assert_eq!(claimed.attach_claim_owner.as_deref(), Some("router::local"));
             assert!(claimed.attach_last_attempt_at.is_some());
@@ -5531,6 +5532,7 @@ mod tests {
                 sibling.attach_state,
                 OrchestrationObligationAttachState::Eligible
             );
+            assert_eq!(sibling.attach_state.forward_design_state(), "queued");
 
             let second_claim = store
                 .claim_session_auto_attach("sess_auto_attach_claim", "router::second")
@@ -5650,6 +5652,7 @@ mod tests {
                 claimed.attach_state,
                 OrchestrationObligationAttachState::Satisfied
             );
+            assert_eq!(claimed.attach_state.forward_design_state(), "completed");
             assert_eq!(
                 claimed.attach_completion_reason.as_deref(),
                 Some("session_attach_restored_by_test")
@@ -5664,6 +5667,7 @@ mod tests {
                 sibling.attach_state,
                 OrchestrationObligationAttachState::Superseded
             );
+            assert_eq!(sibling.attach_state.forward_design_state(), "cancelled");
             assert_eq!(
                 sibling.attach_completion_reason.as_deref(),
                 Some("session_attach_restored_by_test")

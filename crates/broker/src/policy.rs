@@ -982,6 +982,10 @@ impl Policy {
         self.agents_world_dispatch_obligations_blocked_allowed
     }
 
+    pub fn workflow_router_enabled(&self) -> bool {
+        self.workflow_router_enabled
+    }
+
     pub fn requires_world(&self) -> bool {
         self.world_fs_require_world
     }
