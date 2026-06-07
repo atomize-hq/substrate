@@ -143,9 +143,21 @@ pub(crate) struct OrchestrationObligationRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_participant_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingress_source_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingress_source_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingress_received_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin_host_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_host_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub causation_event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub causation_message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub causation_request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_backend_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -184,8 +196,14 @@ impl OrchestrationObligationRecord {
             summary: summary.into(),
             resolution_note: None,
             source_participant_id: None,
+            ingress_source_kind: None,
+            ingress_source_id: None,
+            ingress_received_at: None,
             origin_host_id: None,
             target_host_id: None,
+            causation_event_id: None,
+            causation_message_id: None,
+            causation_request_id: None,
             target_backend_id: None,
             world_id: None,
             world_generation: None,
@@ -203,8 +221,25 @@ impl OrchestrationObligationRecord {
         if self.summary.trim().is_empty() {
             anyhow::bail!("orchestration obligation must include summary");
         }
+        validate_optional_exact_identity(
+            self.ingress_source_kind.as_deref(),
+            "ingress_source_kind",
+        )?;
+        validate_optional_exact_identity(self.ingress_source_id.as_deref(), "ingress_source_id")?;
         validate_optional_host_id(self.origin_host_id.as_deref(), "origin_host_id")?;
         validate_optional_host_id(self.target_host_id.as_deref(), "target_host_id")?;
+        validate_optional_exact_identity(
+            self.causation_event_id.as_deref(),
+            "causation_event_id",
+        )?;
+        validate_optional_exact_identity(
+            self.causation_message_id.as_deref(),
+            "causation_message_id",
+        )?;
+        validate_optional_exact_identity(
+            self.causation_request_id.as_deref(),
+            "causation_request_id",
+        )?;
         if self.state.is_pending() && self.resolved_at.is_some() {
             anyhow::bail!("pending orchestration obligations must not include resolved_at");
         }
@@ -436,9 +471,17 @@ fn validate_host_id(host_id: &str, field_name: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_optional_exact_identity(field_value: Option<&str>, field_name: &str) -> Result<()> {
+    if field_value.is_some_and(|value| value.trim().is_empty()) {
+        anyhow::bail!("orchestration obligations must not persist an empty {field_name}");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn pending_obligation_validates_minimum_shape() {
@@ -529,6 +572,70 @@ mod tests {
             .validate()
             .expect_err("blank target_host_id must fail validation");
         assert!(err.to_string().contains("empty target_host_id"));
+    }
+
+    #[test]
+    fn ingress_and_causation_identity_fields_reject_empty_ids() {
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::RuntimeAlert,
+            "World reported a runtime alert",
+        );
+        obligation.ingress_source_kind = Some(" ".to_string());
+
+        let err = obligation
+            .validate()
+            .expect_err("blank ingress_source_kind must fail validation");
+        assert!(err.to_string().contains("empty ingress_source_kind"));
+
+        obligation.ingress_source_kind = Some("local_runtime".to_string());
+        obligation.ingress_source_id = Some("\t".to_string());
+        let err = obligation
+            .validate()
+            .expect_err("blank ingress_source_id must fail validation");
+        assert!(err.to_string().contains("empty ingress_source_id"));
+
+        obligation.ingress_source_id = Some("run-123".to_string());
+        obligation.causation_event_id = Some(" ".to_string());
+        let err = obligation
+            .validate()
+            .expect_err("blank causation_event_id must fail validation");
+        assert!(err.to_string().contains("empty causation_event_id"));
+
+        obligation.causation_event_id = Some("event-123".to_string());
+        obligation.causation_message_id = Some(" ".to_string());
+        let err = obligation
+            .validate()
+            .expect_err("blank causation_message_id must fail validation");
+        assert!(err.to_string().contains("empty causation_message_id"));
+
+        obligation.causation_message_id = Some("message-123".to_string());
+        obligation.causation_request_id = Some(" ".to_string());
+        let err = obligation
+            .validate()
+            .expect_err("blank causation_request_id must fail validation");
+        assert!(err.to_string().contains("empty causation_request_id"));
+    }
+
+    #[test]
+    fn payload_thread_id_is_not_promoted_into_canonical_causation_fields() {
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::FollowUpRequired,
+            "Need host follow-up",
+        );
+        obligation.payload = Some(json!({
+            "thread_id": "thread-123",
+        }));
+
+        obligation
+            .validate()
+            .expect("payload thread_id remains payload-only metadata");
+        assert_eq!(obligation.causation_message_id, None);
+        assert_eq!(obligation.causation_event_id, None);
+        assert_eq!(obligation.causation_request_id, None);
     }
 
     #[test]

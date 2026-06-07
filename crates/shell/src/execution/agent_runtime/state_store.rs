@@ -5476,7 +5476,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn persist_obligation_round_trips_host_targeting_fields_when_present() {
+    fn persist_obligation_round_trips_ingress_causation_and_host_targeting_fields_when_present() {
         with_store(|store| {
             let participant = detached_orchestrator(
                 "codex",
@@ -5493,8 +5493,15 @@ mod tests {
                 "obl_targeted",
                 OrchestrationObligationKind::FollowUpRequired,
             );
+            let ingress_received_at = Utc::now();
             obligation.origin_host_id = Some("host-origin".to_string());
             obligation.target_host_id = Some("host-local".to_string());
+            obligation.ingress_source_kind = Some("local_runtime".to_string());
+            obligation.ingress_source_id = Some("run-123".to_string());
+            obligation.ingress_received_at = Some(ingress_received_at);
+            obligation.causation_event_id = Some("event-123".to_string());
+            obligation.causation_message_id = Some("message-123".to_string());
+            obligation.causation_request_id = Some("request-123".to_string());
 
             store
                 .persist_obligation(&obligation)
@@ -5504,15 +5511,21 @@ mod tests {
                 .load_obligation("sess_obligation_targeted", "obl_targeted")
                 .expect("load targeted obligation")
                 .expect("targeted obligation exists");
+            assert_eq!(loaded.ingress_source_kind.as_deref(), Some("local_runtime"));
+            assert_eq!(loaded.ingress_source_id.as_deref(), Some("run-123"));
+            assert_eq!(loaded.ingress_received_at, Some(ingress_received_at));
             assert_eq!(loaded.origin_host_id.as_deref(), Some("host-origin"));
             assert_eq!(loaded.target_host_id.as_deref(), Some("host-local"));
+            assert_eq!(loaded.causation_event_id.as_deref(), Some("event-123"));
+            assert_eq!(loaded.causation_message_id.as_deref(), Some("message-123"));
+            assert_eq!(loaded.causation_request_id.as_deref(), Some("request-123"));
             assert_eq!(loaded, obligation);
         });
     }
 
     #[test]
     #[serial_test::serial]
-    fn load_obligation_defaults_missing_host_targeting_fields_for_legacy_artifacts() {
+    fn load_obligation_defaults_missing_packet_one_fields_for_legacy_artifacts() {
         with_store(|store| {
             let participant = detached_orchestrator(
                 "codex",
@@ -5534,8 +5547,14 @@ mod tests {
             let artifact = legacy_artifact
                 .as_object_mut()
                 .expect("legacy obligation serializes to an object");
+            artifact.remove("ingress_source_kind");
+            artifact.remove("ingress_source_id");
+            artifact.remove("ingress_received_at");
             artifact.remove("origin_host_id");
             artifact.remove("target_host_id");
+            artifact.remove("causation_event_id");
+            artifact.remove("causation_message_id");
+            artifact.remove("causation_request_id");
 
             let obligation_path = store.canonical_obligation_path(
                 "sess_obligation_legacy_targeting",
@@ -5548,8 +5567,14 @@ mod tests {
                 .load_obligation("sess_obligation_legacy_targeting", "obl_legacy_targeting")
                 .expect("load legacy obligation")
                 .expect("legacy obligation exists");
+            assert_eq!(loaded.ingress_source_kind, None);
+            assert_eq!(loaded.ingress_source_id, None);
+            assert_eq!(loaded.ingress_received_at, None);
             assert_eq!(loaded.origin_host_id, None);
             assert_eq!(loaded.target_host_id, None);
+            assert_eq!(loaded.causation_event_id, None);
+            assert_eq!(loaded.causation_message_id, None);
+            assert_eq!(loaded.causation_request_id, None);
             assert_eq!(loaded.kind, OrchestrationObligationKind::Blocked);
             assert_eq!(
                 loaded.attach_state,
