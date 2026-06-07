@@ -198,7 +198,7 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(checkpoints.len(), 2);
     assert!(checkpoints
         .iter()
-        .all(|checkpoint| checkpoint.schema_version == "v0.3"));
+        .all(|checkpoint| checkpoint.schema_version == "v0.4"));
 
     let first = &checkpoints[0];
     let second = &checkpoints[1];
@@ -793,7 +793,7 @@ fn fixture_checkpoint(
         .unwrap_or_else(|| vec![format!("src/{}/base.rs", session.session_id)]);
 
     Checkpoint {
-        schema_version: "v0.3".to_string(),
+        schema_version: "v0.4".to_string(),
         session_id: session.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", session.session_id),
         ordinal,
@@ -801,6 +801,7 @@ fn fixture_checkpoint(
             start: RowRef::from_row(boundary_row),
             end: RowRef::from_row(boundary_row),
         },
+        turn_context: None,
         diagnostics,
         task_frame: TaskFrame {
             objective: format!("Objective {}", session.session_id),

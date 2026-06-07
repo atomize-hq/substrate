@@ -16,8 +16,12 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
     assert_eq!(checkpoints[0].session_id, "session-alpha");
+    assert_eq!(checkpoints[0].schema_version, "v0.4");
     assert_eq!(checkpoints[0].ordinal, 1);
+    assert!(checkpoints[0].turn_context.is_none());
     assert_eq!(checkpoints[1].ordinal, 2);
+    assert_eq!(checkpoints[1].schema_version, "v0.4");
+    assert!(checkpoints[1].turn_context.is_none());
     assert_eq!(checkpoints[0].boundary.end.event_index, 8);
     assert_eq!(checkpoints[1].boundary.end.event_index, 12);
     assert!(checkpoints[0].boundary.end.event_index < checkpoints[1].boundary.end.event_index);

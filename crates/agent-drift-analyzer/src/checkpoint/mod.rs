@@ -18,7 +18,7 @@ pub use export::{
 };
 pub use schema::{
     Checkpoint, CheckpointBoundary, CheckpointDiagnostics, Confidence, DriftClass, DriftScore,
-    DriftState, EvidenceRef, TaskFrame,
+    DriftState, EvidenceRef, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
@@ -159,11 +159,12 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
     Checkpoint {
-        schema_version: "v0.3".to_string(),
+        schema_version: "v0.4".to_string(),
         session_id: analysis.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
         ordinal,
         boundary,
+        turn_context: None,
         diagnostics,
         task_frame: task_frame.clone(),
         flagged: drift_scores.iter().any(|score| score.flagged),

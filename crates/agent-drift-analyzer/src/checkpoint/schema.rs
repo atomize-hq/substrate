@@ -52,6 +52,41 @@ pub struct CheckpointDiagnostics {
     pub evidence_item_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TurnContext {
+    pub turn_id: Option<String>,
+    pub turn_ordinal: usize,
+    pub rows_since_turn_start: usize,
+    pub seconds_since_turn_start: Option<i64>,
+    pub checkpoints_in_turn: usize,
+    pub prompts_observed_in_session: usize,
+    pub execution_mode: TurnExecutionMode,
+    pub activity_mix: TurnActivityMix,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TurnActivityMix {
+    pub directive_row_count: usize,
+    pub assistant_message_count: usize,
+    pub tool_call_count: usize,
+    pub read_like_command_count: usize,
+    pub write_like_command_count: usize,
+    pub verification_like_command_count: usize,
+    pub tool_output_count: usize,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnExecutionMode {
+    Conversational,
+    Autonomous,
+    VerificationHeavy,
+    #[default]
+    Mixed,
+}
+
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
 )]
@@ -82,6 +117,8 @@ pub struct Checkpoint {
     pub checkpoint_id: String,
     pub ordinal: usize,
     pub boundary: CheckpointBoundary,
+    #[serde(default)]
+    pub turn_context: Option<TurnContext>,
     pub diagnostics: CheckpointDiagnostics,
     pub task_frame: TaskFrame,
     pub drift_scores: Vec<DriftScore>,
