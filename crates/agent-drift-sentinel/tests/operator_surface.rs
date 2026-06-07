@@ -63,6 +63,29 @@ fn operator_surface_renders_diagnostics_for_silent_checkpoints() {
 }
 
 #[test]
+fn operator_surface_replay_flagged_checkpoints_keep_checkpoint_ready_headlines() {
+    let fixture = support::ReplayFixture::sample();
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let visible = &result.report.visible_warnings[0];
+
+    assert!(visible.checkpoint.flagged);
+    assert!(visible.headline.contains("checkpoint_ready"));
+    assert!(!visible
+        .headline
+        .contains("scheduler_repeated_failure_trigger"));
+    assert_eq!(visible.posture, Some(CheckpointPosture::Active));
+}
+
+#[test]
 fn operator_surface_renders_unavailable_density_for_zero_command_checkpoints() {
     let mut checkpoints = support::sample_checkpoints();
     checkpoints[0].diagnostics.interval_command_count = 0;

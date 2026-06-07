@@ -153,6 +153,54 @@ fn live_end_to_end_replay_and_live_surfaces_share_the_same_diagnostics_summary_f
 }
 
 #[test]
+fn live_end_to_end_replay_and_live_share_checkpoint_ready_headlines_for_matching_checkpoints() {
+    let checkpoints = support::sample_checkpoints();
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        checkpoints[..2].to_vec(),
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live_visible = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live visible checkpoint");
+    let live_silent = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live silent checkpoint");
+
+    let replay_visible = &replay.report.visible_warnings[0];
+    let replay_silent = &replay.report.silent_checkpoints[0];
+
+    assert_eq!(replay_visible.headline, live_visible.presentation.headline);
+    assert_eq!(replay_silent.headline, live_silent.presentation.headline);
+    assert!(replay_visible.headline.contains("checkpoint_ready"));
+    assert!(replay_silent.headline.contains("checkpoint_ready"));
+    assert!(!replay_visible
+        .headline
+        .contains("scheduler_repeated_failure_trigger"));
+    assert!(!replay_silent
+        .headline
+        .contains("scheduler_repeated_failure_trigger"));
+}
+
+#[test]
 fn live_end_to_end_replay_and_live_surfaces_share_turn_context_rendering_for_v0_4_checkpoints() {
     let mut checkpoints = support::sample_checkpoints();
     for (index, checkpoint) in checkpoints.iter_mut().take(2).enumerate() {
@@ -502,7 +550,8 @@ fn live_end_to_end_keeps_scheduler_trigger_labels_distinct_from_analyzer_posture
         other => panic!("expected status event, got {other:?}"),
     };
 
-    assert!(replay_visible
+    assert!(replay_visible.headline.contains("checkpoint_ready"));
+    assert!(!replay_visible
         .headline
         .contains("scheduler_repeated_failure_trigger"));
     assert_eq!(
