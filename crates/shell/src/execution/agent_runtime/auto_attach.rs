@@ -72,6 +72,7 @@ pub(crate) enum SessionAutoAttachExecution {
     },
 }
 
+#[cfg(target_os = "linux")]
 impl SessionAutoAttachExecution {
     pub(crate) fn obligation_id(&self) -> Option<&str> {
         match self {
