@@ -96,6 +96,7 @@ struct RouterOwnedAutoAttachOutcomeRecord {
     reason: String,
     satisfied_obligation_ids: Vec<String>,
     superseded_obligation_ids: Vec<String>,
+    failed_closed_obligation_ids: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -1751,46 +1752,43 @@ fn build_router_owned_auto_attach_outcome_record(
         reason: execution.execution.completion_reason().to_string(),
         satisfied_obligation_ids: settled.satisfied_obligation_ids,
         superseded_obligation_ids: settled.superseded_obligation_ids,
+        failed_closed_obligation_ids: settled.failed_closed_obligation_ids,
     })
 }
 
 #[cfg(target_os = "linux")]
 fn log_router_owned_auto_attach_outcome(outcome: &RouterOwnedAutoAttachOutcomeRecord) {
-    let obligation_id = outcome.obligation_id.as_deref().unwrap_or("-");
-    let attach_claim_owner = outcome.attach_claim_owner.as_deref().unwrap_or("-");
-    let backend_id = outcome.backend_id.as_deref().unwrap_or("-");
-    let world_id = outcome.world_id.as_deref().unwrap_or("-");
-    let world_generation = outcome.world_generation.unwrap_or_default();
-
     match outcome.outcome {
         "failed_closed" => warn!(
             target = "substrate::shell",
             orchestration_session_id = %outcome.orchestration_session_id,
-            obligation_id,
+            obligation_id = ?outcome.obligation_id,
             obligation_kind = ?outcome.obligation_kind,
-            attach_claim_owner,
-            backend_id,
-            world_id,
-            world_generation,
+            attach_claim_owner = ?outcome.attach_claim_owner,
+            backend_id = ?outcome.backend_id,
+            world_id = ?outcome.world_id,
+            world_generation = ?outcome.world_generation,
             outcome = outcome.outcome,
             reason = %outcome.reason,
             satisfied_obligation_ids = ?outcome.satisfied_obligation_ids,
             superseded_obligation_ids = ?outcome.superseded_obligation_ids,
+            failed_closed_obligation_ids = ?outcome.failed_closed_obligation_ids,
             "router-owned auto-attach outcome"
         ),
         _ => info!(
             target = "substrate::shell",
             orchestration_session_id = %outcome.orchestration_session_id,
-            obligation_id,
+            obligation_id = ?outcome.obligation_id,
             obligation_kind = ?outcome.obligation_kind,
-            attach_claim_owner,
-            backend_id,
-            world_id,
-            world_generation,
+            attach_claim_owner = ?outcome.attach_claim_owner,
+            backend_id = ?outcome.backend_id,
+            world_id = ?outcome.world_id,
+            world_generation = ?outcome.world_generation,
             outcome = outcome.outcome,
             reason = %outcome.reason,
             satisfied_obligation_ids = ?outcome.satisfied_obligation_ids,
             superseded_obligation_ids = ?outcome.superseded_obligation_ids,
+            failed_closed_obligation_ids = ?outcome.failed_closed_obligation_ids,
             "router-owned auto-attach outcome"
         ),
     }
@@ -7458,6 +7456,20 @@ mod tests {
 
         persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
             .expect("persist detached continue obligation");
+        let mut sibling = OrchestrationObligationRecord::new(
+            "sess_dispatch",
+            "obl_router_sibling_follow_up",
+            OrchestrationObligationKind::FollowUpRequired,
+            "follow-up needed while detached".to_string(),
+        );
+        sibling.attention_required = true;
+        sibling.attach_state = OrchestrationObligationAttachState::Eligible;
+        sibling.target_backend_id = Some("cli:codex_world".to_string());
+        sibling.world_id = Some("world-17".to_string());
+        sibling.world_generation = Some(2);
+        store
+            .persist_obligation(&sibling)
+            .expect("persist detached sibling obligation");
         let executions =
             crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
                 &store,
@@ -7491,6 +7503,13 @@ mod tests {
             outcome.reason.contains("workflow.router.enabled must be true"),
             "fail-closed router outcome must explain the policy gate: {}",
             outcome.reason
+        );
+        assert_eq!(
+            outcome.failed_closed_obligation_ids,
+            vec![
+                "obl_continue_req_continue_router_approval_required".to_string(),
+                "obl_router_sibling_follow_up".to_string()
+            ]
         );
         assert!(outcome.satisfied_obligation_ids.is_empty());
         assert!(outcome.superseded_obligation_ids.is_empty());
@@ -7563,6 +7582,7 @@ mod tests {
                 settled: SessionAutoAttachSettleResult {
                     satisfied_obligation_ids: vec!["obl_claimed".to_string()],
                     superseded_obligation_ids: vec!["obl_sibling".to_string()],
+                    failed_closed_obligation_ids: Vec::new(),
                 },
             },
         };
@@ -7590,6 +7610,7 @@ mod tests {
             outcome.superseded_obligation_ids,
             vec!["obl_sibling".to_string()]
         );
+        assert!(outcome.failed_closed_obligation_ids.is_empty());
     }
 
     #[cfg(target_os = "linux")]

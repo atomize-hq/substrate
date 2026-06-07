@@ -45,6 +45,7 @@ pub(crate) enum SessionAutoAttachClaim {
 pub(crate) struct SessionAutoAttachSettleResult {
     pub satisfied_obligation_ids: Vec<String>,
     pub superseded_obligation_ids: Vec<String>,
+    pub failed_closed_obligation_ids: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -60,6 +61,7 @@ pub(crate) enum SessionAutoAttachExecution {
         obligation_id: String,
         attach_claim_owner: String,
         reason: String,
+        settled: SessionAutoAttachSettleResult,
     },
     Attached {
         obligation_id: String,
@@ -104,10 +106,8 @@ impl SessionAutoAttachExecution {
 
     pub(crate) fn settled(&self) -> Option<&SessionAutoAttachSettleResult> {
         match self {
-            Self::Attached { settled, .. } => Some(settled),
-            Self::NoCandidate { .. }
-            | Self::AlreadyClaimed { .. }
-            | Self::FailedClosed { .. } => None,
+            Self::Attached { settled, .. } | Self::FailedClosed { settled, .. } => Some(settled),
+            Self::NoCandidate { .. } | Self::AlreadyClaimed { .. } => None,
         }
     }
 }
@@ -262,30 +262,36 @@ pub(crate) fn execute_session_auto_attach(
         Ok(obligation) => obligation,
         Err(err) => {
             let reason = err.to_string();
-            mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+            let settled =
+                mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
             return Ok(SessionAutoAttachExecution::FailedClosed {
                 obligation_id,
                 attach_claim_owner,
                 reason,
+                settled,
             });
         }
     };
     if let Err(err) = ensure_router_auto_attach_allowed(policy, &obligation) {
         let reason = err.to_string();
-        mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+        let settled =
+            mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
         return Ok(SessionAutoAttachExecution::FailedClosed {
             obligation_id,
             attach_claim_owner,
             reason,
+            settled,
         });
     }
     if let Err(err) = ensure_router_auto_attach_supported() {
         let reason = err.to_string();
-        mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+        let settled =
+            mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
         return Ok(SessionAutoAttachExecution::FailedClosed {
             obligation_id,
             attach_claim_owner,
             reason,
+            settled,
         });
     }
 
@@ -293,11 +299,13 @@ pub(crate) fn execute_session_auto_attach(
         Ok(plan) => plan,
         Err(err) => {
             let reason = err.to_string();
-            mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+            let settled =
+                mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
             return Ok(SessionAutoAttachExecution::FailedClosed {
                 obligation_id,
                 attach_claim_owner,
                 reason,
+                settled,
             });
         }
     };
@@ -306,11 +314,13 @@ pub(crate) fn execute_session_auto_attach(
         Ok(receipt) => receipt,
         Err(err) => {
             let reason = err.to_string();
-            mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+            let settled =
+                mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
             return Ok(SessionAutoAttachExecution::FailedClosed {
                 obligation_id,
                 attach_claim_owner,
                 reason,
+                settled,
             });
         }
     };
@@ -352,11 +362,12 @@ fn fail_closed_auto_attach_policy_resolution(
             attach_claim_owner,
         } => (obligation_id, attach_claim_owner),
     };
-    let _ = store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
+    let settled = store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
     Ok(SessionAutoAttachExecution::FailedClosed {
         obligation_id,
         attach_claim_owner,
         reason: reason.to_string(),
+        settled,
     })
 }
 
@@ -604,9 +615,8 @@ fn mark_attach_failed_closed(
     orchestration_session_id: &str,
     _obligation_id: &str,
     reason: &str,
-) -> Result<()> {
-    let _ = store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
-    Ok(())
+) -> Result<SessionAutoAttachSettleResult> {
+    store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)
 }
 
 fn ensure_auto_attach_restored_session(
@@ -1025,6 +1035,7 @@ mod tests {
                 obligation_id,
                 attach_claim_owner,
                 reason,
+                ..
             } = &executions[0].execution
             else {
                 panic!("detached candidate should fail closed under disabled router policy");
@@ -1195,6 +1206,7 @@ agents:
                 obligation_id,
                 attach_claim_owner,
                 reason,
+                ..
             } = &invalid_execution.execution
             else {
                 panic!("invalid workspace should fail closed without aborting batch");
@@ -1216,6 +1228,7 @@ agents:
                 obligation_id,
                 attach_claim_owner,
                 reason,
+                ..
             } = &denied_execution.execution
             else {
                 panic!("healthy sibling session should still execute in the same batch");

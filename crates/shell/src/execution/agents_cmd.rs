@@ -710,6 +710,10 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
 }
 
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
+    let store = AgentRuntimeStateStore::new()?;
+    let _ = store
+        .claim_session_auto_attach(&args.session, "manual::reattach")
+        .map_err(runtime_start_error)?;
     let plan = build_attach_launch_plan(
         &args.session,
         DispatchCallerKind::HumanReattach,
@@ -726,7 +730,6 @@ fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
         )));
     }
 
-    let store = AgentRuntimeStateStore::new()?;
     let target = store
         .resolve_public_control_target(&receipt.orchestration_session_id, PublicControlAction::Stop)
         .map_err(runtime_start_error)?;

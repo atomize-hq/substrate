@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use std::fs::File;
 #[cfg(unix)]
 use std::io::Write;
 use std::io::{self, Read};
@@ -10,7 +11,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
@@ -18,6 +19,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 #[cfg(target_os = "linux")]
 use base64::Engine;
 use chrono::Utc;
+use fs2::FileExt;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
@@ -309,6 +311,15 @@ pub(crate) struct HiddenOwnerHelperLaunchReceipt {
     pub backend_id: String,
 }
 
+struct HiddenOwnerHelperAttachLaunchGuard {
+    _lock_file: File,
+}
+
+enum HiddenOwnerHelperAttachJoinResult {
+    Joined(HiddenOwnerHelperLaunchReceipt),
+    RetryAsLeader,
+}
+
 #[allow(dead_code)]
 pub(crate) fn launch_hidden_owner_helper(
     plan: &HiddenOwnerHelperLaunchPlan,
@@ -316,6 +327,19 @@ pub(crate) fn launch_hidden_owner_helper(
     no_world: bool,
 ) -> Result<HiddenOwnerHelperLaunchReceipt> {
     let store = AgentRuntimeStateStore::new()?;
+    let _attach_launch_guard = if plan.mode == OwnerHelperMode::Attach {
+        loop {
+            match try_acquire_hidden_owner_helper_attach_launch_guard(&store, plan)? {
+                Some(guard) => break Some(guard),
+                None => match wait_for_inflight_hidden_owner_helper_attach_launch(&store, plan)? {
+                    HiddenOwnerHelperAttachJoinResult::Joined(receipt) => return Ok(receipt),
+                    HiddenOwnerHelperAttachJoinResult::RetryAsLeader => continue,
+                },
+            }
+        }
+    } else {
+        None
+    };
     let plan_path = persist_hidden_owner_helper_launch_plan(&store, plan)?;
     let exe = env::current_exe()
         .context("failed to resolve current substrate executable for hidden owner-helper launch")?;
@@ -389,6 +413,93 @@ pub(crate) fn launch_hidden_owner_helper(
         orchestration_session_id: plan.session.orchestration_session_id.clone(),
         participant_id: plan.participant.participant_id.clone(),
         backend_id: plan.descriptor.backend_id.clone(),
+    })
+}
+
+fn try_acquire_hidden_owner_helper_attach_launch_guard(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<Option<HiddenOwnerHelperAttachLaunchGuard>> {
+    let path = hidden_owner_helper_attach_lock_path(store, plan.orchestration_session_id());
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "hidden owner-helper attach lock path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(&path)
+        .with_context(|| format!("failed to open hidden owner-helper attach lock {}", path.display()))?;
+    match file.try_lock_exclusive() {
+        Ok(()) => Ok(Some(HiddenOwnerHelperAttachLaunchGuard { _lock_file: file })),
+        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+        Err(err) => Err(anyhow::Error::new(err).context(format!(
+            "failed to coordinate hidden owner-helper attach launch for orchestration session {}",
+            plan.orchestration_session_id()
+        ))),
+    }
+}
+
+fn wait_for_inflight_hidden_owner_helper_attach_launch(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<HiddenOwnerHelperAttachJoinResult> {
+    let started_at = Instant::now();
+    loop {
+        if joined_hidden_owner_helper_attach_receipt(store, plan.orchestration_session_id()).is_ok()
+        {
+            return Ok(HiddenOwnerHelperAttachJoinResult::Joined(
+                joined_hidden_owner_helper_attach_receipt(store, plan.orchestration_session_id())?,
+            ));
+        }
+        if let Some(guard) = try_acquire_hidden_owner_helper_attach_launch_guard(store, plan)? {
+            drop(guard);
+            return Ok(HiddenOwnerHelperAttachJoinResult::RetryAsLeader);
+        }
+        if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
+            anyhow::bail!(
+                "{}{}",
+                OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX,
+                plan.orchestration_session_id(),
+            );
+        }
+        thread::sleep(OWNER_HELPER_READY_POLL_INTERVAL);
+    }
+}
+
+fn joined_hidden_owner_helper_attach_receipt(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+) -> Result<HiddenOwnerHelperLaunchReceipt> {
+    let record = store
+        .load_session(orchestration_session_id)?
+        .ok_or_else(|| anyhow::anyhow!(
+            "owner_unreachable: joined hidden owner-helper attach launch lost orchestration session {}",
+            orchestration_session_id
+        ))?;
+    let participant = record.live_orchestrator().ok_or_else(|| {
+        anyhow::anyhow!(
+            "owner_unreachable: joined hidden owner-helper attach launch for orchestration session {} did not restore a live retained owner",
+            orchestration_session_id
+        )
+    })?;
+    let helper_pid = participant.internal.shell_owner_pid;
+    if helper_pid == 0 {
+        anyhow::bail!(
+            "owner_unreachable: joined hidden owner-helper attach launch for orchestration session {} is missing authoritative owner pid",
+            orchestration_session_id,
+        );
+    }
+
+    Ok(HiddenOwnerHelperLaunchReceipt {
+        helper_pid,
+        orchestration_session_id: orchestration_session_id.to_string(),
+        participant_id: participant.handle.participant_id,
+        backend_id: participant.handle.backend_id,
     })
 }
 
@@ -681,6 +792,17 @@ pub(crate) fn hidden_owner_helper_plan_path(
         .handles_dir()
         .join("owner-helper")
         .join(format!("{session_fragment}-{participant_fragment}.json"))
+}
+
+pub(crate) fn hidden_owner_helper_attach_lock_path(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+) -> PathBuf {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    store
+        .handles_dir()
+        .join("owner-helper")
+        .join(format!("{session_fragment}.attach.lock"))
 }
 
 #[cfg(unix)]
@@ -3334,6 +3456,41 @@ mod tests {
         }
     }
 
+    fn attach_test_plan(
+        orchestration_session_id: &str,
+        participant_id: &str,
+        internal_uaa_session_id: &str,
+    ) -> HiddenOwnerHelperLaunchPlan {
+        HiddenOwnerHelperLaunchPlan {
+            mode: OwnerHelperMode::Attach,
+            descriptor: ResolvedRuntimeDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: ResolvedRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: "/usr/bin/codex".to_string(),
+            },
+            session: HiddenOwnerHelperSessionPlan {
+                orchestration_session_id: orchestration_session_id.to_string(),
+                shell_trace_session_id: "trace_session".to_string(),
+                workspace_root: "/workspace".to_string(),
+                world_id: None,
+                world_generation: None,
+            },
+            participant: HiddenOwnerHelperParticipantPlan {
+                participant_id: participant_id.to_string(),
+                lease_token: format!("lease_{participant_id}"),
+                run_id: "run_attach".to_string(),
+                resumed_from_participant_id: Some(participant_id.to_string()),
+                internal_uaa_session_id: Some(internal_uaa_session_id.to_string()),
+            },
+            host_attach_contract: None,
+            startup_prompt: None,
+            source_orchestration_session_id: None,
+        }
+    }
+
     fn prompt_submit_runtime_for_test(
         store: &AgentRuntimeStateStore,
         orchestration_session: OrchestrationSessionRecord,
@@ -3887,6 +4044,68 @@ mod tests {
                 ),
             )
             .expect("resume_one_turn readiness should accept a terminalized fast-detach handoff");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn inflight_attach_join_returns_authoritative_receipt_when_ready_state_already_exists() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_attach_join".to_string(),
+                "ash_attach_join".to_string(),
+                "lease_attach_join".to_string(),
+            )
+            .expect("orchestrator participant");
+            participant.transition_state(AgentRuntimeSessionState::Ready);
+            participant.set_uaa_session_id("uaa_attach_join");
+            participant.mark_runtime_ownership_retained();
+
+            let mut orchestration = OrchestrationSessionRecord::new(
+                "sess_attach_join".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
+            );
+            orchestration.transition_state(OrchestrationSessionState::Active);
+            orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+
+            store
+                .persist_orchestration_session(&orchestration)
+                .expect("persist attached orchestration");
+            store
+                .persist_participant(&participant)
+                .expect("persist attached participant");
+
+            let plan = attach_test_plan(
+                "sess_attach_join",
+                "ash_attach_join",
+                "uaa_attach_join",
+            );
+            let _guard = super::try_acquire_hidden_owner_helper_attach_launch_guard(store, &plan)
+                .expect("acquire attach launch guard")
+                .expect("attach launch guard must be available");
+
+            let joined = super::wait_for_inflight_hidden_owner_helper_attach_launch(store, &plan)
+                .expect("join existing ready attach launch");
+
+            let super::HiddenOwnerHelperAttachJoinResult::Joined(receipt) = joined else {
+                panic!("ready attach join must not fall back to a new leader launch");
+            };
+            assert_eq!(receipt.orchestration_session_id, "sess_attach_join");
+            assert_eq!(receipt.participant_id, "ash_attach_join");
+            assert_eq!(receipt.backend_id, "cli:codex");
+            assert_eq!(receipt.helper_pid, std::process::id());
         });
     }
 

@@ -2970,7 +2970,7 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
         completion_reason: &str,
-    ) -> Result<Vec<String>> {
+    ) -> Result<SessionAutoAttachSettleResult> {
         if completion_reason.trim().is_empty() {
             anyhow::bail!(
                 "session auto-attach fail-closed settlement must include an explanation-ready completion reason"
@@ -2983,7 +2983,7 @@ impl AgentRuntimeStateStore {
         let obligations = self.list_obligations(orchestration_session_id)?;
         let _ = claimed_obligation_id(&obligations)?;
 
-        let mut failed_closed_obligation_ids = Vec::new();
+        let mut result = SessionAutoAttachSettleResult::default();
         let settled_at = Utc::now();
         for mut obligation in obligations {
             if !obligation.is_pending() {
@@ -2994,7 +2994,9 @@ impl AgentRuntimeStateStore {
                 OrchestrationObligationAttachState::Claimed
                 | OrchestrationObligationAttachState::Eligible => {
                     obligation.mark_attach_failed_closed(completion_reason, settled_at);
-                    failed_closed_obligation_ids.push(obligation.obligation_id.clone());
+                    result
+                        .failed_closed_obligation_ids
+                        .push(obligation.obligation_id.clone());
                     true
                 }
                 OrchestrationObligationAttachState::NotEligible
@@ -3014,7 +3016,7 @@ impl AgentRuntimeStateStore {
             write_atomic_json(&path, &obligation)?;
         }
 
-        Ok(failed_closed_obligation_ids)
+        Ok(result)
     }
 
     pub(crate) fn set_orchestration_session_world_binding(
