@@ -3003,6 +3003,51 @@ impl AgentRuntimeStateStore {
         Ok(true)
     }
 
+    pub(crate) fn settle_exact_session_auto_attach_obligation_failed_closed(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        completion_reason: &str,
+    ) -> Result<SessionAutoAttachSettleResult> {
+        if obligation_id.trim().is_empty() {
+            anyhow::bail!(
+                "exact session auto-attach fail-closed settlement requires obligation_id"
+            );
+        }
+        if completion_reason.trim().is_empty() {
+            anyhow::bail!(
+                "exact session auto-attach fail-closed settlement must include an explanation-ready completion reason"
+            );
+        }
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+
+        let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)?
+        else {
+            return Ok(SessionAutoAttachSettleResult::default());
+        };
+        if !obligation.is_pending()
+            || obligation.attach_state != OrchestrationObligationAttachState::Claimed
+        {
+            return Ok(SessionAutoAttachSettleResult::default());
+        }
+
+        let settled_at = Utc::now();
+        obligation.mark_attach_failed_closed(completion_reason, settled_at);
+        self.validate_obligation_record(&obligation)?;
+        let path = self.canonical_obligation_path(
+            &obligation.orchestration_session_id,
+            &obligation.obligation_id,
+        );
+        write_atomic_json(&path, &obligation)?;
+
+        Ok(SessionAutoAttachSettleResult {
+            failed_closed_obligation_ids: vec![obligation.obligation_id],
+            ..SessionAutoAttachSettleResult::default()
+        })
+    }
+
     pub(crate) fn settle_session_auto_attach_failed_closed(
         &self,
         orchestration_session_id: &str,
@@ -6262,6 +6307,102 @@ mod tests {
             assert_eq!(released.attach_completion_reason, None);
             assert_eq!(released.attach_attempt_count, original_attempt_count);
             assert_eq!(released.attach_last_attempt_at, original_last_attempt_at);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn settling_exact_session_auto_attach_obligation_failed_closed_preserves_sibling_review_state()
+    {
+        with_store(|store| {
+            let participant = live_orchestrator(
+                "codex",
+                "sess_exact_auto_attach_fail_closed",
+                "ash_exact_fail_closed",
+            );
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let mut claimed = pending_obligation(
+                "sess_exact_auto_attach_fail_closed",
+                "obl_claimed_wrong_host",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            claimed.review_state = OrchestrationObligationReviewState::Acknowledged;
+            claimed.mark_attach_claimed("router::local", Utc::now());
+            store
+                .persist_obligation(&claimed)
+                .expect("persist claimed wrong-host obligation");
+
+            let mut sibling = pending_obligation(
+                "sess_exact_auto_attach_fail_closed",
+                "obl_sibling_remaining",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            sibling.review_state = OrchestrationObligationReviewState::Acknowledged;
+            store
+                .persist_obligation(&sibling)
+                .expect("persist sibling obligation");
+
+            let settled = store
+                .settle_exact_session_auto_attach_obligation_failed_closed(
+                    "sess_exact_auto_attach_fail_closed",
+                    "obl_claimed_wrong_host",
+                    "wrong_target_host: obligation obl_claimed_wrong_host targets host host-remote not local host host-local",
+                )
+                .expect("settle exact wrong-host obligation");
+            assert_eq!(
+                settled.failed_closed_obligation_ids,
+                vec!["obl_claimed_wrong_host".to_string()]
+            );
+
+            let claimed = store
+                .load_obligation(
+                    "sess_exact_auto_attach_fail_closed",
+                    "obl_claimed_wrong_host",
+                )
+                .expect("reload claimed wrong-host obligation")
+                .expect("claimed wrong-host obligation exists");
+            assert_eq!(
+                claimed.attach_state,
+                OrchestrationObligationAttachState::FailedClosed
+            );
+            assert_eq!(
+                claimed.attach_completion_reason.as_deref(),
+                Some(
+                    "wrong_target_host: obligation obl_claimed_wrong_host targets host host-remote not local host host-local"
+                )
+            );
+            assert_eq!(
+                claimed.review_state,
+                OrchestrationObligationReviewState::Acknowledged
+            );
+            assert_eq!(claimed.state, OrchestrationObligationState::Pending);
+            assert!(claimed.resolved_at.is_none());
+
+            let sibling = store
+                .load_obligation(
+                    "sess_exact_auto_attach_fail_closed",
+                    "obl_sibling_remaining",
+                )
+                .expect("reload sibling obligation")
+                .expect("sibling obligation exists");
+            assert_eq!(
+                sibling.attach_state,
+                OrchestrationObligationAttachState::Eligible
+            );
+            assert_eq!(sibling.attach_completion_reason, None);
+            assert_eq!(
+                sibling.review_state,
+                OrchestrationObligationReviewState::Acknowledged
+            );
+            assert_eq!(sibling.state, OrchestrationObligationState::Pending);
+            assert!(sibling.resolved_at.is_none());
         });
     }
 

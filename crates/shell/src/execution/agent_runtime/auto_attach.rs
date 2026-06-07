@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
+use gethostname::gethostname;
 use substrate_broker::Policy;
 use uuid::Uuid;
 
@@ -13,7 +14,10 @@ use super::dispatch_contract::{
     DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
     DispatchRequestEnvelope, HostExecutionClientStart,
 };
-use super::obligation_ledger::{OrchestrationObligationKind, OrchestrationObligationRecord};
+use super::obligation_ledger::{
+    LocalHostObligationTargetingDisposition, OrchestrationObligationKind,
+    OrchestrationObligationRecord,
+};
 use super::orchestration_session::OrchestrationSessionPosture;
 use super::state_store::AgentRuntimeStateStore;
 use super::validator::{materialize_runtime_descriptor, RuntimeSelectionDescriptor};
@@ -289,6 +293,21 @@ pub(crate) fn execute_session_auto_attach(
             settled,
         });
     }
+    if let Err(err) = ensure_router_auto_attach_targets_local_host(&obligation) {
+        let reason = err.to_string();
+        let settled = mark_exact_obligation_failed_closed(
+            store,
+            orchestration_session_id,
+            &obligation_id,
+            &reason,
+        )?;
+        return Ok(SessionAutoAttachExecution::FailedClosed {
+            obligation_id,
+            attach_claim_owner,
+            reason,
+            settled,
+        });
+    }
     if let Err(err) = ensure_router_auto_attach_supported() {
         let reason = err.to_string();
         let settled =
@@ -441,6 +460,46 @@ fn ensure_router_auto_attach_allowed(
     }
 
     Ok(())
+}
+
+fn ensure_router_auto_attach_targets_local_host(
+    obligation: &OrchestrationObligationRecord,
+) -> Result<()> {
+    if obligation.target_host_id.is_none() {
+        return Ok(());
+    }
+
+    let local_host_id = resolve_router_auto_attach_local_host_id()?;
+    ensure_router_auto_attach_targets_exact_local_host(obligation, &local_host_id)
+}
+
+fn ensure_router_auto_attach_targets_exact_local_host(
+    obligation: &OrchestrationObligationRecord,
+    local_host_id: &str,
+) -> Result<()> {
+    match obligation.classify_local_host_targeting(local_host_id)? {
+        LocalHostObligationTargetingDisposition::Untargeted
+        | LocalHostObligationTargetingDisposition::TargetedToLocalHost => Ok(()),
+        LocalHostObligationTargetingDisposition::WrongHost { target_host_id } => {
+            anyhow::bail!(
+                "wrong_target_host: obligation {} targets host {} not local host {}",
+                obligation.obligation_id,
+                target_host_id,
+                local_host_id,
+            );
+        }
+    }
+}
+
+fn resolve_router_auto_attach_local_host_id() -> Result<String> {
+    let local_host_id = gethostname().to_string_lossy().trim().to_string();
+    if local_host_id.is_empty() {
+        anyhow::bail!(
+            "local_host_id_unavailable: router-owned automatic attach requires exact local host identity before evaluating target_host_id"
+        );
+    }
+
+    Ok(local_host_id)
 }
 
 fn select_policy_eligible_attach_candidate<'a>(
@@ -625,6 +684,19 @@ fn mark_attach_failed_closed(
     store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)
 }
 
+fn mark_exact_obligation_failed_closed(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    obligation_id: &str,
+    reason: &str,
+) -> Result<SessionAutoAttachSettleResult> {
+    store.settle_exact_session_auto_attach_obligation_failed_closed(
+        orchestration_session_id,
+        obligation_id,
+        reason,
+    )
+}
+
 fn finalize_session_auto_attach_after_launch(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -711,6 +783,7 @@ mod tests {
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::obligation_ledger::{
         OrchestrationObligationAttachState, OrchestrationObligationRecord,
+        OrchestrationObligationReviewState,
     };
     use crate::execution::agent_runtime::orchestration_session::{
         HostAttachContract, HostAttachExecutionClientStart, HostAttachLaunchKnobs,
@@ -814,6 +887,49 @@ mod tests {
             other => panic!("unexpected auto-attach kind in test helper: {other:?}"),
         }
         policy
+    }
+
+    #[test]
+    fn ensure_router_auto_attach_targets_exact_local_host_allows_untargeted_obligations() {
+        let obligation = eligible_obligation(
+            "sess_auto_attach_untargeted",
+            "obl_untargeted",
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        ensure_router_auto_attach_targets_exact_local_host(&obligation, "host-local")
+            .expect("untargeted obligations should preserve packet two behavior");
+    }
+
+    #[test]
+    fn ensure_router_auto_attach_targets_exact_local_host_allows_same_host_targets() {
+        let mut obligation = eligible_obligation(
+            "sess_auto_attach_local_target",
+            "obl_local_target",
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        obligation.target_host_id = Some("host-local".to_string());
+
+        ensure_router_auto_attach_targets_exact_local_host(&obligation, "host-local")
+            .expect("same-host targeted obligations should remain attach-eligible");
+    }
+
+    #[test]
+    fn ensure_router_auto_attach_targets_exact_local_host_rejects_foreign_targets() {
+        let mut obligation = eligible_obligation(
+            "sess_auto_attach_foreign_target",
+            "obl_foreign_target",
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        obligation.target_host_id = Some("host-remote".to_string());
+
+        let err = ensure_router_auto_attach_targets_exact_local_host(&obligation, "host-local")
+            .expect_err("foreign-targeted obligations must fail closed on the local router");
+        assert!(
+            err.to_string().contains(
+                "wrong_target_host: obligation obl_foreign_target targets host host-remote not local host host-local"
+            ),
+            "wrong-host errors should stay explanation-ready: {err:#}"
+        );
     }
 
     fn write_workspace_policy(workspace_root: &Path, yaml: &str) {
@@ -1045,6 +1161,100 @@ mod tests {
                     .expect("list candidates after session fail-close")
                     .contains(&"sess_auto_attach_policy_disabled".to_string()),
                 "session-wide fail-close should prevent silent router retries after policy denial"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn execute_session_auto_attach_fails_closed_before_launch_when_target_host_is_foreign() {
+        with_store(|store| {
+            let (session, participant) = detached_orchestrator(
+                "sess_auto_attach_wrong_host",
+                "ash_auto_attach_wrong_host",
+            );
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist session");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let mut wrong_host = eligible_obligation(
+                "sess_auto_attach_wrong_host",
+                "obl_wrong_host",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            wrong_host.target_host_id = Some("host-remote".to_string());
+            let sibling = eligible_obligation(
+                "sess_auto_attach_wrong_host",
+                "obl_local_sibling",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            store
+                .persist_obligation(&wrong_host)
+                .expect("persist wrong-host obligation");
+            store
+                .persist_obligation(&sibling)
+                .expect("persist eligible sibling obligation");
+
+            let execution = execute_session_auto_attach(
+                store,
+                "sess_auto_attach_wrong_host",
+                "router::local",
+                &router_auto_attach_policy(OrchestrationObligationKind::ApprovalRequired),
+                false,
+                false,
+            )
+            .expect("wrong-host auto attach should fail closed, not error");
+            let SessionAutoAttachExecution::FailedClosed {
+                reason, settled, ..
+            } = execution
+            else {
+                panic!("expected wrong-host automatic attach to fail closed");
+            };
+            assert!(
+                reason.contains("wrong_target_host"),
+                "wrong-host failure should preserve an explanation-ready reason: {reason}"
+            );
+            assert_eq!(
+                settled.failed_closed_obligation_ids,
+                vec!["obl_wrong_host".to_string()]
+            );
+
+            let wrong_host = store
+                .load_obligation("sess_auto_attach_wrong_host", "obl_wrong_host")
+                .expect("reload wrong-host obligation")
+                .expect("wrong-host obligation exists after failed-close");
+            assert_eq!(
+                wrong_host.attach_state,
+                OrchestrationObligationAttachState::FailedClosed
+            );
+            assert_eq!(
+                wrong_host.attach_completion_reason.as_deref(),
+                Some(reason.as_str())
+            );
+            assert_eq!(
+                wrong_host.review_state,
+                OrchestrationObligationReviewState::Unread
+            );
+
+            let sibling = store
+                .load_obligation("sess_auto_attach_wrong_host", "obl_local_sibling")
+                .expect("reload sibling obligation")
+                .expect("sibling obligation exists after wrong-host failed-close");
+            assert_eq!(
+                sibling.attach_state,
+                OrchestrationObligationAttachState::Eligible
+            );
+            assert_eq!(sibling.attach_completion_reason, None);
+            assert_eq!(sibling.review_state, OrchestrationObligationReviewState::Unread);
+            assert!(
+                store
+                    .list_router_auto_attach_candidate_session_ids()
+                    .expect("list candidates after wrong-host failed-close")
+                    .contains(&"sess_auto_attach_wrong_host".to_string()),
+                "preserved sibling obligations should keep the session eligible for later router work"
             );
         });
     }
