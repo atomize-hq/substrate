@@ -20,7 +20,9 @@ Related design stack:
 - [DESIGN-auto-attach-trigger-and-work-queue-contract.md](./DESIGN-auto-attach-trigger-and-work-queue-contract.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: drafted on `2026-06-06`
+Status: implemented on `2026-06-07`
+Landed posture note: the first internal host-side router-owned local-session auto-attach execution boundary is landed repo-wide; it remains Linux-only in v1, local-session-only, deny-by-default through `workflow.router.enabled` plus the relevant existing retained-obligation gate, continuity-first on persisted attach truth, and bounded away from cross-host ingress, public daemon UX, worker continuation, and review-state resolution.
+Validation note: Packet 4's validation wall is green. Final validation did not require any in-scope Slice `48` stabilization follow-up, and no broader host-targeting, ingress, or workflow-engine work was reopened.
 
 ## Assumptions
 

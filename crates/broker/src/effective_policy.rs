@@ -2733,6 +2733,10 @@ fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {
     map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
 
+fn hashmap_to_btree(map: &HashMap<String, String>) -> BTreeMap<String, String> {
+    map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2766,8 +2770,4 @@ workflow:
         assert!(!effective.agents_world_dispatch_obligations_follow_up_allowed);
         assert!(effective.agents_world_dispatch_obligations_blocked_allowed);
     }
-}
-
-fn hashmap_to_btree(map: &HashMap<String, String>) -> BTreeMap<String, String> {
-    map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }

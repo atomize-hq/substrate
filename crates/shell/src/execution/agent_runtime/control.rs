@@ -433,9 +433,16 @@ fn try_acquire_hidden_owner_helper_attach_launch_guard(
         .write(true)
         .truncate(false)
         .open(&path)
-        .with_context(|| format!("failed to open hidden owner-helper attach lock {}", path.display()))?;
+        .with_context(|| {
+            format!(
+                "failed to open hidden owner-helper attach lock {}",
+                path.display()
+            )
+        })?;
     match file.try_lock_exclusive() {
-        Ok(()) => Ok(Some(HiddenOwnerHelperAttachLaunchGuard { _lock_file: file })),
+        Ok(()) => Ok(Some(HiddenOwnerHelperAttachLaunchGuard {
+            _lock_file: file,
+        })),
         Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
         Err(err) => Err(anyhow::Error::new(err).context(format!(
             "failed to coordinate hidden owner-helper attach launch for orchestration session {}",
@@ -4099,11 +4106,7 @@ mod tests {
                 .persist_participant(&participant)
                 .expect("persist attached participant");
 
-            let plan = attach_test_plan(
-                "sess_attach_join",
-                "ash_attach_join",
-                "uaa_attach_join",
-            );
+            let plan = attach_test_plan("sess_attach_join", "ash_attach_join", "uaa_attach_join");
             let _guard = super::try_acquire_hidden_owner_helper_attach_launch_guard(store, &plan)
                 .expect("acquire attach launch guard")
                 .expect("attach launch guard must be available");

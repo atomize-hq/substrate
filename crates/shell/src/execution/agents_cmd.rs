@@ -2,6 +2,7 @@ use crate::execution::agent_inventory::{
     discover_agent_files, load_effective_agent_inventory, validate_agent_file,
     AgentInventoryEntryV1,
 };
+use crate::execution::agent_runtime::auto_attach::SessionAutoAttachClaim;
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::request_private_stop;
 #[cfg(target_os = "linux")]
@@ -23,7 +24,6 @@ use crate::execution::agent_runtime::control::{
     run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
     HiddenOwnerHelperStartupPromptPlan,
 };
-use crate::execution::agent_runtime::auto_attach::SessionAutoAttachClaim;
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -802,10 +802,9 @@ fn verify_manual_reattach_restored_ownership(
     receipt: &HiddenOwnerHelperLaunchReceipt,
     claimed_auto_attach: Option<&(String, String)>,
 ) -> Result<()> {
-    let target = match store.resolve_public_control_target(
-        &receipt.orchestration_session_id,
-        PublicControlAction::Stop,
-    ) {
+    let target = match store
+        .resolve_public_control_target(&receipt.orchestration_session_id, PublicControlAction::Stop)
+    {
         Ok(target) => target,
         Err(err) => {
             if let Err(release_err) = release_manual_reattach_auto_attach_claim(
@@ -3976,10 +3975,9 @@ impl AgentExecutionScope {
 mod tests {
     use super::*;
     use crate::execution::agent_runtime::{
-        mapping::AgentRuntimeBackendKind, AgentRuntimeParticipantRecord,
-        AgentRuntimeSessionState, OrchestrationObligationAttachState,
-        OrchestrationObligationKind, OrchestrationObligationRecord, OrchestrationSessionRecord,
-        OrchestrationSessionState,
+        mapping::AgentRuntimeBackendKind, AgentRuntimeParticipantRecord, AgentRuntimeSessionState,
+        OrchestrationObligationAttachState, OrchestrationObligationKind,
+        OrchestrationObligationRecord, OrchestrationSessionRecord, OrchestrationSessionState,
     };
     use crate::execution::config_model::AgentExecutionScope;
     use serial_test::serial;

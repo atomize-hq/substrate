@@ -2562,18 +2562,14 @@ fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume()
         !fixture.fake_codex_args_path(1).exists(),
         "reattach denial must fail before launching the backend runtime"
     );
-    let obligation = fixture.load_obligation(
-        orchestration_session_id,
-        "obl_resume_disabled_contract",
-    );
+    let obligation =
+        fixture.load_obligation(orchestration_session_id, "obl_resume_disabled_contract");
     assert_eq!(
         obligation.get("attach_state").and_then(Value::as_str),
         Some("eligible")
     );
     assert_eq!(
-        obligation
-            .get("attach_claim_owner")
-            .and_then(Value::as_str),
+        obligation.get("attach_claim_owner").and_then(Value::as_str),
         None,
         "manual reattach plan-build failure must not leave a durable attach claim behind"
     );

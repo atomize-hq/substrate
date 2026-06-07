@@ -2982,7 +2982,8 @@ impl AgentRuntimeStateStore {
             .lock()
             .expect("snapshot write mutex poisoned");
 
-        let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)? else {
+        let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)?
+        else {
             return Ok(false);
         };
         if !obligation.is_pending()
@@ -6129,8 +6130,11 @@ mod tests {
     #[serial_test::serial]
     fn releasing_session_auto_attach_claim_restores_claimed_obligation_to_eligible() {
         with_store(|store| {
-            let participant =
-                live_orchestrator("codex", "sess_release_auto_attach_claim", "ash_release_claim");
+            let participant = live_orchestrator(
+                "codex",
+                "sess_release_auto_attach_claim",
+                "ash_release_claim",
+            );
             let parent = active_parent(&participant);
             store
                 .persist_orchestration_session(&parent)

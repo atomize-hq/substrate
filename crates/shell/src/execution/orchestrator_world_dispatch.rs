@@ -7500,7 +7500,9 @@ mod tests {
         assert_eq!(outcome.world_generation, Some(2));
         assert_eq!(outcome.outcome, "failed_closed");
         assert!(
-            outcome.reason.contains("workflow.router.enabled must be true"),
+            outcome
+                .reason
+                .contains("workflow.router.enabled must be true"),
             "fail-closed router outcome must explain the policy gate: {}",
             outcome.reason
         );

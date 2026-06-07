@@ -38,7 +38,8 @@ This contract does not introduce a second config system or new root file family.
 - Secrets must not be stored in Substrate YAML patches.
 - Host credential reads remain explicitly policy-gated by
   `agents.host_credentials.read.allowed_backends`.
-- Router daemon indirect execution remains explicitly policy-gated by `workflow.router.*`.
+- Workflow-router and router-owned indirect execution remain explicitly policy-gated by `workflow.router.*`.
+- The landed Slice `48` internal local-session auto-attach boundary remains deny-by-default and additionally requires the relevant existing `agents.world_dispatch.obligations.*` or `agents.world_dispatch.fork.requests_allowed` gate for the claimed obligation kind.
 
 ## Precedence
 

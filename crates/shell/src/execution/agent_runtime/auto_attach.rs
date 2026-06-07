@@ -263,8 +263,12 @@ pub(crate) fn execute_session_auto_attach(
         Ok(obligation) => obligation,
         Err(err) => {
             let reason = err.to_string();
-            let settled =
-                mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+            let settled = mark_attach_failed_closed(
+                store,
+                orchestration_session_id,
+                &obligation_id,
+                &reason,
+            )?;
             return Ok(SessionAutoAttachExecution::FailedClosed {
                 obligation_id,
                 attach_claim_owner,
@@ -300,8 +304,12 @@ pub(crate) fn execute_session_auto_attach(
         Ok(plan) => plan,
         Err(err) => {
             let reason = err.to_string();
-            let settled =
-                mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+            let settled = mark_attach_failed_closed(
+                store,
+                orchestration_session_id,
+                &obligation_id,
+                &reason,
+            )?;
             return Ok(SessionAutoAttachExecution::FailedClosed {
                 obligation_id,
                 attach_claim_owner,
@@ -315,8 +323,12 @@ pub(crate) fn execute_session_auto_attach(
         Ok(receipt) => receipt,
         Err(err) => {
             let reason = err.to_string();
-            let settled =
-                mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+            let settled = mark_attach_failed_closed(
+                store,
+                orchestration_session_id,
+                &obligation_id,
+                &reason,
+            )?;
             return Ok(SessionAutoAttachExecution::FailedClosed {
                 obligation_id,
                 attach_claim_owner,
@@ -354,7 +366,8 @@ fn fail_closed_auto_attach_policy_resolution(
             attach_claim_owner,
         } => (obligation_id, attach_claim_owner),
     };
-    let settled = store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
+    let settled =
+        store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
     Ok(SessionAutoAttachExecution::FailedClosed {
         obligation_id,
         attach_claim_owner,
@@ -618,9 +631,11 @@ fn finalize_session_auto_attach_after_launch(
     attach_claim_owner: String,
     receipt: HiddenOwnerHelperLaunchReceipt,
 ) -> Result<SessionAutoAttachExecution> {
-    if let Err(err) =
-        ensure_auto_attach_restored_session(store, orchestration_session_id, &receipt.participant_id)
-    {
+    if let Err(err) = ensure_auto_attach_restored_session(
+        store,
+        orchestration_session_id,
+        &receipt.participant_id,
+    ) {
         let reason = err.to_string();
         let settled =
             mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
@@ -1051,9 +1066,9 @@ mod tests {
             store
                 .persist_obligation(&{
                     let mut obligation = eligible_obligation(
-                    "sess_auto_attach_restore_failed",
-                    "obl_restore_failed",
-                    OrchestrationObligationKind::Blocked,
+                        "sess_auto_attach_restore_failed",
+                        "obl_restore_failed",
+                        OrchestrationObligationKind::Blocked,
                     );
                     obligation.mark_attach_claimed("router::local", chrono::Utc::now());
                     obligation
@@ -1078,7 +1093,10 @@ mod tests {
                 },
             )
             .expect("restore verification failure should fail closed, not error");
-            let SessionAutoAttachExecution::FailedClosed { reason, settled, .. } = execution else {
+            let SessionAutoAttachExecution::FailedClosed {
+                reason, settled, ..
+            } = execution
+            else {
                 panic!("restore verification failure should return failed-closed execution");
             };
             assert!(
