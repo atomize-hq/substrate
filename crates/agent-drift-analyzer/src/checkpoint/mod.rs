@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::input::BundleSession;
 use crate::{
-    context::assemble_context, context::collect_command_observations, context::CommandObservation,
-    context::ContextPack, context::focusable_directive_rows, inference::infer_task_frame,
-    scoring::DriftStateHint, scoring::ScoredDrift,
+    context::assemble_context, context::collect_command_observations,
+    context::focusable_directive_rows, context::CommandObservation, context::ContextPack,
+    inference::infer_task_frame, scoring::DriftStateHint, scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -258,28 +258,6 @@ struct CurrentTurnSlice<'a> {
     turn_ordinal: usize,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct TurnActivityAnalysis {
-    mix: TurnActivityMix,
-    command_primary_counts: CommandPrimaryCounts,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct CommandPrimaryCounts {
-    read_like: usize,
-    write_like: usize,
-    verification_like: usize,
-    other: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CommandPrimaryKind {
-    ReadLike,
-    WriteLike,
-    VerificationLike,
-    Other,
-}
-
 fn turn_context(
     session: &BundleSession,
     current: &CheckpointSlice,
@@ -296,8 +274,8 @@ fn turn_context(
         }
         None => 1,
     };
-    let activity = turn_activity_analysis(turn_slice.rows);
-    let execution_mode = turn_execution_mode(&turn_slice, checkpoints_in_turn, &activity);
+    let activity_mix = turn_activity_mix(turn_slice.rows);
+    let execution_mode = turn_execution_mode(&turn_slice, checkpoints_in_turn, &activity_mix);
 
     TurnContext {
         turn_id: turn_slice.turn_id.map(str::to_owned),
@@ -307,97 +285,78 @@ fn turn_context(
         checkpoints_in_turn,
         prompts_observed_in_session,
         execution_mode,
-        activity_mix: activity.mix,
+        activity_mix,
     }
 }
 
-fn turn_activity_analysis(rows: &[CompactionRow]) -> TurnActivityAnalysis {
+fn turn_activity_mix(rows: &[CompactionRow]) -> TurnActivityMix {
     let command_observations = collect_command_observations(rows);
-    let mut command_primary_counts = CommandPrimaryCounts::default();
-    for command in &command_observations {
-        match primary_command_kind(command) {
-            CommandPrimaryKind::ReadLike => command_primary_counts.read_like += 1,
-            CommandPrimaryKind::WriteLike => command_primary_counts.write_like += 1,
-            CommandPrimaryKind::VerificationLike => {
-                command_primary_counts.verification_like += 1;
-            }
-            CommandPrimaryKind::Other => command_primary_counts.other += 1,
-        }
-    }
-
-    TurnActivityAnalysis {
-        mix: TurnActivityMix {
-            directive_row_count: focusable_directive_rows(rows).count(),
-            assistant_message_count: rows
-                .iter()
-                .filter(|row| row.kind == CompactionKind::AssistantMessage)
-                .count(),
-            tool_call_count: rows
-                .iter()
-                .filter(|row| row.kind == CompactionKind::ToolCall)
-                .count(),
-            read_like_command_count: command_observations
-                .iter()
-                .filter(|command| command.read_like)
-                .count(),
-            write_like_command_count: command_observations
-                .iter()
-                .filter(|command| command.write_like)
-                .count(),
-            verification_like_command_count: command_observations
-                .iter()
-                .filter(|command| command.verification_like)
-                .count(),
-            tool_output_count: rows
-                .iter()
-                .filter(|row| row.kind == CompactionKind::ToolOutput)
-                .count(),
-        },
-        command_primary_counts,
-    }
-}
-
-fn primary_command_kind(command: &CommandObservation) -> CommandPrimaryKind {
-    if command.verification_like {
-        CommandPrimaryKind::VerificationLike
-    } else if command.write_like {
-        CommandPrimaryKind::WriteLike
-    } else if command.read_like {
-        CommandPrimaryKind::ReadLike
-    } else {
-        CommandPrimaryKind::Other
+    TurnActivityMix {
+        directive_row_count: focusable_directive_rows(rows).count(),
+        assistant_message_count: rows
+            .iter()
+            .filter(|row| row.kind == CompactionKind::AssistantMessage)
+            .count(),
+        tool_call_count: rows
+            .iter()
+            .filter(|row| row.kind == CompactionKind::ToolCall)
+            .count(),
+        read_like_command_count: command_observations
+            .iter()
+            .filter(|command| command.read_like)
+            .count(),
+        write_like_command_count: command_observations
+            .iter()
+            .filter(|command| command.write_like)
+            .count(),
+        verification_like_command_count: command_observations
+            .iter()
+            .filter(|command| command.verification_like)
+            .count(),
+        tool_output_count: rows
+            .iter()
+            .filter(|row| row.kind == CompactionKind::ToolOutput)
+            .count(),
     }
 }
 
 fn turn_execution_mode(
     turn_slice: &CurrentTurnSlice<'_>,
     checkpoints_in_turn: usize,
-    activity: &TurnActivityAnalysis,
+    activity_mix: &TurnActivityMix,
 ) -> TurnExecutionMode {
     let directive_and_assistant_rows =
-        activity.mix.directive_row_count + activity.mix.assistant_message_count;
-    if activity.mix.tool_call_count == 0
-        || (checkpoints_in_turn <= 1 && directive_and_assistant_rows > activity.mix.tool_call_count)
+        activity_mix.directive_row_count + activity_mix.assistant_message_count;
+    let conversational = activity_mix.tool_call_count == 0
+        || (checkpoints_in_turn <= 1
+            && directive_and_assistant_rows > activity_mix.tool_call_count);
+    let autonomous =
+        activity_mix.tool_call_count > 0 && checkpoints_in_turn > 1 && turn_slice.turn_id.is_some();
+    let verification_heavy = verification_like_is_strict_plurality(activity_mix);
+
+    match [
+        conversational.then_some(TurnExecutionMode::Conversational),
+        autonomous.then_some(TurnExecutionMode::Autonomous),
+        verification_heavy.then_some(TurnExecutionMode::VerificationHeavy),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .as_slice()
     {
-        return TurnExecutionMode::Conversational;
+        [mode] => *mode,
+        _ => TurnExecutionMode::Mixed,
     }
-
-    if activity.mix.tool_call_count > 0 && checkpoints_in_turn > 1 && turn_slice.turn_id.is_some() {
-        return TurnExecutionMode::Autonomous;
-    }
-
-    if verification_like_is_strict_plurality(&activity.command_primary_counts) {
-        return TurnExecutionMode::VerificationHeavy;
-    }
-
-    TurnExecutionMode::Mixed
 }
 
-fn verification_like_is_strict_plurality(counts: &CommandPrimaryCounts) -> bool {
-    counts.verification_like > 0
-        && counts.verification_like > counts.read_like
-        && counts.verification_like > counts.write_like
-        && counts.verification_like > counts.other
+fn verification_like_is_strict_plurality(mix: &TurnActivityMix) -> bool {
+    let non_verification_like_command_count = mix
+        .tool_call_count
+        .saturating_sub(mix.verification_like_command_count);
+    mix.verification_like_command_count > 0
+        && mix.verification_like_command_count > mix.read_like_command_count
+        && mix.verification_like_command_count > mix.write_like_command_count
+        && mix.verification_like_command_count > non_verification_like_command_count
 }
 
 fn current_turn_slice<'a>(

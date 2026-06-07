@@ -148,7 +148,7 @@ fn checkpoints_compute_turn_activity_mix_and_execution_modes() {
     assert_eq!(first_turn.activity_mix.tool_output_count, 2);
     assert_eq!(
         first_turn.execution_mode,
-        agent_drift_analyzer::TurnExecutionMode::VerificationHeavy
+        agent_drift_analyzer::TurnExecutionMode::Mixed
     );
 
     assert_eq!(second_turn.activity_mix.directive_row_count, 2);
@@ -161,6 +161,71 @@ fn checkpoints_compute_turn_activity_mix_and_execution_modes() {
     assert_eq!(
         second_turn.execution_mode,
         agent_drift_analyzer::TurnExecutionMode::Autonomous
+    );
+}
+
+#[test]
+fn checkpoints_mark_cargo_heavy_write_turns_as_mixed() {
+    let result = analyze_sample_bundle();
+    let first_turn = result.sessions[0].checkpoints[0]
+        .turn_context
+        .as_ref()
+        .expect("first turn context");
+
+    assert_eq!(first_turn.activity_mix.tool_call_count, 5);
+    assert_eq!(first_turn.activity_mix.write_like_command_count, 3);
+    assert_eq!(first_turn.activity_mix.verification_like_command_count, 3);
+    assert_eq!(
+        first_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Mixed
+    );
+}
+
+#[test]
+fn checkpoints_bias_same_turn_verification_plurality_overlap_to_mixed() {
+    let mut bundle = load_sample_bundle();
+    for row in bundle
+        .archival_rows
+        .iter_mut()
+        .chain(bundle.compact_rows.iter_mut())
+    {
+        match row.event_index {
+            2 | 8 => {
+                row.text =
+                    "{\"command\":\"sed -n '1,40p' crates/agent-drift-analyzer/src/lib.rs\",\"workdir\":\"/repo\"}"
+                        .to_string();
+            }
+            3 | 4 | 5 | 10 | 11 | 12 => {
+                row.text =
+                    "{\"command\":\"npm test -- --runInBand\",\"workdir\":\"/repo\"}".to_string();
+            }
+            _ => {}
+        }
+    }
+
+    let fixture = BundleFixture::from_rows(
+        bundle.archival_rows,
+        bundle.compact_rows,
+        bundle.dedupe_groups,
+    );
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze overlapping mode bundle");
+    let second_turn = result.sessions[0].checkpoints[1]
+        .turn_context
+        .as_ref()
+        .expect("second turn context");
+
+    assert_eq!(second_turn.checkpoints_in_turn, 2);
+    assert_eq!(second_turn.activity_mix.tool_call_count, 8);
+    assert_eq!(second_turn.activity_mix.read_like_command_count, 2);
+    assert_eq!(second_turn.activity_mix.write_like_command_count, 0);
+    assert_eq!(second_turn.activity_mix.verification_like_command_count, 6);
+    assert_eq!(
+        second_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Mixed
     );
 }
 
