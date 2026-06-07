@@ -230,6 +230,61 @@ fn checkpoints_bias_same_turn_verification_plurality_overlap_to_mixed() {
 }
 
 #[test]
+fn checkpoints_mark_single_checkpoint_verification_plurality_turns_as_verification_heavy() {
+    let mut bundle = load_sample_bundle();
+    for row in bundle
+        .archival_rows
+        .iter_mut()
+        .chain(bundle.compact_rows.iter_mut())
+        .filter(|row| row.event_index >= 9)
+    {
+        row.turn_id = Some("turn-002".to_string());
+        match row.event_index {
+            10 => {
+                row.text = "{\"command\":\"npm test -- --runInBand\",\"workdir\":\"/repo\"}"
+                    .to_string();
+            }
+            11 => {
+                row.text = "{\"command\":\"pnpm lint\",\"workdir\":\"/repo\"}".to_string();
+            }
+            12 => {
+                row.text =
+                    "{\"command\":\"pnpm test -- --runInBand\",\"workdir\":\"/repo\"}"
+                        .to_string();
+            }
+            _ => {}
+        }
+    }
+
+    let fixture = BundleFixture::from_rows(
+        bundle.archival_rows,
+        bundle.compact_rows,
+        bundle.dedupe_groups,
+    );
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze verification-heavy turn bundle");
+    let second_turn = result.sessions[0].checkpoints[1]
+        .turn_context
+        .as_ref()
+        .expect("second turn context");
+
+    assert_eq!(second_turn.checkpoints_in_turn, 1);
+    assert_eq!(second_turn.activity_mix.directive_row_count, 0);
+    assert_eq!(second_turn.activity_mix.assistant_message_count, 1);
+    assert_eq!(second_turn.activity_mix.tool_call_count, 3);
+    assert_eq!(second_turn.activity_mix.read_like_command_count, 0);
+    assert_eq!(second_turn.activity_mix.write_like_command_count, 0);
+    assert_eq!(second_turn.activity_mix.verification_like_command_count, 3);
+    assert_eq!(
+        second_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::VerificationHeavy
+    );
+}
+
+#[test]
 fn checkpoints_mark_tool_free_short_turns_as_conversational() {
     let mut bundle = load_sample_bundle();
     for row in bundle
