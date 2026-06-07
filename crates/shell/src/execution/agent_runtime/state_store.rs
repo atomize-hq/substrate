@@ -3079,6 +3079,31 @@ impl AgentRuntimeStateStore {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn list_router_auto_attach_candidate_session_ids(&self) -> Result<Vec<String>> {
+        let mut session_ids = Vec::new();
+        for session in self.list_orchestration_sessions()? {
+            if session.state.is_terminal()
+                || session.posture == OrchestrationSessionPosture::ActiveAttached
+                || session.host_attach_contract().is_none()
+            {
+                continue;
+            }
+
+            let obligations = self.list_obligations(&session.orchestration_session_id)?;
+            if claimed_obligation_id(&obligations)?.is_some()
+                || select_attach_candidate(&obligations).is_none()
+            {
+                continue;
+            }
+
+            session_ids.push(session.orchestration_session_id);
+        }
+        session_ids.sort();
+        session_ids.dedup();
+        Ok(session_ids)
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn find_active_orchestration_session_for_pid(
         &self,
         pid: u32,
@@ -5553,6 +5578,94 @@ mod tests {
                 Some("router::local")
             );
             assert_eq!(persisted.attach_attempt_count, 1);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn list_router_auto_attach_candidate_session_ids_filters_to_detached_exact_truth() {
+        with_store(|store| {
+            let candidate =
+                detached_orchestrator("codex", "sess_auto_attach_candidate", "ash_candidate");
+            let candidate_parent = parked_parent(&candidate);
+            store
+                .persist_orchestration_session(&candidate_parent)
+                .expect("persist candidate parent");
+            store
+                .persist_obligation(&pending_obligation(
+                    "sess_auto_attach_candidate",
+                    "obl_candidate",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist candidate obligation");
+
+            let attached = live_orchestrator("codex", "sess_auto_attach_attached", "ash_attached");
+            let attached_parent = active_parent(&attached);
+            store
+                .persist_orchestration_session(&attached_parent)
+                .expect("persist attached parent");
+            store
+                .persist_obligation(&pending_obligation(
+                    "sess_auto_attach_attached",
+                    "obl_attached",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist attached obligation");
+
+            let terminal =
+                detached_orchestrator("codex", "sess_auto_attach_terminal", "ash_terminal");
+            let mut terminal_parent = parked_parent(&terminal);
+            terminal_parent.transition_state(OrchestrationSessionState::Stopped);
+            store
+                .persist_orchestration_session(&terminal_parent)
+                .expect("persist terminal parent");
+            store
+                .persist_obligation(&pending_obligation(
+                    "sess_auto_attach_terminal",
+                    "obl_terminal",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist terminal obligation");
+
+            let not_eligible =
+                detached_orchestrator("codex", "sess_auto_attach_not_eligible", "ash_ineligible");
+            let not_eligible_parent = parked_parent(&not_eligible);
+            store
+                .persist_orchestration_session(&not_eligible_parent)
+                .expect("persist ineligible parent");
+            store
+                .persist_obligation(&{
+                    let mut obligation = pending_obligation(
+                        "sess_auto_attach_not_eligible",
+                        "obl_not_eligible",
+                        OrchestrationObligationKind::ForkRecommendation,
+                    );
+                    obligation.attach_state = OrchestrationObligationAttachState::NotEligible;
+                    obligation
+                })
+                .expect("persist ineligible obligation");
+
+            let claimed = detached_orchestrator("codex", "sess_auto_attach_claimed", "ash_claimed");
+            let claimed_parent = parked_parent(&claimed);
+            store
+                .persist_orchestration_session(&claimed_parent)
+                .expect("persist claimed parent");
+            let mut claimed_obligation = pending_obligation(
+                "sess_auto_attach_claimed",
+                "obl_claimed",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            claimed_obligation.mark_attach_claimed("router::existing", Utc::now());
+            store
+                .persist_obligation(&claimed_obligation)
+                .expect("persist claimed obligation");
+
+            assert_eq!(
+                store
+                    .list_router_auto_attach_candidate_session_ids()
+                    .expect("list router auto-attach candidates"),
+                vec!["sess_auto_attach_candidate".to_string()]
+            );
         });
     }
 

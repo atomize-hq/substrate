@@ -77,6 +77,9 @@ use crate::execution::routing::{
 #[cfg(target_os = "linux")]
 use transport_api_types::ExecuteCancelRequestV1;
 
+#[cfg(target_os = "linux")]
+const CONTINUE_WORLD_WORKER_ROUTER_IDENTITY: &str = "router::continue_world_worker";
+
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct PreparedOrchestratorWorldDispatch {
@@ -1194,6 +1197,7 @@ async fn continue_world_worker(
         .filter(|event| continue_world_worker_event_persists_live_obligation(event.event_class))
     {
         persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
+        run_router_owned_auto_attach_work_loop_once(&prepared.store, &base_policy)?;
     }
     let fork_bootstrap =
         continue_world_worker_fork_command_bootstrap_after_delivery(&prepared).await?;
@@ -1595,6 +1599,21 @@ fn continue_world_worker_event_persists_live_obligation(
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
     )
+}
+
+#[cfg(target_os = "linux")]
+fn run_router_owned_auto_attach_work_loop_once(
+    store: &AgentRuntimeStateStore,
+    policy: &Policy,
+) -> Result<()> {
+    let _ = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
+        store,
+        CONTINUE_WORLD_WORKER_ROUTER_IDENTITY,
+        policy,
+        false,
+        false,
+    )?;
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -4854,6 +4873,45 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn persist_detached_continue_dispatch_state(
+        store: &AgentRuntimeStateStore,
+        workspace_root: &Path,
+        world_id: &str,
+        world_generation: u64,
+    ) {
+        let mut session = sample_session();
+        session.workspace_root = workspace_root.display().to_string();
+        session.shell_owner_pid = std::process::id();
+        session.world_id = Some(world_id.to_string());
+        session.world_generation = Some(world_generation);
+
+        let mut orchestrator = sample_orchestrator_participant();
+        orchestrator.internal.shell_owner_pid = std::process::id();
+        orchestrator.internal.uaa_session_id = Some("uaa_orch_dispatch".to_string());
+        orchestrator.internal.attached_client_present = false;
+        orchestrator.internal.last_attached_at = Some(chrono::Utc::now());
+        orchestrator.internal.resume_eligible = true;
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&orchestrator);
+        session.mark_parked_resumable("owner detached cleanly");
+
+        let mut member = sample_member_participant();
+        member.internal.shell_owner_pid = std::process::id();
+        member.internal.uaa_session_id = Some("uaa_member_dispatch".to_string());
+        member.handle.world_id = Some(world_id.to_string());
+        member.handle.world_generation = Some(world_generation);
+
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist detached session");
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist detached orchestrator");
+        store
+            .persist_participant(&member)
+            .expect("persist retained worker");
+    }
+
+    #[cfg(target_os = "linux")]
     fn persist_pending_continue_approval_obligation(
         store: &AgentRuntimeStateStore,
         obligation_id: &str,
@@ -6994,6 +7052,61 @@ mod tests {
                 Some(format!("payload for {}", continue_worker_event_label(event_class)).as_str())
             );
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn router_owned_auto_attach_work_loop_fails_closed_for_detached_continue_world_worker_obligations_when_router_policy_is_disabled(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let submit_request =
+            sample_continue_submit_request_for_run("req_continue_router", "world-17", 2);
+        let worker_event = ContinueWorldWorkerEventV1 {
+            event_class: ContinueWorldWorkerEventClassV1::ApprovalRequest,
+            source_participant_id: "ash_member".to_string(),
+            target_participant_id: "orch_dispatch".to_string(),
+            source_backend_id: "cli:codex_world".to_string(),
+            attention_required: true,
+            thread_id: Some("thread_router".to_string()),
+            stream_channel: Some("worker.request".to_string()),
+            payload: serde_json::json!({
+                "message": "approval needed while detached"
+            }),
+        };
+
+        persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
+            .expect("persist detached continue obligation");
+        run_router_owned_auto_attach_work_loop_once(&store, &Policy::default())
+            .expect("router work loop should fail closed, not error");
+
+        let obligation = store
+            .load_obligation(
+                "sess_dispatch",
+                "obl_continue_req_continue_router_approval_required",
+            )
+            .expect("load router-owned auto-attach obligation")
+            .expect("router-owned auto-attach obligation exists");
+        assert_eq!(
+            obligation.attach_state,
+            OrchestrationObligationAttachState::FailedClosed
+        );
+        assert!(
+            obligation
+                .attach_completion_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("workflow.router.enabled must be true")),
+            "policy-disabled router auto-attach must record the router gate failure"
+        );
+        assert_eq!(
+            obligation.attach_claim_owner.as_deref(),
+            Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
+        );
     }
 
     #[cfg(target_os = "linux")]

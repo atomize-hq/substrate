@@ -68,6 +68,13 @@ pub(crate) enum SessionAutoAttachExecution {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct RouterAutoAttachSessionExecution {
+    pub orchestration_session_id: String,
+    pub execution: SessionAutoAttachExecution,
+}
+
+#[allow(dead_code)]
 pub(crate) fn claimed_obligation_id(
     obligations: &[OrchestrationObligationRecord],
 ) -> Result<Option<&str>> {
@@ -114,6 +121,33 @@ fn candidate_priority(kind: OrchestrationObligationKind) -> u8 {
         OrchestrationObligationKind::FollowUpRequired => 3,
         _ => u8::MAX,
     }
+}
+
+#[allow(dead_code)]
+pub(crate) fn execute_router_auto_attach_for_eligible_sessions(
+    store: &AgentRuntimeStateStore,
+    router_identity: &str,
+    policy: &Policy,
+    world: bool,
+    no_world: bool,
+) -> Result<Vec<RouterAutoAttachSessionExecution>> {
+    store
+        .list_router_auto_attach_candidate_session_ids()?
+        .into_iter()
+        .map(|orchestration_session_id| {
+            Ok(RouterAutoAttachSessionExecution {
+                execution: execute_session_auto_attach(
+                    store,
+                    &orchestration_session_id,
+                    router_identity,
+                    policy,
+                    world,
+                    no_world,
+                )?,
+                orchestration_session_id,
+            })
+        })
+        .collect()
 }
 
 #[allow(dead_code)]
@@ -451,7 +485,7 @@ mod tests {
     };
     use crate::execution::agent_runtime::orchestration_session::{
         HostAttachContract, HostAttachExecutionClientStart, HostAttachLaunchKnobs,
-        HostAttachModePreference,
+        HostAttachModePreference, OrchestrationSessionPosture,
     };
     use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
     use crate::execution::agent_runtime::{
@@ -716,6 +750,91 @@ mod tests {
             assert_eq!(
                 obligation.attach_completion_reason.as_deref(),
                 Some(reason.as_str())
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn execute_router_auto_attach_for_eligible_sessions_discovers_detached_candidates_only() {
+        with_store(|store| {
+            let (detached_session, detached_participant) =
+                detached_orchestrator("sess_auto_attach_batch", "ash_auto_attach_batch");
+            store
+                .persist_orchestration_session(&detached_session)
+                .expect("persist detached session");
+            store
+                .persist_participant(&detached_participant)
+                .expect("persist detached participant");
+            store
+                .persist_obligation(&eligible_obligation(
+                    "sess_auto_attach_batch",
+                    "obl_batch",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist detached obligation");
+
+            let (mut attached_session, attached_participant) =
+                detached_orchestrator("sess_auto_attach_attached_skip", "ash_attached_skip");
+            attached_session.posture = OrchestrationSessionPosture::ActiveAttached;
+            attached_session.attached_participant_id =
+                Some(attached_participant.handle.participant_id.clone());
+            store
+                .persist_orchestration_session(&attached_session)
+                .expect("persist attached session");
+            store
+                .persist_obligation(&eligible_obligation(
+                    "sess_auto_attach_attached_skip",
+                    "obl_attached_skip",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist attached obligation");
+
+            let executions = execute_router_auto_attach_for_eligible_sessions(
+                store,
+                "router::packet_two",
+                &Policy::default(),
+                false,
+                false,
+            )
+            .expect("execute detached router auto-attach batch");
+
+            assert_eq!(executions.len(), 1);
+            assert_eq!(
+                executions[0].orchestration_session_id,
+                "sess_auto_attach_batch"
+            );
+            let SessionAutoAttachExecution::FailedClosed {
+                obligation_id,
+                attach_claim_owner,
+                reason,
+            } = &executions[0].execution
+            else {
+                panic!("detached candidate should fail closed under disabled router policy");
+            };
+            assert_eq!(obligation_id, "obl_batch");
+            assert_eq!(attach_claim_owner, "router::packet_two");
+            assert!(
+                reason.contains("workflow.router.enabled must be true"),
+                "policy-disabled batch execution should record the router gate failure: {reason}"
+            );
+
+            let detached = store
+                .load_obligation("sess_auto_attach_batch", "obl_batch")
+                .expect("load detached obligation")
+                .expect("detached obligation exists");
+            assert_eq!(
+                detached.attach_state,
+                OrchestrationObligationAttachState::FailedClosed
+            );
+
+            let attached = store
+                .load_obligation("sess_auto_attach_attached_skip", "obl_attached_skip")
+                .expect("load attached obligation")
+                .expect("attached obligation exists");
+            assert_eq!(
+                attached.attach_state,
+                OrchestrationObligationAttachState::Eligible
             );
         });
     }
