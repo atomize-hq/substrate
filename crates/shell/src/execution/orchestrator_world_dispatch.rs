@@ -17,6 +17,8 @@ use tokio::sync::mpsc::UnboundedSender;
 #[cfg(target_os = "linux")]
 use tokio::sync::watch;
 #[cfg(target_os = "linux")]
+use tracing::warn;
+#[cfg(target_os = "linux")]
 use uuid::Uuid;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1197,7 +1199,7 @@ async fn continue_world_worker(
         .filter(|event| continue_world_worker_event_persists_live_obligation(event.event_class))
     {
         persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
-        spawn_router_owned_auto_attach_for_session_trigger(
+        spawn_router_owned_auto_attach_discovery_trigger(
             prepared.store.clone(),
             prepared.session.orchestration_session_id.clone(),
             base_policy.clone(),
@@ -1606,32 +1608,33 @@ fn continue_world_worker_event_persists_live_obligation(
 }
 
 #[cfg(target_os = "linux")]
-fn spawn_router_owned_auto_attach_for_session_trigger(
+fn spawn_router_owned_auto_attach_discovery_trigger(
     store: AgentRuntimeStateStore,
-    orchestration_session_id: String,
+    trigger_orchestration_session_id: String,
     policy: Policy,
 ) -> Result<()> {
     // Keep router-owned attach on its own internal entrypoint instead of
-    // running the exact-session evaluation inline on retained-worker delivery.
+    // running discovery inline on retained-worker delivery.
     tokio::task::spawn_blocking(move || {
-        let _ = run_router_owned_auto_attach_for_session_once(
-            &store,
-            &orchestration_session_id,
-            &policy,
-        );
+        if let Err(err) = run_router_owned_auto_attach_discovery_once(&store, &policy) {
+            warn!(
+                target = "substrate::shell",
+                trigger_orchestration_session_id = %trigger_orchestration_session_id,
+                error = %err,
+                "router-owned auto-attach discovery entrypoint failed"
+            );
+        }
     });
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn run_router_owned_auto_attach_for_session_once(
+fn run_router_owned_auto_attach_discovery_once(
     store: &AgentRuntimeStateStore,
-    orchestration_session_id: &str,
     policy: &Policy,
 ) -> Result<()> {
-    let _ = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_session(
+    let _ = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
         store,
-        orchestration_session_id,
         CONTINUE_WORLD_WORKER_ROUTER_IDENTITY,
         policy,
         false,
@@ -7106,8 +7109,8 @@ mod tests {
 
         persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
             .expect("persist detached continue obligation");
-        run_router_owned_auto_attach_for_session_once(&store, "sess_dispatch", &Policy::default())
-            .expect("router session trigger should fail closed, not error");
+        run_router_owned_auto_attach_discovery_once(&store, &Policy::default())
+            .expect("router discovery trigger should fail closed, not error");
 
         let obligation = store
             .load_obligation(
@@ -7136,7 +7139,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial]
-    fn router_owned_auto_attach_session_trigger_stays_exact_session_scoped() {
+    fn router_owned_auto_attach_discovery_trigger_discovers_other_detached_candidate_sessions() {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -7220,8 +7223,8 @@ mod tests {
         persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
             .expect("persist target detached continue obligation");
 
-        run_router_owned_auto_attach_for_session_once(&store, "sess_dispatch", &Policy::default())
-            .expect("router session trigger should fail closed, not error");
+        run_router_owned_auto_attach_discovery_once(&store, &Policy::default())
+            .expect("router discovery trigger should fail closed, not error");
 
         let unrelated = store
             .load_obligation("sess_unrelated", "obl_unrelated_follow_up")
@@ -7229,8 +7232,42 @@ mod tests {
             .expect("unrelated session obligation exists");
         assert_eq!(
             unrelated.attach_state,
-            OrchestrationObligationAttachState::Eligible,
-            "exact-session trigger should leave unrelated detached sessions untouched"
+            OrchestrationObligationAttachState::FailedClosed,
+            "batch discovery should evaluate unrelated detached candidates too"
+        );
+        assert!(
+            unrelated
+                .attach_completion_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("workflow.router.enabled must be true")),
+            "batch discovery should record the router gate failure on unrelated detached candidates"
+        );
+        assert_eq!(
+            unrelated.attach_claim_owner.as_deref(),
+            Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
+        );
+
+        let target = store
+            .load_obligation(
+                "sess_dispatch",
+                "obl_continue_req_continue_router_target_approval_required",
+            )
+            .expect("load target session obligation")
+            .expect("target session obligation exists");
+        assert_eq!(
+            target.attach_state,
+            OrchestrationObligationAttachState::FailedClosed
+        );
+        assert!(
+            target
+                .attach_completion_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("workflow.router.enabled must be true")),
+            "batch discovery should still evaluate the triggering session candidate"
+        );
+        assert_eq!(
+            target.attach_claim_owner.as_deref(),
+            Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
         );
     }
 
