@@ -2,7 +2,10 @@
 
 mod support;
 
-use agent_drift_analyzer::{Checkpoint, DriftClass, DriftState, EvidenceRef};
+use agent_drift_analyzer::{
+    Checkpoint, DriftClass, DriftState, EvidenceRef, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
+};
 use agent_drift_sentinel::{
     execute,
     operator_surface::{present_checkpoint_with_previous, warning_fingerprint, CheckpointPosture},
@@ -81,6 +84,51 @@ fn operator_surface_renders_unavailable_density_for_zero_command_checkpoints() {
 
     assert!(rendered.contains(
         "Diagnostics: task_frame_transitioned=true, working_set_changed=false, verification=0/0 (unavailable), evidence_items=2"
+    ));
+}
+
+#[test]
+fn operator_surface_renders_compact_turn_context_for_v0_4_checkpoints() {
+    let mut visible = checkpoint_with_drift(
+        "session-turn-context",
+        1,
+        DriftClass::TruthGroundingGap,
+        82,
+        true,
+        "align plan to repo truth",
+        &["flagged score for session-turn-context:1"],
+    );
+    visible.schema_version = "v0.4".to_string();
+    visible.turn_context = Some(sample_turn_context(1));
+
+    let mut silent = checkpoint_with_drift(
+        "session-turn-context",
+        2,
+        DriftClass::TruthGroundingGap,
+        20,
+        false,
+        "continue on the current task frame",
+        &["historical truth-grounding gap: flagged score for session-turn-context:1"],
+    );
+    silent.schema_version = "v0.4".to_string();
+    silent.turn_context = Some(sample_turn_context(1));
+
+    let fixture =
+        support::ReplayFixture::from_checkpoints(vec![visible, silent], support::sample_summary());
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let rendered = result.report.to_console_text();
+
+    assert!(rendered.contains(
+        "- Turn context: turn-1 (#1) rows=4 elapsed=12s checkpoints=2 session-prompts=1 mode=autonomous activity[dir=1 asst=1 tool=1 read=1 write=1 verify=0 out=1]"
     ));
 }
 
@@ -440,4 +488,25 @@ fn checkpoint_with_state(
         .collect();
     checkpoint.diagnostics.evidence_item_count = checkpoint.drift_scores[0].evidence.len();
     checkpoint
+}
+
+fn sample_turn_context(turn_ordinal: usize) -> TurnContext {
+    TurnContext {
+        turn_id: Some(format!("turn-{turn_ordinal}")),
+        turn_ordinal,
+        rows_since_turn_start: 4,
+        seconds_since_turn_start: Some(12),
+        checkpoints_in_turn: 2,
+        prompts_observed_in_session: turn_ordinal,
+        execution_mode: TurnExecutionMode::Autonomous,
+        activity_mix: TurnActivityMix {
+            directive_row_count: 1,
+            assistant_message_count: 1,
+            tool_call_count: 1,
+            read_like_command_count: 1,
+            write_like_command_count: 1,
+            verification_like_command_count: 0,
+            tool_output_count: 1,
+        },
+    }
 }

@@ -2,7 +2,10 @@
 
 mod support;
 
-use agent_drift_analyzer::{Checkpoint, DriftClass, DriftState, EvidenceRef};
+use agent_drift_analyzer::{
+    Checkpoint, DriftClass, DriftState, EvidenceRef, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
+};
 use camino::Utf8PathBuf;
 
 use agent_drift_sentinel::{
@@ -147,6 +150,66 @@ fn live_end_to_end_replay_and_live_surfaces_share_the_same_diagnostics_summary_f
         replay_silent.diagnostics_summary,
         live_silent_event.diagnostics_summary
     );
+}
+
+#[test]
+fn live_end_to_end_replay_and_live_surfaces_share_turn_context_rendering_for_v0_4_checkpoints() {
+    let mut checkpoints = support::sample_checkpoints();
+    for (index, checkpoint) in checkpoints.iter_mut().take(2).enumerate() {
+        checkpoint.schema_version = "v0.4".to_string();
+        checkpoint.turn_context = Some(sample_turn_context(index + 1));
+    }
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        checkpoints[..2].to_vec(),
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live_visible = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live visible checkpoint");
+    let live_silent = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live silent checkpoint");
+
+    let replay_visible = &replay.report.visible_warnings[0];
+    let replay_silent = &replay.report.silent_checkpoints[0];
+    let replay_visible_render = replay_visible.render_console_block(None);
+    let live_visible_render = live_visible.presentation.render_console_block(None);
+    let replay_silent_render = replay_silent.render_console_block(None);
+    let live_silent_render = live_silent.presentation.render_console_block(None);
+
+    assert_eq!(
+        extract_turn_context_line(&replay_visible_render),
+        extract_turn_context_line(&live_visible_render)
+    );
+    assert_eq!(
+        extract_turn_context_line(&replay_silent_render),
+        extract_turn_context_line(&live_silent_render)
+    );
+    assert!(replay_visible_render.contains(
+        "- Turn context: turn-1 (#1) rows=5 elapsed=21s checkpoints=2 session-prompts=1 mode=autonomous activity[dir=1 asst=1 tool=1 read=1 write=1 verify=1 out=1]"
+    ));
+    assert!(replay_silent_render.contains(
+        "- Turn context: turn-2 (#2) rows=5 elapsed=21s checkpoints=2 session-prompts=2 mode=autonomous activity[dir=1 asst=1 tool=1 read=1 write=1 verify=1 out=1]"
+    ));
 }
 
 #[test]
@@ -359,6 +422,12 @@ fn build_single_event(observation: &agent_drift_sentinel::LiveObservation) -> Op
     events.into_iter().next().expect("single event")
 }
 
+fn extract_turn_context_line(rendered: &str) -> Option<&str> {
+    rendered
+        .lines()
+        .find(|line| line.starts_with("- Turn context: "))
+}
+
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
@@ -386,4 +455,25 @@ fn checkpoint_with_state(
         .collect();
     checkpoint.diagnostics.evidence_item_count = checkpoint.drift_scores[0].evidence.len();
     checkpoint
+}
+
+fn sample_turn_context(turn_ordinal: usize) -> TurnContext {
+    TurnContext {
+        turn_id: Some(format!("turn-{turn_ordinal}")),
+        turn_ordinal,
+        rows_since_turn_start: 5,
+        seconds_since_turn_start: Some(21),
+        checkpoints_in_turn: 2,
+        prompts_observed_in_session: turn_ordinal,
+        execution_mode: TurnExecutionMode::Autonomous,
+        activity_mix: TurnActivityMix {
+            directive_row_count: 1,
+            assistant_message_count: 1,
+            tool_call_count: 1,
+            read_like_command_count: 1,
+            write_like_command_count: 1,
+            verification_like_command_count: 1,
+            tool_output_count: 1,
+        },
+    }
 }

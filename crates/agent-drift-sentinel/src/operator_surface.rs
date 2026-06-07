@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
-use agent_drift_analyzer::{Checkpoint, DriftClass, DriftState, EvidenceRef};
+use agent_drift_analyzer::{
+    Checkpoint, DriftClass, DriftState, EvidenceRef, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
+};
 use camino::Utf8Path;
 
 use crate::input::{CheckpointCursor, ReplayCheckpointBundle};
@@ -116,6 +119,12 @@ impl CheckpointPresentation {
         if let Some(posture) = self.posture {
             lines.push(format!("- Posture: {}", posture.as_str()));
         }
+        if let Some(turn_context) = self.checkpoint.turn_context.as_ref() {
+            lines.push(format!(
+                "- Turn context: {}",
+                format_turn_context(turn_context)
+            ));
+        }
         lines.push(format!(
             "- Diagnostics: {}",
             self.diagnostics_summary.render_console_summary()
@@ -131,6 +140,62 @@ impl CheckpointPresentation {
             lines.push(format!("- Adjudication: {note}"));
         }
         lines.join("\n")
+    }
+}
+
+fn format_turn_context(turn_context: &TurnContext) -> String {
+    let mut parts = vec![
+        format_turn_label(turn_context),
+        format!("rows={}", turn_context.rows_since_turn_start),
+        format!("checkpoints={}", turn_context.checkpoints_in_turn),
+        format!(
+            "session-prompts={}",
+            turn_context.prompts_observed_in_session
+        ),
+        format!(
+            "mode={}",
+            format_turn_execution_mode(turn_context.execution_mode)
+        ),
+        format!(
+            "activity[{}]",
+            format_turn_activity_mix(&turn_context.activity_mix)
+        ),
+    ];
+    if let Some(seconds_since_turn_start) = turn_context.seconds_since_turn_start {
+        parts.insert(2, format!("elapsed={}s", seconds_since_turn_start));
+    }
+
+    parts.join(" ")
+}
+
+fn format_turn_label(turn_context: &TurnContext) -> String {
+    match (turn_context.turn_id.as_deref(), turn_context.turn_ordinal) {
+        (Some(turn_id), ordinal) if ordinal > 0 => format!("{turn_id} (#{ordinal})"),
+        (Some(turn_id), _) => turn_id.to_string(),
+        (None, ordinal) if ordinal > 0 => format!("turn #{ordinal}"),
+        (None, _) => "no turn id".to_string(),
+    }
+}
+
+fn format_turn_activity_mix(activity_mix: &TurnActivityMix) -> String {
+    format!(
+        "dir={} asst={} tool={} read={} write={} verify={} out={}",
+        activity_mix.directive_row_count,
+        activity_mix.assistant_message_count,
+        activity_mix.tool_call_count,
+        activity_mix.read_like_command_count,
+        activity_mix.write_like_command_count,
+        activity_mix.verification_like_command_count,
+        activity_mix.tool_output_count,
+    )
+}
+
+fn format_turn_execution_mode(mode: TurnExecutionMode) -> &'static str {
+    match mode {
+        TurnExecutionMode::Conversational => "conversational",
+        TurnExecutionMode::Autonomous => "autonomous",
+        TurnExecutionMode::VerificationHeavy => "verification_heavy",
+        TurnExecutionMode::Mixed => "mixed",
     }
 }
 
