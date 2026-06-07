@@ -311,9 +311,7 @@ impl ResolvedInternalWorldDispatchCaller {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RouterAutoAttachSessionReadiness {
     Eligible,
-    NoCandidate {
-        reason: &'static str,
-    },
+    NoCandidate { reason: &'static str },
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -2822,6 +2820,39 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         router_identity: &str,
     ) -> Result<SessionAutoAttachClaim> {
+        self.claim_session_auto_attach_matching(
+            orchestration_session_id,
+            router_identity,
+            |_| true,
+            "no_eligible_obligations",
+        )
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn claim_exact_session_auto_attach_obligation(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        router_identity: &str,
+    ) -> Result<SessionAutoAttachClaim> {
+        self.claim_session_auto_attach_matching(
+            orchestration_session_id,
+            router_identity,
+            |obligation| obligation.obligation_id == obligation_id,
+            "requested_obligation_not_claimable",
+        )
+    }
+
+    fn claim_session_auto_attach_matching<F>(
+        &self,
+        orchestration_session_id: &str,
+        router_identity: &str,
+        matcher: F,
+        no_candidate_reason: &'static str,
+    ) -> Result<SessionAutoAttachClaim>
+    where
+        F: Fn(&OrchestrationObligationRecord) -> bool,
+    {
         if router_identity.trim().is_empty() {
             anyhow::bail!("router-owned auto-attach claims must include a router_identity");
         }
@@ -2845,9 +2876,13 @@ impl AgentRuntimeStateStore {
                 obligation_id: obligation_id.to_string(),
             });
         }
-        let Some(candidate) = select_attach_candidate(&obligations) else {
+        let matching_obligations = obligations
+            .into_iter()
+            .filter(|obligation| matcher(obligation))
+            .collect::<Vec<_>>();
+        let Some(candidate) = select_attach_candidate(&matching_obligations) else {
             return Ok(SessionAutoAttachClaim::NoCandidate {
-                reason: "no_eligible_obligations",
+                reason: no_candidate_reason,
             });
         };
 
@@ -5668,6 +5703,72 @@ mod tests {
                 Some("router::local")
             );
             assert_eq!(persisted.attach_attempt_count, 1);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn claim_exact_session_auto_attach_obligation_claims_requested_policy_eligible_sibling() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_auto_attach_exact_claim", "ash_exact");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let approval = pending_obligation(
+                "sess_auto_attach_exact_claim",
+                "obl_approval",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            let follow_up = pending_obligation(
+                "sess_auto_attach_exact_claim",
+                "obl_follow_up",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            store
+                .persist_obligation(&approval)
+                .expect("persist approval obligation");
+            store
+                .persist_obligation(&follow_up)
+                .expect("persist follow-up obligation");
+
+            let claim = store
+                .claim_exact_session_auto_attach_obligation(
+                    "sess_auto_attach_exact_claim",
+                    "obl_follow_up",
+                    "router::local",
+                )
+                .expect("claim exact follow-up obligation");
+            assert_eq!(
+                claim,
+                SessionAutoAttachClaim::Claimed {
+                    obligation_id: "obl_follow_up".to_string(),
+                    attach_claim_owner: "router::local".to_string(),
+                }
+            );
+
+            let claimed = store
+                .load_obligation("sess_auto_attach_exact_claim", "obl_follow_up")
+                .expect("reload exact claimed obligation")
+                .expect("exact claimed obligation exists");
+            assert_eq!(
+                claimed.attach_state,
+                OrchestrationObligationAttachState::Claimed
+            );
+
+            let sibling = store
+                .load_obligation("sess_auto_attach_exact_claim", "obl_approval")
+                .expect("reload approval sibling")
+                .expect("approval sibling exists");
+            assert_eq!(
+                sibling.attach_state,
+                OrchestrationObligationAttachState::Eligible
+            );
         });
     }
 

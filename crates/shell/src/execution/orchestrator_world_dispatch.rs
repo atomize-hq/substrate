@@ -1197,7 +1197,11 @@ async fn continue_world_worker(
         .filter(|event| continue_world_worker_event_persists_live_obligation(event.event_class))
     {
         persist_continue_world_worker_obligation(&prepared.store, &submit_request, worker_event)?;
-        run_router_owned_auto_attach_work_loop_once(&prepared.store, &base_policy)?;
+        spawn_router_owned_auto_attach_for_session_trigger(
+            prepared.store.clone(),
+            prepared.session.orchestration_session_id.clone(),
+            base_policy.clone(),
+        )?;
     }
     let fork_bootstrap =
         continue_world_worker_fork_command_bootstrap_after_delivery(&prepared).await?;
@@ -1602,12 +1606,32 @@ fn continue_world_worker_event_persists_live_obligation(
 }
 
 #[cfg(target_os = "linux")]
-fn run_router_owned_auto_attach_work_loop_once(
+fn spawn_router_owned_auto_attach_for_session_trigger(
+    store: AgentRuntimeStateStore,
+    orchestration_session_id: String,
+    policy: Policy,
+) -> Result<()> {
+    // Keep router-owned attach on its own internal entrypoint instead of
+    // running the exact-session evaluation inline on retained-worker delivery.
+    tokio::task::spawn_blocking(move || {
+        let _ = run_router_owned_auto_attach_for_session_once(
+            &store,
+            &orchestration_session_id,
+            &policy,
+        );
+    });
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn run_router_owned_auto_attach_for_session_once(
     store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
     policy: &Policy,
 ) -> Result<()> {
-    let _ = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
+    let _ = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_session(
         store,
+        orchestration_session_id,
         CONTINUE_WORLD_WORKER_ROUTER_IDENTITY,
         policy,
         false,
@@ -7057,7 +7081,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial]
-    fn router_owned_auto_attach_work_loop_fails_closed_for_detached_continue_world_worker_obligations_when_router_policy_is_disabled(
+    fn router_owned_auto_attach_session_trigger_fails_closed_for_detached_continue_world_worker_obligations_when_router_policy_is_disabled(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -7082,8 +7106,8 @@ mod tests {
 
         persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
             .expect("persist detached continue obligation");
-        run_router_owned_auto_attach_work_loop_once(&store, &Policy::default())
-            .expect("router work loop should fail closed, not error");
+        run_router_owned_auto_attach_for_session_once(&store, "sess_dispatch", &Policy::default())
+            .expect("router session trigger should fail closed, not error");
 
         let obligation = store
             .load_obligation(
@@ -7106,6 +7130,107 @@ mod tests {
         assert_eq!(
             obligation.attach_claim_owner.as_deref(),
             Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn router_owned_auto_attach_session_trigger_stays_exact_session_scoped() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let store = AgentRuntimeStateStore::new().expect("state store");
+
+        let unrelated_workspace = tempdir().expect("unrelated workspace root tempdir");
+        let mut unrelated_session = sample_session();
+        unrelated_session.orchestration_session_id = "sess_unrelated".to_string();
+        unrelated_session.shell_trace_session_id = "trace_unrelated".to_string();
+        unrelated_session.workspace_root = unrelated_workspace.path().display().to_string();
+        unrelated_session.world_id = Some("world-unrelated".to_string());
+        unrelated_session.world_generation = Some(7);
+        unrelated_session.active_session_handle_id = Some("orch_unrelated".to_string());
+        unrelated_session.attached_participant_id = None;
+
+        let mut unrelated_orchestrator = sample_orchestrator_participant();
+        unrelated_orchestrator.handle.participant_id = "orch_unrelated".to_string();
+        unrelated_orchestrator.handle.orchestration_session_id = "sess_unrelated".to_string();
+        unrelated_orchestrator.internal.shell_owner_pid = std::process::id();
+        unrelated_orchestrator.internal.uaa_session_id = Some("uaa_orch_unrelated".to_string());
+        unrelated_orchestrator.internal.attached_client_present = false;
+        unrelated_orchestrator.internal.last_attached_at = Some(chrono::Utc::now());
+        unrelated_orchestrator.internal.resume_eligible = true;
+        unrelated_session.host_attach_contract =
+            HostAttachContract::from_manifest_for_test(&unrelated_orchestrator);
+        unrelated_session.mark_parked_resumable("owner detached cleanly");
+
+        let mut unrelated_member = sample_member_participant();
+        unrelated_member.handle.participant_id = "ash_member_unrelated".to_string();
+        unrelated_member.handle.orchestration_session_id = "sess_unrelated".to_string();
+        unrelated_member.handle.world_id = Some("world-unrelated".to_string());
+        unrelated_member.handle.world_generation = Some(7);
+        unrelated_member.handle.orchestrator_participant_id = Some("orch_unrelated".to_string());
+        unrelated_member.internal.shell_owner_pid = std::process::id();
+        unrelated_member.internal.uaa_session_id = Some("uaa_member_unrelated".to_string());
+        store
+            .persist_orchestration_session(&unrelated_session)
+            .expect("persist unrelated detached session");
+        store
+            .persist_participant(&unrelated_orchestrator)
+            .expect("persist unrelated detached orchestrator");
+        store
+            .persist_participant(&unrelated_member)
+            .expect("persist unrelated retained worker");
+
+        let mut unrelated_obligation = OrchestrationObligationRecord::new(
+            "sess_unrelated",
+            "obl_unrelated_follow_up",
+            OrchestrationObligationKind::FollowUpRequired,
+            "unrelated detached session follow-up".to_string(),
+        );
+        unrelated_obligation.attention_required = true;
+        unrelated_obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        store
+            .persist_obligation(&unrelated_obligation)
+            .expect("persist unrelated detached session obligation");
+
+        let target_workspace = tempdir().expect("target workspace root tempdir");
+        persist_detached_continue_dispatch_state(
+            &store,
+            target_workspace.path(),
+            "world-target",
+            11,
+        );
+        let submit_request = sample_continue_submit_request_for_run(
+            "req_continue_router_target",
+            "world-target",
+            11,
+        );
+        let worker_event = ContinueWorldWorkerEventV1 {
+            event_class: ContinueWorldWorkerEventClassV1::ApprovalRequest,
+            source_participant_id: "ash_member".to_string(),
+            target_participant_id: "orch_dispatch".to_string(),
+            source_backend_id: "cli:codex_world".to_string(),
+            attention_required: true,
+            thread_id: Some("thread_router_target".to_string()),
+            stream_channel: Some("worker.request".to_string()),
+            payload: serde_json::json!({
+                "message": "approval needed while detached"
+            }),
+        };
+        persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
+            .expect("persist target detached continue obligation");
+
+        run_router_owned_auto_attach_for_session_once(&store, "sess_dispatch", &Policy::default())
+            .expect("router session trigger should fail closed, not error");
+
+        let unrelated = store
+            .load_obligation("sess_unrelated", "obl_unrelated_follow_up")
+            .expect("load unrelated session obligation")
+            .expect("unrelated session obligation exists");
+        assert_eq!(
+            unrelated.attach_state,
+            OrchestrationObligationAttachState::Eligible,
+            "exact-session trigger should leave unrelated detached sessions untouched"
         );
     }
 

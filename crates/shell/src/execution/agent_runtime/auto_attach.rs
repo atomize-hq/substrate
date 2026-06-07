@@ -134,32 +134,51 @@ pub(crate) fn execute_router_auto_attach_for_eligible_sessions(
 ) -> Result<Vec<RouterAutoAttachSessionExecution>> {
     let mut executions = Vec::new();
     for orchestration_session_id in store.list_router_auto_attach_candidate_session_ids()? {
-        let execution = match resolve_router_auto_attach_policy_for_session(
+        executions.push(execute_router_auto_attach_for_session(
             store,
             &orchestration_session_id,
+            router_identity,
             fallback_policy,
-        ) {
-            Ok(session_policy) => execute_session_auto_attach(
-                store,
-                &orchestration_session_id,
-                router_identity,
-                &session_policy,
-                world,
-                no_world,
-            )?,
-            Err(err) => fail_closed_auto_attach_policy_resolution(
-                store,
-                &orchestration_session_id,
-                router_identity,
-                &err.to_string(),
-            )?,
-        };
-        executions.push(RouterAutoAttachSessionExecution {
-            orchestration_session_id,
-            execution,
-        });
+            world,
+            no_world,
+        )?);
     }
     Ok(executions)
+}
+
+#[allow(dead_code)]
+pub(crate) fn execute_router_auto_attach_for_session(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    router_identity: &str,
+    fallback_policy: &Policy,
+    world: bool,
+    no_world: bool,
+) -> Result<RouterAutoAttachSessionExecution> {
+    let execution = match resolve_router_auto_attach_policy_for_session(
+        store,
+        orchestration_session_id,
+        fallback_policy,
+    ) {
+        Ok(session_policy) => execute_session_auto_attach(
+            store,
+            orchestration_session_id,
+            router_identity,
+            &session_policy,
+            world,
+            no_world,
+        )?,
+        Err(err) => fail_closed_auto_attach_policy_resolution(
+            store,
+            orchestration_session_id,
+            router_identity,
+            &err.to_string(),
+        )?,
+    };
+    Ok(RouterAutoAttachSessionExecution {
+        orchestration_session_id: orchestration_session_id.to_string(),
+        execution,
+    })
 }
 
 #[allow(dead_code)]
@@ -171,7 +190,17 @@ pub(crate) fn execute_session_auto_attach(
     world: bool,
     no_world: bool,
 ) -> Result<SessionAutoAttachExecution> {
-    let claim = store.claim_session_auto_attach(orchestration_session_id, router_identity)?;
+    let claim = match select_policy_eligible_attach_candidate(
+        &store.list_obligations(orchestration_session_id)?,
+        policy,
+    ) {
+        Some(candidate) => store.claim_exact_session_auto_attach_obligation(
+            orchestration_session_id,
+            &candidate.obligation_id,
+            router_identity,
+        )?,
+        None => store.claim_session_auto_attach(orchestration_session_id, router_identity)?,
+    };
     let (obligation_id, attach_claim_owner) = match claim {
         SessionAutoAttachClaim::NoCandidate { reason } => {
             return Ok(SessionAutoAttachExecution::NoCandidate { reason });
@@ -309,18 +338,17 @@ fn resolve_router_auto_attach_policy_for_session(
         return Ok(fallback_policy.clone());
     };
     let workspace_root = Path::new(&session.workspace_root);
-    let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(
-        workspace_root,
-        false,
-    )
-    .map_err(|err| {
-        anyhow::anyhow!(
+    let (policy, _) =
+        substrate_broker::resolve_effective_policy_with_explain(workspace_root, false).map_err(
+            |err| {
+                anyhow::anyhow!(
             "failed to resolve router auto-attach policy for orchestration session {} from {}: {}",
             orchestration_session_id,
             workspace_root.display(),
             err
         )
-    })?;
+            },
+        )?;
     Ok(policy)
 }
 
@@ -334,28 +362,12 @@ fn ensure_router_auto_attach_allowed(
         );
     }
 
-    let (allowed, policy_key) = match obligation.kind {
-        OrchestrationObligationKind::ApprovalRequired => (
-            policy.world_dispatch_approval_requests_allowed(),
-            "agents.world_dispatch.obligations.approval_allowed",
-        ),
-        OrchestrationObligationKind::FollowUpRequired => (
-            policy.world_dispatch_follow_up_allowed(),
-            "agents.world_dispatch.obligations.follow_up_allowed",
-        ),
-        OrchestrationObligationKind::Blocked => (
-            policy.world_dispatch_blocked_allowed(),
-            "agents.world_dispatch.obligations.blocked_allowed",
-        ),
-        OrchestrationObligationKind::ForkRequest => (
-            policy.world_dispatch_fork_requests_allowed(),
-            "agents.world_dispatch.fork.requests_allowed",
-        ),
-        other => {
-            anyhow::bail!(
-                "router_auto_attach_unsupported_kind: obligation kind {other:?} is not eligible for router-owned automatic attach"
-            );
-        }
+    let (allowed, policy_key) = router_auto_attach_kind_gate(policy, obligation.kind);
+    let Some(policy_key) = policy_key else {
+        anyhow::bail!(
+            "router_auto_attach_unsupported_kind: obligation kind {:?} is not eligible for router-owned automatic attach",
+            obligation.kind
+        );
     };
     if !allowed {
         anyhow::bail!(
@@ -367,6 +379,55 @@ fn ensure_router_auto_attach_allowed(
     }
 
     Ok(())
+}
+
+fn select_policy_eligible_attach_candidate<'a>(
+    obligations: &'a [OrchestrationObligationRecord],
+    policy: &Policy,
+) -> Option<&'a OrchestrationObligationRecord> {
+    if !policy.workflow_router_enabled() {
+        return None;
+    }
+
+    let mut candidates = obligations
+        .iter()
+        .filter(|obligation| {
+            obligation.is_auto_attach_eligible()
+                && router_auto_attach_kind_gate(policy, obligation.kind).0
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        candidate_priority(left.kind)
+            .cmp(&candidate_priority(right.kind))
+            .then(left.created_at.cmp(&right.created_at))
+            .then(left.obligation_id.cmp(&right.obligation_id))
+    });
+    candidates.into_iter().next()
+}
+
+fn router_auto_attach_kind_gate(
+    policy: &Policy,
+    kind: OrchestrationObligationKind,
+) -> (bool, Option<&'static str>) {
+    match kind {
+        OrchestrationObligationKind::ApprovalRequired => (
+            policy.world_dispatch_approval_requests_allowed(),
+            Some("agents.world_dispatch.obligations.approval_allowed"),
+        ),
+        OrchestrationObligationKind::FollowUpRequired => (
+            policy.world_dispatch_follow_up_allowed(),
+            Some("agents.world_dispatch.obligations.follow_up_allowed"),
+        ),
+        OrchestrationObligationKind::Blocked => (
+            policy.world_dispatch_blocked_allowed(),
+            Some("agents.world_dispatch.obligations.blocked_allowed"),
+        ),
+        OrchestrationObligationKind::ForkRequest => (
+            policy.world_dispatch_fork_requests_allowed(),
+            Some("agents.world_dispatch.fork.requests_allowed"),
+        ),
+        _ => (false, None),
+    }
 }
 
 #[allow(dead_code)]
@@ -759,6 +820,26 @@ mod tests {
             ensure_router_auto_attach_allowed(&router_auto_attach_policy(kind), &obligation)
                 .expect("per-kind router gate should allow matching auto-attach kinds");
         }
+    }
+
+    #[test]
+    fn select_policy_eligible_attach_candidate_skips_denied_higher_priority_sibling() {
+        let approval = eligible_obligation(
+            "sess_auto_attach_policy_selection",
+            "obl_approval",
+            OrchestrationObligationKind::ApprovalRequired,
+        );
+        let follow_up = eligible_obligation(
+            "sess_auto_attach_policy_selection",
+            "obl_follow_up",
+            OrchestrationObligationKind::FollowUpRequired,
+        );
+        let policy = router_auto_attach_policy(OrchestrationObligationKind::FollowUpRequired);
+
+        let obligations = [approval, follow_up];
+        let candidate = select_policy_eligible_attach_candidate(&obligations, &policy)
+            .expect("policy-eligible follow-up should still route auto-attach");
+        assert_eq!(candidate.obligation_id, "obl_follow_up");
     }
 
     #[test]
