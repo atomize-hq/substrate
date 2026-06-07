@@ -5,11 +5,22 @@ Source plan: [PLAN-49.md](./PLAN-49.md)
 Source prior slice: [TASKS-48.md](./TASKS-48.md)  
 Phase: `TASKS`  
 Execution model: four sequential `/incremental-implementation` sessions  
-Status: Packet 4 docs/validation completed on `2026-06-07`
+Status: Packets 1-4 landed; slice 49 closed on `2026-06-07` after Packet 4 aligned docs and reran the validation wall
 
 ## Phase Gate
 
 These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `49` have been reviewed and accepted as the bounded source of truth before implementation begins.
+
+## Execution Packets
+
+This slice was planned as four sequential `/incremental-implementation` sessions, but Packets 1-3 are already landed in code and now serve as the frozen floor for Packet 4 closeout.
+
+- Packet 1 is landed and should not be reopened unless the contract changes.
+- Packet 2 is landed and should not be reopened unless the contract changes.
+- Packet 3 is landed and should not be reopened unless the contract changes.
+- Packet 4 is landed; no active implementation packets remain for slice 49.
+
+Treat the Packet 4 checkpoint as green repo floor for this slice. Slice 49 is now closed against the landed Packet 1-4 floor.
 
 ## Packet 1: Host-Targeting Envelope Contract Freeze
 
@@ -21,7 +32,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the bounded host-targeting fields to the canonical obligation artifact
+- [x] Task 1.1: Add the bounded host-targeting fields to the canonical obligation artifact
   - Acceptance: the canonical obligation record preserves room for `origin_host_id` and `target_host_id`, round-trips them when present, and does not widen into `ingress_source_*`, `host_inbox`, or broader federation state.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -30,7 +41,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 1.2: Freeze wrong-host semantics for the current local-only architecture
+- [x] Task 1.2: Freeze wrong-host semantics for the current local-only architecture
   - Acceptance: the spec-aligned runtime contract makes it explicit that a locally persisted obligation targeted at another host is a fail-closed local condition in the current architecture, while obligations with no `target_host_id` preserve current local-only behavior.
   - Verify:
     - targeted unit coverage for the chosen validation/classification helper
@@ -60,7 +71,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Stamp bounded local host-targeting truth on locally produced obligations where the runtime knows it
+- [x] Task 2.1: Stamp bounded local host-targeting truth on locally produced obligations where the runtime knows it
   - Acceptance: local Family-2 obligation producers preserve exact session/backend/world truth and add bounded host-targeting metadata when the local runtime can state it exactly, without widening into cross-host ingress or global routing.
   - Verify:
     - `cargo test -p shell orchestrator_world_dispatch -- --nocapture`
@@ -69,7 +80,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Keep persistence and reload behavior compatible for untargeted legacy/local obligations
+- [x] Task 2.2: Keep persistence and reload behavior compatible for untargeted legacy/local obligations
   - Acceptance: obligations with no `origin_host_id` or `target_host_id` continue to round-trip and remain usable by the landed Slice `48` paths, while new targeted records remain explanation-ready after reload.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -98,7 +109,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Introduce an exact local-host check on the router-owned attach path
+- [x] Task 3.1: Introduce an exact local-host check on the router-owned attach path
   - Acceptance: the router-owned auto-attach path compares explicit `target_host_id` against exact local host identity before attach launch and does not attempt attach when the obligation targets another host.
   - Verify:
     - `cargo test -p shell auto_attach -- --nocapture`
@@ -107,7 +118,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/auto_attach.rs`](../crates/shell/src/execution/agent_runtime/auto_attach.rs)
     - one new or existing bounded helper file under `crates/shell/src/execution/` or `crates/common/`
 
-- [ ] Task 3.2: Settle wrong-host obligations fail closed without mutating review state
+- [x] Task 3.2: Settle wrong-host obligations fail closed without mutating review state
   - Acceptance: foreign-targeted local obligations produce explanation-ready fail-closed outcomes, do not launch attach, do not silently reroute, and do not resolve or dismiss review state.
   - Verify:
     - `cargo test -p shell auto_attach -- --nocapture`
@@ -129,7 +140,7 @@ Packet 3 is complete only when:
 
 Do not start Packet 4 until Packet 3 verification is green.
 
-## Packet 4: Docs Alignment And Final Validation
+## Packet 4: Landed Docs Alignment And Final Validation
 
 Session goal:
 
