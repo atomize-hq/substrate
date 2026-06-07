@@ -398,7 +398,7 @@ fn classify_checkpoint_posture(
 }
 
 fn uses_explicit_analyzer_state(checkpoint: &Checkpoint) -> bool {
-    checkpoint.schema_version == "v0.3"
+    matches!(checkpoint.schema_version.as_str(), "v0.3" | "v0.4")
 }
 
 fn classify_checkpoint_posture_from_state(checkpoint: &Checkpoint) -> Option<CheckpointPosture> {

@@ -703,9 +703,36 @@ fn checkpoint_with_state(
     expected_next_step: &str,
     evidence_reasons: &[&str],
 ) -> Checkpoint {
+    checkpoint_with_schema_state(
+        "v0.4",
+        session_id,
+        ordinal,
+        class,
+        state,
+        raw_score,
+        flagged,
+        expected_next_step,
+        evidence_reasons,
+    )
+}
+
+fn checkpoint_with_schema_state(
+    schema_version: &str,
+    session_id: &str,
+    ordinal: usize,
+    class: DriftClass,
+    state: DriftState,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+    evidence_reasons: &[&str],
+) -> Checkpoint {
     let mut checkpoint =
         support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
-    checkpoint.schema_version = "v0.3".to_string();
+    checkpoint.schema_version = schema_version.to_string();
+    if schema_version == "v0.4" {
+        checkpoint.turn_context = Some(sample_turn_context(ordinal));
+    }
     checkpoint.flagged = flagged;
     checkpoint.drift_scores[0].class = class;
     checkpoint.drift_scores[0].state = state;

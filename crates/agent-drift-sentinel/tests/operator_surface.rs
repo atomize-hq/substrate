@@ -309,73 +309,79 @@ fn operator_surface_preserves_recovered_posture_when_replay_resumes_after_cursor
 }
 
 #[test]
-fn operator_surface_prefers_explicit_v0_3_state_without_previous_checkpoint() {
-    let recovered = checkpoint_with_state(
-        "session-v03",
-        2,
-        DriftClass::TruthGroundingGap,
-        DriftState::Recovered,
-        20,
-        false,
-        "continue on the current task frame",
-        &["explicit analyzer recovery evidence"],
-    );
-    let historical_only = checkpoint_with_state(
-        "session-v03",
-        3,
-        DriftClass::TruthGroundingGap,
-        DriftState::HistoricalOnly,
-        20,
-        false,
-        "continue on the current task frame",
-        &["explicit analyzer historical evidence"],
-    );
-    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+fn operator_surface_prefers_explicit_v0_3_and_v0_4_state_without_previous_checkpoint() {
+    for schema_version in ["v0.3", "v0.4"] {
+        let recovered = checkpoint_with_schema_state(
+            schema_version,
+            "session-explicit-state",
+            2,
+            DriftClass::TruthGroundingGap,
+            DriftState::Recovered,
+            20,
+            false,
+            "continue on the current task frame",
+            &["explicit analyzer recovery evidence"],
+        );
+        let historical_only = checkpoint_with_schema_state(
+            schema_version,
+            "session-explicit-state",
+            3,
+            DriftClass::TruthGroundingGap,
+            DriftState::HistoricalOnly,
+            20,
+            false,
+            "continue on the current task frame",
+            &["explicit analyzer historical evidence"],
+        );
+        let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
 
-    let recovered_decision = scheduler.observe(
-        agent_drift_sentinel::CheckpointCursor::from(&recovered),
-        TriggerClass::CheckpointReady,
-        recovered.flagged,
-        Some(&warning_fingerprint(&recovered)),
-    );
-    let recovered_presentation = present_checkpoint_with_previous(
-        &recovered,
-        None,
-        TriggerClass::CheckpointReady,
-        &recovered_decision,
-        &WarningPolicy::default(),
-    );
+        let recovered_decision = scheduler.observe(
+            agent_drift_sentinel::CheckpointCursor::from(&recovered),
+            TriggerClass::CheckpointReady,
+            recovered.flagged,
+            Some(&warning_fingerprint(&recovered)),
+        );
+        let recovered_presentation = present_checkpoint_with_previous(
+            &recovered,
+            None,
+            TriggerClass::CheckpointReady,
+            &recovered_decision,
+            &WarningPolicy::default(),
+        );
 
-    let historical_decision = scheduler.observe(
-        agent_drift_sentinel::CheckpointCursor::from(&historical_only),
-        TriggerClass::CheckpointReady,
-        historical_only.flagged,
-        Some(&warning_fingerprint(&historical_only)),
-    );
-    let historical_presentation = present_checkpoint_with_previous(
-        &historical_only,
-        None,
-        TriggerClass::CheckpointReady,
-        &historical_decision,
-        &WarningPolicy::default(),
-    );
+        let historical_decision = scheduler.observe(
+            agent_drift_sentinel::CheckpointCursor::from(&historical_only),
+            TriggerClass::CheckpointReady,
+            historical_only.flagged,
+            Some(&warning_fingerprint(&historical_only)),
+        );
+        let historical_presentation = present_checkpoint_with_previous(
+            &historical_only,
+            None,
+            TriggerClass::CheckpointReady,
+            &historical_decision,
+            &WarningPolicy::default(),
+        );
 
-    assert_eq!(
-        recovered_presentation.posture,
-        Some(CheckpointPosture::Recovered)
-    );
-    assert_eq!(
-        historical_presentation.posture,
-        Some(CheckpointPosture::HistoricalOnly)
-    );
-    assert!(recovered_presentation
-        .evidence_lines
-        .iter()
-        .any(|line| line.contains("explicit analyzer recovery evidence")));
-    assert!(historical_presentation
-        .evidence_lines
-        .iter()
-        .any(|line| line.contains("explicit analyzer historical evidence")));
+        assert_eq!(
+            recovered_presentation.posture,
+            Some(CheckpointPosture::Recovered),
+            "{schema_version} recovered posture should stay explicit-state backed"
+        );
+        assert_eq!(
+            historical_presentation.posture,
+            Some(CheckpointPosture::HistoricalOnly),
+            "{schema_version} historical-only posture should stay explicit-state backed"
+        );
+        assert!(recovered_presentation
+            .evidence_lines
+            .iter()
+            .any(|line| line.contains("explicit analyzer recovery evidence")));
+        assert!(historical_presentation
+            .evidence_lines
+            .iter()
+            .any(|line| line.contains("explicit analyzer historical evidence")));
+    }
 }
 
 #[test]
@@ -562,9 +568,36 @@ fn checkpoint_with_state(
     expected_next_step: &str,
     evidence_reasons: &[&str],
 ) -> Checkpoint {
+    checkpoint_with_schema_state(
+        "v0.4",
+        session_id,
+        ordinal,
+        class,
+        state,
+        raw_score,
+        flagged,
+        expected_next_step,
+        evidence_reasons,
+    )
+}
+
+fn checkpoint_with_schema_state(
+    schema_version: &str,
+    session_id: &str,
+    ordinal: usize,
+    class: DriftClass,
+    state: DriftState,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+    evidence_reasons: &[&str],
+) -> Checkpoint {
     let mut checkpoint =
         support::checkpoint(session_id, ordinal, raw_score, flagged, expected_next_step);
-    checkpoint.schema_version = "v0.3".to_string();
+    checkpoint.schema_version = schema_version.to_string();
+    if schema_version == "v0.4" {
+        checkpoint.turn_context = Some(sample_turn_context(ordinal));
+    }
     checkpoint.flagged = flagged;
     checkpoint.drift_scores[0].class = class;
     checkpoint.drift_scores[0].state = state;
