@@ -133,28 +133,34 @@ pub(crate) fn execute_router_auto_attach_for_eligible_sessions(
     world: bool,
     no_world: bool,
 ) -> Result<Vec<RouterAutoAttachSessionExecution>> {
-    store
-        .list_router_auto_attach_candidate_session_ids()?
-        .into_iter()
-        .map(|orchestration_session_id| {
-            let session_policy = resolve_router_auto_attach_policy_for_session(
+    let mut executions = Vec::new();
+    for orchestration_session_id in store.list_router_auto_attach_candidate_session_ids()? {
+        let execution = match resolve_router_auto_attach_policy_for_session(
+            store,
+            &orchestration_session_id,
+            fallback_policy,
+        ) {
+            Ok(session_policy) => execute_session_auto_attach(
                 store,
                 &orchestration_session_id,
-                fallback_policy,
-            )?;
-            Ok(RouterAutoAttachSessionExecution {
-                execution: execute_session_auto_attach(
-                    store,
-                    &orchestration_session_id,
-                    router_identity,
-                    &session_policy,
-                    world,
-                    no_world,
-                )?,
-                orchestration_session_id,
-            })
-        })
-        .collect()
+                router_identity,
+                &session_policy,
+                world,
+                no_world,
+            )?,
+            Err(err) => fail_closed_auto_attach_policy_resolution(
+                store,
+                &orchestration_session_id,
+                router_identity,
+                &err.to_string(),
+            )?,
+        };
+        executions.push(RouterAutoAttachSessionExecution {
+            orchestration_session_id,
+            execution,
+        });
+    }
+    Ok(executions)
 }
 
 #[allow(dead_code)]
@@ -251,6 +257,33 @@ pub(crate) fn execute_session_auto_attach(
         obligation_id,
         attach_claim_owner,
         receipt,
+    })
+}
+
+fn fail_closed_auto_attach_policy_resolution(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    router_identity: &str,
+    reason: &str,
+) -> Result<SessionAutoAttachExecution> {
+    let claim = store.claim_session_auto_attach(orchestration_session_id, router_identity)?;
+    let (obligation_id, attach_claim_owner) = match claim {
+        SessionAutoAttachClaim::NoCandidate { reason } => {
+            return Ok(SessionAutoAttachExecution::NoCandidate { reason });
+        }
+        SessionAutoAttachClaim::AlreadyClaimed { obligation_id } => {
+            return Ok(SessionAutoAttachExecution::AlreadyClaimed { obligation_id });
+        }
+        SessionAutoAttachClaim::Claimed {
+            obligation_id,
+            attach_claim_owner,
+        } => (obligation_id, attach_claim_owner),
+    };
+    mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, reason)?;
+    Ok(SessionAutoAttachExecution::FailedClosed {
+        obligation_id,
+        attach_claim_owner,
+        reason: reason.to_string(),
     })
 }
 
@@ -940,6 +973,121 @@ agents:
                 allowed.world_dispatch_approval_requests_allowed(),
                 "allowed workspace should preserve its own approval gate"
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn execute_router_auto_attach_for_eligible_sessions_fail_closes_bad_workspace_per_session() {
+        with_store(|store| {
+            let workspace_invalid = tempfile::tempdir().expect("invalid workspace");
+            let workspace_denied = tempfile::tempdir().expect("denied workspace");
+            write_workspace_policy(workspace_invalid.path(), "workflow: [\n");
+            write_workspace_policy(workspace_denied.path(), "{}\n");
+
+            let (mut invalid_session, invalid_participant) =
+                detached_orchestrator("sess_auto_attach_invalid_workspace", "ash_invalid");
+            invalid_session.workspace_root = workspace_invalid.path().display().to_string();
+            store
+                .persist_orchestration_session(&invalid_session)
+                .expect("persist invalid session");
+            store
+                .persist_participant(&invalid_participant)
+                .expect("persist invalid participant");
+            store
+                .persist_obligation(&eligible_obligation(
+                    "sess_auto_attach_invalid_workspace",
+                    "obl_invalid_workspace",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist invalid workspace obligation");
+
+            let (mut denied_session, denied_participant) =
+                detached_orchestrator("sess_auto_attach_denied_workspace", "ash_denied");
+            denied_session.workspace_root = workspace_denied.path().display().to_string();
+            store
+                .persist_orchestration_session(&denied_session)
+                .expect("persist denied session");
+            store
+                .persist_participant(&denied_participant)
+                .expect("persist denied participant");
+            store
+                .persist_obligation(&eligible_obligation(
+                    "sess_auto_attach_denied_workspace",
+                    "obl_denied_workspace",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist denied workspace obligation");
+
+            let executions = execute_router_auto_attach_for_eligible_sessions(
+                store,
+                "router::packet_two",
+                &Policy::default(),
+                false,
+                false,
+            )
+            .expect("policy-resolution failure should fail closed per session");
+
+            assert_eq!(executions.len(), 2);
+
+            let invalid_execution = executions
+                .iter()
+                .find(|execution| {
+                    execution.orchestration_session_id == "sess_auto_attach_invalid_workspace"
+                })
+                .expect("invalid workspace execution");
+            let SessionAutoAttachExecution::FailedClosed {
+                obligation_id,
+                attach_claim_owner,
+                reason,
+            } = &invalid_execution.execution
+            else {
+                panic!("invalid workspace should fail closed without aborting batch");
+            };
+            assert_eq!(obligation_id, "obl_invalid_workspace");
+            assert_eq!(attach_claim_owner, "router::packet_two");
+            assert!(
+                reason.contains("failed to resolve router auto-attach policy"),
+                "policy-resolution failure should be recorded on the affected session: {reason}"
+            );
+
+            let denied_execution = executions
+                .iter()
+                .find(|execution| {
+                    execution.orchestration_session_id == "sess_auto_attach_denied_workspace"
+                })
+                .expect("denied workspace execution");
+            let SessionAutoAttachExecution::FailedClosed {
+                obligation_id,
+                attach_claim_owner,
+                reason,
+            } = &denied_execution.execution
+            else {
+                panic!("healthy sibling session should still execute in the same batch");
+            };
+            assert_eq!(obligation_id, "obl_denied_workspace");
+            assert_eq!(attach_claim_owner, "router::packet_two");
+            assert!(
+                reason.contains("workflow.router.enabled must be true"),
+                "sibling session should still reach ordinary policy gating: {reason}"
+            );
+
+            for (session_id, obligation_id) in [
+                (
+                    "sess_auto_attach_invalid_workspace",
+                    "obl_invalid_workspace",
+                ),
+                ("sess_auto_attach_denied_workspace", "obl_denied_workspace"),
+            ] {
+                let obligation = store
+                    .load_obligation(session_id, obligation_id)
+                    .expect("reload obligation after fail-close")
+                    .expect("obligation exists after fail-close");
+                assert_eq!(
+                    obligation.attach_state,
+                    OrchestrationObligationAttachState::FailedClosed
+                );
+            }
         });
     }
 
