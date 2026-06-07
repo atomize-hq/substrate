@@ -2,9 +2,12 @@
 
 mod support;
 
+use std::collections::BTreeMap;
 use std::fs;
 
 use agent_drift_analyzer::AnalyzeRequest;
+use agent_session_compactor::CompactionRow;
+use camino::Utf8PathBuf;
 use support::{load_sample_bundle, read_checkpoints, BundleFixture};
 
 #[test]
@@ -134,11 +137,25 @@ fn end_to_end_reruns_preserve_identical_turn_context_and_ordinal_stability() {
         }
     }
 
-    let fixture = BundleFixture::from_rows(
-        bundle.archival_rows,
-        bundle.compact_rows,
-        bundle.dedupe_groups,
+    let mut beta_archival_rows = bundle.archival_rows.clone();
+    let mut beta_compact_rows = bundle.compact_rows.clone();
+    scope_rows_to_session(
+        &mut beta_archival_rows,
+        "session-beta",
+        "/tmp/session-beta/rollout.jsonl",
     );
+    scope_rows_to_session(
+        &mut beta_compact_rows,
+        "session-beta",
+        "/tmp/session-beta/rollout.jsonl",
+    );
+
+    let mut archival_rows = bundle.archival_rows;
+    archival_rows.extend(beta_archival_rows);
+    let mut compact_rows = bundle.compact_rows;
+    compact_rows.extend(beta_compact_rows);
+
+    let fixture = BundleFixture::from_rows(archival_rows, compact_rows, bundle.dedupe_groups);
     let request = AnalyzeRequest {
         input_dir: fixture.input_dir.clone(),
         output_dir: fixture.output_dir.clone(),
@@ -150,6 +167,7 @@ fn end_to_end_reruns_preserve_identical_turn_context_and_ordinal_stability() {
     let first_checkpoints = read_checkpoints(&first.checkpoints_path);
     let second_checkpoints = read_checkpoints(&second.checkpoints_path);
 
+    assert_eq!(first_checkpoints.len(), 4);
     let first_artifact_shape = first_checkpoints
         .iter()
         .map(|checkpoint| {
@@ -173,27 +191,51 @@ fn end_to_end_reruns_preserve_identical_turn_context_and_ordinal_stability() {
 
     assert_eq!(first_artifact_shape, second_artifact_shape);
     assert_eq!(
-        first_checkpoints
+        session_ordinals(&first_checkpoints),
+        BTreeMap::from([
+            ("session-alpha".to_string(), vec![1, 2]),
+            ("session-beta".to_string(), vec![1, 2]),
+        ])
+    );
+    for session_id in ["session-alpha", "session-beta"] {
+        let session_checkpoints = first_checkpoints
             .iter()
-            .map(|checkpoint| checkpoint.ordinal)
-            .collect::<Vec<_>>(),
-        vec![1, 2]
-    );
-    assert!(first_checkpoints
-        .iter()
-        .all(|checkpoint| checkpoint.session_id == "session-alpha"));
-    assert_eq!(
-        first_checkpoints[1]
-            .turn_context
-            .as_ref()
-            .and_then(|turn| turn.turn_id.as_deref()),
-        Some("turn-002")
-    );
-    assert_eq!(
-        first_checkpoints[1]
-            .turn_context
-            .as_ref()
-            .map(|turn| turn.turn_ordinal),
-        Some(2)
-    );
+            .filter(|checkpoint| checkpoint.session_id == session_id)
+            .collect::<Vec<_>>();
+        assert_eq!(session_checkpoints.len(), 2);
+        assert_eq!(
+            session_checkpoints[1]
+                .turn_context
+                .as_ref()
+                .and_then(|turn| turn.turn_id.as_deref()),
+            Some("turn-002")
+        );
+        assert_eq!(
+            session_checkpoints[1]
+                .turn_context
+                .as_ref()
+                .map(|turn| turn.turn_ordinal),
+            Some(2)
+        );
+    }
+}
+
+fn scope_rows_to_session(rows: &mut [CompactionRow], session_id: &str, source_file: &str) {
+    for row in rows {
+        row.session_id = Some(session_id.to_string());
+        row.source_file = Utf8PathBuf::from(source_file);
+    }
+}
+
+fn session_ordinals(
+    checkpoints: &[agent_drift_analyzer::Checkpoint],
+) -> BTreeMap<String, Vec<usize>> {
+    let mut ordinals = BTreeMap::new();
+    for checkpoint in checkpoints {
+        ordinals
+            .entry(checkpoint.session_id.clone())
+            .or_insert_with(Vec::new)
+            .push(checkpoint.ordinal);
+    }
+    ordinals
 }

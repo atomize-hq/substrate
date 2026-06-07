@@ -105,7 +105,7 @@ impl BundleFixture {
             archival_row_count: archival_rows.len(),
             compact_row_count: compact_rows.len(),
             dedupe_group_count: dedupe_groups.len(),
-            session_ids: vec!["session-alpha".to_string()],
+            session_ids: collect_session_ids(&archival_rows, &compact_rows),
             files: file_registry.files.clone(),
         };
 
@@ -282,6 +282,7 @@ fn build_file_registry(
     let mut files = Vec::with_capacity(paths.len());
     let mut ids_by_path = BTreeMap::new();
     let mut turn_ids_by_path = BTreeMap::new();
+    let session_ids_by_path = collect_session_ids_by_path(archival_rows, compact_rows);
     for (index, path) in paths.into_iter().enumerate() {
         let id = u32::try_from(index).expect("test file id");
         let turns = turns_by_path
@@ -299,7 +300,7 @@ fn build_file_registry(
         files.push(BundleFileV0_2 {
             id,
             path: path.clone(),
-            session_id: Some("session-alpha".to_string()),
+            session_id: session_ids_by_path.get(&path).cloned().flatten(),
             turns,
         });
         ids_by_path.insert(path, id);
@@ -311,6 +312,37 @@ fn build_file_registry(
         ids_by_path,
         turn_ids_by_path,
     }
+}
+
+fn collect_session_ids(
+    archival_rows: &[CompactionRow],
+    compact_rows: &[CompactionRow],
+) -> Vec<String> {
+    archival_rows
+        .iter()
+        .chain(compact_rows.iter())
+        .filter_map(|row| row.session_id.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn collect_session_ids_by_path(
+    archival_rows: &[CompactionRow],
+    compact_rows: &[CompactionRow],
+) -> BTreeMap<Utf8PathBuf, Option<String>> {
+    let mut session_ids_by_path = BTreeMap::new();
+    for row in archival_rows.iter().chain(compact_rows.iter()) {
+        let previous = session_ids_by_path.insert(row.source_file.clone(), row.session_id.clone());
+        assert!(
+            previous
+                .as_ref()
+                .is_none_or(|session_id| session_id == &row.session_id),
+            "test fixture path {} reused across sessions",
+            row.source_file
+        );
+    }
+    session_ids_by_path
 }
 
 fn export_rows(rows: &[CompactionRow], registry: &TestFileRegistry) -> Vec<ExportRowV0_2> {
