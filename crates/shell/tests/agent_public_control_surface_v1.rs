@@ -2515,6 +2515,19 @@ fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume()
         None,
         ts,
     );
+    write_obligation_record(
+        &fixture,
+        ObligationRecordSpec {
+            orchestration_session_id,
+            obligation_id: "obl_resume_disabled_contract",
+            kind: "blocked",
+            attach_state: "eligible",
+            attach_attempt_count: 0,
+            attach_claim_owner: None,
+            attach_completion_reason: None,
+            ts,
+        },
+    );
 
     let mut session = fixture.load_orchestration_session(orchestration_session_id);
     session["host_attach_contract"]["capabilities"] = json!({
@@ -2548,6 +2561,21 @@ fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume()
     assert!(
         !fixture.fake_codex_args_path(1).exists(),
         "reattach denial must fail before launching the backend runtime"
+    );
+    let obligation = fixture.load_obligation(
+        orchestration_session_id,
+        "obl_resume_disabled_contract",
+    );
+    assert_eq!(
+        obligation.get("attach_state").and_then(Value::as_str),
+        Some("eligible")
+    );
+    assert_eq!(
+        obligation
+            .get("attach_claim_owner")
+            .and_then(Value::as_str),
+        None,
+        "manual reattach plan-build failure must not leave a durable attach claim behind"
     );
 }
 

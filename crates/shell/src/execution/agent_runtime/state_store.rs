@@ -2966,6 +2966,42 @@ impl AgentRuntimeStateStore {
         Ok(result)
     }
 
+    pub(crate) fn release_session_auto_attach_claim(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        attach_claim_owner: &str,
+    ) -> Result<bool> {
+        if obligation_id.trim().is_empty() {
+            anyhow::bail!("releasing a session auto-attach claim requires obligation_id");
+        }
+        if attach_claim_owner.trim().is_empty() {
+            anyhow::bail!("releasing a session auto-attach claim requires attach_claim_owner");
+        }
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+
+        let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)? else {
+            return Ok(false);
+        };
+        if !obligation.is_pending()
+            || obligation.attach_state != OrchestrationObligationAttachState::Claimed
+            || obligation.attach_claim_owner.as_deref() != Some(attach_claim_owner)
+        {
+            return Ok(false);
+        }
+
+        obligation.release_attach_claim(Utc::now());
+        self.validate_obligation_record(&obligation)?;
+        let path = self.canonical_obligation_path(
+            &obligation.orchestration_session_id,
+            &obligation.obligation_id,
+        );
+        write_atomic_json(&path, &obligation)?;
+        Ok(true)
+    }
+
     pub(crate) fn settle_session_auto_attach_failed_closed(
         &self,
         orchestration_session_id: &str,
@@ -6086,6 +6122,58 @@ mod tests {
             );
             assert_eq!(sibling.state, OrchestrationObligationState::Pending);
             assert!(sibling.resolved_at.is_none());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn releasing_session_auto_attach_claim_restores_claimed_obligation_to_eligible() {
+        with_store(|store| {
+            let participant =
+                live_orchestrator("codex", "sess_release_auto_attach_claim", "ash_release_claim");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let mut claimed = pending_obligation(
+                "sess_release_auto_attach_claim",
+                "obl_release_claim",
+                OrchestrationObligationKind::Blocked,
+            );
+            claimed.mark_attach_claimed("manual::reattach", Utc::now());
+            let original_attempt_count = claimed.attach_attempt_count;
+            let original_last_attempt_at = claimed.attach_last_attempt_at;
+            store
+                .persist_obligation(&claimed)
+                .expect("persist claimed obligation");
+
+            assert!(
+                store
+                    .release_session_auto_attach_claim(
+                        "sess_release_auto_attach_claim",
+                        "obl_release_claim",
+                        "manual::reattach",
+                    )
+                    .expect("release attach claim"),
+                "expected claimed obligation to be released"
+            );
+
+            let released = store
+                .load_obligation("sess_release_auto_attach_claim", "obl_release_claim")
+                .expect("load released obligation")
+                .expect("released obligation exists");
+            assert_eq!(
+                released.attach_state,
+                OrchestrationObligationAttachState::Eligible
+            );
+            assert_eq!(released.attach_claim_owner, None);
+            assert_eq!(released.attach_completion_reason, None);
+            assert_eq!(released.attach_attempt_count, original_attempt_count);
+            assert_eq!(released.attach_last_attempt_at, original_last_attempt_at);
         });
     }
 

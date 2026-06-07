@@ -303,6 +303,13 @@ impl OrchestrationObligationRecord {
         self.updated_at = claimed_at;
     }
 
+    pub(crate) fn release_attach_claim(&mut self, released_at: DateTime<Utc>) {
+        self.attach_state = OrchestrationObligationAttachState::Eligible;
+        self.attach_claim_owner = None;
+        self.attach_completion_reason = None;
+        self.updated_at = released_at;
+    }
+
     pub(crate) fn mark_attach_satisfied(
         &mut self,
         attach_completion_reason: impl Into<String>,

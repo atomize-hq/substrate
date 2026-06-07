@@ -23,6 +23,7 @@ use crate::execution::agent_runtime::control::{
     run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
     HiddenOwnerHelperStartupPromptPlan,
 };
+use crate::execution::agent_runtime::auto_attach::SessionAutoAttachClaim;
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -711,17 +712,38 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
 
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
     let store = AgentRuntimeStateStore::new()?;
-    let _ = store
-        .claim_session_auto_attach(&args.session, "manual::reattach")
-        .map_err(runtime_start_error)?;
     let plan = build_attach_launch_plan(
         &args.session,
         DispatchCallerKind::HumanReattach,
         OwnerHelperMode::Attach,
         false,
     )?;
-    let receipt =
-        launch_hidden_owner_helper(&plan, cli.world, cli.no_world).map_err(runtime_start_error)?;
+    let claimed_auto_attach = match store
+        .claim_session_auto_attach(&args.session, "manual::reattach")
+        .map_err(runtime_start_error)?
+    {
+        SessionAutoAttachClaim::Claimed {
+            obligation_id,
+            attach_claim_owner,
+        } => Some((obligation_id, attach_claim_owner)),
+        SessionAutoAttachClaim::NoCandidate { .. }
+        | SessionAutoAttachClaim::AlreadyClaimed { .. } => None,
+    };
+    let receipt = match launch_hidden_owner_helper(&plan, cli.world, cli.no_world) {
+        Ok(receipt) => receipt,
+        Err(err) => {
+            if let Err(release_err) = release_manual_reattach_auto_attach_claim(
+                &store,
+                &args.session,
+                claimed_auto_attach.as_ref(),
+            ) {
+                return Err(runtime_start_error(anyhow::anyhow!(
+                    "manual reattach launch failed: {err}; additionally failed to release the session auto-attach claim: {release_err}"
+                )));
+            }
+            return Err(runtime_start_error(err));
+        }
+    };
     if receipt.orchestration_session_id != args.session {
         anyhow::bail!(runtime_start_error(anyhow::anyhow!(
             "hidden owner-helper attached orchestration session {} instead of requested session {}",
@@ -761,6 +783,22 @@ fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
             source_orchestration_session_id: None,
         },
     )
+}
+
+fn release_manual_reattach_auto_attach_claim(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    claimed_auto_attach: Option<&(String, String)>,
+) -> Result<()> {
+    let Some((obligation_id, attach_claim_owner)) = claimed_auto_attach else {
+        return Ok(());
+    };
+    let _ = store.release_session_auto_attach_claim(
+        orchestration_session_id,
+        obligation_id,
+        attach_claim_owner,
+    )?;
+    Ok(())
 }
 
 fn normalize_public_prompt_error(err: anyhow::Error) -> anyhow::Error {

@@ -325,22 +325,13 @@ pub(crate) fn execute_session_auto_attach(
         }
     };
 
-    ensure_auto_attach_restored_session(store, orchestration_session_id, &receipt.participant_id)
-        .inspect_err(|err| {
-        let reason = err.to_string();
-        let _ = mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason);
-    })?;
-    let settled = store.settle_session_auto_attach_after_attach_restored(
+    finalize_session_auto_attach_after_launch(
+        store,
         orchestration_session_id,
-        ROUTER_AUTO_ATTACH_RESTORED_REASON,
-    )?;
-
-    Ok(SessionAutoAttachExecution::Attached {
         obligation_id,
         attach_claim_owner,
         receipt,
-        settled,
-    })
+    )
 }
 
 fn fail_closed_auto_attach_policy_resolution(
@@ -617,6 +608,39 @@ fn mark_attach_failed_closed(
     reason: &str,
 ) -> Result<SessionAutoAttachSettleResult> {
     store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)
+}
+
+fn finalize_session_auto_attach_after_launch(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    obligation_id: String,
+    attach_claim_owner: String,
+    receipt: HiddenOwnerHelperLaunchReceipt,
+) -> Result<SessionAutoAttachExecution> {
+    if let Err(err) =
+        ensure_auto_attach_restored_session(store, orchestration_session_id, &receipt.participant_id)
+    {
+        let reason = err.to_string();
+        let settled =
+            mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason)?;
+        return Ok(SessionAutoAttachExecution::FailedClosed {
+            obligation_id,
+            attach_claim_owner,
+            reason,
+            settled,
+        });
+    }
+    let settled = store.settle_session_auto_attach_after_attach_restored(
+        orchestration_session_id,
+        ROUTER_AUTO_ATTACH_RESTORED_REASON,
+    )?;
+
+    Ok(SessionAutoAttachExecution::Attached {
+        obligation_id,
+        attach_claim_owner,
+        receipt,
+        settled,
+    })
 }
 
 fn ensure_auto_attach_restored_session(
@@ -977,6 +1001,75 @@ mod tests {
                     .expect("list candidates after session fail-close")
                     .contains(&"sess_auto_attach_policy_disabled".to_string()),
                 "session-wide fail-close should prevent silent router retries after policy denial"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn finalize_session_auto_attach_after_launch_returns_failed_closed_when_restore_check_fails() {
+        with_store(|store| {
+            let (session, participant) = detached_orchestrator(
+                "sess_auto_attach_restore_failed",
+                "ash_auto_attach_restore_failed",
+            );
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist detached session");
+            store
+                .persist_participant(&participant)
+                .expect("persist detached participant");
+
+            store
+                .persist_obligation(&eligible_obligation(
+                    "sess_auto_attach_restore_failed",
+                    "obl_restore_failed",
+                    OrchestrationObligationKind::Blocked,
+                ))
+                .expect("persist eligible obligation");
+
+            let claim = store
+                .claim_session_auto_attach("sess_auto_attach_restore_failed", "router::local")
+                .expect("claim auto-attach obligation");
+            let SessionAutoAttachClaim::Claimed {
+                obligation_id,
+                attach_claim_owner,
+            } = claim
+            else {
+                panic!("expected detached eligible session to produce a claim");
+            };
+
+            let execution = finalize_session_auto_attach_after_launch(
+                store,
+                "sess_auto_attach_restore_failed",
+                obligation_id,
+                attach_claim_owner,
+                HiddenOwnerHelperLaunchReceipt {
+                    helper_pid: std::process::id(),
+                    orchestration_session_id: "sess_auto_attach_restore_failed".to_string(),
+                    participant_id: "ash_unrestored_owner".to_string(),
+                    backend_id: "cli:codex".to_string(),
+                },
+            )
+            .expect("restore verification failure should fail closed, not error");
+            let SessionAutoAttachExecution::FailedClosed { reason, settled, .. } = execution else {
+                panic!("restore verification failure should return failed-closed execution");
+            };
+            assert!(
+                reason.contains("did not restore a live retained owner")
+                    || reason.contains("restored participant"),
+                "restore verification failure should explain the authoritative attach mismatch: {reason}"
+            );
+            assert_eq!(
+                settled.failed_closed_obligation_ids,
+                vec!["obl_restore_failed".to_string()]
+            );
+            assert!(
+                !store
+                    .list_router_auto_attach_candidate_session_ids()
+                    .expect("list candidates after restore failure")
+                    .contains(&"sess_auto_attach_restore_failed".to_string()),
+                "failed-closed restore verification should keep the router from retrying the same session silently"
             );
         });
     }
