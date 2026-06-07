@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::Result;
+#[cfg(target_os = "linux")]
+use gethostname::gethostname;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
@@ -1817,6 +1819,10 @@ fn persist_continue_world_worker_obligation(
         obligation_kind,
         obligation_summary,
     );
+    if let Some(local_host_id) = resolve_local_obligation_host_id() {
+        obligation.origin_host_id = Some(local_host_id.clone());
+        obligation.target_host_id = Some(local_host_id);
+    }
     obligation.attention_required = worker_event.attention_required;
     obligation.attach_state = continue_world_worker_obligation_attach_state(obligation_kind);
     obligation.source_participant_id = Some(worker_event.source_participant_id.clone());
@@ -1838,6 +1844,16 @@ fn persist_continue_world_worker_obligation(
             obligation.obligation_id, request.participant_id
         )
     })
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_local_obligation_host_id() -> Option<String> {
+    let host_id = gethostname().to_string_lossy().trim().to_string();
+    if host_id.is_empty() {
+        None
+    } else {
+        Some(host_id)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -7085,6 +7101,7 @@ mod tests {
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let expected_local_host_id = resolve_local_obligation_host_id();
 
         let cases = [
             (
@@ -7177,6 +7194,8 @@ mod tests {
                 obligation.target_backend_id.as_deref(),
                 Some("cli:codex_world")
             );
+            assert_eq!(obligation.origin_host_id, expected_local_host_id.clone());
+            assert_eq!(obligation.target_host_id, expected_local_host_id.clone());
             assert_eq!(obligation.world_id.as_deref(), Some("world-17"));
             assert_eq!(obligation.world_generation, Some(2));
             assert_eq!(
