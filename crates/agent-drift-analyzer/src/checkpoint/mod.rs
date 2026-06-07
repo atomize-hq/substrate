@@ -9,7 +9,7 @@ use crate::{
     context::ContextPack, inference::infer_task_frame, scoring::DriftStateHint,
     scoring::ScoredDrift,
 };
-use agent_session_compactor::{CompactionKind, CompactionRow, RowRef};
+use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use camino::Utf8PathBuf;
 
 pub use export::{
@@ -30,6 +30,7 @@ pub(crate) struct CheckpointAnalysis {
     pub current: CheckpointSlice,
     pub previous: Option<CheckpointSlice>,
     pub interval: IntervalSlice,
+    pub turn_context: TurnContext,
     pub repetition: RepetitionSlice,
     pub task_frame_delta: TaskFrameDelta,
     pub recovery: RecoveryState,
@@ -92,6 +93,8 @@ pub(crate) struct RecoveryState {
 pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnalysis> {
     let mut analyses = Vec::new();
     let mut previous = None;
+    let prompts_observed_in_session = prompts_observed_in_session(session);
+    let mut checkpoints_in_turn = BTreeMap::<TurnSliceIdentity, usize>::new();
 
     for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
         let context = assemble_context(&window);
@@ -102,6 +105,13 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             task_frame,
         };
         let interval = interval_slice(previous.as_ref(), &current);
+        let turn_context = turn_context(
+            session,
+            &current,
+            &interval,
+            prompts_observed_in_session,
+            &mut checkpoints_in_turn,
+        );
         let repetition = repetition_slice(&current);
         let task_frame_delta = task_frame_delta(previous.as_ref(), &current);
         let recovery = recovery_state(&current, &interval, &repetition);
@@ -112,6 +122,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             current: current.clone(),
             previous: previous.clone(),
             interval,
+            turn_context,
             repetition,
             task_frame_delta,
             recovery,
@@ -164,7 +175,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
         ordinal,
         boundary,
-        turn_context: None,
+        turn_context: Some(analysis.turn_context.clone()),
         diagnostics,
         task_frame: task_frame.clone(),
         flagged: drift_scores.iter().any(|score| score.flagged),
@@ -232,6 +243,131 @@ fn checkpoint_diagnostics_from_analysis(
         interval_command_count: analysis.interval.command_observations.len(),
         interval_verification_command_count: analysis.recovery.interval_verification_command_count,
         evidence_item_count: evidence_item_count(task_frame, drift_scores),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TurnSliceIdentity {
+    turn_id: String,
+    start: (Utf8PathBuf, usize, usize),
+}
+
+struct CurrentTurnSlice<'a> {
+    rows: &'a [CompactionRow],
+    turn_id: Option<&'a str>,
+    turn_ordinal: usize,
+}
+
+fn turn_context(
+    session: &BundleSession,
+    current: &CheckpointSlice,
+    interval: &IntervalSlice,
+    prompts_observed_in_session: usize,
+    checkpoints_in_turn: &mut BTreeMap<TurnSliceIdentity, usize>,
+) -> TurnContext {
+    let turn_slice = current_turn_slice(session, current, interval);
+    let checkpoints_in_turn = match turn_slice_identity(&turn_slice) {
+        Some(identity) => {
+            let count = checkpoints_in_turn.entry(identity).or_default();
+            *count += 1;
+            *count
+        }
+        None => 1,
+    };
+
+    TurnContext {
+        turn_id: turn_slice.turn_id.map(str::to_owned),
+        turn_ordinal: turn_slice.turn_ordinal,
+        rows_since_turn_start: turn_slice.rows.len(),
+        seconds_since_turn_start: seconds_since_turn_start(turn_slice.rows),
+        checkpoints_in_turn,
+        prompts_observed_in_session,
+        execution_mode: TurnExecutionMode::Mixed,
+        activity_mix: TurnActivityMix::default(),
+    }
+}
+
+fn current_turn_slice<'a>(
+    session: &'a BundleSession,
+    current: &'a CheckpointSlice,
+    interval: &'a IntervalSlice,
+) -> CurrentTurnSlice<'a> {
+    let rows = preferred_rows(&current.window.archival_rows, &current.window.compact_rows);
+    let Some(turn_id) = rows.iter().rev().find_map(|row| row.turn_id.as_deref()) else {
+        return CurrentTurnSlice {
+            rows: preferred_rows(&interval.archival_rows, &interval.compact_rows),
+            turn_id: None,
+            turn_ordinal: 0,
+        };
+    };
+
+    let start_index = rows
+        .iter()
+        .rposition(|row| matches!(row.turn_id.as_deref(), Some(id) if id != turn_id))
+        .map_or(0, |index| index + 1);
+
+    CurrentTurnSlice {
+        rows: &rows[start_index..],
+        turn_id: Some(turn_id),
+        turn_ordinal: turn_ordinal(session, turn_id),
+    }
+}
+
+fn turn_slice_identity(turn_slice: &CurrentTurnSlice<'_>) -> Option<TurnSliceIdentity> {
+    Some(TurnSliceIdentity {
+        turn_id: turn_slice.turn_id?.to_string(),
+        start: row_key(turn_slice.rows.first()?),
+    })
+}
+
+fn turn_ordinal(session: &BundleSession, current_turn_id: &str) -> usize {
+    let mut seen = BTreeSet::new();
+    let mut ordinal = 0;
+
+    for row in preferred_rows(&session.archival_rows, &session.compact_rows) {
+        let Some(turn_id) = row.turn_id.as_deref() else {
+            continue;
+        };
+        if seen.insert(turn_id) {
+            ordinal += 1;
+        }
+        if turn_id == current_turn_id {
+            return ordinal;
+        }
+    }
+
+    0
+}
+
+fn seconds_since_turn_start(rows: &[CompactionRow]) -> Option<i64> {
+    let start = rows.iter().find_map(|row| row.timestamp)?;
+    let end = rows.last().and_then(|row| row.timestamp)?;
+    Some((end - start).whole_seconds().max(0))
+}
+
+fn prompts_observed_in_session(session: &BundleSession) -> usize {
+    session
+        .compact_rows
+        .iter()
+        .filter(|row| row.kind == CompactionKind::UserMessage)
+        .filter(|row| !is_synthetic_user_message(row))
+        .filter(|row| {
+            matches!(
+                row.user_message_role.unwrap_or(UserMessageRole::Unknown),
+                UserMessageRole::Prompt
+            )
+        })
+        .count()
+}
+
+fn preferred_rows<'a>(
+    archival_rows: &'a [CompactionRow],
+    compact_rows: &'a [CompactionRow],
+) -> &'a [CompactionRow] {
+    if archival_rows.is_empty() {
+        compact_rows
+    } else {
+        archival_rows
     }
 }
 
@@ -577,6 +713,12 @@ fn row_text_is_focusable(row: &CompactionRow) -> bool {
         && !row.text.contains("<skill>")
         && !row.text.contains("Available skills")
         && row.text != "[encrypted_reasoning]"
+}
+
+fn is_synthetic_user_message(row: &CompactionRow) -> bool {
+    row.text.contains("AGENTS.md instructions")
+        || row.text.contains("<skill>")
+        || row.text.contains("Available skills")
 }
 
 fn row_key(row: &CompactionRow) -> (Utf8PathBuf, usize, usize) {
