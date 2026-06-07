@@ -103,6 +103,14 @@ impl OrchestrationObligationAttachState {
     }
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum LocalHostObligationTargetingDisposition {
+    Untargeted,
+    TargetedToLocalHost,
+    WrongHost { target_host_id: String },
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct OrchestrationObligationRecord {
     pub orchestration_session_id: String,
@@ -134,6 +142,10 @@ pub(crate) struct OrchestrationObligationRecord {
     pub resolution_note: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_host_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_host_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_backend_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -172,6 +184,8 @@ impl OrchestrationObligationRecord {
             summary: summary.into(),
             resolution_note: None,
             source_participant_id: None,
+            origin_host_id: None,
+            target_host_id: None,
             target_backend_id: None,
             world_id: None,
             world_generation: None,
@@ -189,6 +203,8 @@ impl OrchestrationObligationRecord {
         if self.summary.trim().is_empty() {
             anyhow::bail!("orchestration obligation must include summary");
         }
+        validate_optional_host_id(self.origin_host_id.as_deref(), "origin_host_id")?;
+        validate_optional_host_id(self.target_host_id.as_deref(), "target_host_id")?;
         if self.state.is_pending() && self.resolved_at.is_some() {
             anyhow::bail!("pending orchestration obligations must not include resolved_at");
         }
@@ -264,6 +280,24 @@ impl OrchestrationObligationRecord {
         }
 
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn classify_local_host_targeting(
+        &self,
+        local_host_id: &str,
+    ) -> Result<LocalHostObligationTargetingDisposition> {
+        validate_host_id(local_host_id, "local_host_id")?;
+
+        match self.target_host_id.as_deref() {
+            None => Ok(LocalHostObligationTargetingDisposition::Untargeted),
+            Some(target_host_id) if target_host_id == local_host_id => {
+                Ok(LocalHostObligationTargetingDisposition::TargetedToLocalHost)
+            }
+            Some(target_host_id) => Ok(LocalHostObligationTargetingDisposition::WrongHost {
+                target_host_id: target_host_id.to_string(),
+            }),
+        }
     }
 
     pub(crate) fn is_pending(&self) -> bool {
@@ -388,6 +422,20 @@ impl OrchestrationObligationRecord {
     }
 }
 
+fn validate_optional_host_id(host_id: Option<&str>, field_name: &str) -> Result<()> {
+    if let Some(host_id) = host_id {
+        validate_host_id(host_id, field_name)?;
+    }
+    Ok(())
+}
+
+fn validate_host_id(host_id: &str, field_name: &str) -> Result<()> {
+    if host_id.trim().is_empty() {
+        anyhow::bail!("orchestration obligations must not persist an empty {field_name}");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -457,6 +505,80 @@ mod tests {
             .validate()
             .expect_err("partial world binding must fail validation");
         assert!(err.to_string().contains("world binding"));
+    }
+
+    #[test]
+    fn host_targeting_fields_reject_empty_ids() {
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::RuntimeAlert,
+            "World reported a runtime alert",
+        );
+        obligation.origin_host_id = Some("   ".to_string());
+
+        let err = obligation
+            .validate()
+            .expect_err("blank origin_host_id must fail validation");
+        assert!(err.to_string().contains("empty origin_host_id"));
+
+        obligation.origin_host_id = Some("host-origin".to_string());
+        obligation.target_host_id = Some("\t".to_string());
+
+        let err = obligation
+            .validate()
+            .expect_err("blank target_host_id must fail validation");
+        assert!(err.to_string().contains("empty target_host_id"));
+    }
+
+    #[test]
+    fn classify_local_host_targeting_freezes_packet_one_wrong_host_boundary() {
+        let mut obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::FollowUpRequired,
+            "Need host follow-up",
+        );
+
+        assert_eq!(
+            obligation
+                .classify_local_host_targeting("host-local")
+                .expect("untargeted obligations preserve local-only semantics"),
+            LocalHostObligationTargetingDisposition::Untargeted,
+        );
+
+        obligation.target_host_id = Some("host-local".to_string());
+        assert_eq!(
+            obligation
+                .classify_local_host_targeting("host-local")
+                .expect("same-host targeting stays locally eligible"),
+            LocalHostObligationTargetingDisposition::TargetedToLocalHost,
+        );
+
+        obligation.target_host_id = Some("host-remote".to_string());
+        assert_eq!(
+            obligation
+                .classify_local_host_targeting("host-local")
+                .expect("foreign targeting is classified fail-closed"),
+            LocalHostObligationTargetingDisposition::WrongHost {
+                target_host_id: "host-remote".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn classify_local_host_targeting_rejects_blank_local_host_id() {
+        let obligation = OrchestrationObligationRecord::new(
+            "sess_001",
+            "obl_001",
+            OrchestrationObligationKind::FollowUpRequired,
+            "Need host follow-up",
+        );
+
+        let err = obligation
+            .classify_local_host_targeting("   ")
+            .expect_err("blank local_host_id must fail classification");
+        assert!(err.to_string().contains("empty local_host_id"));
     }
 
     #[test]

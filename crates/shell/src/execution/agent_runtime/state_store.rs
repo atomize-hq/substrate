@@ -5427,6 +5427,90 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn persist_obligation_round_trips_host_targeting_fields_when_present() {
+        with_store(|store| {
+            let participant = detached_orchestrator(
+                "codex",
+                "sess_obligation_targeted",
+                "ash_obligation_targeted",
+            );
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let mut obligation = pending_obligation(
+                "sess_obligation_targeted",
+                "obl_targeted",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            obligation.origin_host_id = Some("host-origin".to_string());
+            obligation.target_host_id = Some("host-local".to_string());
+
+            store
+                .persist_obligation(&obligation)
+                .expect("persist targeted obligation");
+
+            let loaded = store
+                .load_obligation("sess_obligation_targeted", "obl_targeted")
+                .expect("load targeted obligation")
+                .expect("targeted obligation exists");
+            assert_eq!(loaded.origin_host_id.as_deref(), Some("host-origin"));
+            assert_eq!(loaded.target_host_id.as_deref(), Some("host-local"));
+            assert_eq!(loaded, obligation);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_obligation_defaults_missing_host_targeting_fields_for_legacy_artifacts() {
+        with_store(|store| {
+            let participant = detached_orchestrator(
+                "codex",
+                "sess_obligation_legacy_targeting",
+                "ash_obligation_legacy_targeting",
+            );
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let obligation = pending_obligation(
+                "sess_obligation_legacy_targeting",
+                "obl_legacy_targeting",
+                OrchestrationObligationKind::Blocked,
+            );
+            let mut legacy_artifact =
+                serde_json::to_value(&obligation).expect("serialize legacy obligation");
+            let artifact = legacy_artifact
+                .as_object_mut()
+                .expect("legacy obligation serializes to an object");
+            artifact.remove("origin_host_id");
+            artifact.remove("target_host_id");
+
+            let obligation_path = store.canonical_obligation_path(
+                "sess_obligation_legacy_targeting",
+                "obl_legacy_targeting",
+            );
+            write_atomic_json(&obligation_path, &legacy_artifact)
+                .expect("write legacy obligation artifact");
+
+            let loaded = store
+                .load_obligation("sess_obligation_legacy_targeting", "obl_legacy_targeting")
+                .expect("load legacy obligation")
+                .expect("legacy obligation exists");
+            assert_eq!(loaded.origin_host_id, None);
+            assert_eq!(loaded.target_host_id, None);
+            assert_eq!(loaded.kind, OrchestrationObligationKind::Blocked);
+            assert_eq!(
+                loaded.attach_state,
+                OrchestrationObligationAttachState::Eligible
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn persist_packet_two_worker_request_obligations_preserves_exact_reviewable_fields() {
         with_store(|store| {
             let cases = [
