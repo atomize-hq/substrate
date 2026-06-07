@@ -85,8 +85,7 @@ fn end_to_end_analysis_is_stable_for_many_short_conversational_turns() {
     let first_checkpoints = fs::read_to_string(&first.checkpoints_path).expect("first checkpoints");
     let first_summary = fs::read_to_string(&first.summary_path).expect("first summary");
 
-    let second =
-        agent_drift_analyzer::analyze_bundle(&request).expect("second conversational run");
+    let second = agent_drift_analyzer::analyze_bundle(&request).expect("second conversational run");
     assert_eq!(
         first_checkpoints,
         fs::read_to_string(&second.checkpoints_path).expect("second checkpoints")
@@ -103,4 +102,98 @@ fn end_to_end_analysis_is_stable_for_many_short_conversational_turns() {
     assert!(first_summary.contains(
         "  turn: `turn-002 (#2) rows=4 checkpoints=1 session-prompts=1 mode=conversational activity[dir=1 asst=3 tool=0 read=0 write=0 verify=0 out=0]`"
     ));
+}
+
+#[test]
+fn end_to_end_reruns_preserve_identical_turn_context_and_ordinal_stability() {
+    let mut bundle = load_sample_bundle();
+    for row in bundle
+        .archival_rows
+        .iter_mut()
+        .chain(bundle.compact_rows.iter_mut())
+        .filter(|row| row.event_index >= 9)
+    {
+        row.turn_id = Some("turn-002".to_string());
+        match row.event_index {
+            10 => {
+                row.kind = agent_session_compactor::CompactionKind::AssistantMessage;
+                row.text = "I am summarizing the next patch step.".to_string();
+                row.dedupe_identity = None;
+            }
+            11 => {
+                row.kind = agent_session_compactor::CompactionKind::DeveloperMessage;
+                row.text = "Stay inside Packet R3-6 only.".to_string();
+                row.dedupe_identity = None;
+            }
+            12 => {
+                row.kind = agent_session_compactor::CompactionKind::AssistantMessage;
+                row.text = "Waiting for the next instruction.".to_string();
+                row.dedupe_identity = None;
+            }
+            _ => {}
+        }
+    }
+
+    let fixture = BundleFixture::from_rows(
+        bundle.archival_rows,
+        bundle.compact_rows,
+        bundle.dedupe_groups,
+    );
+    let request = AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    };
+
+    let first = agent_drift_analyzer::analyze_bundle(&request).expect("first conversational run");
+    let second = agent_drift_analyzer::analyze_bundle(&request).expect("second conversational run");
+
+    let first_checkpoints = read_checkpoints(&first.checkpoints_path);
+    let second_checkpoints = read_checkpoints(&second.checkpoints_path);
+
+    let first_artifact_shape = first_checkpoints
+        .iter()
+        .map(|checkpoint| {
+            (
+                checkpoint.session_id.clone(),
+                checkpoint.ordinal,
+                checkpoint.turn_context.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let second_artifact_shape = second_checkpoints
+        .iter()
+        .map(|checkpoint| {
+            (
+                checkpoint.session_id.clone(),
+                checkpoint.ordinal,
+                checkpoint.turn_context.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(first_artifact_shape, second_artifact_shape);
+    assert_eq!(
+        first_checkpoints
+            .iter()
+            .map(|checkpoint| checkpoint.ordinal)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert!(first_checkpoints
+        .iter()
+        .all(|checkpoint| checkpoint.session_id == "session-alpha"));
+    assert_eq!(
+        first_checkpoints[1]
+            .turn_context
+            .as_ref()
+            .and_then(|turn| turn.turn_id.as_deref()),
+        Some("turn-002")
+    );
+    assert_eq!(
+        first_checkpoints[1]
+            .turn_context
+            .as_ref()
+            .map(|turn| turn.turn_ordinal),
+        Some(2)
+    );
 }

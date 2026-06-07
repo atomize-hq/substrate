@@ -165,6 +165,42 @@ fn checkpoints_compute_turn_activity_mix_and_execution_modes() {
 }
 
 #[test]
+fn checkpoints_recognize_multiple_checkpoints_in_one_long_autonomous_turn() {
+    let result = analyze_sample_bundle();
+    let checkpoints = &result.sessions[0].checkpoints;
+
+    assert_eq!(checkpoints.len(), 2);
+    assert_eq!(checkpoints[0].session_id, "session-alpha");
+    assert_eq!(checkpoints[1].session_id, "session-alpha");
+    assert_eq!(checkpoints[0].ordinal, 1);
+    assert_eq!(checkpoints[1].ordinal, 2);
+
+    let first_turn = checkpoints[0]
+        .turn_context
+        .as_ref()
+        .expect("first turn context");
+    let second_turn = checkpoints[1]
+        .turn_context
+        .as_ref()
+        .expect("second turn context");
+
+    assert_eq!(first_turn.turn_id.as_deref(), Some("turn-001"));
+    assert_eq!(second_turn.turn_id.as_deref(), Some("turn-001"));
+    assert_eq!(first_turn.turn_ordinal, 1);
+    assert_eq!(second_turn.turn_ordinal, 1);
+    assert_eq!(first_turn.checkpoints_in_turn, 1);
+    assert_eq!(second_turn.checkpoints_in_turn, 2);
+    assert!(
+        first_turn.rows_since_turn_start < second_turn.rows_since_turn_start,
+        "later checkpoints in one long turn should accumulate more rows"
+    );
+    assert_eq!(
+        second_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Autonomous
+    );
+}
+
+#[test]
 fn checkpoints_mark_cargo_heavy_write_turns_as_mixed() {
     let result = analyze_sample_bundle();
     let first_turn = result.sessions[0].checkpoints[0]
@@ -241,16 +277,15 @@ fn checkpoints_mark_single_checkpoint_verification_plurality_turns_as_verificati
         row.turn_id = Some("turn-002".to_string());
         match row.event_index {
             10 => {
-                row.text = "{\"command\":\"npm test -- --runInBand\",\"workdir\":\"/repo\"}"
-                    .to_string();
+                row.text =
+                    "{\"command\":\"npm test -- --runInBand\",\"workdir\":\"/repo\"}".to_string();
             }
             11 => {
                 row.text = "{\"command\":\"pnpm lint\",\"workdir\":\"/repo\"}".to_string();
             }
             12 => {
                 row.text =
-                    "{\"command\":\"pnpm test -- --runInBand\",\"workdir\":\"/repo\"}"
-                        .to_string();
+                    "{\"command\":\"pnpm test -- --runInBand\",\"workdir\":\"/repo\"}".to_string();
             }
             _ => {}
         }
