@@ -671,6 +671,11 @@ fn ensure_auto_attach_restored_session(
             "owner_unreachable: orchestration session {orchestration_session_id} did not restore a live retained owner after automatic attach"
         );
     };
+    if !live_owner.attached_client_present() {
+        anyhow::bail!(
+            "owner_unreachable: orchestration session {orchestration_session_id} did not restore an attached host execution client after automatic attach"
+        );
+    }
     if live_owner.participant_id() != participant_id {
         anyhow::bail!(
             "owner_unreachable: orchestration session {orchestration_session_id} restored participant {} instead of expected {} after automatic attach",
@@ -744,6 +749,16 @@ mod tests {
         orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
         orchestration.mark_parked_resumable("owner detached cleanly");
         (orchestration, participant)
+    }
+
+    fn detached_live_orchestrator(
+        session_id: &str,
+        participant_id: &str,
+    ) -> (OrchestrationSessionRecord, AgentRuntimeParticipantRecord) {
+        let (session, mut participant) = detached_orchestrator(session_id, participant_id);
+        participant.mark_runtime_ownership_retained();
+        participant.mark_client_detached("owner detached cleanly");
+        (session, participant)
     }
 
     fn eligible_obligation(
@@ -1022,7 +1037,7 @@ mod tests {
     #[serial_test::serial]
     fn finalize_session_auto_attach_after_launch_returns_failed_closed_when_restore_check_fails() {
         with_store(|store| {
-            let (session, participant) = detached_orchestrator(
+            let (mut session, participant) = detached_live_orchestrator(
                 "sess_auto_attach_restore_failed",
                 "ash_auto_attach_restore_failed",
             );
@@ -1034,33 +1049,31 @@ mod tests {
                 .expect("persist detached participant");
 
             store
-                .persist_obligation(&eligible_obligation(
+                .persist_obligation(&{
+                    let mut obligation = eligible_obligation(
                     "sess_auto_attach_restore_failed",
                     "obl_restore_failed",
                     OrchestrationObligationKind::Blocked,
-                ))
+                    );
+                    obligation.mark_attach_claimed("router::local", chrono::Utc::now());
+                    obligation
+                })
                 .expect("persist eligible obligation");
 
-            let claim = store
-                .claim_session_auto_attach("sess_auto_attach_restore_failed", "router::local")
-                .expect("claim auto-attach obligation");
-            let SessionAutoAttachClaim::Claimed {
-                obligation_id,
-                attach_claim_owner,
-            } = claim
-            else {
-                panic!("expected detached eligible session to produce a claim");
-            };
+            session.bind_active_session_handle("ash_auto_attach_restore_failed");
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist attached session without client restore");
 
             let execution = finalize_session_auto_attach_after_launch(
                 store,
                 "sess_auto_attach_restore_failed",
-                obligation_id,
-                attach_claim_owner,
+                "obl_restore_failed".to_string(),
+                "router::local".to_string(),
                 HiddenOwnerHelperLaunchReceipt {
                     helper_pid: std::process::id(),
                     orchestration_session_id: "sess_auto_attach_restore_failed".to_string(),
-                    participant_id: "ash_unrestored_owner".to_string(),
+                    participant_id: "ash_auto_attach_restore_failed".to_string(),
                     backend_id: "cli:codex".to_string(),
                 },
             )
@@ -1069,9 +1082,7 @@ mod tests {
                 panic!("restore verification failure should return failed-closed execution");
             };
             assert!(
-                reason.contains("did not restore active_attached posture")
-                    || reason.contains("did not restore a live retained owner")
-                    || reason.contains("restored participant"),
+                reason.contains("did not restore an attached host execution client"),
                 "restore verification failure should explain the authoritative attach mismatch: {reason}"
             );
             assert_eq!(

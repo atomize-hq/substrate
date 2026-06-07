@@ -493,6 +493,12 @@ fn joined_hidden_owner_helper_attach_receipt(
             orchestration_session_id
         )
     })?;
+    if !participant.attached_client_present() {
+        anyhow::bail!(
+            "owner_unreachable: joined hidden owner-helper attach launch for orchestration session {} did not restore an attached host execution client",
+            orchestration_session_id
+        );
+    }
     let helper_pid = participant.internal.shell_owner_pid;
     if helper_pid == 0 {
         anyhow::bail!(
@@ -4136,6 +4142,7 @@ mod tests {
             .expect("orchestrator participant");
             participant.transition_state(AgentRuntimeSessionState::Ready);
             participant.set_uaa_session_id("uaa_attach_join_detached");
+            participant.mark_runtime_ownership_retained();
             participant.mark_client_detached("owner detached cleanly");
 
             let mut orchestration = OrchestrationSessionRecord::new(
