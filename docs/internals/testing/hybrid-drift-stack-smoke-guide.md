@@ -63,8 +63,18 @@ Run these commands from the repo root when you want the exact steps instead of t
 ```bash
 export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 
-find "$CODEX_HOME/sessions" -name 'rollout-*.jsonl' -type f -print0 \
-  | xargs -0 stat -f '%m %N' \
+stat_mtime_path() {
+  if stat -f '%m %N' "$1" >/dev/null 2>&1; then
+    stat -f '%m %N' "$1"
+  else
+    stat -c '%Y %n' "$1"
+  fi
+}
+
+find "$CODEX_HOME/sessions" -name 'rollout-*.jsonl' -type f -print0 |
+  while IFS= read -r -d '' path; do
+    stat_mtime_path "$path"
+  done \
   | sort -n \
   | tail -n 10
 ```
@@ -75,7 +85,22 @@ Choose a session id from an actually active Codex session.
 
 ```bash
 export SESSION_ID="<active-session-id>"
-export ROLLOUT_PATH="$(find "$CODEX_HOME/sessions" -name "rollout-*${SESSION_ID}*.jsonl" | head -n 1)"
+mapfile -t ROLLOUT_MATCHES < <(
+  find "$CODEX_HOME/sessions" -name "rollout-*${SESSION_ID}*.jsonl" -type f | sort
+)
+
+if [ "${#ROLLOUT_MATCHES[@]}" -eq 0 ]; then
+  echo "no rollout artifact found for $SESSION_ID" >&2
+  exit 1
+fi
+
+if [ "${#ROLLOUT_MATCHES[@]}" -gt 1 ]; then
+  printf 'multiple rollout artifacts matched %s:\n' "$SESSION_ID" >&2
+  printf '  %s\n' "${ROLLOUT_MATCHES[@]}" >&2
+  exit 1
+fi
+
+export ROLLOUT_PATH="${ROLLOUT_MATCHES[0]}"
 
 export SMOKE_ROOT="target/hybrid-drift-smoke/$SESSION_ID"
 export COMPACTOR_OUT="$SMOKE_ROOT/compactor"
@@ -88,9 +113,17 @@ This matters: `LIVE_STATE_DIR` must match the current `SESSION_ID`. If it still 
 ### 3. Check whether the rollout is moving
 
 ```bash
-stat -f '%z %N' "$ROLLOUT_PATH"
+stat_size_path() {
+  if stat -f '%z %N' "$1" >/dev/null 2>&1; then
+    stat -f '%z %N' "$1"
+  else
+    stat -c '%s %n' "$1"
+  fi
+}
+
+stat_size_path "$ROLLOUT_PATH"
 sleep 3
-stat -f '%z %N' "$ROLLOUT_PATH"
+stat_size_path "$ROLLOUT_PATH"
 ```
 
 If the size changes, you have a real live source. If it does not change, sentinel can still attach, but you should not treat quiet output as live proof yet.
