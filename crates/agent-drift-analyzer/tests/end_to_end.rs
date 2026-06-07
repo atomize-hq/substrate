@@ -32,4 +32,10 @@ fn end_to_end_analysis_is_stable_across_reruns() {
     assert_eq!(checkpoints[0].schema_version, "v0.4");
     assert!(checkpoints[0].turn_context.is_some());
     assert!(!checkpoints[0].expected_next_step.is_empty());
+    assert!(first_summary.contains(
+        "- Turn-context overview: `turn-001 (#1); checkpoints in turn 1-2; modes mixed -> autonomous`"
+    ));
+    assert!(first_summary.contains(
+        "  turn: `turn-001 (#1) rows=13 checkpoints=2 prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=6 verify=4 out=2]`"
+    ));
 }

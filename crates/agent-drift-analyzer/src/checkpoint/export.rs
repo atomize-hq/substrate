@@ -6,7 +6,10 @@ use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessage
 use camino::{Utf8Path, Utf8PathBuf};
 use time::OffsetDateTime;
 
-use crate::checkpoint::{Checkpoint, Confidence, DriftClass, TaskFrame};
+use crate::checkpoint::{
+    Checkpoint, Confidence, DriftClass, TaskFrame, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
+};
 use crate::input::BundleSession;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -418,6 +421,10 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
             "- Unknown user messages: `{}`",
             session_summary.diagnostics.user_message_roles.unknown
         ));
+        lines.push(format!(
+            "- Turn-context overview: `{}`",
+            format_turn_context_overview(&session_summary.checkpoints)
+        ));
         for checkpoint in &session_summary.checkpoints {
             let flagged_scores = checkpoint
                 .drift_scores
@@ -435,6 +442,10 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
                 } else {
                     flagged_scores.join(", ")
                 }
+            ));
+            lines.push(format!(
+                "  turn: `{}`",
+                format_checkpoint_turn_context(checkpoint.turn_context.as_ref())
             ));
         }
         lines.push(String::new());
@@ -767,6 +778,114 @@ fn format_optional_metric(metric: Option<f64>) -> String {
     metric
         .map(|value| format!("{value:.2}"))
         .unwrap_or_else(|| "unavailable".to_string())
+}
+
+fn format_turn_context_overview(checkpoints: &[Checkpoint]) -> String {
+    let contexts = checkpoints
+        .iter()
+        .filter_map(|checkpoint| checkpoint.turn_context.as_ref())
+        .collect::<Vec<_>>();
+    if contexts.is_empty() {
+        return "unavailable".to_string();
+    }
+
+    let turn_path = contexts
+        .iter()
+        .map(|context| format_turn_label(context))
+        .fold(Vec::<String>::new(), |mut acc, label| {
+            if acc.last() != Some(&label) {
+                acc.push(label);
+            }
+            acc
+        })
+        .join(" -> ");
+    let checkpoints_in_turn = format_turn_checkpoint_span(&contexts);
+    let mode_path = contexts
+        .iter()
+        .map(|context| format_turn_execution_mode(context.execution_mode).to_string())
+        .fold(Vec::<String>::new(), |mut acc, mode| {
+            if acc.last() != Some(&mode) {
+                acc.push(mode);
+            }
+            acc
+        })
+        .join(" -> ");
+
+    format!(
+        "{turn_path}; checkpoints in turn {checkpoints_in_turn}; modes {mode_path}"
+    )
+}
+
+fn format_checkpoint_turn_context(turn_context: Option<&TurnContext>) -> String {
+    let Some(turn_context) = turn_context else {
+        return "unavailable".to_string();
+    };
+
+    let mut parts = vec![
+        format_turn_label(turn_context),
+        format!("rows={}", turn_context.rows_since_turn_start),
+        format!("checkpoints={}", turn_context.checkpoints_in_turn),
+        format!("prompts={}", turn_context.prompts_observed_in_session),
+        format!(
+            "mode={}",
+            format_turn_execution_mode(turn_context.execution_mode)
+        ),
+        format!("activity[{}]", format_turn_activity_mix(&turn_context.activity_mix)),
+    ];
+    if let Some(seconds_since_turn_start) = turn_context.seconds_since_turn_start {
+        parts.insert(3, format!("elapsed={}s", seconds_since_turn_start));
+    }
+
+    parts.join(" ")
+}
+
+fn format_turn_label(turn_context: &TurnContext) -> String {
+    match (turn_context.turn_id.as_deref(), turn_context.turn_ordinal) {
+        (Some(turn_id), ordinal) if ordinal > 0 => format!("{turn_id} (#{ordinal})"),
+        (Some(turn_id), _) => turn_id.to_string(),
+        (None, ordinal) if ordinal > 0 => format!("turn #{ordinal}"),
+        (None, _) => "no turn id".to_string(),
+    }
+}
+
+fn format_turn_checkpoint_span(contexts: &[&TurnContext]) -> String {
+    let min = contexts
+        .iter()
+        .map(|context| context.checkpoints_in_turn)
+        .min()
+        .unwrap_or(0);
+    let max = contexts
+        .iter()
+        .map(|context| context.checkpoints_in_turn)
+        .max()
+        .unwrap_or(0);
+    if min == max {
+        min.to_string()
+    } else {
+        format!("{min}-{max}")
+    }
+}
+
+fn format_turn_activity_mix(activity_mix: &TurnActivityMix) -> String {
+    format!(
+        "dir={} asst={} tool={} read={} write={} verify={} out={}",
+        activity_mix.directive_row_count,
+        activity_mix.assistant_message_count,
+        activity_mix.tool_call_count,
+        activity_mix.read_like_command_count,
+        activity_mix.write_like_command_count,
+        activity_mix.verification_like_command_count,
+        activity_mix.tool_output_count,
+    )
+}
+
+fn format_turn_execution_mode(mode: TurnExecutionMode) -> &'static str {
+    match mode {
+        TurnExecutionMode::Conversational => "conversational",
+        TurnExecutionMode::Autonomous => "autonomous",
+        TurnExecutionMode::VerificationHeavy => "verification_heavy",
+        TurnExecutionMode::Mixed => "mixed",
+    }
 }
 
 fn format_drift_class_frequencies(stats: &CheckpointDiagnosticStats) -> String {
