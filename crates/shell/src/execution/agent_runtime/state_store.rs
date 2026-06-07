@@ -308,6 +308,14 @@ impl ResolvedInternalWorldDispatchCaller {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RouterAutoAttachSessionReadiness {
+    Eligible,
+    NoCandidate {
+        reason: &'static str,
+    },
+}
+
 #[cfg(any(target_os = "linux", test))]
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -2825,20 +2833,10 @@ impl AgentRuntimeStateStore {
                 reason: "missing_session",
             });
         };
-        if record.session.state.is_terminal() {
-            return Ok(SessionAutoAttachClaim::NoCandidate {
-                reason: "terminal_session",
-            });
-        }
-        if record.session.posture == OrchestrationSessionPosture::ActiveAttached {
-            return Ok(SessionAutoAttachClaim::NoCandidate {
-                reason: "attached_host_present",
-            });
-        }
-        if record.session.host_attach_contract().is_none() {
-            return Ok(SessionAutoAttachClaim::NoCandidate {
-                reason: "missing_attach_contract",
-            });
+        let readiness =
+            classify_router_auto_attach_session_readiness(&record, orchestration_session_id);
+        if let RouterAutoAttachSessionReadiness::NoCandidate { reason } = readiness {
+            return Ok(SessionAutoAttachClaim::NoCandidate { reason });
         }
 
         let obligations = self.list_obligations(orchestration_session_id)?;
@@ -3081,22 +3079,25 @@ impl AgentRuntimeStateStore {
     #[allow(dead_code)]
     pub(crate) fn list_router_auto_attach_candidate_session_ids(&self) -> Result<Vec<String>> {
         let mut session_ids = Vec::new();
-        for session in self.list_orchestration_sessions()? {
-            if session.state.is_terminal()
-                || session.posture == OrchestrationSessionPosture::ActiveAttached
-                || session.host_attach_contract().is_none()
-            {
+        for record in self.list_sessions()? {
+            let orchestration_session_id = record.orchestration_session_id().to_string();
+            if !matches!(
+                classify_router_auto_attach_session_readiness(&record, &orchestration_session_id),
+                RouterAutoAttachSessionReadiness::Eligible
+            ) {
                 continue;
             }
 
-            let obligations = self.list_obligations(&session.orchestration_session_id)?;
-            if claimed_obligation_id(&obligations)?.is_some()
-                || select_attach_candidate(&obligations).is_none()
-            {
+            let obligations = self.list_obligations(&orchestration_session_id)?;
+            let claimed_obligation = match claimed_obligation_id(&obligations) {
+                Ok(claimed_obligation) => claimed_obligation,
+                Err(_) => continue,
+            };
+            if claimed_obligation.is_some() || select_attach_candidate(&obligations).is_none() {
                 continue;
             }
 
-            session_ids.push(session.orchestration_session_id);
+            session_ids.push(orchestration_session_id);
         }
         session_ids.sort();
         session_ids.dedup();
@@ -4214,6 +4215,41 @@ fn classify_public_session_posture(
         return PublicSessionPosture::DetachedReattachable;
     }
     PublicSessionPosture::Terminal
+}
+
+fn classify_router_auto_attach_session_readiness(
+    record: &AgentRuntimeSessionRecord,
+    orchestration_session_id: &str,
+) -> RouterAutoAttachSessionReadiness {
+    if record.session.state.is_terminal() {
+        return RouterAutoAttachSessionReadiness::NoCandidate {
+            reason: "terminal_session",
+        };
+    }
+    if record.session.host_attach_contract().is_none() {
+        return RouterAutoAttachSessionReadiness::NoCandidate {
+            reason: "missing_attach_contract",
+        };
+    }
+
+    let resolved = match resolve_authoritative_session_control(record, orchestration_session_id) {
+        Ok(resolved) => resolved,
+        Err(_) => {
+            return RouterAutoAttachSessionReadiness::NoCandidate {
+                reason: "stale_linkage",
+            };
+        }
+    };
+
+    match resolved.session_posture {
+        PublicSessionPosture::DetachedReattachable => RouterAutoAttachSessionReadiness::Eligible,
+        PublicSessionPosture::Active => RouterAutoAttachSessionReadiness::NoCandidate {
+            reason: "attached_host_present",
+        },
+        PublicSessionPosture::Terminal => RouterAutoAttachSessionReadiness::NoCandidate {
+            reason: "owner_unreachable",
+        },
+    }
 }
 
 // Detached continuity is valid only when persisted session truth and participant truth agree.
@@ -5506,6 +5542,9 @@ mod tests {
             store
                 .persist_orchestration_session(&parent)
                 .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
 
             let follow_up = pending_obligation(
                 "sess_auto_attach_claim",
@@ -5583,6 +5622,41 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn claim_session_auto_attach_recovers_stale_attached_truth() {
+        with_store(|store| {
+            let mut participant =
+                live_orchestrator("codex", "sess_auto_attach_stale_claim", "ash_stale_claim");
+            participant.internal.shell_owner_pid = 999_999_999;
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+            store
+                .persist_obligation(&pending_obligation(
+                    "sess_auto_attach_stale_claim",
+                    "obl_stale_claim",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist stale obligation");
+
+            let claim = store
+                .claim_session_auto_attach("sess_auto_attach_stale_claim", "router::local")
+                .expect("claim stale-attached auto attach");
+            assert_eq!(
+                claim,
+                SessionAutoAttachClaim::Claimed {
+                    obligation_id: "obl_stale_claim".to_string(),
+                    attach_claim_owner: "router::local".to_string(),
+                }
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn list_router_auto_attach_candidate_session_ids_filters_to_detached_exact_truth() {
         with_store(|store| {
             let candidate =
@@ -5592,6 +5666,9 @@ mod tests {
                 .persist_orchestration_session(&candidate_parent)
                 .expect("persist candidate parent");
             store
+                .persist_participant(&candidate)
+                .expect("persist candidate participant");
+            store
                 .persist_obligation(&pending_obligation(
                     "sess_auto_attach_candidate",
                     "obl_candidate",
@@ -5599,11 +5676,32 @@ mod tests {
                 ))
                 .expect("persist candidate obligation");
 
+            let mut stale =
+                live_orchestrator("codex", "sess_auto_attach_stale", "ash_stale_candidate");
+            stale.internal.shell_owner_pid = 999_999_999;
+            let stale_parent = active_parent(&stale);
+            store
+                .persist_orchestration_session(&stale_parent)
+                .expect("persist stale parent");
+            store
+                .persist_participant(&stale)
+                .expect("persist stale participant");
+            store
+                .persist_obligation(&pending_obligation(
+                    "sess_auto_attach_stale",
+                    "obl_stale",
+                    OrchestrationObligationKind::ApprovalRequired,
+                ))
+                .expect("persist stale obligation");
+
             let attached = live_orchestrator("codex", "sess_auto_attach_attached", "ash_attached");
             let attached_parent = active_parent(&attached);
             store
                 .persist_orchestration_session(&attached_parent)
                 .expect("persist attached parent");
+            store
+                .persist_participant(&attached)
+                .expect("persist attached participant");
             store
                 .persist_obligation(&pending_obligation(
                     "sess_auto_attach_attached",
@@ -5650,6 +5748,9 @@ mod tests {
             store
                 .persist_orchestration_session(&claimed_parent)
                 .expect("persist claimed parent");
+            store
+                .persist_participant(&claimed)
+                .expect("persist claimed participant");
             let mut claimed_obligation = pending_obligation(
                 "sess_auto_attach_claimed",
                 "obl_claimed",
@@ -5660,11 +5761,42 @@ mod tests {
                 .persist_obligation(&claimed_obligation)
                 .expect("persist claimed obligation");
 
+            let invalid =
+                detached_orchestrator("codex", "sess_auto_attach_invalid_batch", "ash_invalid");
+            let invalid_parent = parked_parent(&invalid);
+            store
+                .persist_orchestration_session(&invalid_parent)
+                .expect("persist invalid parent");
+            store
+                .persist_participant(&invalid)
+                .expect("persist invalid participant");
+            let mut first_invalid = pending_obligation(
+                "sess_auto_attach_invalid_batch",
+                "obl_invalid_first",
+                OrchestrationObligationKind::Blocked,
+            );
+            first_invalid.mark_attach_claimed("router::one", Utc::now());
+            store
+                .persist_obligation(&first_invalid)
+                .expect("persist first invalid obligation");
+            let mut second_invalid = pending_obligation(
+                "sess_auto_attach_invalid_batch",
+                "obl_invalid_second",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            second_invalid.mark_attach_claimed("router::two", Utc::now());
+            store
+                .persist_obligation(&second_invalid)
+                .expect("persist second invalid obligation");
+
             assert_eq!(
                 store
                     .list_router_auto_attach_candidate_session_ids()
                     .expect("list router auto-attach candidates"),
-                vec!["sess_auto_attach_candidate".to_string()]
+                vec![
+                    "sess_auto_attach_candidate".to_string(),
+                    "sess_auto_attach_stale".to_string()
+                ]
             );
         });
     }
@@ -5679,6 +5811,9 @@ mod tests {
             store
                 .persist_orchestration_session(&parent)
                 .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
 
             let mut first = pending_obligation(
                 "sess_auto_attach_invalid",

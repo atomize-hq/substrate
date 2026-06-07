@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::Result;
 use chrono::Utc;
 use substrate_broker::Policy;
@@ -127,7 +129,7 @@ fn candidate_priority(kind: OrchestrationObligationKind) -> u8 {
 pub(crate) fn execute_router_auto_attach_for_eligible_sessions(
     store: &AgentRuntimeStateStore,
     router_identity: &str,
-    policy: &Policy,
+    fallback_policy: &Policy,
     world: bool,
     no_world: bool,
 ) -> Result<Vec<RouterAutoAttachSessionExecution>> {
@@ -135,12 +137,17 @@ pub(crate) fn execute_router_auto_attach_for_eligible_sessions(
         .list_router_auto_attach_candidate_session_ids()?
         .into_iter()
         .map(|orchestration_session_id| {
+            let session_policy = resolve_router_auto_attach_policy_for_session(
+                store,
+                &orchestration_session_id,
+                fallback_policy,
+            )?;
             Ok(RouterAutoAttachSessionExecution {
                 execution: execute_session_auto_attach(
                     store,
                     &orchestration_session_id,
                     router_identity,
-                    policy,
+                    &session_policy,
                     world,
                     no_world,
                 )?,
@@ -259,6 +266,27 @@ fn load_claimed_obligation(
                 "missing_claimed_obligation: claimed router auto-attach obligation {obligation_id} disappeared before policy evaluation"
             )
         })
+}
+
+fn resolve_router_auto_attach_policy_for_session(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    fallback_policy: &Policy,
+) -> Result<Policy> {
+    let Some(session) = store.load_orchestration_session(orchestration_session_id)? else {
+        return Ok(fallback_policy.clone());
+    };
+    let workspace_root = Path::new(&session.workspace_root);
+    let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(workspace_root, false)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "failed to resolve router auto-attach policy for orchestration session {} from {}: {}",
+                orchestration_session_id,
+                workspace_root.display(),
+                err
+            )
+        })?;
+    Ok(policy)
 }
 
 fn ensure_router_auto_attach_allowed(
@@ -476,7 +504,7 @@ fn ensure_auto_attach_restored_session(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::{fs, path::Path, path::PathBuf};
     use substrate_broker::Policy;
 
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -575,6 +603,14 @@ mod tests {
             other => panic!("unexpected auto-attach kind in test helper: {other:?}"),
         }
         policy
+    }
+
+    fn write_workspace_policy(workspace_root: &Path, yaml: &str) {
+        let policy_dir = workspace_root.join(".substrate");
+        fs::create_dir_all(&policy_dir).expect("create workspace policy dir");
+        fs::write(policy_dir.join("workspace.yaml"), "schema_version: 1\n")
+            .expect("write workspace marker");
+        fs::write(policy_dir.join("policy.yaml"), yaml).expect("write workspace policy");
     }
 
     #[test]
@@ -835,6 +871,74 @@ mod tests {
             assert_eq!(
                 attached.attach_state,
                 OrchestrationObligationAttachState::Eligible
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn execute_router_auto_attach_for_eligible_sessions_resolves_policy_per_candidate_workspace() {
+        with_store(|store| {
+            let workspace_denied = tempfile::tempdir().expect("denied workspace");
+            let workspace_allowed = tempfile::tempdir().expect("allowed workspace");
+            write_workspace_policy(workspace_denied.path(), "{}\n");
+            write_workspace_policy(
+                workspace_allowed.path(),
+                r#"
+workflow:
+  router:
+    enabled: true
+agents:
+  world_dispatch:
+    obligations:
+      approval_allowed: true
+"#,
+            );
+
+            let (mut denied_session, denied_participant) =
+                detached_orchestrator("sess_auto_attach_denied_workspace", "ash_denied");
+            denied_session.workspace_root = workspace_denied.path().display().to_string();
+            store
+                .persist_orchestration_session(&denied_session)
+                .expect("persist denied session");
+            store
+                .persist_participant(&denied_participant)
+                .expect("persist denied participant");
+
+            let (mut allowed_session, allowed_participant) =
+                detached_orchestrator("sess_auto_attach_allowed_workspace", "ash_allowed");
+            allowed_session.workspace_root = workspace_allowed.path().display().to_string();
+            store
+                .persist_orchestration_session(&allowed_session)
+                .expect("persist allowed session");
+            store
+                .persist_participant(&allowed_participant)
+                .expect("persist allowed participant");
+
+            let denied = resolve_router_auto_attach_policy_for_session(
+                store,
+                "sess_auto_attach_denied_workspace",
+                &Policy::default(),
+            )
+            .expect("resolve denied workspace policy");
+            assert!(
+                !denied.workflow_router_enabled(),
+                "denied workspace should preserve its own disabled router policy"
+            );
+
+            let allowed = resolve_router_auto_attach_policy_for_session(
+                store,
+                "sess_auto_attach_allowed_workspace",
+                &Policy::default(),
+            )
+            .expect("resolve allowed workspace policy");
+            assert!(
+                allowed.workflow_router_enabled(),
+                "allowed workspace should resolve its own router-enabled policy"
+            );
+            assert!(
+                allowed.world_dispatch_approval_requests_allowed(),
+                "allowed workspace should preserve its own approval gate"
             );
         });
     }
