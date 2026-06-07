@@ -7,7 +7,9 @@ This task list implements:
 
 ## Task List
 
-- [ ] Task: Lock the `R3` packet boundary and `v0.4` turn-context contract in repo docs
+## Packet R3-1: Repo Doc Contract Lock
+
+- [x] Task: Lock the `R3` packet boundary and `v0.4` turn-context contract in repo docs
   - Acceptance:
     - docs define `R3` as checkpoint-local turn-context promotion only
     - docs explicitly keep `R4` archetype, `R5` progress, and `R6` scorer cutover out of scope
@@ -21,6 +23,17 @@ This task list implements:
     - `docs/specs/agent-drift-analyzer-turn-context-r3-spec.md`
     - `docs/specs/agent-drift-analyzer-turn-context-r3-plan.md`
     - `docs/specs/agent-drift-analyzer-turn-context-r3-tasks.md`
+    - `docs/specs/hybrid-drift-sentinel-implementation-order.md`
+    - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
+
+Packet `R3-1` exit condition:
+
+- repo docs lock `R3` as checkpoint-local turn context only
+- repo docs lock the explicit checkpoint-contract decision `v0.3 -> v0.4`
+- repo docs lock the deliberate differences from AgentLens and DST-inspired patterns
+- `R3-2`, `R3-3`, `R3-4`, `R4`, `R5`, and `R6` remain unstarted here
+
+## Packet R3-2: Analyzer Turn-Context Contract And Export
 
 - [ ] Task: Add analyzer-owned turn-context schema types and exports
   - Acceptance:
@@ -35,6 +48,8 @@ This task list implements:
     - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/src/lib.rs`
+
+## Packet R3-3: Analyzer Derivation, Summary, And Regression Walls
 
 - [ ] Task: Derive deterministic current-turn slices during checkpoint analysis
   - Acceptance:
@@ -103,6 +118,8 @@ This task list implements:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
     - `crates/agent-drift-analyzer/tests/end_to_end.rs`
     - `crates/agent-drift-analyzer/tests/support/mod.rs`
+
+## Packet R3-4: Sentinel Compatibility And Presentation
 
 - [ ] Task: Extend sentinel replay input and live compatibility to `v0.4`
   - Acceptance:

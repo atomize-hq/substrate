@@ -2,6 +2,20 @@
 
 ## Scope
 
+Implementation status on `2026-06-06`:
+
+- Packet `R3-1` is repo-doc contract lock only:
+  - lock `R3` as checkpoint-local turn-context promotion only
+  - lock the explicit checkpoint-contract widening from `v0.3` to `v0.4`
+  - lock the deliberate differences from AgentLens and DST-inspired patterns
+- Packet `R3-2` stays reserved for analyzer-owned `TurnContext`, `TurnActivityMix`, and
+  `TurnExecutionMode` types plus checkpoint export on `schema_version = "v0.4"`
+- Packet `R3-3` stays reserved for deterministic turn-slice derivation, analyzer summary output,
+  and long-turn vs many-short-turn analyzer regressions
+- Packet `R3-4` stays reserved for sentinel `v0.4` compatibility and compact replay/live
+  turn-context presentation
+- `R4`, `R5`, and `R6` remain outside the `R3` packet boundary
+
 This plan implements:
 
 - `docs/specs/agent-drift-analyzer-turn-context-r3-spec.md`
@@ -56,6 +70,13 @@ busy-looking checkpoint belongs to:
 
 ## Implementation Strategy
 
+Execution split:
+
+1. `R3-1`: lock the repo-doc contract and packet boundary only
+2. `R3-2`: add analyzer-owned schema types and explicit `v0.4` export
+3. `R3-3`: derive deterministic turn-local state and lock analyzer summary/regressions
+4. `R3-4`: extend sentinel compatibility/presentation without changing posture behavior
+
 ### Workstream 1: Lock The Turn-Context Contract
 
 Define the `R3` contract in code and docs first:
@@ -70,6 +91,7 @@ Why first:
 - later analyzer, export, and sentinel work all depend on a stable contract
 - this is the place to encode the narrow interpretation of AgentLens/DST inspiration before code
   drifts into `R4+`
+- `R3-1` ends here; no analyzer or sentinel code changes belong in this packet
 
 ### Workstream 2: Add Analyzer Turn-Slice Derivation
 
@@ -142,14 +164,13 @@ Why fifth:
 
 Sequential work:
 
-1. lock the `R3` contract in docs
-2. add analyzer-local turn-context types and helper seams
-3. populate `turn_context` during checkpoint construction
-4. widen analyzer checkpoint export to `v0.4`
-5. update analyzer summary rendering and analyzer tests
-6. extend sentinel replay/live compatibility to `v0.4`
-7. expose compact turn-context output in replay/live presentation
-8. run focused analyzer and sentinel walls
+1. `R3-1`: lock the `R3` contract in repo docs
+2. `R3-2`: add analyzer-local turn-context types and helper seams
+3. `R3-2`: populate `turn_context` during checkpoint construction and widen export to `v0.4`
+4. `R3-3`: update analyzer summary rendering and analyzer tests
+5. `R3-4`: extend sentinel replay/live compatibility to `v0.4`
+6. `R3-4`: expose compact turn-context output in replay/live presentation
+7. `R3-4`: run focused analyzer and sentinel walls
 
 Parallel-safe work after the contract is locked:
 

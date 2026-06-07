@@ -512,7 +512,7 @@ R2 continuity notes:
     not a successful-output-only tail
   - the acceptance wall now asserts final analyzer `dead_end_thrash` posture directly from the
     frozen bundle inputs instead of routing through sentinel output
-  - conclusion: the next open packet after `R2` is `R3`, not more `R2` replay/fixture work
+  - conclusion: the next open packet after `R2` is `R3-1`, not more `R2` replay/fixture work
 
 ## Packet R3: Per-Checkpoint Turn Context
 
@@ -530,6 +530,18 @@ archetype logic into the scorers.
 - add per-checkpoint turn-context fields
 - compute turn age and turn-local checkpoint density
 - export that state with checkpoints and summary
+- widen analyzer checkpoints explicitly from `v0.3` to `v0.4`
+- keep session archetype, session progress, and drift-scorer retuning out of scope for this
+  packet
+
+### Packet Split
+
+- `R3-1`: repo-doc contract lock only
+- `R3-2`: analyzer-owned `TurnContext`, `TurnActivityMix`, and `TurnExecutionMode` types plus
+  `v0.4` export
+- `R3-3`: deterministic turn-slice derivation, analyzer summary output, and long-turn vs
+  many-short-turn analyzer regressions
+- `R3-4`: sentinel `v0.4` compatibility and compact replay/live turn-context presentation
 
 ### Acceptance
 
@@ -639,15 +651,15 @@ This improves locality and maintainability, but it should not block the analyzer
 
 ## Immediate Next Action
 
-If only one packet lands next, it should be `R1A`.
+If only one packet lands next, it should be `R3-1`.
 
 The next honest implementation target is:
 
-- explicit outcome evidence classification
-- repeated-failure cutover to that narrower evidence surface
-- focused analyzer tests first, with bounded replay proof deferred to `R1C`
+- lock repo docs around checkpoint-local turn context only
+- lock the explicit checkpoint-contract decision `v0.3 -> v0.4`
+- lock the deliberate non-AgentLens/non-DST boundaries before any code work
 
-That is the current blocking gap. Everything else in this document should follow from there.
+That is the current top-of-stack action after `R2`. `R3-2+` remains queued behind this doc lock.
 
 ## Research-Informed Design Directions
 
@@ -678,11 +690,16 @@ leaving them as summary-only aggregates.
 - `AgentLens: Revealing The Lucky Pass Problem in SWE-Agent Evaluation`
   - Link: <https://huggingface.co/papers/2605.12925>
   - Useful pattern:
-    - classify actions by trajectory history, not only by tool identity
-    - separate `Exploration`, `Implementation`, `Verification`, and `Orchestration`
+    - classify trajectory behavior by recent history, not only by tool identity
   - Why it matters here:
     - this maps closely to the missing turn-context seam in hybrid drift
-    - the analyzer already exports enough coarse metrics to support a similar intent layer
+    - the analyzer already exports enough coarse metrics to support a coarse checkpoint-local
+      activity mix and execution-mode layer
+  - Deliberate `R3` boundary:
+    - do not make `Exploration` / `Implementation` / `Verification` / `Orchestration` per-action
+      stage labels the canonical `R3` artifact
+    - keep AgentLens influence limited to observational turn-local structure, not evaluative or
+      task-level scoring
 
 - `Large Language Models as Zero-shot Dialogue State Tracker through Function Calling`
   - Link: <https://huggingface.co/papers/2402.10466>
@@ -691,6 +708,9 @@ leaving them as summary-only aggregates.
   - Why it matters here:
     - hybrid drift should likely maintain structured per-checkpoint turn state rather than
       repeatedly infer turn meaning from raw rows
+  - Deliberate `R3` boundary:
+    - do not adopt function-calling or LLM extraction as the state-construction mechanism
+    - keep the state deterministic and analyzer-computed from landed telemetry
 
 - `Interpretable and Robust Dialogue State Tracking via Natural Language Summarization with LLMs`
   - Link: <https://huggingface.co/papers/2503.08857>
@@ -699,6 +719,9 @@ leaving them as summary-only aggregates.
   - Why it matters here:
     - this could inspire an optional checkpoint-level state summary for debugging and operator
       review, without replacing machine-readable fields
+  - Deliberate `R3` boundary:
+    - any prose summary stays derived and presentation-only, never the canonical checkpoint
+      contract
 
 ### Concrete Hybrid-Drift Ideas
 
@@ -708,7 +731,7 @@ leaving them as summary-only aggregates.
   - `rows_since_turn_start`
   - `checkpoints_in_turn`
   - `turn_activity_mix`
-  - `turn_intent_stage`
+  - `turn_execution_mode`
 - keep these analyzer-owned and export them with checkpoint artifacts
 
 ## Packet R4: Session Archetype Classification

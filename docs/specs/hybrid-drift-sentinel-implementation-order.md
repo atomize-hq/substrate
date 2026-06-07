@@ -606,7 +606,16 @@ Packet 18 note:
     `target/` or `~/.codex`
   - delegated sessions remain excluded, and
     `019e9401-9d69-7190-a43e-9ee3be08b369` remains outside the successful-output acceptance corpus
-  - the next open packet after `R2` is `R3` turn-context promotion
+  - the next open packet after `R2` is `R3-1`, the repo-doc lock for turn-context promotion
+- `2026-06-06`: the `R3` turn-context family is intentionally split before any code changes:
+  - `R3-1`: repo-doc lock for checkpoint-local turn context, explicit `v0.3 -> v0.4`
+    checkpoint-contract widening, and the deliberate non-AgentLens/non-DST boundaries
+  - `R3-2`: analyzer-owned `TurnContext`, `TurnActivityMix`, and `TurnExecutionMode` contract
+    plus `v0.4` export
+  - `R3-3`: deterministic turn-slice derivation, analyzer summary output, and long-turn vs
+    many-short-turn analyzer regressions
+  - `R3-4`: sentinel `v0.4` compatibility and compact replay/live turn-context presentation
+  - `R4`, `R5`, and `R6` stay explicitly out of scope for the `R3` family
 
 ## If You Want Fewer Packets
 
