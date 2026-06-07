@@ -557,6 +557,46 @@ archetype logic into the scorers.
 - sentinel replay/live consumers accept `v0.4` while preserving legacy `v0.2` and `v0.3`
 - replay/live surfaces expose the same compact turn-context view for matching checkpoints
 - focused analyzer and sentinel verification commands for the packet are green
+- bounded manual proof on real rollout `019ea027-9bb6-7aa2-9d05-94f3ba997948` confirmed that the
+  new turn-context surface is correct, but also exposed one remaining sentinel-local headline seam:
+  replay still derives the trigger headline from `checkpoint.flagged`, while live checkpoint
+  arrivals still headline from ingress event type, so the same flagged checkpoint can still render
+  `@ scheduler_repeated_failure_trigger` in replay and `@ checkpoint_ready` in live even when the
+  posture, drift, diagnostics, and turn-context lines all match
+
+## Packet R3.5: Replay/Live Trigger Headline Canonicalization
+
+### Objective
+
+Make replay and live use one honest operator-facing trigger headline for the same checkpoint
+without reopening analyzer semantics or broader sentinel redesign.
+
+### Why Next
+
+`R3` proved the new turn-context surface on a real rollout, but that same proof also showed that
+operators can still see a replay/live headline mismatch on the same checkpoint even when the
+substantive fields match. This is a narrow sentinel-local presentation seam and should close
+before session-archetype and progress work so later packets do not build on a known operator-facing
+inconsistency.
+
+### Scope
+
+- canonicalize replay/live trigger-headline rendering for matched checkpoints
+- preserve analyzer checkpoint state and posture as the truth source for active, recovered, and
+  historical-only interpretation
+- keep `scheduler_repeated_failure_trigger` available only when the operator surface is actually
+  describing a scheduler fast path rather than an ordinary checkpoint arrival
+- keep the fix sentinel-local to replay/live presentation plumbing and focused regression proof
+
+### Acceptance
+
+- the same matched replay/live checkpoint no longer renders different trigger headlines solely
+  because replay derived the trigger from `checkpoint.flagged` while live used the ingress event
+  type
+- scheduler fast-path events still render distinctly when they are actually emitted
+- posture, drift, diagnostics, and turn-context parity stay intact after the headline cutover
+- the fix does not widen into analyzer schema changes, analyzer scorer changes, or full sentinel
+  interpretation consolidation
 
 ## Packet R4: Session Archetype Classification
 
@@ -564,7 +604,7 @@ archetype logic into the scorers.
 
 Add one analyzer-owned `session_archetype` module.
 
-### Why Fourth
+### Why After R3.5
 
 Turn context provides the raw structure; archetype turns that structure into meaning.
 
@@ -586,7 +626,7 @@ Turn context provides the raw structure; archetype turns that structure into mea
 
 Add one analyzer-owned `session_progress` module that measures progress relative to archetype.
 
-### Why Fifth
+### Why After R4
 
 Archetype without progress is not enough. The main value comes from saying “this troubleshooting
 session is moving the failure frontier” or “this planning session is converging.”
@@ -611,7 +651,7 @@ session is moving the failure frontier” or “this planning session is converg
 Re-score `dead_end_thrash` and related drift classes using typed outcome evidence, turn context,
 archetype, and progress modules.
 
-### Why Sixth
+### Why After R5
 
 This is where the earlier packets finally pay off. The scorers should become consumers of deeper
 analyzer modules rather than home-grown heuristic islands.
@@ -636,7 +676,8 @@ Collapse replay/live checkpoint interpretation duplication in sentinel.
 
 ### Why Last
 
-This improves locality and maintainability, but it should not block the analyzer semantic fix.
+This improves locality and maintainability, but it should not block the analyzer semantic fix or
+the narrower `R3.5` replay/live trigger-headline cutover.
 
 ### Scope
 
@@ -661,12 +702,15 @@ This improves locality and maintainability, but it should not block the analyzer
 
 ## Immediate Next Action
 
-If only one packet lands next, it should be `R4`.
+If only one packet lands next, it should be `R3.5`.
 
 The next honest implementation target is:
 
 - keep `R3` closed as the completed turn-context packet family
-- start `R4` only if the next task really is session-level archetype classification
+- land the narrow replay/live trigger-headline canonicalization seam before deeper analyzer
+  packets
+- start `R4` only after that headline seam is closed, if the next task really is session-level
+  archetype classification
 - keep `R5` progress semantics and `R6` scorer cutover queued behind `R4`
 
 That is the current top-of-stack action after `R3`.

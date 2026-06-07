@@ -624,7 +624,11 @@ Packet 18 note:
   - replay/live operator presentation renders the same compact turn-context view for matching
     checkpoints
   - the focused `R3` analyzer and sentinel verification wall is green
-  - `R4` is the next open packet family after `R3`
+  - real-rollout proof also exposed one remaining sentinel-local seam: replay still headlines some
+    ordinary flagged checkpoints as `scheduler_repeated_failure_trigger` while live headlines the
+    same checkpoints as `checkpoint_ready`
+  - `R3.5` is the next open packet after `R3`; `R4` remains the next analyzer-deepening family
+    after that narrower sentinel cutover
 
 ## If You Want Fewer Packets
 
