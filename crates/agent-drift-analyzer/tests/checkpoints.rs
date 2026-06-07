@@ -127,6 +127,163 @@ fn checkpoints_start_a_new_turn_when_the_boundary_moves_to_a_new_turn_id() {
 }
 
 #[test]
+fn checkpoints_compute_turn_activity_mix_and_execution_modes() {
+    let result = analyze_sample_bundle();
+    let checkpoints = &result.sessions[0].checkpoints;
+    let first_turn = checkpoints[0]
+        .turn_context
+        .as_ref()
+        .expect("first turn context");
+    let second_turn = checkpoints[1]
+        .turn_context
+        .as_ref()
+        .expect("second turn context");
+
+    assert_eq!(first_turn.activity_mix.directive_row_count, 2);
+    assert_eq!(first_turn.activity_mix.assistant_message_count, 0);
+    assert_eq!(first_turn.activity_mix.tool_call_count, 5);
+    assert_eq!(first_turn.activity_mix.read_like_command_count, 2);
+    assert_eq!(first_turn.activity_mix.write_like_command_count, 3);
+    assert_eq!(first_turn.activity_mix.verification_like_command_count, 3);
+    assert_eq!(first_turn.activity_mix.tool_output_count, 2);
+    assert_eq!(
+        first_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::VerificationHeavy
+    );
+
+    assert_eq!(second_turn.activity_mix.directive_row_count, 2);
+    assert_eq!(second_turn.activity_mix.assistant_message_count, 1);
+    assert_eq!(second_turn.activity_mix.tool_call_count, 8);
+    assert_eq!(second_turn.activity_mix.read_like_command_count, 2);
+    assert_eq!(second_turn.activity_mix.write_like_command_count, 6);
+    assert_eq!(second_turn.activity_mix.verification_like_command_count, 4);
+    assert_eq!(second_turn.activity_mix.tool_output_count, 2);
+    assert_eq!(
+        second_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Autonomous
+    );
+}
+
+#[test]
+fn checkpoints_mark_tool_free_short_turns_as_conversational() {
+    let mut bundle = load_sample_bundle();
+    for row in bundle
+        .archival_rows
+        .iter_mut()
+        .chain(bundle.compact_rows.iter_mut())
+        .filter(|row| row.event_index >= 9)
+    {
+        row.turn_id = Some("turn-002".to_string());
+        match row.event_index {
+            10 => {
+                row.kind = agent_session_compactor::CompactionKind::AssistantMessage;
+                row.text = "I am summarizing the next patch step.".to_string();
+                row.dedupe_identity = None;
+            }
+            11 => {
+                row.kind = agent_session_compactor::CompactionKind::DeveloperMessage;
+                row.text = "Stay inside Packet R3-4 only.".to_string();
+                row.dedupe_identity = None;
+            }
+            12 => {
+                row.kind = agent_session_compactor::CompactionKind::AssistantMessage;
+                row.text = "Waiting for the next instruction.".to_string();
+                row.dedupe_identity = None;
+            }
+            _ => {}
+        }
+    }
+
+    let fixture = BundleFixture::from_rows(
+        bundle.archival_rows,
+        bundle.compact_rows,
+        bundle.dedupe_groups,
+    );
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze conversational turn bundle");
+    let second_turn = result.sessions[0].checkpoints[1]
+        .turn_context
+        .as_ref()
+        .expect("second turn context");
+
+    assert_eq!(second_turn.activity_mix.directive_row_count, 1);
+    assert_eq!(second_turn.activity_mix.assistant_message_count, 3);
+    assert_eq!(second_turn.activity_mix.tool_call_count, 0);
+    assert_eq!(second_turn.activity_mix.tool_output_count, 0);
+    assert_eq!(
+        second_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Conversational
+    );
+}
+
+#[test]
+fn checkpoints_bias_ambiguous_turns_to_mixed() {
+    let mut bundle = load_sample_bundle();
+    for row in bundle
+        .archival_rows
+        .iter_mut()
+        .chain(bundle.compact_rows.iter_mut())
+        .filter(|row| row.event_index >= 9)
+    {
+        row.turn_id = Some("turn-002".to_string());
+        match row.event_index {
+            10 => {
+                row.text =
+                    "{\"command\":\"sed -n '1,40p' crates/agent-drift-analyzer/src/lib.rs\",\"workdir\":\"/repo\"}"
+                        .to_string();
+                row.dedupe_identity = Some(
+                    "{\"call_id\":\"call-9\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"
+                        .to_string(),
+                );
+            }
+            11 => {
+                row.text = "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}".to_string();
+                row.dedupe_identity = Some(
+                    "{\"call_id\":\"call-10\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"
+                        .to_string(),
+                );
+            }
+            12 => {
+                row.kind = agent_session_compactor::CompactionKind::ToolOutput;
+                row.text = "patched lib.rs".to_string();
+                row.dedupe_identity = None;
+            }
+            _ => {}
+        }
+    }
+
+    let fixture = BundleFixture::from_rows(
+        bundle.archival_rows,
+        bundle.compact_rows,
+        bundle.dedupe_groups,
+    );
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze ambiguous turn bundle");
+    let second_turn = result.sessions[0].checkpoints[1]
+        .turn_context
+        .as_ref()
+        .expect("second turn context");
+
+    assert_eq!(second_turn.activity_mix.directive_row_count, 0);
+    assert_eq!(second_turn.activity_mix.assistant_message_count, 1);
+    assert_eq!(second_turn.activity_mix.tool_call_count, 2);
+    assert_eq!(second_turn.activity_mix.read_like_command_count, 1);
+    assert_eq!(second_turn.activity_mix.write_like_command_count, 1);
+    assert_eq!(second_turn.activity_mix.verification_like_command_count, 0);
+    assert_eq!(second_turn.activity_mix.tool_output_count, 1);
+    assert_eq!(
+        second_turn.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Mixed
+    );
+}
+
+#[test]
 fn checkpoints_degrade_conservatively_when_no_turn_id_is_available() {
     let mut bundle = load_sample_bundle();
     for row in bundle

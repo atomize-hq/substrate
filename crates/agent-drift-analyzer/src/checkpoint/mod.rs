@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::input::BundleSession;
 use crate::{
     context::assemble_context, context::collect_command_observations, context::CommandObservation,
-    context::ContextPack, inference::infer_task_frame, scoring::DriftStateHint,
-    scoring::ScoredDrift,
+    context::ContextPack, context::focusable_directive_rows, inference::infer_task_frame,
+    scoring::DriftStateHint, scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -258,6 +258,28 @@ struct CurrentTurnSlice<'a> {
     turn_ordinal: usize,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct TurnActivityAnalysis {
+    mix: TurnActivityMix,
+    command_primary_counts: CommandPrimaryCounts,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct CommandPrimaryCounts {
+    read_like: usize,
+    write_like: usize,
+    verification_like: usize,
+    other: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommandPrimaryKind {
+    ReadLike,
+    WriteLike,
+    VerificationLike,
+    Other,
+}
+
 fn turn_context(
     session: &BundleSession,
     current: &CheckpointSlice,
@@ -274,6 +296,8 @@ fn turn_context(
         }
         None => 1,
     };
+    let activity = turn_activity_analysis(turn_slice.rows);
+    let execution_mode = turn_execution_mode(&turn_slice, checkpoints_in_turn, &activity);
 
     TurnContext {
         turn_id: turn_slice.turn_id.map(str::to_owned),
@@ -282,9 +306,98 @@ fn turn_context(
         seconds_since_turn_start: seconds_since_turn_start(turn_slice.rows),
         checkpoints_in_turn,
         prompts_observed_in_session,
-        execution_mode: TurnExecutionMode::Mixed,
-        activity_mix: TurnActivityMix::default(),
+        execution_mode,
+        activity_mix: activity.mix,
     }
+}
+
+fn turn_activity_analysis(rows: &[CompactionRow]) -> TurnActivityAnalysis {
+    let command_observations = collect_command_observations(rows);
+    let mut command_primary_counts = CommandPrimaryCounts::default();
+    for command in &command_observations {
+        match primary_command_kind(command) {
+            CommandPrimaryKind::ReadLike => command_primary_counts.read_like += 1,
+            CommandPrimaryKind::WriteLike => command_primary_counts.write_like += 1,
+            CommandPrimaryKind::VerificationLike => {
+                command_primary_counts.verification_like += 1;
+            }
+            CommandPrimaryKind::Other => command_primary_counts.other += 1,
+        }
+    }
+
+    TurnActivityAnalysis {
+        mix: TurnActivityMix {
+            directive_row_count: focusable_directive_rows(rows).count(),
+            assistant_message_count: rows
+                .iter()
+                .filter(|row| row.kind == CompactionKind::AssistantMessage)
+                .count(),
+            tool_call_count: rows
+                .iter()
+                .filter(|row| row.kind == CompactionKind::ToolCall)
+                .count(),
+            read_like_command_count: command_observations
+                .iter()
+                .filter(|command| command.read_like)
+                .count(),
+            write_like_command_count: command_observations
+                .iter()
+                .filter(|command| command.write_like)
+                .count(),
+            verification_like_command_count: command_observations
+                .iter()
+                .filter(|command| command.verification_like)
+                .count(),
+            tool_output_count: rows
+                .iter()
+                .filter(|row| row.kind == CompactionKind::ToolOutput)
+                .count(),
+        },
+        command_primary_counts,
+    }
+}
+
+fn primary_command_kind(command: &CommandObservation) -> CommandPrimaryKind {
+    if command.verification_like {
+        CommandPrimaryKind::VerificationLike
+    } else if command.write_like {
+        CommandPrimaryKind::WriteLike
+    } else if command.read_like {
+        CommandPrimaryKind::ReadLike
+    } else {
+        CommandPrimaryKind::Other
+    }
+}
+
+fn turn_execution_mode(
+    turn_slice: &CurrentTurnSlice<'_>,
+    checkpoints_in_turn: usize,
+    activity: &TurnActivityAnalysis,
+) -> TurnExecutionMode {
+    let directive_and_assistant_rows =
+        activity.mix.directive_row_count + activity.mix.assistant_message_count;
+    if activity.mix.tool_call_count == 0
+        || (checkpoints_in_turn <= 1 && directive_and_assistant_rows > activity.mix.tool_call_count)
+    {
+        return TurnExecutionMode::Conversational;
+    }
+
+    if activity.mix.tool_call_count > 0 && checkpoints_in_turn > 1 && turn_slice.turn_id.is_some() {
+        return TurnExecutionMode::Autonomous;
+    }
+
+    if verification_like_is_strict_plurality(&activity.command_primary_counts) {
+        return TurnExecutionMode::VerificationHeavy;
+    }
+
+    TurnExecutionMode::Mixed
+}
+
+fn verification_like_is_strict_plurality(counts: &CommandPrimaryCounts) -> bool {
+    counts.verification_like > 0
+        && counts.verification_like > counts.read_like
+        && counts.verification_like > counts.write_like
+        && counts.verification_like > counts.other
 }
 
 fn current_turn_slice<'a>(
