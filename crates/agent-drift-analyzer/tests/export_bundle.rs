@@ -111,10 +111,65 @@ fn export_bundle_writes_checkpoints_and_summary() {
         "- Turn-context overview: `turn-001 (#1); checkpoints in turn 1-2; modes mixed -> autonomous`"
     ));
     assert!(summary.contains(
-        "  turn: `turn-001 (#1) rows=9 checkpoints=1 prompts=1 mode=mixed activity[dir=2 asst=0 tool=5 read=2 write=3 verify=3 out=2]`"
+        "  turn: `turn-001 (#1) rows=9 checkpoints=1 session-prompts=1 mode=mixed activity[dir=2 asst=0 tool=5 read=2 write=3 verify=3 out=2]`"
     ));
     assert!(summary.contains(
-        "  turn: `turn-001 (#1) rows=13 checkpoints=2 prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=6 verify=4 out=2]`"
+        "  turn: `turn-001 (#1) rows=13 checkpoints=2 session-prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=6 verify=4 out=2]`"
+    ));
+}
+
+#[test]
+fn export_bundle_distinguishes_many_short_conversational_turns_in_summary() {
+    let mut bundle = load_sample_bundle();
+    for row in bundle
+        .archival_rows
+        .iter_mut()
+        .chain(bundle.compact_rows.iter_mut())
+        .filter(|row| row.event_index >= 9)
+    {
+        row.turn_id = Some("turn-002".to_string());
+        match row.event_index {
+            10 => {
+                row.kind = CompactionKind::AssistantMessage;
+                row.text = "I am summarizing the next patch step.".to_string();
+                row.dedupe_identity = None;
+            }
+            11 => {
+                row.kind = CompactionKind::DeveloperMessage;
+                row.text = "Stay inside Packet R3-5 only.".to_string();
+                row.dedupe_identity = None;
+            }
+            12 => {
+                row.kind = CompactionKind::AssistantMessage;
+                row.text = "Waiting for the next instruction.".to_string();
+                row.dedupe_identity = None;
+            }
+            _ => {}
+        }
+    }
+
+    let fixture = BundleFixture::from_rows(
+        bundle.archival_rows,
+        bundle.compact_rows,
+        bundle.dedupe_groups,
+    );
+    let result = agent_drift_analyzer::analyze_bundle(&agent_drift_analyzer::AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze conversational turn bundle");
+    let summary = fs::read_to_string(&result.summary_path).expect("summary");
+
+    assert!(summary.contains("Turns observed: `2`"));
+    assert!(summary.contains("- Checkpoints per turn: `1.00`"));
+    assert!(summary.contains(
+        "- Turn-context overview: `turn-001 (#1) -> turn-002 (#2); checkpoints in turn 1; modes mixed -> conversational`"
+    ));
+    assert!(summary.contains(
+        "  turn: `turn-001 (#1) rows=9 checkpoints=1 session-prompts=1 mode=mixed activity[dir=2 asst=0 tool=5 read=2 write=3 verify=3 out=2]`"
+    ));
+    assert!(summary.contains(
+        "  turn: `turn-002 (#2) rows=4 checkpoints=1 session-prompts=1 mode=conversational activity[dir=1 asst=3 tool=0 read=0 write=0 verify=0 out=0]`"
     ));
 }
 

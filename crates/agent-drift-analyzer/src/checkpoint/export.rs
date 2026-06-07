@@ -825,7 +825,10 @@ fn format_checkpoint_turn_context(turn_context: Option<&TurnContext>) -> String 
         format_turn_label(turn_context),
         format!("rows={}", turn_context.rows_since_turn_start),
         format!("checkpoints={}", turn_context.checkpoints_in_turn),
-        format!("prompts={}", turn_context.prompts_observed_in_session),
+        format!(
+            "session-prompts={}",
+            turn_context.prompts_observed_in_session
+        ),
         format!(
             "mode={}",
             format_turn_execution_mode(turn_context.execution_mode)
