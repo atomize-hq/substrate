@@ -4,7 +4,7 @@ Source spec: [SPEC-49-internal-family-2-host-targeted-obligation-envelope-and-wr
 Source prior slice: [PLAN-48.md](./PLAN-48.md)  
 Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
 Plan type: first post-`48` Family-2 envelope slice  
-Status: drafted on `2026-06-07`
+Status: implemented and validation-aligned on `2026-06-07`
 
 ## Objective
 
@@ -45,11 +45,11 @@ This plan assumes the `SPECIFY` phase artifact in [SPEC-49-internal-family-2-hos
 
 ## Plan Summary
 
-After Slice `48`, the local router-owned attach boundary is no longer open. The next remaining Family-2 seam is narrower:
+After Slice `48`, the next remaining Family-2 seam was narrower:
 
-1. the obligation ledger still lacks bounded host-targeting truth,
-2. the router still lacks an exact local-host wrong-target check,
-3. the current architecture still has no explicit answer for what to do when a foreign-targeted obligation appears locally before `host_inbox` exists.
+1. the obligation ledger needed bounded host-targeting truth,
+2. the router needed an exact local-host wrong-target check,
+3. the current architecture needed an explicit answer for what to do when a foreign-targeted obligation appears locally before `host_inbox` exists.
 
 The design stack is already clear enough to freeze that seam now:
 
@@ -58,12 +58,12 @@ The design stack is already clear enough to freeze that seam now:
 3. explicit wrong-host obligations must fail closed rather than silently reroute,
 4. ingress metadata and host-global inbox layering remain later work.
 
-The narrowest honest Slice `49` is therefore:
+The landed Slice `49` therefore:
 
 1. freeze the bounded host-targeting envelope first,
 2. widen local persistence and producers second,
 3. add wrong-host router evaluation and fail-closed settlement third,
-4. finish with docs and validation fourth.
+4. finished with docs and validation fourth.
 
 ## Locked Decisions
 

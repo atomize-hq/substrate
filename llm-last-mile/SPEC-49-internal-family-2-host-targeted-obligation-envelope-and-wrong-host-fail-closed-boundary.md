@@ -14,7 +14,7 @@ Related design stack:
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: drafted on `2026-06-07`
+Status: implemented and validation-aligned on `2026-06-07`
 
 ## Assumptions
 
@@ -61,13 +61,13 @@ The current repo already has most of the local Family-2 floor that this slice sh
 4. router-owned attach execution already consumes local obligations through [`auto_attach.rs`](../crates/shell/src/execution/agent_runtime/auto_attach.rs),
 5. Slice `48` already closed the local router-owned execution boundary, deny-by-default policy gate, and manual-reattach convergence.
 
-What is still missing in the live tree is the host-targeting envelope itself:
+What this slice now lands in the live tree is the bounded host-targeting envelope itself:
 
-1. the obligation record does not yet carry `origin_host_id` or `target_host_id`,
-2. the router path does not yet have an exact local-host boundary check for obligation targeting,
-3. there is no bounded Family-2 contract for what "wrong host" means before a future `host_inbox` or remote ingress layer exists.
+1. the obligation record now carries `origin_host_id` and `target_host_id`,
+2. the router path now has an exact local-host boundary check for obligation targeting,
+3. the runtime now treats an explicit foreign-targeted local obligation as an explanation-ready fail-closed local-materialization condition until a future `host_inbox` or remote ingress layer exists.
 
-That is why this is the next honest Family-2 slice.
+That keeps Slice `49` honest: the local-only boundary is widened just enough for exact host targeting, but no broader ingress or federation machinery is implied.
 
 ## Tech Stack
 

@@ -5,7 +5,7 @@ Source plan: [PLAN-49.md](./PLAN-49.md)
 Source prior slice: [TASKS-48.md](./TASKS-48.md)  
 Phase: `TASKS`  
 Execution model: four sequential `/incremental-implementation` sessions  
-Status: drafted on `2026-06-07`
+Status: Packet 4 docs/validation completed on `2026-06-07`
 
 ## Phase Gate
 
@@ -139,7 +139,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align docs with the landed Slice `49` boundary
+- [x] Task 4.1: Align docs with the landed Slice `49` boundary
   - Acceptance: docs describe Slice `49` as bounded host-targeting envelope plus wrong-host fail-closed behavior only, and do not imply `host_inbox`, remote ingress, or broader federation support has landed.
   - Verify:
     - manual diff review
@@ -150,7 +150,7 @@ Session goal:
     - [`llm-last-mile/PLAN-49.md`](./PLAN-49.md)
     - [`llm-last-mile/TASKS-49.md`](./TASKS-49.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests are green against the bounded Slice `49` file set; this task validates the slice and does not become an open-ended cleanup bucket.
   - Verify:
     - `cargo fmt --all -- --check`
