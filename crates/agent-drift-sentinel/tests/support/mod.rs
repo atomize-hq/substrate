@@ -87,6 +87,7 @@ pub(crate) fn checkpoint(
             start: row.clone(),
             end: row.clone(),
         },
+        turn_context: None,
         diagnostics: CheckpointDiagnostics {
             task_frame_transitioned: ordinal == 1,
             working_set_changed: false,

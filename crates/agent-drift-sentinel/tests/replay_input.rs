@@ -1,14 +1,147 @@
 #![allow(unused_crate_dependencies)]
 
-mod support;
-
 use std::fs;
 
-use agent_drift_analyzer::DriftState;
+use agent_drift_analyzer::{
+    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftState,
+    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+};
 use agent_drift_sentinel::input::{load_replay_bundle, InputError};
+use agent_session_compactor::RowRef;
 use camino::Utf8Path;
-use support::{checkpoint, ReplayFixture};
 use tempfile::TempDir;
+
+struct ReplayFixture {
+    _temp_dir: TempDir,
+    checkpoint_dir: camino::Utf8PathBuf,
+}
+
+impl ReplayFixture {
+    fn from_checkpoints(checkpoints: Vec<Checkpoint>, summary: &str) -> Self {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+        let checkpoint_dir = root.join("checkpoint");
+        fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+        write_jsonl(checkpoint_dir.join("checkpoints.jsonl"), &checkpoints);
+        fs::write(checkpoint_dir.join("summary.md"), summary).expect("write summary");
+        Self {
+            _temp_dir: temp_dir,
+            checkpoint_dir,
+        }
+    }
+}
+
+fn sample_summary() -> &'static str {
+    "# Agent Drift Analyzer Summary\n\nSessions analyzed: `2`\nFlagged checkpoints: `3`\n"
+}
+
+fn sample_checkpoints() -> Vec<Checkpoint> {
+    vec![
+        checkpoint("session-alpha", 1, 82, true, "align plan to repo truth"),
+        checkpoint(
+            "session-alpha",
+            2,
+            40,
+            true,
+            "re-read the task doc before editing",
+        ),
+        checkpoint(
+            "session-alpha",
+            3,
+            86,
+            true,
+            "re-read the task doc before editing",
+        ),
+        checkpoint(
+            "session-beta",
+            1,
+            0,
+            false,
+            "continue on the current task frame",
+        ),
+    ]
+}
+
+fn checkpoint(
+    session_id: &str,
+    ordinal: usize,
+    raw_score: u8,
+    flagged: bool,
+    expected_next_step: &str,
+) -> Checkpoint {
+    let row = RowRef {
+        source_file: camino::Utf8PathBuf::from(format!("/tmp/{session_id}.jsonl")),
+        event_index: ordinal,
+        row_ordinal: 0,
+    };
+    let evidence_item_count = if flagged { 2 } else { 1 };
+    Checkpoint {
+        schema_version: "v0.2".to_string(),
+        session_id: session_id.to_string(),
+        checkpoint_id: format!("{session_id}:{ordinal:04}"),
+        ordinal,
+        boundary: CheckpointBoundary {
+            start: row.clone(),
+            end: row.clone(),
+        },
+        turn_context: None,
+        diagnostics: CheckpointDiagnostics {
+            task_frame_transitioned: ordinal == 1,
+            working_set_changed: false,
+            interval_command_count: 1,
+            interval_verification_command_count: 1,
+            evidence_item_count,
+        },
+        task_frame: TaskFrame {
+            objective: format!(
+                "/goal Complete replay validation for {session_id} checkpoint {ordinal}"
+            ),
+            confidence: Confidence::Medium,
+            truth_artifacts: vec!["docs/specs/agent-drift-sentinel-v0.2-spec.md".to_string()],
+            working_set_paths: vec!["crates/agent-drift-sentinel/src/lib.rs".to_string()],
+            tools: vec!["functions.shell_command".to_string()],
+            command_families: vec!["cargo".to_string()],
+            verification_commands: vec![
+                "cargo test -p agent-drift-sentinel -- --nocapture".to_string()
+            ],
+            supporting_evidence: vec![agent_drift_analyzer::EvidenceRef {
+                row: row.clone(),
+                reason: "objective row".to_string(),
+            }],
+            counter_evidence: Vec::new(),
+        },
+        drift_scores: vec![agent_drift_analyzer::DriftScore {
+            class: agent_drift_analyzer::DriftClass::WrongPlanBranch,
+            state: if flagged {
+                DriftState::Active
+            } else {
+                DriftState::Cleared
+            },
+            raw_score,
+            confidence: Confidence::Medium,
+            flagged,
+            evidence: if flagged {
+                vec![agent_drift_analyzer::EvidenceRef {
+                    row,
+                    reason: format!("flagged score for {session_id}:{ordinal}"),
+                }]
+            } else {
+                Vec::new()
+            },
+        }],
+        expected_next_step: expected_next_step.to_string(),
+        flagged,
+    }
+}
+
+fn write_jsonl<T: serde::Serialize>(path: camino::Utf8PathBuf, items: &[T]) {
+    let body = items
+        .iter()
+        .map(|item| serde_json::to_string(item).expect("json"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(path, format!("{body}\n")).expect("write jsonl");
+}
 
 fn schema_checkpoint(
     schema_version: &str,
@@ -23,6 +156,27 @@ fn schema_checkpoint(
     checkpoint
 }
 
+fn sample_turn_context(turn_ordinal: usize) -> TurnContext {
+    TurnContext {
+        turn_id: Some(format!("turn-{turn_ordinal}")),
+        turn_ordinal,
+        rows_since_turn_start: 4,
+        seconds_since_turn_start: Some(12),
+        checkpoints_in_turn: 2,
+        prompts_observed_in_session: turn_ordinal,
+        execution_mode: TurnExecutionMode::Autonomous,
+        activity_mix: TurnActivityMix {
+            directive_row_count: 1,
+            assistant_message_count: 1,
+            tool_call_count: 1,
+            read_like_command_count: 1,
+            write_like_command_count: 1,
+            verification_like_command_count: 0,
+            tool_output_count: 1,
+        },
+    }
+}
+
 #[test]
 fn replay_input_loads_and_sorts_v0_3_checkpoints() {
     let fixture = ReplayFixture::from_checkpoints(
@@ -31,7 +185,7 @@ fn replay_input_loads_and_sorts_v0_3_checkpoints() {
             schema_checkpoint("v0.3", "session-alpha", 3, 65, true, "repair"),
             schema_checkpoint("v0.3", "session-alpha", 1, 85, true, "repair"),
         ],
-        support::sample_summary(),
+        sample_summary(),
     );
 
     let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load replay bundle");
@@ -41,6 +195,37 @@ fn replay_input_loads_and_sorts_v0_3_checkpoints() {
     assert_eq!(bundle.checkpoints[0].checkpoint_id, "session-alpha:0001");
     assert_eq!(bundle.checkpoints[1].checkpoint_id, "session-alpha:0003");
     assert_eq!(bundle.checkpoints[2].checkpoint_id, "session-beta:0002");
+}
+
+#[test]
+fn replay_input_loads_and_sorts_v0_4_checkpoints() {
+    let mut session_beta = schema_checkpoint("v0.4", "session-beta", 2, 0, false, "continue");
+    session_beta.turn_context = Some(sample_turn_context(2));
+    let mut session_alpha_late = schema_checkpoint("v0.4", "session-alpha", 3, 65, true, "repair");
+    session_alpha_late.turn_context = Some(sample_turn_context(3));
+    let mut session_alpha_early = schema_checkpoint("v0.4", "session-alpha", 1, 85, true, "repair");
+    session_alpha_early.turn_context = Some(sample_turn_context(1));
+
+    let fixture = ReplayFixture::from_checkpoints(
+        vec![session_beta, session_alpha_late, session_alpha_early],
+        sample_summary(),
+    );
+
+    let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load replay bundle");
+
+    assert_eq!(bundle.schema_version, "v0.4");
+    assert_eq!(bundle.checkpoints.len(), 3);
+    assert_eq!(bundle.checkpoints[0].checkpoint_id, "session-alpha:0001");
+    assert_eq!(bundle.checkpoints[1].checkpoint_id, "session-alpha:0003");
+    assert_eq!(bundle.checkpoints[2].checkpoint_id, "session-beta:0002");
+    assert_eq!(
+        bundle.checkpoints[0]
+            .turn_context
+            .as_ref()
+            .expect("v0.4 turn context")
+            .execution_mode,
+        TurnExecutionMode::Autonomous
+    );
 }
 
 #[test]
@@ -63,7 +248,7 @@ fn replay_input_retains_v0_2_compatibility() {
         format!("{legacy_line}\n"),
     )
     .expect("write checkpoints");
-    fs::write(checkpoint_dir.join("summary.md"), support::sample_summary()).expect("write summary");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
 
     let bundle = load_replay_bundle(&checkpoint_dir).expect("load replay bundle");
 
@@ -93,7 +278,7 @@ fn replay_input_rejects_v0_3_checkpoints_missing_state() {
         format!("{malformed_line}\n"),
     )
     .expect("write checkpoints");
-    fs::write(checkpoint_dir.join("summary.md"), support::sample_summary()).expect("write summary");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
 
     let error = load_replay_bundle(&checkpoint_dir)
         .expect_err("v0.3 checkpoints missing state must fail closed");
@@ -110,6 +295,44 @@ fn replay_input_rejects_v0_3_checkpoints_missing_state() {
 }
 
 #[test]
+fn replay_input_rejects_v0_4_checkpoints_missing_turn_context() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let checkpoint_dir = root.join("checkpoint");
+    fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+
+    let mut checkpoint = schema_checkpoint("v0.4", "session-alpha", 1, 85, true, "repair");
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    let mut malformed_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    malformed_json
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("turn_context");
+    let malformed_line =
+        serde_json::to_string(&malformed_json).expect("serialize malformed checkpoint");
+    fs::write(
+        checkpoint_dir.join("checkpoints.jsonl"),
+        format!("{malformed_line}\n"),
+    )
+    .expect("write checkpoints");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
+
+    let error = load_replay_bundle(&checkpoint_dir)
+        .expect_err("v0.4 checkpoints missing turn context must fail closed");
+
+    assert!(matches!(
+        error,
+        InputError::ContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.4" && field == "turn_context"
+    ));
+    assert!(error.to_string().contains("missing turn_context"));
+}
+
+#[test]
 fn replay_input_preserves_explicit_v0_3_drift_state() {
     let mut checkpoint = schema_checkpoint("v0.3", "session-alpha", 1, 20, false, "continue");
     checkpoint.drift_scores[0].state = DriftState::HistoricalOnly;
@@ -118,8 +341,7 @@ fn replay_input_preserves_explicit_v0_3_drift_state() {
         reason: "explicit analyzer historical state".to_string(),
     }];
 
-    let fixture =
-        ReplayFixture::from_checkpoints(vec![checkpoint.clone()], support::sample_summary());
+    let fixture = ReplayFixture::from_checkpoints(vec![checkpoint.clone()], sample_summary());
 
     let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load replay bundle");
 
@@ -137,14 +359,14 @@ fn replay_input_preserves_explicit_v0_3_drift_state() {
 #[test]
 fn replay_input_applies_cursor_strictly_after_session_and_ordinal() {
     let fixture = ReplayFixture::from_checkpoints(
-        support::sample_checkpoints()
+        sample_checkpoints()
             .into_iter()
             .map(|mut checkpoint| {
                 checkpoint.schema_version = "v0.2".to_string();
                 checkpoint
             })
             .collect(),
-        support::sample_summary(),
+        sample_summary(),
     );
     let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load replay bundle");
 
@@ -180,7 +402,7 @@ fn replay_input_accepts_legacy_ignoring_repo_truth_rows_while_mapping_to_truth_g
         format!("{legacy_line}\n"),
     )
     .expect("write checkpoints");
-    fs::write(checkpoint_dir.join("summary.md"), support::sample_summary()).expect("write summary");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
 
     let bundle = load_replay_bundle(&checkpoint_dir).expect("load replay bundle");
 

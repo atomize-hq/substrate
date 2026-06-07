@@ -10,8 +10,8 @@ use crate::input::CheckpointCursor;
 use crate::operator_surface::warning_fingerprint;
 use crate::scheduler::TriggerClass;
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2 or v0.3";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4"];
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, or v0.4";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCheckpointEvent {
@@ -399,6 +399,13 @@ pub fn verify_live_checkpoint_compatibility(
             "empty expected next step prevents operator guidance".to_string(),
         ));
     }
+    if checkpoint.schema_version == "v0.4" && checkpoint.turn_context.is_none() {
+        return Err(compatibility_gap(
+            checkpoint,
+            "turn_context",
+            "v0.4 checkpoints must carry explicit turn context".to_string(),
+        ));
+    }
 
     Ok(LiveCheckpointCompatibility {
         cursor: CheckpointCursor::from(checkpoint),
@@ -425,10 +432,34 @@ fn validate_live_fixture_contract(
     let Some(checkpoint) = record.get("checkpoint") else {
         return Ok(());
     };
-    if checkpoint.get("schema_version").and_then(Value::as_str) != Some("v0.3") {
-        return Ok(());
+    match checkpoint.get("schema_version").and_then(Value::as_str) {
+        Some("v0.3") => {
+            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.3")
+        }
+        Some("v0.4") => {
+            if checkpoint.get("turn_context").is_none()
+                || checkpoint.get("turn_context").is_some_and(Value::is_null)
+            {
+                return Err(LiveInputError::FixtureContractGap {
+                    path: path.to_owned(),
+                    line_number,
+                    schema_version: "v0.4".to_string(),
+                    field: "checkpoint.turn_context".to_string(),
+                    reason: "v0.4 checkpoints must serialize explicit turn context".to_string(),
+                });
+            }
+            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.4")
+        }
+        _ => Ok(()),
     }
+}
 
+fn validate_fixture_drift_score_state_contract(
+    path: &Utf8Path,
+    line_number: usize,
+    checkpoint: &Value,
+    schema_version: &str,
+) -> Result<(), LiveInputError> {
     let Some(drift_scores) = checkpoint.get("drift_scores").and_then(Value::as_array) else {
         return Ok(());
     };
@@ -438,11 +469,12 @@ fn validate_live_fixture_contract(
             return Err(LiveInputError::FixtureContractGap {
                 path: path.to_owned(),
                 line_number,
-                schema_version: "v0.3".to_string(),
+                schema_version: schema_version.to_string(),
                 field: format!("checkpoint.drift_scores[{index}].state"),
                 reason:
-                    "v0.3 checkpoints must serialize explicit drift state for every drift score"
-                        .to_string(),
+                    format!(
+                        "{schema_version} checkpoints must serialize explicit drift state for every drift score"
+                    ),
             });
         }
     }
