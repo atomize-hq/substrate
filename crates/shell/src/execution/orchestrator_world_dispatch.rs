@@ -1819,11 +1819,15 @@ fn persist_continue_world_worker_obligation(
         obligation_kind,
         obligation_summary,
     );
+    obligation.ingress_source_kind = Some("local_runtime".to_string());
+    obligation.ingress_source_id = Some(request.run_id.clone());
+    obligation.ingress_received_at = Some(obligation.created_at);
     if let Some(local_host_id) = resolve_local_obligation_host_id() {
         obligation.origin_host_id = Some(local_host_id.clone());
         obligation.target_host_id = Some(local_host_id);
     }
     obligation.attention_required = worker_event.attention_required;
+    obligation.causation_request_id = Some(request.run_id.clone());
     obligation.attach_state = continue_world_worker_obligation_attach_state(obligation_kind);
     obligation.source_participant_id = Some(worker_event.source_participant_id.clone());
     obligation.target_backend_id = Some(request.backend_id.clone());
@@ -7194,8 +7198,23 @@ mod tests {
                 obligation.target_backend_id.as_deref(),
                 Some("cli:codex_world")
             );
+            assert_eq!(
+                obligation.ingress_source_kind.as_deref(),
+                Some("local_runtime")
+            );
+            assert_eq!(obligation.ingress_source_id.as_deref(), Some(run_id.as_str()));
+            assert_eq!(
+                obligation.ingress_received_at,
+                Some(obligation.created_at)
+            );
             assert_eq!(obligation.origin_host_id, expected_local_host_id.clone());
             assert_eq!(obligation.target_host_id, expected_local_host_id.clone());
+            assert_eq!(obligation.causation_event_id, None);
+            assert_eq!(obligation.causation_message_id, None);
+            assert_eq!(
+                obligation.causation_request_id.as_deref(),
+                Some(run_id.as_str())
+            );
             assert_eq!(obligation.world_id.as_deref(), Some("world-17"));
             assert_eq!(obligation.world_generation, Some(2));
             assert_eq!(
@@ -8135,6 +8154,24 @@ agents:
             assert_eq!(
                 obligation.target_backend_id.as_deref(),
                 Some("cli:codex_world")
+            );
+            assert_eq!(
+                obligation.ingress_source_kind.as_deref(),
+                Some("local_runtime")
+            );
+            assert_eq!(
+                obligation.ingress_source_id.as_deref(),
+                Some(request_id.as_str())
+            );
+            assert_eq!(
+                obligation.ingress_received_at,
+                Some(obligation.created_at)
+            );
+            assert_eq!(obligation.causation_event_id, None);
+            assert_eq!(obligation.causation_message_id, None);
+            assert_eq!(
+                obligation.causation_request_id.as_deref(),
+                Some(request_id.as_str())
             );
             assert_eq!(obligation.world_id.as_deref(), Some("world-17"));
             assert_eq!(obligation.world_generation, Some(2));
