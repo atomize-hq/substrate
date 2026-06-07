@@ -294,14 +294,9 @@ pub fn render_replay_report(
 
         let cursor = CheckpointCursor::from(checkpoint);
         let fingerprint = warning_fingerprint(checkpoint);
-        let scheduler_trigger = if checkpoint.flagged {
-            TriggerClass::RepeatedFailure
-        } else {
-            TriggerClass::CheckpointReady
-        };
         let decision = scheduler.observe(
             cursor,
-            scheduler_trigger,
+            TriggerClass::CheckpointReady,
             checkpoint.flagged,
             Some(&fingerprint),
         );

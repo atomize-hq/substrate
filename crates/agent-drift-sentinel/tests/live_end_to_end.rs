@@ -201,6 +201,108 @@ fn live_end_to_end_replay_and_live_share_checkpoint_ready_headlines_for_matching
 }
 
 #[test]
+fn live_end_to_end_replay_ordinary_flagged_checkpoints_do_not_take_repeated_failure_fast_path() {
+    let scheduler_policy = SchedulerPolicy {
+        checkpoint_cooldown: 3,
+        repeated_failure_threshold: 2,
+        ..SchedulerPolicy::default()
+    };
+    let checkpoints = vec![
+        checkpoint_with_state(
+            "session-policy-split",
+            1,
+            DriftClass::TruthGroundingGap,
+            DriftState::Active,
+            82,
+            true,
+            "align plan to repo truth",
+            &["flagged score for session-policy-split:1"],
+        ),
+        checkpoint_with_state(
+            "session-policy-split",
+            2,
+            DriftClass::TruthGroundingGap,
+            DriftState::Active,
+            86,
+            true,
+            "confirm fresh repo evidence before continuing",
+            &["flagged score for session-policy-split:2"],
+        ),
+    ];
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        checkpoints.clone(),
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy,
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    assert_eq!(replay.report.visible_warnings.len(), 1);
+    assert_eq!(replay.report.silent_checkpoints.len(), 1);
+
+    let replay_silent = replay
+        .report
+        .silent_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.checkpoint.checkpoint_id == "session-policy-split:0002")
+        .expect("replay second checkpoint");
+
+    let mut runtime = LiveRuntime::new(scheduler_policy, WarningPolicy::default());
+    runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live first checkpoint");
+    let live_second = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live second checkpoint");
+    let live_second_event = match build_single_event(&live_second) {
+        OperatorEvent::SilentCheckpoint(event) => event,
+        other => panic!("expected silent checkpoint event, got {other:?}"),
+    };
+
+    assert_eq!(replay_silent.headline, live_second.presentation.headline);
+    assert_eq!(replay_silent.posture, live_second.presentation.posture);
+    assert!(replay_silent.headline.contains("checkpoint_ready"));
+    assert!(!replay_silent
+        .headline
+        .contains("scheduler_repeated_failure_trigger"));
+    assert!(live_second_event
+        .reason
+        .contains("scheduler cooldown deferred replay evaluation"));
+
+    let live_fast_path = runtime
+        .observe(LiveCheckpointEvent::repeated_failure(
+            3,
+            live_second.event.cursor.clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live repeated-failure event");
+    let live_fast_path_event = match build_single_event(&live_fast_path) {
+        OperatorEvent::Status(event) => event,
+        other => panic!("expected status event, got {other:?}"),
+    };
+
+    assert!(live_fast_path.decision.evaluate);
+    assert!(live_fast_path_event
+        .message
+        .contains("scheduler_repeated_failure_trigger"));
+    assert_ne!(live_fast_path.presentation.headline, replay_silent.headline);
+}
+
+#[test]
 fn live_end_to_end_replay_and_live_surfaces_share_turn_context_rendering_for_v0_4_checkpoints() {
     let mut checkpoints = support::sample_checkpoints();
     for (index, checkpoint) in checkpoints.iter_mut().take(2).enumerate() {
