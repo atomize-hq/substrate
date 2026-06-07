@@ -79,7 +79,7 @@ Execution split:
 
 ### Workstream 1: Lock The Turn-Context Contract
 
-Define the `R3` contract in code and docs first:
+Lock the `R3` contract in repo docs first:
 
 - `TurnContext`
 - `TurnActivityMix`
@@ -88,14 +88,36 @@ Define the `R3` contract in code and docs first:
 
 Why first:
 
-- later analyzer, export, and sentinel work all depend on a stable contract
+- later analyzer, export, derivation, and sentinel work all depend on a stable contract
 - this is the place to encode the narrow interpretation of AgentLens/DST inspiration before code
   drifts into `R4+`
 - `R3-1` ends here; no analyzer or sentinel code changes belong in this packet
 
-### Workstream 2: Add Analyzer Turn-Slice Derivation
+Implementation ownership after this doc lock:
 
-Implement one analyzer-local helper that derives the current turn slice for each checkpoint using:
+- `R3-2` owns the analyzer-local schema types and the explicit `v0.4` checkpoint export seam
+- `R3-3` owns deterministic turn-slice derivation, first population of `turn_context`, analyzer
+  summary output, and analyzer regression walls
+
+### Workstream 2: Add Analyzer Schema Types And `v0.4` Export
+
+Implement the analyzer-owned checkpoint contract surface:
+
+- `TurnContext`
+- `TurnActivityMix`
+- `TurnExecutionMode`
+- explicit `schema_version = "v0.4"` export
+- exported `turn_context` checkpoint field
+
+Why second:
+
+- `R3-2` should lock the analyzer-owned schema surface and explicit version cutover before
+  deterministic derivation is wired into checkpoint construction
+
+### Workstream 3: Add Analyzer Turn-Slice Derivation And Summary Walls
+
+Once the schema surface is fixed, implement one analyzer-local helper that derives the current turn
+slice for each checkpoint using:
 
 - checkpoint boundary rows
 - latest observed `turn_id`
@@ -114,22 +136,16 @@ The helper should compute:
 - `activity_mix`
 - `execution_mode`
 
-Why second:
-
-- the analyzer must own the raw turn-context truth before export or sentinel compatibility changes
-
-### Workstream 3: Widen Analyzer Export To `v0.4`
-
-Once analyzer computation is stable:
+It should also:
 
 - attach `turn_context` to every checkpoint
-- switch new exports to `schema_version = "v0.4"`
 - update summary rendering with compact turn-context inspection
+- lock long-turn vs many-short-turn analyzer regressions
 
 Why third:
 
-- widening the public contract before deterministic analyzer derivation is stable would create a
-  moving downstream target
+- `R3-3` owns the first deterministic population of `turn_context`, so summary output and analyzer
+  regressions should land in the same packet as the derivation logic
 
 ### Workstream 4: Extend Sentinel Compatibility
 
@@ -165,8 +181,8 @@ Why fifth:
 Sequential work:
 
 1. `R3-1`: lock the `R3` contract in repo docs
-2. `R3-2`: add analyzer-local turn-context types and helper seams
-3. `R3-2`: populate `turn_context` during checkpoint construction and widen export to `v0.4`
+2. `R3-2`: add analyzer-local turn-context types and explicit `v0.4` export seam
+3. `R3-3`: populate deterministic `turn_context` during checkpoint construction
 4. `R3-3`: update analyzer summary rendering and analyzer tests
 5. `R3-4`: extend sentinel replay/live compatibility to `v0.4`
 6. `R3-4`: expose compact turn-context output in replay/live presentation
