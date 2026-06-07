@@ -6058,6 +6058,12 @@ mod tests {
                 Some("session_attach_restored_by_test")
             );
             assert_eq!(claimed.attach_claim_owner.as_deref(), Some("router::local"));
+            assert_eq!(
+                claimed.review_state,
+                OrchestrationObligationReviewState::Unread
+            );
+            assert_eq!(claimed.state, OrchestrationObligationState::Pending);
+            assert!(claimed.resolved_at.is_none());
 
             let sibling = store
                 .load_obligation("sess_auto_attach_restored", "obl_sibling")
@@ -6072,6 +6078,12 @@ mod tests {
                 sibling.attach_completion_reason.as_deref(),
                 Some("session_attach_restored_by_test")
             );
+            assert_eq!(
+                sibling.review_state,
+                OrchestrationObligationReviewState::Unread
+            );
+            assert_eq!(sibling.state, OrchestrationObligationState::Pending);
+            assert!(sibling.resolved_at.is_none());
         });
     }
 

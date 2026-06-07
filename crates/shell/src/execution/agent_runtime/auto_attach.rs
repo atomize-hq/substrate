@@ -65,7 +65,51 @@ pub(crate) enum SessionAutoAttachExecution {
         obligation_id: String,
         attach_claim_owner: String,
         receipt: HiddenOwnerHelperLaunchReceipt,
+        settled: SessionAutoAttachSettleResult,
     },
+}
+
+impl SessionAutoAttachExecution {
+    pub(crate) fn obligation_id(&self) -> Option<&str> {
+        match self {
+            Self::NoCandidate { .. } => None,
+            Self::AlreadyClaimed { obligation_id }
+            | Self::FailedClosed { obligation_id, .. }
+            | Self::Attached { obligation_id, .. } => Some(obligation_id.as_str()),
+        }
+    }
+
+    pub(crate) fn attach_claim_owner(&self) -> Option<&str> {
+        match self {
+            Self::NoCandidate { .. } | Self::AlreadyClaimed { .. } => None,
+            Self::FailedClosed {
+                attach_claim_owner, ..
+            }
+            | Self::Attached {
+                attach_claim_owner, ..
+            } => Some(attach_claim_owner.as_str()),
+        }
+    }
+
+    pub(crate) fn completion_reason(&self) -> &str {
+        match self {
+            Self::NoCandidate { reason } => reason,
+            Self::AlreadyClaimed { .. } => {
+                "auto_attach_claim_already_owned_by_this_orchestration_session"
+            }
+            Self::FailedClosed { reason, .. } => reason.as_str(),
+            Self::Attached { .. } => ROUTER_AUTO_ATTACH_RESTORED_REASON,
+        }
+    }
+
+    pub(crate) fn settled(&self) -> Option<&SessionAutoAttachSettleResult> {
+        match self {
+            Self::Attached { settled, .. } => Some(settled),
+            Self::NoCandidate { .. }
+            | Self::AlreadyClaimed { .. }
+            | Self::FailedClosed { .. } => None,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -276,7 +320,7 @@ pub(crate) fn execute_session_auto_attach(
         let reason = err.to_string();
         let _ = mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, &reason);
     })?;
-    store.settle_session_auto_attach_after_attach_restored(
+    let settled = store.settle_session_auto_attach_after_attach_restored(
         orchestration_session_id,
         ROUTER_AUTO_ATTACH_RESTORED_REASON,
     )?;
@@ -285,6 +329,7 @@ pub(crate) fn execute_session_auto_attach(
         obligation_id,
         attach_claim_owner,
         receipt,
+        settled,
     })
 }
 

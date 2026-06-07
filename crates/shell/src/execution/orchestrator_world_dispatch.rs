@@ -17,7 +17,7 @@ use tokio::sync::mpsc::UnboundedSender;
 #[cfg(target_os = "linux")]
 use tokio::sync::watch;
 #[cfg(target_os = "linux")]
-use tracing::warn;
+use tracing::{info, warn};
 #[cfg(target_os = "linux")]
 use uuid::Uuid;
 
@@ -81,6 +81,22 @@ use transport_api_types::ExecuteCancelRequestV1;
 
 #[cfg(target_os = "linux")]
 const CONTINUE_WORLD_WORKER_ROUTER_IDENTITY: &str = "router::continue_world_worker";
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RouterOwnedAutoAttachOutcomeRecord {
+    orchestration_session_id: String,
+    obligation_id: Option<String>,
+    obligation_kind: Option<OrchestrationObligationKind>,
+    attach_claim_owner: Option<String>,
+    backend_id: Option<String>,
+    world_id: Option<String>,
+    world_generation: Option<u64>,
+    outcome: &'static str,
+    reason: String,
+    satisfied_obligation_ids: Vec<String>,
+    superseded_obligation_ids: Vec<String>,
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -1633,14 +1649,151 @@ fn run_router_owned_auto_attach_discovery_once(
     store: &AgentRuntimeStateStore,
     policy: &Policy,
 ) -> Result<()> {
-    let _ = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
+    let executions = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
         store,
         CONTINUE_WORLD_WORKER_ROUTER_IDENTITY,
         policy,
         false,
         false,
     )?;
+    emit_router_owned_auto_attach_execution_outcomes(store, &executions);
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn emit_router_owned_auto_attach_execution_outcomes(
+    store: &AgentRuntimeStateStore,
+    executions: &[crate::execution::agent_runtime::auto_attach::RouterAutoAttachSessionExecution],
+) {
+    for execution in executions {
+        match build_router_owned_auto_attach_outcome_record(store, execution) {
+            Ok(outcome) => log_router_owned_auto_attach_outcome(&outcome),
+            Err(err) => warn!(
+                target = "substrate::shell",
+                orchestration_session_id = %execution.orchestration_session_id,
+                error = %err,
+                "failed to describe router-owned auto-attach outcome"
+            ),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn build_router_owned_auto_attach_outcome_record(
+    store: &AgentRuntimeStateStore,
+    execution: &crate::execution::agent_runtime::auto_attach::RouterAutoAttachSessionExecution,
+) -> Result<RouterOwnedAutoAttachOutcomeRecord> {
+    let obligation = match execution.execution.obligation_id() {
+        Some(obligation_id) => Some(
+            store
+                .load_obligation(&execution.orchestration_session_id, obligation_id)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "router-owned auto-attach outcome could not reload obligation {} for orchestration session {}",
+                        obligation_id,
+                        execution.orchestration_session_id
+                    )
+                })?,
+        ),
+        None => None,
+    };
+
+    let (outcome, attach_claim_owner) = match &execution.execution {
+        crate::execution::agent_runtime::auto_attach::SessionAutoAttachExecution::NoCandidate {
+            ..
+        } => ("no_candidate", None),
+        crate::execution::agent_runtime::auto_attach::SessionAutoAttachExecution::AlreadyClaimed {
+            ..
+        } => (
+            "already_claimed",
+            obligation
+                .as_ref()
+                .and_then(|obligation| obligation.attach_claim_owner.clone()),
+        ),
+        crate::execution::agent_runtime::auto_attach::SessionAutoAttachExecution::FailedClosed {
+            ..
+        } => (
+            "failed_closed",
+            execution
+                .execution
+                .attach_claim_owner()
+                .map(ToOwned::to_owned),
+        ),
+        crate::execution::agent_runtime::auto_attach::SessionAutoAttachExecution::Attached {
+            ..
+        } => (
+            "attached",
+            execution
+                .execution
+                .attach_claim_owner()
+                .map(ToOwned::to_owned),
+        ),
+    };
+    let settled = execution.execution.settled().cloned().unwrap_or_default();
+
+    Ok(RouterOwnedAutoAttachOutcomeRecord {
+        orchestration_session_id: execution.orchestration_session_id.clone(),
+        obligation_id: obligation
+            .as_ref()
+            .map(|obligation| obligation.obligation_id.clone()),
+        obligation_kind: obligation.as_ref().map(|obligation| obligation.kind),
+        attach_claim_owner,
+        backend_id: obligation
+            .as_ref()
+            .and_then(|obligation| obligation.target_backend_id.clone()),
+        world_id: obligation
+            .as_ref()
+            .and_then(|obligation| obligation.world_id.clone()),
+        world_generation: obligation
+            .as_ref()
+            .and_then(|obligation| obligation.world_generation),
+        outcome,
+        reason: execution.execution.completion_reason().to_string(),
+        satisfied_obligation_ids: settled.satisfied_obligation_ids,
+        superseded_obligation_ids: settled.superseded_obligation_ids,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn log_router_owned_auto_attach_outcome(outcome: &RouterOwnedAutoAttachOutcomeRecord) {
+    let obligation_id = outcome.obligation_id.as_deref().unwrap_or("-");
+    let attach_claim_owner = outcome.attach_claim_owner.as_deref().unwrap_or("-");
+    let backend_id = outcome.backend_id.as_deref().unwrap_or("-");
+    let world_id = outcome.world_id.as_deref().unwrap_or("-");
+    let world_generation = outcome.world_generation.unwrap_or_default();
+
+    match outcome.outcome {
+        "failed_closed" => warn!(
+            target = "substrate::shell",
+            orchestration_session_id = %outcome.orchestration_session_id,
+            obligation_id,
+            obligation_kind = ?outcome.obligation_kind,
+            attach_claim_owner,
+            backend_id,
+            world_id,
+            world_generation,
+            outcome = outcome.outcome,
+            reason = %outcome.reason,
+            satisfied_obligation_ids = ?outcome.satisfied_obligation_ids,
+            superseded_obligation_ids = ?outcome.superseded_obligation_ids,
+            "router-owned auto-attach outcome"
+        ),
+        _ => info!(
+            target = "substrate::shell",
+            orchestration_session_id = %outcome.orchestration_session_id,
+            obligation_id,
+            obligation_kind = ?outcome.obligation_kind,
+            attach_claim_owner,
+            backend_id,
+            world_id,
+            world_generation,
+            outcome = outcome.outcome,
+            reason = %outcome.reason,
+            satisfied_obligation_ids = ?outcome.satisfied_obligation_ids,
+            superseded_obligation_ids = ?outcome.superseded_obligation_ids,
+            "router-owned auto-attach outcome"
+        ),
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -3908,6 +4061,13 @@ mod tests {
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::auto_attach::{
+        RouterAutoAttachSessionExecution, SessionAutoAttachExecution,
+        SessionAutoAttachSettleResult, ROUTER_AUTO_ATTACH_RESTORED_REASON,
+    };
+    #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::control::HiddenOwnerHelperLaunchReceipt;
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::dispatch_contract::{
         ApprovalResponseDecisionV1, ControlDirectiveKindV1, WorkerCancelPayloadV1,
@@ -7268,6 +7428,167 @@ mod tests {
         assert_eq!(
             target.attach_claim_owner.as_deref(),
             Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn build_router_owned_auto_attach_outcome_record_joins_fail_closed_router_session_details() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let submit_request =
+            sample_continue_submit_request_for_run("req_continue_router", "world-17", 2);
+        let worker_event = ContinueWorldWorkerEventV1 {
+            event_class: ContinueWorldWorkerEventClassV1::ApprovalRequest,
+            source_participant_id: "ash_member".to_string(),
+            target_participant_id: "orch_dispatch".to_string(),
+            source_backend_id: "cli:codex_world".to_string(),
+            attention_required: true,
+            thread_id: Some("thread_router".to_string()),
+            stream_channel: Some("worker.request".to_string()),
+            payload: serde_json::json!({
+                "message": "approval needed while detached"
+            }),
+        };
+
+        persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
+            .expect("persist detached continue obligation");
+        let executions =
+            crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
+                &store,
+                CONTINUE_WORLD_WORKER_ROUTER_IDENTITY,
+                &Policy::default(),
+                false,
+                false,
+            )
+            .expect("execute router-owned auto-attach batch");
+        let outcome = build_router_owned_auto_attach_outcome_record(&store, &executions[0])
+            .expect("build joined router outcome");
+
+        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+        assert_eq!(
+            outcome.obligation_id.as_deref(),
+            Some("obl_continue_req_continue_router_approval_required")
+        );
+        assert_eq!(
+            outcome.obligation_kind,
+            Some(OrchestrationObligationKind::ApprovalRequired)
+        );
+        assert_eq!(
+            outcome.attach_claim_owner.as_deref(),
+            Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
+        );
+        assert_eq!(outcome.backend_id.as_deref(), Some("cli:codex_world"));
+        assert_eq!(outcome.world_id.as_deref(), Some("world-17"));
+        assert_eq!(outcome.world_generation, Some(2));
+        assert_eq!(outcome.outcome, "failed_closed");
+        assert!(
+            outcome.reason.contains("workflow.router.enabled must be true"),
+            "fail-closed router outcome must explain the policy gate: {}",
+            outcome.reason
+        );
+        assert!(outcome.satisfied_obligation_ids.is_empty());
+        assert!(outcome.superseded_obligation_ids.is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn build_router_owned_auto_attach_outcome_record_preserves_attached_settlement_detail() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let store = AgentRuntimeStateStore::new().expect("state store");
+
+        let mut session = sample_session();
+        session.orchestration_session_id = "sess_router_attached".to_string();
+        session.shell_trace_session_id = "trace_router_attached".to_string();
+        session.active_session_handle_id = Some("orch_router_attached".to_string());
+        session.attached_participant_id = Some("orch_router_attached".to_string());
+        let mut orchestrator = sample_orchestrator_participant();
+        orchestrator.handle.participant_id = "orch_router_attached".to_string();
+        orchestrator.handle.orchestration_session_id = "sess_router_attached".to_string();
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&orchestrator);
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist attached router session");
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist attached router orchestrator");
+
+        let mut claimed = OrchestrationObligationRecord::new(
+            "sess_router_attached",
+            "obl_claimed",
+            OrchestrationObligationKind::Blocked,
+            "blocked while detached".to_string(),
+        );
+        claimed.attention_required = true;
+        claimed.target_backend_id = Some("cli:codex_world".to_string());
+        claimed.world_id = Some("world-55".to_string());
+        claimed.world_generation = Some(55);
+        claimed.mark_attach_claimed("router::local", chrono::Utc::now());
+        claimed.mark_attach_satisfied(ROUTER_AUTO_ATTACH_RESTORED_REASON, chrono::Utc::now());
+        store
+            .persist_obligation(&claimed)
+            .expect("persist satisfied claimed obligation");
+
+        let mut sibling = OrchestrationObligationRecord::new(
+            "sess_router_attached",
+            "obl_sibling",
+            OrchestrationObligationKind::FollowUpRequired,
+            "follow-up while detached".to_string(),
+        );
+        sibling.attention_required = true;
+        sibling.attach_state = OrchestrationObligationAttachState::Eligible;
+        sibling.mark_attach_superseded(ROUTER_AUTO_ATTACH_RESTORED_REASON, chrono::Utc::now());
+        store
+            .persist_obligation(&sibling)
+            .expect("persist superseded sibling obligation");
+
+        let execution = RouterAutoAttachSessionExecution {
+            orchestration_session_id: "sess_router_attached".to_string(),
+            execution: SessionAutoAttachExecution::Attached {
+                obligation_id: "obl_claimed".to_string(),
+                attach_claim_owner: "router::local".to_string(),
+                receipt: HiddenOwnerHelperLaunchReceipt {
+                    helper_pid: 100,
+                    orchestration_session_id: "sess_router_attached".to_string(),
+                    participant_id: "ash_attached".to_string(),
+                    backend_id: "cli:codex_world".to_string(),
+                },
+                settled: SessionAutoAttachSettleResult {
+                    satisfied_obligation_ids: vec!["obl_claimed".to_string()],
+                    superseded_obligation_ids: vec!["obl_sibling".to_string()],
+                },
+            },
+        };
+
+        let outcome = build_router_owned_auto_attach_outcome_record(&store, &execution)
+            .expect("build attached router outcome");
+
+        assert_eq!(outcome.orchestration_session_id, "sess_router_attached");
+        assert_eq!(outcome.obligation_id.as_deref(), Some("obl_claimed"));
+        assert_eq!(
+            outcome.obligation_kind,
+            Some(OrchestrationObligationKind::Blocked)
+        );
+        assert_eq!(outcome.attach_claim_owner.as_deref(), Some("router::local"));
+        assert_eq!(outcome.backend_id.as_deref(), Some("cli:codex_world"));
+        assert_eq!(outcome.world_id.as_deref(), Some("world-55"));
+        assert_eq!(outcome.world_generation, Some(55));
+        assert_eq!(outcome.outcome, "attached");
+        assert_eq!(outcome.reason, ROUTER_AUTO_ATTACH_RESTORED_REASON);
+        assert_eq!(
+            outcome.satisfied_obligation_ids,
+            vec!["obl_claimed".to_string()]
+        );
+        assert_eq!(
+            outcome.superseded_obligation_ids,
+            vec!["obl_sibling".to_string()]
         );
     }
 
