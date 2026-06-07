@@ -2931,6 +2931,57 @@ impl AgentRuntimeStateStore {
         Ok(result)
     }
 
+    pub(crate) fn settle_session_auto_attach_failed_closed(
+        &self,
+        orchestration_session_id: &str,
+        completion_reason: &str,
+    ) -> Result<Vec<String>> {
+        if completion_reason.trim().is_empty() {
+            anyhow::bail!(
+                "session auto-attach fail-closed settlement must include an explanation-ready completion reason"
+            );
+        }
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+
+        let obligations = self.list_obligations(orchestration_session_id)?;
+        let _ = claimed_obligation_id(&obligations)?;
+
+        let mut failed_closed_obligation_ids = Vec::new();
+        let settled_at = Utc::now();
+        for mut obligation in obligations {
+            if !obligation.is_pending() {
+                continue;
+            }
+
+            let changed = match obligation.attach_state {
+                OrchestrationObligationAttachState::Claimed
+                | OrchestrationObligationAttachState::Eligible => {
+                    obligation.mark_attach_failed_closed(completion_reason, settled_at);
+                    failed_closed_obligation_ids.push(obligation.obligation_id.clone());
+                    true
+                }
+                OrchestrationObligationAttachState::NotEligible
+                | OrchestrationObligationAttachState::Satisfied
+                | OrchestrationObligationAttachState::FailedClosed
+                | OrchestrationObligationAttachState::Superseded => false,
+            };
+            if !changed {
+                continue;
+            }
+
+            self.validate_obligation_record(&obligation)?;
+            let path = self.canonical_obligation_path(
+                &obligation.orchestration_session_id,
+                &obligation.obligation_id,
+            );
+            write_atomic_json(&path, &obligation)?;
+        }
+
+        Ok(failed_closed_obligation_ids)
+    }
+
     pub(crate) fn set_orchestration_session_world_binding(
         &self,
         session: &mut OrchestrationSessionRecord,

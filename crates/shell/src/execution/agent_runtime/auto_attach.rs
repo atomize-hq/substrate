@@ -279,7 +279,8 @@ fn fail_closed_auto_attach_policy_resolution(
             attach_claim_owner,
         } => (obligation_id, attach_claim_owner),
     };
-    mark_attach_failed_closed(store, orchestration_session_id, &obligation_id, reason)?;
+    let _ =
+        store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
     Ok(SessionAutoAttachExecution::FailedClosed {
         obligation_id,
         attach_claim_owner,
@@ -1001,6 +1002,13 @@ agents:
                     OrchestrationObligationKind::ApprovalRequired,
                 ))
                 .expect("persist invalid workspace obligation");
+            store
+                .persist_obligation(&eligible_obligation(
+                    "sess_auto_attach_invalid_workspace",
+                    "obl_invalid_workspace_sibling",
+                    OrchestrationObligationKind::FollowUpRequired,
+                ))
+                .expect("persist invalid workspace sibling obligation");
 
             let (mut denied_session, denied_participant) =
                 detached_orchestrator("sess_auto_attach_denied_workspace", "ash_denied");
@@ -1088,6 +1096,33 @@ agents:
                     OrchestrationObligationAttachState::FailedClosed
                 );
             }
+
+            let invalid_sibling = store
+                .load_obligation(
+                    "sess_auto_attach_invalid_workspace",
+                    "obl_invalid_workspace_sibling",
+                )
+                .expect("reload invalid workspace sibling after fail-close")
+                .expect("invalid workspace sibling exists after fail-close");
+            assert_eq!(
+                invalid_sibling.attach_state,
+                OrchestrationObligationAttachState::FailedClosed
+            );
+            assert!(
+                invalid_sibling
+                    .attach_completion_reason
+                    .as_deref()
+                    .expect("fail-closed sibling reason")
+                    .contains("failed to resolve router auto-attach policy"),
+                "session-level policy-resolution failure should dead-letter sibling obligations too"
+            );
+            assert!(
+                !store
+                    .list_router_auto_attach_candidate_session_ids()
+                    .expect("list candidates after session fail-close")
+                    .contains(&"sess_auto_attach_invalid_workspace".to_string()),
+                "session-level fail-close should prevent silent router retries for siblings"
+            );
         });
     }
 
