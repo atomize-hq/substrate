@@ -407,6 +407,120 @@ fn live_end_to_end_replay_and_live_keep_posture_session_local_at_session_boundar
     );
 }
 
+#[test]
+fn live_end_to_end_keeps_scheduler_trigger_labels_distinct_from_analyzer_posture() {
+    let checkpoints = vec![
+        checkpoint_with_state(
+            "session-trigger-label",
+            1,
+            DriftClass::TruthGroundingGap,
+            DriftState::Active,
+            82,
+            true,
+            "align plan to repo truth",
+            &["flagged score for session-trigger-label:1"],
+        ),
+        checkpoint_with_state(
+            "session-trigger-label",
+            2,
+            DriftClass::TruthGroundingGap,
+            DriftState::Recovered,
+            20,
+            false,
+            "continue on the current task frame",
+            &["explicit analyzer recovery evidence"],
+        ),
+        checkpoint_with_state(
+            "session-trigger-label",
+            3,
+            DriftClass::TruthGroundingGap,
+            DriftState::HistoricalOnly,
+            20,
+            false,
+            "continue on the current task frame",
+            &["explicit analyzer historical evidence"],
+        ),
+    ];
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        vec![checkpoints[0].clone()],
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live active checkpoint");
+    let live_recovered_checkpoint = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live recovered checkpoint");
+    let live_recovered_fast_path = runtime
+        .observe(LiveCheckpointEvent::repeated_failure(
+            3,
+            live_recovered_checkpoint.event.cursor.clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live recovered repeated-failure trigger");
+    let live_historical_checkpoint = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            4,
+            checkpoints[2].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live historical-only checkpoint");
+    let live_historical_fast_path = runtime
+        .observe(LiveCheckpointEvent::repeated_failure(
+            5,
+            live_historical_checkpoint.event.cursor.clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live historical-only repeated-failure trigger");
+
+    let replay_visible = &replay.report.visible_warnings[0];
+    let live_recovered_status = match build_single_event(&live_recovered_fast_path) {
+        OperatorEvent::Status(event) => event,
+        other => panic!("expected status event, got {other:?}"),
+    };
+    let live_historical_status = match build_single_event(&live_historical_fast_path) {
+        OperatorEvent::Status(event) => event,
+        other => panic!("expected status event, got {other:?}"),
+    };
+
+    assert!(replay_visible
+        .headline
+        .contains("scheduler_repeated_failure_trigger"));
+    assert_eq!(
+        live_recovered_fast_path.presentation.posture,
+        Some(CheckpointPosture::Recovered)
+    );
+    assert!(live_recovered_status
+        .message
+        .contains("scheduler_repeated_failure_trigger"));
+    assert_eq!(
+        live_historical_fast_path.presentation.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+    assert!(live_historical_status
+        .message
+        .contains("scheduler_repeated_failure_trigger"));
+}
+
 fn fixture_path(name: &str) -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

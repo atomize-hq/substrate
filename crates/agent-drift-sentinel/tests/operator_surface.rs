@@ -435,6 +435,74 @@ fn operator_surface_public_previous_aware_presenter_can_render_recovered_posture
             .contains("historical truth-grounding gap: flagged score for session-public:1")));
 }
 
+#[test]
+fn operator_surface_labels_scheduler_trigger_separately_from_analyzer_posture() {
+    let recovered = checkpoint_with_state(
+        "session-trigger-label",
+        2,
+        DriftClass::TruthGroundingGap,
+        DriftState::Recovered,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer recovery evidence"],
+    );
+    let historical_only = checkpoint_with_state(
+        "session-trigger-label",
+        3,
+        DriftClass::TruthGroundingGap,
+        DriftState::HistoricalOnly,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer historical evidence"],
+    );
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+
+    let recovered_decision = scheduler.observe(
+        agent_drift_sentinel::CheckpointCursor::from(&recovered),
+        TriggerClass::RepeatedFailure,
+        recovered.flagged,
+        Some(&warning_fingerprint(&recovered)),
+    );
+    let recovered_presentation = present_checkpoint_with_previous(
+        &recovered,
+        None,
+        TriggerClass::RepeatedFailure,
+        &recovered_decision,
+        &WarningPolicy::default(),
+    );
+
+    let historical_decision = scheduler.observe(
+        agent_drift_sentinel::CheckpointCursor::from(&historical_only),
+        TriggerClass::RepeatedFailure,
+        historical_only.flagged,
+        Some(&warning_fingerprint(&historical_only)),
+    );
+    let historical_presentation = present_checkpoint_with_previous(
+        &historical_only,
+        None,
+        TriggerClass::RepeatedFailure,
+        &historical_decision,
+        &WarningPolicy::default(),
+    );
+
+    assert!(recovered_presentation
+        .headline
+        .contains("scheduler_repeated_failure_trigger"));
+    assert_eq!(
+        recovered_presentation.posture,
+        Some(CheckpointPosture::Recovered)
+    );
+    assert!(historical_presentation
+        .headline
+        .contains("scheduler_repeated_failure_trigger"));
+    assert_eq!(
+        historical_presentation.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+}
+
 fn checkpoint_with_drift(
     session_id: &str,
     ordinal: usize,

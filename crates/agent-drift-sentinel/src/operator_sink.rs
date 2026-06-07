@@ -196,7 +196,7 @@ fn trigger_name(trigger: TriggerClass) -> &'static str {
     match trigger {
         TriggerClass::CheckpointReady => "checkpoint_ready",
         TriggerClass::Heartbeat => "heartbeat",
-        TriggerClass::RepeatedFailure => "repeated_failure",
+        TriggerClass::RepeatedFailure => "scheduler_repeated_failure_trigger",
         TriggerClass::ManualReview => "manual_review",
     }
 }

@@ -203,6 +203,64 @@ fn operator_sink_emits_heartbeat_and_manual_review_status_events() {
     assert_eq!(sink.events().len(), 3);
 }
 
+#[test]
+fn operator_sink_labels_repeated_failure_status_as_scheduler_trigger() {
+    let checkpoints = vec![
+        checkpoint_with_state(
+            "session-trigger-label",
+            1,
+            DriftClass::TruthGroundingGap,
+            DriftState::Active,
+            82,
+            true,
+            "align plan to repo truth",
+            &["flagged score for session-trigger-label:1"],
+        ),
+        checkpoint_with_state(
+            "session-trigger-label",
+            2,
+            DriftClass::TruthGroundingGap,
+            DriftState::Recovered,
+            20,
+            false,
+            "continue on the current task frame",
+            &["explicit analyzer recovery evidence"],
+        ),
+    ];
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+
+    runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("active checkpoint");
+    let recovered = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("recovered checkpoint");
+    let repeated_failure = runtime
+        .observe(LiveCheckpointEvent::repeated_failure(
+            3,
+            recovered.event.cursor.clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("repeated failure status");
+
+    let events = build_operator_events(&repeated_failure);
+    assert!(matches!(
+        events.as_slice(),
+        [OperatorEvent::Status(event)]
+            if event.trigger == TriggerClass::RepeatedFailure
+                && event.message.contains("scheduler_repeated_failure_trigger")
+                && event.message.contains("session-trigger-label:0002")
+    ));
+}
+
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
