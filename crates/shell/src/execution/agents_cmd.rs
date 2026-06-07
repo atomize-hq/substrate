@@ -752,17 +752,12 @@ fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
         )));
     }
 
-    let target = store
-        .resolve_public_control_target(&receipt.orchestration_session_id, PublicControlAction::Stop)
-        .map_err(runtime_start_error)?;
-    if target.session_posture != PublicSessionPosture::Active
-        || target.active_participant.handle.participant_id != receipt.participant_id
-    {
-        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
-            "orchestration session {} did not reach durable active_attached ownership after reattach",
-            receipt.orchestration_session_id
-        )));
-    }
+    verify_manual_reattach_restored_ownership(
+        &store,
+        &args.session,
+        &receipt,
+        claimed_auto_attach.as_ref(),
+    )?;
     store
         .settle_session_auto_attach_after_attach_restored(
             &receipt.orchestration_session_id,
@@ -798,6 +793,52 @@ fn release_manual_reattach_auto_attach_claim(
         obligation_id,
         attach_claim_owner,
     )?;
+    Ok(())
+}
+
+fn verify_manual_reattach_restored_ownership(
+    store: &AgentRuntimeStateStore,
+    requested_session_id: &str,
+    receipt: &HiddenOwnerHelperLaunchReceipt,
+    claimed_auto_attach: Option<&(String, String)>,
+) -> Result<()> {
+    let target = match store.resolve_public_control_target(
+        &receipt.orchestration_session_id,
+        PublicControlAction::Stop,
+    ) {
+        Ok(target) => target,
+        Err(err) => {
+            if let Err(release_err) = release_manual_reattach_auto_attach_claim(
+                store,
+                requested_session_id,
+                claimed_auto_attach,
+            ) {
+                return Err(runtime_start_error(anyhow::anyhow!(
+                    "manual reattach durable-ownership verification failed: {err}; additionally failed to release the session auto-attach claim: {release_err}"
+                )));
+            }
+            return Err(runtime_start_error(err));
+        }
+    };
+    if target.session_posture != PublicSessionPosture::Active
+        || target.active_participant.handle.participant_id != receipt.participant_id
+    {
+        if let Err(release_err) = release_manual_reattach_auto_attach_claim(
+            store,
+            requested_session_id,
+            claimed_auto_attach,
+        ) {
+            return Err(runtime_start_error(anyhow::anyhow!(
+                "manual reattach durable-ownership verification failed: orchestration session {} did not reach durable active_attached ownership after reattach; additionally failed to release the session auto-attach claim: {release_err}",
+                receipt.orchestration_session_id
+            )));
+        }
+        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+            "orchestration session {} did not reach durable active_attached ownership after reattach",
+            receipt.orchestration_session_id
+        )));
+    }
+
     Ok(())
 }
 
@@ -3934,6 +3975,13 @@ impl AgentExecutionScope {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::agent_runtime::{
+        mapping::AgentRuntimeBackendKind, AgentRuntimeParticipantRecord,
+        AgentRuntimeSessionState, OrchestrationObligationAttachState,
+        OrchestrationObligationKind, OrchestrationObligationRecord, OrchestrationSessionRecord,
+        OrchestrationSessionState,
+    };
+    use crate::execution::config_model::AgentExecutionScope;
     use serial_test::serial;
     use std::fs;
     use std::path::PathBuf;
@@ -4108,6 +4156,70 @@ mod tests {
         }
     }
 
+    fn with_state_store<T>(test: impl FnOnce(&AgentRuntimeStateStore) -> T) -> T {
+        let temp = TempDir::new().expect("tempdir");
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", temp.path());
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let result = test(&store);
+        std::env::remove_var("SUBSTRATE_HOME");
+        result
+    }
+
+    fn host_descriptor() -> RuntimeSelectionDescriptor {
+        RuntimeSelectionDescriptor {
+            agent_id: "codex".to_string(),
+            backend_id: "cli:codex".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            binary_path: PathBuf::from("/bin/sh"),
+        }
+    }
+
+    fn detached_orchestrator(
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> (OrchestrationSessionRecord, AgentRuntimeParticipantRecord) {
+        let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+            &host_descriptor(),
+            orchestration_session_id.to_string(),
+            participant_id.to_string(),
+            format!("lease_{participant_id}"),
+        )
+        .expect("orchestrator participant");
+        participant.transition_state(AgentRuntimeSessionState::Ready);
+        participant.set_uaa_session_id(format!("uaa-{orchestration_session_id}"));
+        participant.mark_client_detached("owner detached cleanly");
+        participant.touch_heartbeat();
+
+        let mut orchestration = OrchestrationSessionRecord::new(
+            orchestration_session_id.to_string(),
+            format!("trace_{orchestration_session_id}"),
+            "/workspace".to_string(),
+            &participant,
+            HostAttachContract::from_manifest_for_test(&participant),
+        );
+        orchestration.transition_state(OrchestrationSessionState::Active);
+        orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+        orchestration.mark_parked_resumable("owner detached cleanly");
+        (orchestration, participant)
+    }
+
+    fn eligible_obligation(
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> OrchestrationObligationRecord {
+        let mut obligation = OrchestrationObligationRecord::new(
+            orchestration_session_id.to_string(),
+            obligation_id.to_string(),
+            OrchestrationObligationKind::Blocked,
+            format!("summary for {obligation_id}"),
+        );
+        obligation.attention_required = true;
+        obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        obligation
+    }
+
     fn omitted_scope_start_args(backend_id: &str) -> AgentStartArgs {
         AgentStartArgs {
             backend: backend_id.to_string(),
@@ -4144,6 +4256,70 @@ mod tests {
                 .host_execution_client_start,
             crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::StartNow
         );
+    }
+
+    #[test]
+    #[serial]
+    fn manual_reattach_verification_failure_releases_claimed_auto_attach_obligation() {
+        with_state_store(|store| {
+            let orchestration_session_id = "sess_manual_reattach_verify_failure";
+            let obligation_id = "obl_manual_reattach_verify_failure";
+            let participant_id = "ash_manual_reattach_verify_failure";
+            let (session, participant) =
+                detached_orchestrator(orchestration_session_id, participant_id);
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist session");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+            store
+                .persist_obligation(&eligible_obligation(
+                    orchestration_session_id,
+                    obligation_id,
+                ))
+                .expect("persist obligation");
+
+            let claimed_auto_attach = match store
+                .claim_session_auto_attach(orchestration_session_id, "manual::reattach")
+                .expect("claim manual reattach auto-attach")
+            {
+                SessionAutoAttachClaim::Claimed {
+                    obligation_id,
+                    attach_claim_owner,
+                } => Some((obligation_id, attach_claim_owner)),
+                other => panic!("expected claimed auto-attach obligation, got {other:?}"),
+            };
+            let receipt = HiddenOwnerHelperLaunchReceipt {
+                helper_pid: 0,
+                orchestration_session_id: orchestration_session_id.to_string(),
+                participant_id: participant.handle.participant_id.clone(),
+                backend_id: participant.handle.backend_id.clone(),
+            };
+
+            let err = verify_manual_reattach_restored_ownership(
+                store,
+                orchestration_session_id,
+                &receipt,
+                claimed_auto_attach.as_ref(),
+            )
+            .expect_err("detached session posture must fail durable ownership verification");
+            assert!(
+                err.to_string()
+                    .contains("did not reach durable active_attached ownership after reattach"),
+                "verification failure should stay explanation-ready: {err:#}"
+            );
+
+            let obligation = store
+                .load_obligation(orchestration_session_id, obligation_id)
+                .expect("reload obligation")
+                .expect("obligation exists");
+            assert_eq!(
+                obligation.attach_state,
+                OrchestrationObligationAttachState::Eligible
+            );
+            assert_eq!(obligation.attach_claim_owner, None);
+        });
     }
 
     #[test]
