@@ -1069,7 +1069,8 @@ mod tests {
                 panic!("restore verification failure should return failed-closed execution");
             };
             assert!(
-                reason.contains("did not restore a live retained owner")
+                reason.contains("did not restore active_attached posture")
+                    || reason.contains("did not restore a live retained owner")
                     || reason.contains("restored participant"),
                 "restore verification failure should explain the authoritative attach mismatch: {reason}"
             );
