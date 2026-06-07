@@ -35,7 +35,7 @@ use uuid::Uuid;
 use crate::execution::agent_events::format_event_line;
 use crate::execution::agent_runtime::dispatch_contract::WorkerCancelPayloadV1;
 use crate::execution::agent_runtime::orchestration_session::{
-    HostAttachContract, StartupPromptStreamState,
+    HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
@@ -481,6 +481,12 @@ fn joined_hidden_owner_helper_attach_receipt(
             "owner_unreachable: joined hidden owner-helper attach launch lost orchestration session {}",
             orchestration_session_id
         ))?;
+    if record.session.posture != OrchestrationSessionPosture::ActiveAttached {
+        anyhow::bail!(
+            "owner_unreachable: joined hidden owner-helper attach launch for orchestration session {} has not restored active_attached posture yet",
+            orchestration_session_id
+        );
+    }
     let participant = record.live_orchestrator().ok_or_else(|| {
         anyhow::anyhow!(
             "owner_unreachable: joined hidden owner-helper attach launch for orchestration session {} did not restore a live retained owner",
@@ -4106,6 +4112,73 @@ mod tests {
             assert_eq!(receipt.participant_id, "ash_attach_join");
             assert_eq!(receipt.backend_id, "cli:codex");
             assert_eq!(receipt.helper_pid, std::process::id());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn inflight_attach_join_does_not_accept_detached_live_owner_as_attached_success() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_attach_join_detached".to_string(),
+                "ash_attach_join_detached".to_string(),
+                "lease_attach_join_detached".to_string(),
+            )
+            .expect("orchestrator participant");
+            participant.transition_state(AgentRuntimeSessionState::Ready);
+            participant.set_uaa_session_id("uaa_attach_join_detached");
+            participant.mark_client_detached("owner detached cleanly");
+
+            let mut orchestration = OrchestrationSessionRecord::new(
+                "sess_attach_join_detached".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
+            );
+            orchestration.transition_state(OrchestrationSessionState::Active);
+            orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+            orchestration.mark_parked_resumable("owner detached cleanly");
+
+            store
+                .persist_orchestration_session(&orchestration)
+                .expect("persist detached orchestration");
+            store
+                .persist_participant(&participant)
+                .expect("persist detached participant");
+
+            let plan = attach_test_plan(
+                "sess_attach_join_detached",
+                "ash_attach_join_detached",
+                "uaa_attach_join_detached",
+            );
+            let guard = super::try_acquire_hidden_owner_helper_attach_launch_guard(store, &plan)
+                .expect("acquire attach launch guard")
+                .expect("attach launch guard must be available");
+
+            let release_thread = std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                drop(guard);
+            });
+
+            let joined = super::wait_for_inflight_hidden_owner_helper_attach_launch(store, &plan)
+                .expect("detached live owner should not satisfy attach join");
+            release_thread
+                .join()
+                .expect("release thread should finish cleanly");
+
+            let super::HiddenOwnerHelperAttachJoinResult::RetryAsLeader = joined else {
+                panic!("detached parked owner must not satisfy attach join success");
+            };
         });
     }
 

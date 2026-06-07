@@ -14,6 +14,7 @@ use super::dispatch_contract::{
     DispatchRequestEnvelope, HostExecutionClientStart,
 };
 use super::obligation_ledger::{OrchestrationObligationKind, OrchestrationObligationRecord};
+use super::orchestration_session::OrchestrationSessionPosture;
 use super::state_store::AgentRuntimeStateStore;
 use super::validator::{materialize_runtime_descriptor, RuntimeSelectionDescriptor};
 use crate::execution::config_model::AgentExecutionScope;
@@ -653,6 +654,18 @@ fn ensure_auto_attach_restored_session(
         .ok_or_else(|| anyhow::anyhow!(
             "owner_unreachable: orchestration session {orchestration_session_id} disappeared before automatic attach could be verified"
         ))?;
+    if record.session.posture != OrchestrationSessionPosture::ActiveAttached {
+        anyhow::bail!(
+            "owner_unreachable: orchestration session {orchestration_session_id} did not restore active_attached posture after automatic attach"
+        );
+    }
+    if record.session.attached_participant_id() != Some(participant_id) {
+        anyhow::bail!(
+            "owner_unreachable: orchestration session {orchestration_session_id} restored attached participant {:?} instead of expected {} after automatic attach",
+            record.session.attached_participant_id(),
+            participant_id
+        );
+    }
     let Some(live_owner) = record.live_orchestrator() else {
         anyhow::bail!(
             "owner_unreachable: orchestration session {orchestration_session_id} did not restore a live retained owner after automatic attach"
