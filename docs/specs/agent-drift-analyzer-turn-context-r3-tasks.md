@@ -7,6 +7,12 @@ This task list implements:
 
 ## Task List
 
+Completion status on `2026-06-07`:
+
+- Packets `R3-1` through `R3-4` are landed on this worktree.
+- The focused analyzer and sentinel verification wall for `R3` is green.
+- `R4`, `R5`, and `R6` remain outside the landed `R3` boundary.
+
 ## Packet R3-1: Repo Doc Contract Lock
 
 - [x] Task: Lock the `R3` packet boundary and `v0.4` turn-context contract in repo docs
@@ -26,7 +32,7 @@ This task list implements:
     - `docs/specs/hybrid-drift-sentinel-implementation-order.md`
     - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
 
-Packet `R3-1` exit condition:
+Packet `R3-1` historical exit condition before `R3-2+` landed:
 
 - repo docs lock `R3` as checkpoint-local turn context only
 - repo docs lock the explicit checkpoint-contract decision `v0.3 -> v0.4`
@@ -35,7 +41,7 @@ Packet `R3-1` exit condition:
 
 ## Packet R3-2: Analyzer Turn-Context Contract And Export
 
-- [ ] Task: Add analyzer-owned turn-context schema types and exports
+- [x] Task: Add analyzer-owned turn-context schema types and exports
   - Acceptance:
     - analyzer checkpoint schema gains `TurnContext`, `TurnActivityMix`, and `TurnExecutionMode`
     - `agent_drift_analyzer::Checkpoint` exports `turn_context`
@@ -51,7 +57,7 @@ Packet `R3-1` exit condition:
 
 ## Packet R3-3: Analyzer Derivation, Summary, And Regression Walls
 
-- [ ] Task: Derive deterministic current-turn slices during checkpoint analysis
+- [x] Task: Derive deterministic current-turn slices during checkpoint analysis
   - Acceptance:
     - analyzer computes current-turn boundaries from existing row order and `turn_id`
     - `turn_ordinal`, `rows_since_turn_start`, `seconds_since_turn_start`, and
@@ -66,7 +72,7 @@ Packet `R3-1` exit condition:
     - `crates/agent-drift-analyzer/src/checkpoint/export.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task: Add deterministic turn activity mix and coarse execution-mode derivation
+- [x] Task: Add deterministic turn activity mix and coarse execution-mode derivation
   - Acceptance:
     - analyzer computes `directive_row_count`, `assistant_message_count`, `tool_call_count`,
       `read_like_command_count`, `write_like_command_count`,
@@ -86,7 +92,7 @@ Packet `R3-1` exit condition:
     - `crates/agent-drift-analyzer/src/context/working_set.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task: Extend analyzer summary output with compact turn-context inspection
+- [x] Task: Extend analyzer summary output with compact turn-context inspection
   - Acceptance:
     - `summary.md` renders compact turn-context information for each session or checkpoint summary
       block
@@ -103,7 +109,7 @@ Packet `R3-1` exit condition:
     - `crates/agent-drift-analyzer/tests/export_bundle.rs`
     - `crates/agent-drift-analyzer/tests/end_to_end.rs`
 
-- [ ] Task: Add analyzer regression coverage for long-turn and many-short-turn shapes
+- [x] Task: Add analyzer regression coverage for long-turn and many-short-turn shapes
   - Acceptance:
     - one deterministic test case proves multiple checkpoints inside one turn are recognized as a
       long agent-side/autonomous shape
@@ -121,7 +127,7 @@ Packet `R3-1` exit condition:
 
 ## Packet R3-4: Sentinel Compatibility And Presentation
 
-- [ ] Task: Extend sentinel replay input and live compatibility to `v0.4`
+- [x] Task: Extend sentinel replay input and live compatibility to `v0.4`
   - Acceptance:
     - replay input accepts and sorts `v0.4` checkpoints
     - live compatibility accepts `v0.4` checkpoints
@@ -136,7 +142,7 @@ Packet `R3-1` exit condition:
     - `crates/agent-drift-sentinel/tests/replay_input.rs`
     - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
-- [ ] Task: Surface compact turn-context inspection in replay/live operator presentation
+- [x] Task: Surface compact turn-context inspection in replay/live operator presentation
   - Acceptance:
     - replay and live surfaces expose the same compact turn-context inspection view for matching
       checkpoints
@@ -158,3 +164,15 @@ Packet `R3` exit condition:
 - sentinel replay/live consumers accept `v0.4` and preserve `v0.3`
 - replay/live surfaces expose the same compact turn-context view
 - `R3` lands without archetype, progress, scorer, scheduler, or warning-policy drift
+
+Packet `R3` completion note on `2026-06-07`:
+
+- all `R3` packet tasks above are landed
+- the focused verification wall passed:
+  - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - `cargo test -p agent-drift-analyzer export_bundle -- --nocapture`
+  - `cargo test -p agent-drift-analyzer end_to_end -- --nocapture`
+  - `cargo test -p agent-drift-sentinel replay_input -- --nocapture`
+  - `cargo test -p agent-drift-sentinel live_checkpoint_compatibility -- --nocapture`
+  - `cargo test -p agent-drift-sentinel operator_surface -- --nocapture`
+  - `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`

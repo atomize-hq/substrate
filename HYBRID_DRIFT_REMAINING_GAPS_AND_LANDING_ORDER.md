@@ -512,7 +512,8 @@ R2 continuity notes:
     not a successful-output-only tail
   - the acceptance wall now asserts final analyzer `dead_end_thrash` posture directly from the
     frozen bundle inputs instead of routing through sentinel output
-  - conclusion: the next open packet after `R2` is `R3-1`, not more `R2` replay/fixture work
+  - conclusion at that point: the next open packet after `R2` was `R3-1`, not more `R2`
+    replay/fixture work
 
 ## Packet R3: Per-Checkpoint Turn Context
 
@@ -547,6 +548,15 @@ archetype logic into the scorers.
 
 - checkpoints can distinguish “one long agent-side turn” from “many short conversational turns”
 - replay/live consumers can inspect turn-local context directly
+
+### Landing Status
+
+- `2026-06-07`: `R3` is landed.
+- analyzer emits `v0.4` checkpoints with structured `turn_context`
+- analyzer summary exposes compact turn-context inspection
+- sentinel replay/live consumers accept `v0.4` while preserving legacy `v0.2` and `v0.3`
+- replay/live surfaces expose the same compact turn-context view for matching checkpoints
+- focused analyzer and sentinel verification commands for the packet are green
 
 ## Packet R4: Session Archetype Classification
 
@@ -651,15 +661,15 @@ This improves locality and maintainability, but it should not block the analyzer
 
 ## Immediate Next Action
 
-If only one packet lands next, it should be `R3-1`.
+If only one packet lands next, it should be `R4`.
 
 The next honest implementation target is:
 
-- lock repo docs around checkpoint-local turn context only
-- lock the explicit checkpoint-contract decision `v0.3 -> v0.4`
-- lock the deliberate non-AgentLens/non-DST boundaries before any code work
+- keep `R3` closed as the completed turn-context packet family
+- start `R4` only if the next task really is session-level archetype classification
+- keep `R5` progress semantics and `R6` scorer cutover queued behind `R4`
 
-That is the current top-of-stack action after `R2`. `R3-2+` remains queued behind this doc lock.
+That is the current top-of-stack action after `R3`.
 
 ## Research-Informed Design Directions
 

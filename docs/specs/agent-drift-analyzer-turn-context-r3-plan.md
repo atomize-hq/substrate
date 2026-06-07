@@ -2,18 +2,16 @@
 
 ## Scope
 
-Implementation status on `2026-06-06`:
+Implementation status on `2026-06-07`:
 
-- Packet `R3-1` is repo-doc contract lock only:
-  - lock `R3` as checkpoint-local turn-context promotion only
-  - lock the explicit checkpoint-contract widening from `v0.3` to `v0.4`
-  - lock the deliberate differences from AgentLens and DST-inspired patterns
-- Packet `R3-2` stays reserved for analyzer-owned `TurnContext`, `TurnActivityMix`, and
-  `TurnExecutionMode` types plus checkpoint export on `schema_version = "v0.4"`
-- Packet `R3-3` stays reserved for deterministic turn-slice derivation, analyzer summary output,
-  and long-turn vs many-short-turn analyzer regressions
-- Packet `R3-4` stays reserved for sentinel `v0.4` compatibility and compact replay/live
-  turn-context presentation
+- Packet `R3-1` landed as the repo-doc contract lock for checkpoint-local turn context,
+  explicit `v0.3 -> v0.4` widening, and the deliberate non-AgentLens/non-DST boundary.
+- Packet `R3-2` landed the analyzer-owned `TurnContext`, `TurnActivityMix`, and
+  `TurnExecutionMode` types plus checkpoint export on `schema_version = "v0.4"`.
+- Packet `R3-3` landed deterministic turn-slice derivation, analyzer summary output, and
+  long-turn vs many-short-turn analyzer regressions.
+- Packet `R3-4` landed sentinel `v0.4` compatibility and compact replay/live turn-context
+  presentation.
 - `R4`, `R5`, and `R6` remain outside the `R3` packet boundary
 
 This plan implements:
