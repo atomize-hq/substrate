@@ -3028,7 +3028,11 @@ impl AgentRuntimeStateStore {
             return Ok(SessionAutoAttachSettleResult::default());
         };
         if !obligation.is_pending()
-            || obligation.attach_state != OrchestrationObligationAttachState::Claimed
+            || !matches!(
+                obligation.attach_state,
+                OrchestrationObligationAttachState::Eligible
+                    | OrchestrationObligationAttachState::Claimed
+            )
         {
             return Ok(SessionAutoAttachSettleResult::default());
         }
@@ -6403,6 +6407,75 @@ mod tests {
             );
             assert_eq!(sibling.state, OrchestrationObligationState::Pending);
             assert!(sibling.resolved_at.is_none());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn settling_exact_session_auto_attach_obligation_failed_closed_from_eligible_preserves_no_claim_truth(
+    ) {
+        with_store(|store| {
+            let participant = live_orchestrator(
+                "codex",
+                "sess_exact_auto_attach_fail_closed_eligible",
+                "ash_exact_fail_closed_eligible",
+            );
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let mut eligible = pending_obligation(
+                "sess_exact_auto_attach_fail_closed_eligible",
+                "obl_wrong_host_eligible",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            eligible.review_state = OrchestrationObligationReviewState::Acknowledged;
+            store
+                .persist_obligation(&eligible)
+                .expect("persist eligible wrong-host obligation");
+
+            let settled = store
+                .settle_exact_session_auto_attach_obligation_failed_closed(
+                    "sess_exact_auto_attach_fail_closed_eligible",
+                    "obl_wrong_host_eligible",
+                    "wrong_target_host: obligation obl_wrong_host_eligible targets host host-remote not local host host-local",
+                )
+                .expect("settle eligible exact wrong-host obligation");
+            assert_eq!(
+                settled.failed_closed_obligation_ids,
+                vec!["obl_wrong_host_eligible".to_string()]
+            );
+
+            let eligible = store
+                .load_obligation(
+                    "sess_exact_auto_attach_fail_closed_eligible",
+                    "obl_wrong_host_eligible",
+                )
+                .expect("reload eligible wrong-host obligation")
+                .expect("eligible wrong-host obligation exists");
+            assert_eq!(
+                eligible.attach_state,
+                OrchestrationObligationAttachState::FailedClosed
+            );
+            assert_eq!(eligible.attach_claim_owner, None);
+            assert_eq!(eligible.attach_attempt_count, 0);
+            assert_eq!(eligible.attach_last_attempt_at, None);
+            assert_eq!(
+                eligible.attach_completion_reason.as_deref(),
+                Some(
+                    "wrong_target_host: obligation obl_wrong_host_eligible targets host host-remote not local host host-local"
+                )
+            );
+            assert_eq!(
+                eligible.review_state,
+                OrchestrationObligationReviewState::Acknowledged
+            );
+            assert_eq!(eligible.state, OrchestrationObligationState::Pending);
+            assert!(eligible.resolved_at.is_none());
         });
     }
 

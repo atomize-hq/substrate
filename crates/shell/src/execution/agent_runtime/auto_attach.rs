@@ -240,6 +240,26 @@ pub(crate) fn execute_session_auto_attach(
     world: bool,
     no_world: bool,
 ) -> Result<SessionAutoAttachExecution> {
+    if let Some(candidate) =
+        preview_router_auto_attach_claim_candidate(store, orchestration_session_id, policy)?
+    {
+        if let Err(err) = ensure_router_auto_attach_targets_local_host(&candidate) {
+            let reason = err.to_string();
+            let settled = mark_exact_obligation_failed_closed(
+                store,
+                orchestration_session_id,
+                &candidate.obligation_id,
+                &reason,
+            )?;
+            return Ok(SessionAutoAttachExecution::FailedClosed {
+                obligation_id: candidate.obligation_id,
+                attach_claim_owner: router_identity.to_string(),
+                reason,
+                settled,
+            });
+        }
+    }
+
     let claim = match select_policy_eligible_attach_candidate(
         &store.list_obligations(orchestration_session_id)?,
         policy,
@@ -364,6 +384,27 @@ pub(crate) fn execute_session_auto_attach(
         obligation_id,
         attach_claim_owner,
         receipt,
+    )
+}
+
+fn preview_router_auto_attach_claim_candidate(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    policy: &Policy,
+) -> Result<Option<OrchestrationObligationRecord>> {
+    if !store
+        .list_router_auto_attach_candidate_session_ids()?
+        .iter()
+        .any(|candidate_session_id| candidate_session_id == orchestration_session_id)
+    {
+        return Ok(None);
+    }
+
+    let obligations = store.list_obligations(orchestration_session_id)?;
+    Ok(
+        select_policy_eligible_attach_candidate(&obligations, policy)
+            .or_else(|| select_attach_candidate(&obligations))
+            .cloned(),
     )
 }
 
@@ -932,6 +973,14 @@ mod tests {
         );
     }
 
+    fn guaranteed_foreign_target_host_id() -> String {
+        format!(
+            "{}::foreign",
+            resolve_router_auto_attach_local_host_id()
+                .expect("resolve deterministic local host id")
+        )
+    }
+
     fn write_workspace_policy(workspace_root: &Path, yaml: &str) {
         let policy_dir = workspace_root.join(".substrate");
         fs::create_dir_all(&policy_dir).expect("create workspace policy dir");
@@ -1169,10 +1218,8 @@ mod tests {
     #[serial_test::serial]
     fn execute_session_auto_attach_fails_closed_before_launch_when_target_host_is_foreign() {
         with_store(|store| {
-            let (session, participant) = detached_orchestrator(
-                "sess_auto_attach_wrong_host",
-                "ash_auto_attach_wrong_host",
-            );
+            let (session, participant) =
+                detached_orchestrator("sess_auto_attach_wrong_host", "ash_auto_attach_wrong_host");
             store
                 .persist_orchestration_session(&session)
                 .expect("persist session");
@@ -1185,7 +1232,7 @@ mod tests {
                 "obl_wrong_host",
                 OrchestrationObligationKind::ApprovalRequired,
             );
-            wrong_host.target_host_id = Some("host-remote".to_string());
+            wrong_host.target_host_id = Some(guaranteed_foreign_target_host_id());
             let sibling = eligible_obligation(
                 "sess_auto_attach_wrong_host",
                 "obl_local_sibling",
@@ -1234,6 +1281,9 @@ mod tests {
                 wrong_host.attach_completion_reason.as_deref(),
                 Some(reason.as_str())
             );
+            assert_eq!(wrong_host.attach_claim_owner, None);
+            assert_eq!(wrong_host.attach_attempt_count, 0);
+            assert_eq!(wrong_host.attach_last_attempt_at, None);
             assert_eq!(
                 wrong_host.review_state,
                 OrchestrationObligationReviewState::Unread
@@ -1248,7 +1298,10 @@ mod tests {
                 OrchestrationObligationAttachState::Eligible
             );
             assert_eq!(sibling.attach_completion_reason, None);
-            assert_eq!(sibling.review_state, OrchestrationObligationReviewState::Unread);
+            assert_eq!(
+                sibling.review_state,
+                OrchestrationObligationReviewState::Unread
+            );
             assert!(
                 store
                     .list_router_auto_attach_candidate_session_ids()
