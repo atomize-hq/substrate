@@ -627,8 +627,13 @@ Packet 18 note:
   - real-rollout proof also exposed one remaining sentinel-local seam: replay still headlines some
     ordinary flagged checkpoints as `scheduler_repeated_failure_trigger` while live headlines the
     same checkpoints as `checkpoint_ready`
-  - `R3.5` is the next open packet after `R3`; `R4` remains the next analyzer-deepening family
-    after that narrower sentinel cutover
+  - the next packet is `R3.5`, not the already-landed `R3-5` turn-context packet; repo docs and
+    file names for this follow-on use `r3_5` to keep that distinction explicit
+  - `R3.5` is the next open packet after `R3`; it is limited to sentinel-local trigger-headline
+    canonicalization, keeps ordinary checkpoint arrivals on `checkpoint_ready`, and reserves
+    `scheduler_repeated_failure_trigger` for true synthetic scheduler fast-path events
+  - `R4`, `R5`, `R6`, and `R7` remain explicitly out of scope until that narrower `R3.5` cutover
+    is landed
 
 ## If You Want Fewer Packets
 

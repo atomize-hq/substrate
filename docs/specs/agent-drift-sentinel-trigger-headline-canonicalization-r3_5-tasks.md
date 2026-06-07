@@ -22,6 +22,9 @@ Completion status on `2026-06-07`:
     - docs explicitly keep analyzer semantics and `R4+` work out of scope
     - docs define the canonical distinction between ordinary checkpoint presentation and synthetic
       scheduler fast-path events
+    - docs explicitly state that ordinary checkpoint arrivals headline `checkpoint_ready` while
+      `scheduler_repeated_failure_trigger` is reserved for true synthetic scheduler fast-path
+      events
     - docs explicitly note the file-naming distinction from the already-landed `R3-5` packet
   - Verify:
     - doc review against `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
@@ -31,6 +34,7 @@ Completion status on `2026-06-07`:
     - `docs/specs/agent-drift-sentinel-trigger-headline-canonicalization-r3_5-plan.md`
     - `docs/specs/agent-drift-sentinel-trigger-headline-canonicalization-r3_5-tasks.md`
     - `docs/specs/hybrid-drift-sentinel-implementation-order.md`
+    - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
 
 ## Packet R3.5-2: Canonical Checkpoint Headlines
 

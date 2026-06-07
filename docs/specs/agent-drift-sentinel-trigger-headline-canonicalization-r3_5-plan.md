@@ -22,7 +22,11 @@ It should:
 
 - canonicalize checkpoint headlines across replay and live
 - keep analyzer-owned posture as the semantic truth source
+- keep ordinary checkpoint arrivals canonicalized as `checkpoint_ready`
 - preserve distinct scheduler fast-path labeling when sentinel actually emits that path
+- reserve `scheduler_repeated_failure_trigger` for true synthetic scheduler fast-path events
+- stay explicitly distinct from the already-landed `R3-5` turn-context packet by keeping
+  `R3.5` packet naming and `r3_5` repo-file naming
 - prove replay/live parity without widening into broader interpretation cleanup
 
 It should not:
@@ -59,6 +63,7 @@ Write packet authority that defines:
 
 - the canonical checkpoint headline rule
 - the distinction between checkpoint arrival and scheduler fast path
+- the naming distinction between the new `R3.5` packet and the already-landed `R3-5` packet
 - the explicit non-goals for analyzer semantics and broader sentinel consolidation
 
 Why first:
@@ -149,6 +154,8 @@ Confirm the spec, plan, and tasks all agree that:
 - `R3.5` is sentinel-local trigger-headline canonicalization only
 - analyzer semantics remain out of scope
 - file naming and packet naming stay distinct from `R3-5`
+- ordinary checkpoint arrivals stay `checkpoint_ready`
+- `scheduler_repeated_failure_trigger` remains reserved for true synthetic scheduler fast paths
 
 ### Checkpoint 2: Replay/Live Checkpoint Parity Holds
 

@@ -571,6 +571,10 @@ archetype logic into the scorers.
 Make replay and live use one honest operator-facing trigger headline for the same checkpoint
 without reopening analyzer semantics or broader sentinel redesign.
 
+This is the `R3.5` follow-on packet, not the already-landed `R3-5` turn-context packet. Repo docs
+and file names for this packet should therefore keep `R3.5` / `r3_5` naming rather than reusing
+`R3-5` / `r3-5`.
+
 ### Why Next
 
 `R3` proved the new turn-context surface on a real rollout, but that same proof also showed that
@@ -582,11 +586,13 @@ inconsistency.
 ### Scope
 
 - canonicalize replay/live trigger-headline rendering for matched checkpoints
+- keep ordinary checkpoint arrivals canonicalized as `checkpoint_ready`
 - preserve analyzer checkpoint state and posture as the truth source for active, recovered, and
   historical-only interpretation
 - keep `scheduler_repeated_failure_trigger` available only when the operator surface is actually
-  describing a scheduler fast path rather than an ordinary checkpoint arrival
+  describing a synthetic scheduler fast path rather than an ordinary checkpoint arrival
 - keep the fix sentinel-local to replay/live presentation plumbing and focused regression proof
+- keep `R4`, `R5`, `R6`, and `R7` explicitly out of scope for this packet
 
 ### Acceptance
 
