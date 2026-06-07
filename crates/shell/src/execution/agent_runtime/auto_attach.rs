@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use anyhow::Result;
-use chrono::Utc;
 use substrate_broker::Policy;
 use uuid::Uuid;
 
@@ -279,8 +278,7 @@ fn fail_closed_auto_attach_policy_resolution(
             attach_claim_owner,
         } => (obligation_id, attach_claim_owner),
     };
-    let _ =
-        store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
+    let _ = store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
     Ok(SessionAutoAttachExecution::FailedClosed {
         obligation_id,
         attach_claim_owner,
@@ -311,15 +309,18 @@ fn resolve_router_auto_attach_policy_for_session(
         return Ok(fallback_policy.clone());
     };
     let workspace_root = Path::new(&session.workspace_root);
-    let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(workspace_root, false)
-        .map_err(|err| {
-            anyhow::anyhow!(
-                "failed to resolve router auto-attach policy for orchestration session {} from {}: {}",
-                orchestration_session_id,
-                workspace_root.display(),
-                err
-            )
-        })?;
+    let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(
+        workspace_root,
+        false,
+    )
+    .map_err(|err| {
+        anyhow::anyhow!(
+            "failed to resolve router auto-attach policy for orchestration session {} from {}: {}",
+            orchestration_session_id,
+            workspace_root.display(),
+            err
+        )
+    })?;
     Ok(policy)
 }
 
@@ -495,19 +496,11 @@ fn ensure_router_auto_attach_supported() -> Result<()> {
 fn mark_attach_failed_closed(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
-    obligation_id: &str,
+    _obligation_id: &str,
     reason: &str,
 ) -> Result<()> {
-    let Some(mut obligation) = store.load_obligation(orchestration_session_id, obligation_id)?
-    else {
-        return Ok(());
-    };
-    if !obligation.is_pending() {
-        return Ok(());
-    }
-
-    obligation.mark_attach_failed_closed(reason, Utc::now());
-    store.persist_obligation(&obligation)
+    let _ = store.settle_session_auto_attach_failed_closed(orchestration_session_id, reason)?;
+    Ok(())
 }
 
 fn ensure_auto_attach_restored_session(
@@ -788,9 +781,17 @@ mod tests {
                 "obl_approval",
                 OrchestrationObligationKind::ApprovalRequired,
             );
+            let follow_up = eligible_obligation(
+                "sess_auto_attach_policy_disabled",
+                "obl_follow_up",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
             store
                 .persist_obligation(&approval)
                 .expect("persist approval obligation");
+            store
+                .persist_obligation(&follow_up)
+                .expect("persist follow-up obligation");
 
             let execution = execute_session_auto_attach(
                 store,
@@ -820,6 +821,26 @@ mod tests {
             assert_eq!(
                 obligation.attach_completion_reason.as_deref(),
                 Some(reason.as_str())
+            );
+
+            let sibling = store
+                .load_obligation("sess_auto_attach_policy_disabled", "obl_follow_up")
+                .expect("reload sibling obligation")
+                .expect("sibling obligation exists after failed-close");
+            assert_eq!(
+                sibling.attach_state,
+                OrchestrationObligationAttachState::FailedClosed
+            );
+            assert_eq!(
+                sibling.attach_completion_reason.as_deref(),
+                Some(reason.as_str())
+            );
+            assert!(
+                !store
+                    .list_router_auto_attach_candidate_session_ids()
+                    .expect("list candidates after session fail-close")
+                    .contains(&"sess_auto_attach_policy_disabled".to_string()),
+                "session-wide fail-close should prevent silent router retries after policy denial"
             );
         });
     }
