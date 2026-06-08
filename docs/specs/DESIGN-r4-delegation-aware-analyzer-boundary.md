@@ -23,6 +23,9 @@ But the current repo truth also says delegated runs were screened out rather tha
 2. `R2` froze only the non-subagent acceptance corpus,
 3. `R3.75` is now the immediate delegation-boundary packet, and `R4` through `R8` are the
    downstream semantic refinement family on top of that simpler world.
+4. in real delegated/subagent runs, the child work may be emitted as its own ordinary
+   `rollout-*.jsonl` with a distinct session id, so the visible parent rollout can be genuinely
+   incomplete rather than merely sparse.
 
 Without a delegation-aware boundary:
 
@@ -96,6 +99,11 @@ is limited to exclusion and screening:
    - `019e93f8-a5e9-7490-ac1a-955b74c92ad0`
    - `019e9406-6736-79a2-946b-8a603e557422`
 3. no current analyzer module exports a stable delegation context on checkpoints.
+
+The important nuance is that "child opacity" is often concrete rather than hypothetical: a
+delegated child may have its own ordinary rollout file and its own session id, while the current
+analyzer path only sees the parent-visible rollout unless a later packet deliberately stitches
+those artifacts together.
 
 That means the stack can currently answer:
 
@@ -199,6 +207,9 @@ Use when:
 3. the analyzer cannot see enough of the child trajectory to claim child intent or progress
    directly.
 
+This often means the decisive child work lives in a separate ordinary rollout JSONL that is not
+currently joined into the parent-visible analyzer bundle.
+
 This is the most important first-pass state because it is what should force later semantic modules
 to stay humble.
 
@@ -214,6 +225,8 @@ The first implementation should prefer already visible rollout and analyzer surf
    verification.
 
 The design should avoid new upstream schema requirements unless current markers prove too weak.
+It should also assume the current first-pass analyzer view is usually parent-rollout-local rather
+than a stitched parent-plus-child rollout graph.
 
 ## Consumption Rules For Later Packets
 
@@ -267,8 +280,11 @@ Rules:
    available,
 2. `R7` may define supported delegated-session progress and drift interpretation for a bounded
    subset of delegated runs,
-3. `R7` should not require sentinel interpretation consolidation in the same packet,
-4. `R7` should preserve the conservative `R3.75` fallback for delegated sessions whose child work
+3. `R7` is the first packet that may deliberately bridge a parent-visible rollout with one or more
+   separate ordinary child rollout files / child session ids when that linkage is explicit and
+   bounded,
+4. `R7` should not require sentinel interpretation consolidation in the same packet,
+5. `R7` should preserve the conservative `R3.75` fallback for delegated sessions whose child work
    remains opaque.
 
 ### `R8` Sentinel Interpretation

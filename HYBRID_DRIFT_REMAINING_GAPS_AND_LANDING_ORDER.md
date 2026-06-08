@@ -629,6 +629,8 @@ delegation-aware seam before `R4` through `R6` start making deeper semantic clai
 - record whether child work is visible, partially visible, or opaque from the current checkpoint
 - keep the first seam descriptive and confidence-bearing rather than evaluative
 - avoid claiming child intent, child progress, or delegated-specific failure modes in this packet
+- treat separate child rollout files / child session ids as a reason to classify parent-visible
+  evidence as `partial` or `opaque`, not as permission to invent stitched semantics in `R3.75`
 
 ### Acceptance
 
@@ -730,6 +732,8 @@ uncertainty with delegation-specific complexity.
 - distinguish parent orchestration activity from child execution activity
 - allow analyzer modules to describe parent-visible progress separately from child-visible progress
   when child evidence is available
+- allow bounded parent/child linkage when delegated work is recorded in separate ordinary
+  `rollout-*.jsonl` files with distinct child session ids
 - add bounded delegated-session regression coverage for supported cases
 - keep the packet analyzer-owned; do not broaden into sentinel interpretation consolidation here
 
