@@ -659,6 +659,10 @@ impl AgentRuntimeStateStore {
         self.substrate_home.join("host_inbox")
     }
 
+    fn invalid_host_inbox_artifacts_dir(&self) -> PathBuf {
+        self.host_inbox_dir().join(".invalid_artifacts")
+    }
+
     fn canonical_session_dir(&self, orchestration_session_id: &str) -> PathBuf {
         self.sessions_dir().join(orchestration_session_id)
     }
@@ -732,6 +736,13 @@ impl AgentRuntimeStateStore {
     pub(crate) fn host_inbox_record_path(&self, record_id: &str) -> Result<PathBuf> {
         HostInboxRecord::validate_record_id(record_id)?;
         Ok(self.host_inbox_dir().join(format!("{record_id}.json")))
+    }
+
+    fn invalid_host_inbox_artifact_record_path(&self, record_id: &str) -> Result<PathBuf> {
+        HostInboxRecord::validate_record_id(record_id)?;
+        Ok(self
+            .invalid_host_inbox_artifacts_dir()
+            .join(format!("{record_id}.json")))
     }
 
     fn host_inbox_record_id_from_path(path: &Path) -> Result<String> {
@@ -2725,6 +2736,32 @@ impl AgentRuntimeStateStore {
         Ok(record)
     }
 
+    fn synthesize_failed_closed_invalid_host_inbox_artifact_record(
+        &self,
+        record_id: &str,
+        reason: impl Into<String>,
+        failed_closed_at: chrono::DateTime<Utc>,
+    ) -> Result<HostInboxRecord> {
+        let mut record = HostInboxRecord::new(
+            String::new(),
+            record_id.to_string(),
+            OrchestrationObligationKind::RuntimeAlert,
+            "malformed host inbox artifact",
+            String::new(),
+            String::new(),
+            String::new(),
+        );
+        record.severity = OrchestrationObligationSeverity::Error;
+        record.created_at = failed_closed_at;
+        record.ingress_received_at = failed_closed_at;
+        record.mark_failed_closed(reason, failed_closed_at);
+        write_atomic_json(
+            &self.invalid_host_inbox_artifact_record_path(&record.record_id)?,
+            &record,
+        )?;
+        Ok(record)
+    }
+
     fn invalid_host_inbox_artifact_record_id(path: &Path) -> String {
         let artifact_name = path
             .file_name()
@@ -2745,20 +2782,45 @@ impl AgentRuntimeStateStore {
         path: &Path,
     ) -> Result<HostInboxRecord> {
         let record_id = Self::invalid_host_inbox_artifact_record_id(path);
+        let failure_path = self.invalid_host_inbox_artifact_record_path(&record_id)?;
         let reason = match Self::host_inbox_record_id_from_path(path) {
             Ok(_) => format!("invalid_host_inbox_artifact_path: {}", path.display()),
             Err(err) => format!("invalid_host_inbox_artifact_path: {err:#}"),
         };
 
-        if let Some(existing) = self.load_host_inbox_record_unvalidated(&record_id)? {
-            if existing.materialization_state == HostInboxMaterializationState::FailedClosed
-                && existing.failed_closed_reason.as_deref() == Some(reason.as_str())
-            {
-                return Ok(existing);
-            }
+        let Some(existing) = read_regular_json_if_exists::<HostInboxRecord>(&failure_path)? else {
+            return self.synthesize_failed_closed_invalid_host_inbox_artifact_record(
+                &record_id,
+                reason,
+                Utc::now(),
+            );
+        };
+        self.validate_host_inbox_record(&existing)
+            .with_context(|| format!("invalid host inbox record in {}", failure_path.display()))?;
+        if existing.materialization_state == HostInboxMaterializationState::FailedClosed
+            && existing.failed_closed_reason.as_deref() == Some(reason.as_str())
+        {
+            return Ok(existing);
         }
+        self.synthesize_failed_closed_invalid_host_inbox_artifact_record(
+            &record_id,
+            reason,
+            Utc::now(),
+        )
+    }
 
-        self.synthesize_failed_closed_host_inbox_record(&record_id, reason, Utc::now())
+    pub(crate) fn load_invalid_host_inbox_artifact_failure_record(
+        &self,
+        source_path: &Path,
+    ) -> Result<Option<HostInboxRecord>> {
+        let record_id = Self::invalid_host_inbox_artifact_record_id(source_path);
+        let path = self.invalid_host_inbox_artifact_record_path(&record_id)?;
+        let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
+            return Ok(None);
+        };
+        self.validate_host_inbox_record(&record)
+            .with_context(|| format!("invalid host inbox record in {}", path.display()))?;
+        Ok(Some(record))
     }
 
     fn validate_host_inbox_record_artifact_identity(
@@ -11474,6 +11536,55 @@ mod tests {
                     .expect("list host inbox records after rejected persist"),
                 Vec::<HostInboxRecord>::new()
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_quarantines_invalid_artifact_failures_outside_canonical_record_paths()
+    {
+        with_store(|store| {
+            let malformed_path = store.host_inbox_dir().join("C:.json");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
+            fs::write(&malformed_path, b"{}").expect("write malformed host inbox artifact");
+
+            let canonical_record_id =
+                AgentRuntimeStateStore::invalid_host_inbox_artifact_record_id(&malformed_path);
+            let canonical_record = pending_host_inbox_record(
+                "sess_host_inbox",
+                &canonical_record_id,
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            store
+                .persist_host_inbox_record(&canonical_record)
+                .expect("persist canonical host inbox record with colliding synthetic id");
+
+            let failed = store
+                .record_invalid_host_inbox_artifact_failure(&malformed_path)
+                .expect("persist invalid host inbox artifact failure");
+            assert_eq!(
+                failed.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+
+            let persisted_canonical = store
+                .load_host_inbox_record(&canonical_record_id)
+                .expect("load canonical host inbox record after invalid artifact failure")
+                .expect("canonical host inbox record should still exist");
+            assert_eq!(persisted_canonical, canonical_record);
+
+            let quarantined = store
+                .load_invalid_host_inbox_artifact_failure_record(&malformed_path)
+                .expect("load quarantined invalid host inbox artifact failure")
+                .expect("quarantined invalid host inbox artifact failure should exist");
+            assert_eq!(
+                quarantined.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+            assert!(quarantined
+                .failed_closed_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("invalid_host_inbox_artifact_path")));
         });
     }
 

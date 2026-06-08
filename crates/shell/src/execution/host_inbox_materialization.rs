@@ -432,9 +432,9 @@ mod tests {
                 .persist_obligation(&obligation)
                 .expect("persist eligible canonical obligation");
 
+            let malformed_path = store.host_inbox_dir().join("C:.json");
             fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
-            fs::write(store.host_inbox_dir().join("C:.json"), b"{}")
-                .expect("write malformed path-stem artifact");
+            fs::write(&malformed_path, b"{}").expect("write malformed path-stem artifact");
 
             let executions =
                 materialize_pending_host_inbox_records_for_local_host(store, "host-local")
@@ -463,15 +463,18 @@ mod tests {
                 vec!["sess_host_inbox_malformed_path".to_string()]
             );
 
-            let failed_closed_records = store
-                .list_host_inbox_record_ids()
-                .expect("list persisted host inbox record ids after malformed path-stem failure");
-            assert!(
-                failed_closed_records
-                    .iter()
-                    .any(|record_id| record_id.starts_with("invalid_host_inbox_artifact_")),
-                "malformed path-stem artifacts should persist a durable failed-closed host inbox record"
+            let failed_closed_record = store
+                .load_invalid_host_inbox_artifact_failure_record(&malformed_path)
+                .expect("load persisted malformed artifact failure record")
+                .expect("malformed path-stem artifacts should persist a durable failed-closed host inbox record");
+            assert_eq!(
+                failed_closed_record.materialization_state,
+                HostInboxMaterializationState::FailedClosed
             );
+            assert!(failed_closed_record
+                .failed_closed_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("invalid_host_inbox_artifact_path")));
         });
     }
 }

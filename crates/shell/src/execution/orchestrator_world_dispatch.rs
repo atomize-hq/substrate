@@ -1653,24 +1653,27 @@ fn run_router_owned_auto_attach_discovery_once(
     policy: &Policy,
 ) -> Result<()> {
     let local_host_id = gethostname().to_string_lossy().trim().to_string();
-    if local_host_id.is_empty() {
-        anyhow::bail!(
-            "local_host_id_unavailable: host inbox materialization requires exact local host identity before router discovery"
+    let materializations = if local_host_id.is_empty() {
+        warn!(
+            target = "substrate::shell",
+            "local host identity unavailable; skipping host inbox materialization pre-pass and continuing router discovery from canonical obligations only"
         );
-    }
-    let materializations = match crate::execution::host_inbox_materialization::materialize_pending_host_inbox_records_for_local_host(
+        Vec::new()
+    } else {
+        match crate::execution::host_inbox_materialization::materialize_pending_host_inbox_records_for_local_host(
             store,
             &local_host_id,
         ) {
-        Ok(materializations) => materializations,
-        Err(err) => {
-            warn!(
-                target = "substrate::shell",
-                local_host_id = %local_host_id,
-                error = %err,
-                "host inbox materialization pre-pass failed; continuing router discovery from canonical obligations only"
-            );
-            Vec::new()
+            Ok(materializations) => materializations,
+            Err(err) => {
+                warn!(
+                    target = "substrate::shell",
+                    local_host_id = %local_host_id,
+                    error = %err,
+                    "host inbox materialization pre-pass failed; continuing router discovery from canonical obligations only"
+                );
+                Vec::new()
+            }
         }
     };
     emit_host_inbox_materialization_execution_outcomes(&materializations);
