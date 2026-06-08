@@ -56,6 +56,16 @@ Success means:
 
 This packet is **delegation topology and child-visibility classification only**.
 
+`R3.75-1` decision lock for the first landing:
+
+- repo docs freeze `DelegationContext`, `DelegationTopology`, and `ChildWorkVisibility` as
+  analyzer-local concepts for the first landing
+- exported checkpoints stay on `schema_version = "v0.4"` throughout `R3.75`
+- sentinel replay/live loaders and presentation stay unchanged throughout `R3.75`
+- separate child rollout files / child session ids are an explicit opacity boundary in `R3.75`,
+  not input that this packet is allowed to stitch or join
+- bounded parent/child linkage and supported delegated-session semantics remain deferred to `R7`
+
 In scope:
 
 - define one analyzer-local `DelegationContext` concept for every checkpoint analysis

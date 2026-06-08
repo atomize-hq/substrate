@@ -31,6 +31,8 @@ Validation gate for this phase:
       `ChildWorkVisibility`
     - docs explicitly preserve checkpoint schema `v0.4` in the first landing
     - docs explicitly keep sentinel compatibility/presentation unchanged in this packet
+    - docs explicitly treat separate child rollout files / child session ids as an opacity
+      boundary in `R3.75`, not as permission to stitch parent and child trajectories here
     - docs explicitly keep `R4`, `R5`, `R6`, `R7`, and `R8` out of scope
     - docs explicitly keep delegated proof separate from the `R2` non-subagent acceptance corpus
   - Verify:
@@ -50,6 +52,8 @@ Packet `R3.75-1` historical exit condition before `R3.75-2+` lands:
 - repo docs lock `R3.75` as analyzer-local delegation topology and visibility only
 - repo docs lock the first-landing decision to preserve `v0.4` rather than widening checkpoint
   schema
+- repo docs lock separate child rollout files / child session ids as a conservative visibility
+  boundary rather than a stitched semantic surface
 - repo docs lock the separation between `R3.75` guardrails and `R7` full delegated-session
   semantics
 - `R3.75-2`, `R3.75-3`, `R3.75-4`, `R4`, `R5`, `R6`, `R7`, and `R8` remain unstarted here

@@ -83,6 +83,10 @@ Lock the first-landing contract in repo docs first:
 - conservative `DelegationTopology`
 - conservative `ChildWorkVisibility`
 - explicit decision to keep checkpoint schema at `v0.4`
+- explicit decision that separate child rollout files / child session ids only justify `partial` or
+  `opaque` visibility in `R3.75`; they do not authorize parent/child stitching in this packet
+- explicit decision that `R7`, not `R3.75`, owns bounded parent/child linkage and supported
+  delegated-session semantics
 
 Why first:
 

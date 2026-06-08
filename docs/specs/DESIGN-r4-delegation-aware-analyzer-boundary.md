@@ -75,6 +75,16 @@ The direction frozen by this design is:
 4. let downstream modules consume that boundary to cap confidence or suppress over-claims,
 5. avoid claiming child progress or child intent when the child trajectory is not visible.
 
+First-landing decisions now frozen for `R3.75-1`:
+
+1. `DelegationContext`, `DelegationTopology`, and `ChildWorkVisibility` stay analyzer-local for
+   the first landing,
+2. exported checkpoints remain on `schema_version = "v0.4"` throughout `R3.75`,
+3. sentinel replay/live compatibility and presentation remain unchanged throughout `R3.75`,
+4. a separate child `rollout-*.jsonl` or child session id is an explicit opacity boundary for
+   `R3.75`, not a license to stitch parent and child trajectories in this packet,
+5. bounded parent/child linkage and supported delegated-session semantics remain deferred to `R7`.
+
 ## Non-Goals
 
 This design does not:
@@ -330,9 +340,7 @@ opaque.
 
 ## Open Questions
 
-1. Should `DelegationContext` be analyzer-local only in the first landing, or should `v0.5` or a
-   near-follow-on schema expose it explicitly on checkpoints?
-2. Are current rollout markers sufficient to distinguish `delegating_parent` from
+1. Are current rollout markers sufficient to distinguish `delegating_parent` from
    `mixed_or_ambiguous`, or will some sessions require a slightly richer helper?
-3. Should the first bounded delegated corpus remain report-only, or should one or two delegated
+2. Should the first bounded delegated corpus remain report-only, or should one or two delegated
    cases become explicit low-confidence regression fixtures once the boundary lands?

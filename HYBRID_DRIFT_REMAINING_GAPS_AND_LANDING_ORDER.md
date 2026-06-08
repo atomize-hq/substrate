@@ -628,9 +628,12 @@ delegation-aware seam before `R4` through `R6` start making deeper semantic clai
 - classify ordinary single-agent versus visible delegated-session topology
 - record whether child work is visible, partially visible, or opaque from the current checkpoint
 - keep the first seam descriptive and confidence-bearing rather than evaluative
+- keep `DelegationContext`, `DelegationTopology`, and `ChildWorkVisibility` analyzer-local during
+  the first landing rather than widening checkpoint export past `v0.4`
 - avoid claiming child intent, child progress, or delegated-specific failure modes in this packet
 - treat separate child rollout files / child session ids as a reason to classify parent-visible
   evidence as `partial` or `opaque`, not as permission to invent stitched semantics in `R3.75`
+- keep sentinel replay/live compatibility and presentation unchanged in this packet
 
 ### Acceptance
 
@@ -639,6 +642,8 @@ delegation-aware seam before `R4` through `R6` start making deeper semantic clai
 - non-delegated sessions remain unchanged on the existing bounded non-subagent corpus
 - later semantic packets have an analyzer-owned boundary they can use to cap confidence or suppress
   over-claims when child work is opaque
+- `R7` remains the first packet allowed to add bounded parent/child linkage or supported delegated
+  semantics beyond the `R3.75` downgrade boundary
 
 ## Packet R4: Session Archetype Classification
 
