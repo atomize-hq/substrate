@@ -32,49 +32,45 @@ This file is intended to be the repo-root authority for the current follow-on se
 
 ### What Is Already Landed
 
-The following slice is landed and should not be re-suggested as the top fix for sticky
-`dead_end_thrash` in this worktree:
+The following slices are landed and should not be re-suggested as the current top missing fix in
+this worktree:
 
+- analyzer-owned explicit outcome evidence from the `R1` family:
+  - generic `ToolOutput` is neutral by default
+  - only unambiguous failure markers such as explicit `Error` rows, leading `error:`, or non-zero
+    exit-code output count as failure evidence
 - analyzer-owned per-class `DriftState`
 - checkpoint schema widening from `v0.2` to `v0.3`
 - sentinel cutover to prefer analyzer-exported state for `v0.3`
 - isolated `v0.2` replay/live compatibility fallback
+- analyzer-owned turn context from `R3` with checkpoint schema `v0.4`
+- replay/live trigger-headline canonicalization from `R3.5`
+- the bounded analyzer-local delegation boundary from `R3.75`
 
-That means the previous recommendation to “deepen the checkpoint-state module” is now closed as a
-top-level architecture ask. The analyzer already exports state, and the sentinel already consumes
-it for `v0.3`.
+That means the old recommendations to “treat generic `ToolOutput` as the top missing seam,”
+“re-open turn context,” or “finish delegation before doing any R4 planning” are now stale as
+top-level architecture asks. Those foundations are already landed.
 
-### What Is Still Broken
+### What Is Still Open
 
-Semantic honesty is still wrong on real completed sessions.
+The stack still lacks explicit checkpoint-local session meaning.
 
-The current analyzer still builds repeated-failure history from generic `ToolOutput` rows:
+The current analyzer now has explicit outcome evidence, turn context, and delegation guardrails,
+but it still does not export one deterministic, evidence-backed `session_archetype`. Operators and
+later scorer packets therefore still have to infer whether a checkpoint is part of planning,
+troubleshooting, autonomous implementation, or verification closeout.
 
-- `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
-  - `repetition_slice(...)`
-  - `is_failure_row(...)`
+### Why The Current Stack Still Needs Follow-On Work
 
-That polluted failure surface feeds `dead_end_thrash`:
+The remaining gap is no longer “sentinel posture logic is missing” or “generic `ToolOutput`
+pollutes failure evidence.” The current honest next step is:
 
-- `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`
+1. add checkpoint-local `session_archetype` (`R4`)
+2. add progress relative to archetype (`R5`)
+3. retune scorers to consume that deeper context (`R6`)
 
-As a result, successful function-call output, bookkeeping output, and real failures still share
-one shallow seam. The state module is landed, but it is being fed bad evidence.
-
-### Why The Current Stack Still Misfires
-
-The remaining failure is upstream of sentinel posture.
-
-Today:
-
-1. raw rows are classified too coarsely
-2. repeated-failure loops are built from that coarse classification
-3. recovery is evaluated against those loops
-4. `dead_end_thrash` consumes the polluted loop history
-5. sentinel correctly renders the analyzer state it receives
-
-So the current wrong answer is not “sentinel posture logic is still missing.” The current wrong
-answer is “the analyzer is still constructing the wrong state from the wrong evidence surface.”
+Without `R4`, later packets would still be trying to score troubleshooting, planning,
+implementation, and closeout as if they meant the same thing.
 
 ## Signals The Analyzer Already Has
 
@@ -114,107 +110,7 @@ metrics instead of being promoted into one analyzer-owned per-checkpoint context
 
 ## Remaining Gaps
 
-## Gap 1: Explicit Outcome Evidence Is Missing
-
-### Problem
-
-The analyzer still treats generic `ToolOutput` as failure evidence. That is too shallow. The
-interface between compactor rows and analyzer evidence does not distinguish:
-
-- explicit failure
-- explicit success
-- neutral output
-- bookkeeping output
-- operator milestone output
-
-### Why This Matters
-
-Without this distinction:
-
-- repeated successful tool outputs can manufacture repeated failure history
-- recovery cannot honestly clear because the failure history is fake
-- every later heuristic inherits a polluted foundation
-
-### What Needs To Exist
-
-One analyzer-owned evidence-classification module that turns raw rows into explicit outcome
-evidence.
-
-Minimum honest logic:
-
-- `Error` rows count as failure evidence
-- generic `ToolOutput` is neutral by default
-- a `ToolOutput` row only counts as failure if it contains a trusted structured failure signal
-- `Exit code: 0`, plan updates, bookkeeping text, and generic function-call output stay neutral
-- ambiguous rows bias neutral, not failure
-
-This is intentionally conservative. False positives are more damaging here than false negatives.
-
-## Gap 2: `dead_end_thrash` Still Reads The Wrong Surface
-
-### Problem
-
-`dead_end_thrash` still consumes repeated-failure loops built from the coarse evidence seam. That
-means the scorer is not actually reasoning about “repeated failure”; it is reasoning about
-“repeated rows that happen to have kind `ToolOutput` or `Error`.”
-
-### Why This Matters
-
-Even if the exported `DriftState` logic is correct, the input to that state is still impure. The
-scorer should only observe:
-
-- repeated verification attempts
-- repeated explicit failures
-- clean recovery intervals
-
-It should not observe:
-
-- generic stdout/stderr text
-- bookkeeping output
-- reason-string conventions as the source of truth
-
-### What Needs To Exist
-
-`dead_end_thrash` should score from typed outcome evidence, not raw row kinds.
-
-## Gap 3: The Stack Lacks Turn-Aware Context
-
-### Problem
-
-The analyzer summary already knows the session shape, but the current per-checkpoint model does not
-make that shape first-class.
-
-Right now the sentinel does not directly know:
-
-- whether it is five minutes into one long agent turn
-- whether it is inside a rapid user/agent back-and-forth
-- whether several checkpoints happened within one user prompt
-- whether the current turn is tool-heavy, verification-heavy, or commentary-heavy
-
-### Why This Matters
-
-The same `dead_end_thrash` pattern means different things in different turn contexts.
-
-For example:
-
-- eight checkpoints inside one user prompt can be a normal autonomous implementation run
-- eight checkpoints across eight user prompts mean something very different
-
-### What Needs To Exist
-
-One analyzer-owned per-checkpoint turn-context module that emits fields such as:
-
-- turn ordinal
-- seconds since turn start
-- rows since turn start
-- checkpoints emitted in current turn
-- prompts observed in current session
-- turn execution mode
-- turn activity mix
-
-This should become a real module, not just a summary-only export.
-
-## Gap 4: The Stack Does Not Identify Session Archetype
+## Gap 1: The Stack Does Not Identify Session Archetype
 
 ### Problem
 
@@ -251,7 +147,7 @@ evidence:
 The classification should be additive and confidence-bearing. It does not need to be perfect on
 day one, but it must be explicit.
 
-## Gap 5: The Stack Does Not Model Progress Relative To Archetype
+## Gap 2: The Stack Does Not Model Progress Relative To Archetype
 
 ### Problem
 
@@ -293,7 +189,7 @@ For autonomous implementation, it should capture:
 - working-set concentration
 - expected-next-step stability or narrowing
 
-## Gap 6: Real Rollout Acceptance Is Too Weak
+## Gap 3: Real Rollout Acceptance Is Too Weak
 
 ### Problem
 
@@ -318,7 +214,7 @@ At minimum, one regression must prove:
 - repeated successful tool output plus a normal `task_complete` tail does not end in active
   `dead_end_thrash`
 
-## Gap 7: Sentinel Still Pays Duplicate Interpretation Cost
+## Gap 4: Sentinel Still Pays Duplicate Interpretation Cost
 
 ### Problem
 
@@ -786,22 +682,20 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5` is now landed on this worktree, and `R3.75-1` through `R3.75-3` are also landed, so the
-next open packet is `R3.75-4`.
+`R3.5` and `R3.75` are now landed on this worktree, so the next open packet is `R4`.
 
 The next honest implementation target is:
 
 - keep `R3` closed as the completed turn-context packet family
 - keep `R3.5` closed as the completed replay/live trigger-headline canonicalization packet
-- close `R3.75-4` as the remaining bounded delegated regression packet for the delegation-aware
-  analyzer boundary
-- keep `R4` session archetype, `R5` progress semantics, and `R6` scorer cutover queued behind
-  full `R3.75` completion
+- keep `R3.75` closed as the completed delegation-aware analyzer boundary
+- make `R4` session archetype the next implementation target, with the landed delegation boundary as
+  an input to confidence capping rather than a blocker
+- keep `R5` progress semantics and `R6` scorer cutover queued behind `R4`
 - keep full delegated-session support as `R7` behind `R6`
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
-That is the current top-of-stack action after the landed `R3.5` and `R3.75-1` through `R3.75-3`
-packets.
+That is the current top-of-stack action after the landed `R3.5` and `R3.75` packets.
 
 ## Research-Informed Design Directions
 

@@ -9,8 +9,10 @@ Implementation status on `2026-06-08`:
 - `R3` turn-context promotion is landed with analyzer checkpoint schema `v0.4`.
 - `R3.5` replay/live trigger-headline canonicalization is landed and closes the last known
   sentinel-local checkpoint headline mismatch from the `R3` family.
-- `R3.75-1` through `R3.75-3` are landed on this worktree.
-- `R3.75-4` remains the only open delegation-aware analyzer packet before `R4`.
+- `R3.75` delegation-aware analyzer boundary is landed on this worktree and is now an input to
+  `R4`, not a blocker in front of it.
+- the `SPECIFY`, `PLAN`, and `TASKS` artifacts now exist for `R4`, but no `R4` implementation
+  packet has started yet
 - `R5`, `R6`, `R7`, and `R8` remain outside the next-packet boundary.
 
 This plan implements:
@@ -20,11 +22,14 @@ This plan implements:
 Validation gate for this phase:
 
 - this plan is the `PLAN` phase artifact for review, not implementation approval by itself
-- do not start `R4-2+` code work until the `SPECIFY` artifact is reviewed and accepted
+- do not start `R4-1+` code work until the `SPECIFY` and `TASKS` artifacts are reviewed and
+  accepted
+- `SPECIFY` / `PLAN` / `TASKS` are pre-implementation gates and should not be counted as packeted
+  implementation work
 - if the spec changes materially, update the spec first and then re-align this plan
 
 `R4` is the first session-meaning packet after the landed `R3` structure family, the landed
-`R3.5` presentation cleanup, and the now-required `R3.75` delegation-aware analyzer boundary.
+`R3.5` presentation cleanup, and the landed `R3.75` delegation-aware analyzer boundary.
 
 Its job is to promote session archetype from an implicit human inference into explicit
 analyzer-owned checkpoint state that later packets can consume directly.
@@ -37,7 +42,12 @@ This packet should:
 - derive the classification deterministically from existing task-frame, diagnostics, turn-context,
   and command-observation evidence
 - treat the exported result as session type at checkpoint scope, not merely turn-archetype labeling
-- allow kickoff prompt shape and explicit skill/orchestration markers only as bounded priors
+- keep the first code landing behavior-first and allow kickoff prompt shape / skill markers only as
+  deferred, disabled, or weak-only bounded priors
+- consume the landed `R3.75` delegation boundary to cap confidence and add counter-evidence when
+  child work is opaque
+- tighten low-hanging command-role and file-role interpretation so broad command families do not act
+  as one-step label proxies
 - widen analyzer checkpoints from `v0.4` to `v0.5`
 - preserve replay/live compatibility by extending sentinel support to `v0.5` while keeping
   `v0.2` through `v0.4`
@@ -75,36 +85,22 @@ Without that seam:
 
 ## Implementation Strategy
 
+Spec-driven-development gate, already satisfied before implementation begins:
+
+- the `SPECIFY` artifact locks scope and success criteria
+- this `PLAN` artifact defines implementation order and risks
+- the `TASKS` artifact names the packeted implementation units
+- implementation packet numbering begins below at the first code-bearing slice
+
 Execution split:
 
-1. `R4-1`: lock the repo-doc contract and packet boundary only
-2. `R4-2`: add analyzer-owned schema types and explicit `v0.5` export
-3. `R4-3`: derive deterministic archetype state and lock analyzer summary/regressions
+1. `R4-1`: add analyzer-owned schema types and legacy-safe `v0.5` export
+2. `R4-2`: add the lower intent-evidence seam plus deterministic archetype aggregation
+3. `R4-3`: lock analyzer summary / fixture authority / regression walls
 4. `R4-4`: extend sentinel compatibility without changing posture behavior
-5. `R4-4`: surface compact replay/live archetype presentation on top of the stabilized contract
+5. `R4-5`: surface compact replay/live archetype presentation on top of the stabilized contract
 
-### Workstream 1: Lock The Session-Archetype Contract
-
-Lock the `R4` contract in repo docs first:
-
-- `SessionArchetype`
-- `SessionArchetypeLabel`
-- schema `v0.5`
-
-Why first:
-
-- later analyzer, export, derivation, and sentinel work all depend on a stable contract
-- this is where the repo should explicitly say that `R4` is classification only, not progress or
-  scorer behavior
-- `R4-1` ends here; no analyzer or sentinel code changes belong in this packet
-
-Implementation ownership after this doc lock:
-
-- `R4-2` owns the analyzer-local schema types and the explicit `v0.5` checkpoint export seam
-- `R4-3` owns deterministic archetype derivation, first population of `session_archetype`,
-  analyzer summary output, and analyzer regression walls
-
-### Workstream 2: Add Analyzer Schema Types And `v0.5` Export
+### Workstream 1: Add Analyzer Schema Types And Legacy-Safe `v0.5` Export
 
 Implement the analyzer-owned checkpoint contract surface:
 
@@ -112,22 +108,26 @@ Implement the analyzer-owned checkpoint contract surface:
 - `SessionArchetypeLabel`
 - explicit `schema_version = "v0.5"` export
 - exported `session_archetype` checkpoint field
+- shared DTO serde that stays compatible with `v0.2` through `v0.4` artifacts while letting
+  `v0.5` validation require the field explicitly
 
-Why second:
+Why first:
 
-- `R4-2` should lock the analyzer-owned schema surface and explicit version cutover before
+- `R4-1` should lock the analyzer-owned schema surface and explicit version cutover before
   deterministic classification is wired into checkpoint construction
 
-### Workstream 3: Add Analyzer Archetype Derivation And Summary Walls
+### Workstream 2: Add Lower Intent Evidence And Archetype Aggregation
 
-Once the schema surface is fixed, implement one analyzer-local helper that derives the current
-checkpoint archetype using:
+Once the schema surface is fixed, implement one analyzer-local lower layer plus one aggregation
+helper that derives the current checkpoint archetype using:
 
-- kickoff-prompt prior signals such as explicit skill calls and orchestration-prompt markers
 - task-frame objective and truth-artifact signals
 - `R3` turn-context execution mode and activity mix
-- diagnostics such as verification density and task-frame transitions
-- command-observation cadence and working-set concentration
+- `R3.75` delegation topology / child-visibility guardrails
+- diagnostics such as verification density, recovery, and task-frame transitions
+- command-observation cadence and working-set concentration interpreted through command-role and
+  file-role heuristics
+- kickoff-prompt prior signals only if they survive the behavior-first guardrails
 
 The helper should produce:
 
@@ -144,13 +144,21 @@ Interpretation rule:
 It should also:
 
 - attach `session_archetype` to every checkpoint
+- cap or degrade confidence when delegated-parent evidence is child-opaque
+- prefer low-confidence `planning` over overclaiming when evidence stays sparse
+
+### Workstream 3: Lock Summary, Fixture Authority, And Regression Walls
+
+Once the derivation seam is stable, lock the packet proof surface:
+
 - update summary rendering with compact archetype inspection
-- lock deterministic regressions for the four initial archetypes
+- add the fixture-manifest authority doc for the first label matrix
+- lock deterministic regressions for the four initial archetypes plus the required ambiguous,
+  transition, delegated, and compatibility cases
 
 Why third:
 
-- `R4-3` owns the first deterministic population of `session_archetype`, so summary output and
-  analyzer regressions should land in the same packet as the derivation logic
+- summary output and regression walls should ride on top of the stabilized derivation boundary
 
 ### Workstream 4: Extend Sentinel Compatibility
 
@@ -159,6 +167,7 @@ Update replay/live checkpoint loaders to:
 - accept `v0.5`
 - preserve `v0.2` through `v0.4` fallback behavior
 - treat missing `session_archetype` as acceptable for legacy schemas only
+- update any explicit-analyzer-state helper that still hard-codes only `v0.3 | v0.4`
 
 Why fourth:
 
@@ -185,19 +194,20 @@ Why fifth:
 
 Sequential work:
 
-1. `R4-1`: lock the `R4` contract in repo docs
-2. `R4-2`: add analyzer-local session-archetype types and explicit `v0.5` export seam
-3. `R4-3`: populate deterministic `session_archetype` during checkpoint construction
-4. `R4-3`: update analyzer summary rendering and analyzer tests
+1. review and accept the `SPECIFY`, `PLAN`, and `TASKS` artifacts before code starts
+2. `R4-1`: add analyzer-local session-archetype types and explicit legacy-safe `v0.5` export seam
+3. `R4-2`: populate deterministic `session_archetype` through an intent-evidence layer plus
+   aggregation helper
+4. `R4-3`: update analyzer summary rendering, fixture authority, and analyzer tests
 5. `R4-4`: extend sentinel replay/live compatibility to `v0.5`
-6. `R4-4`: expose compact archetype output in replay/live presentation
-7. `R4-4`: run focused analyzer and sentinel walls
+6. `R4-5`: expose compact archetype output in replay/live presentation
+7. after `R4-1` through `R4-5`, run focused analyzer and sentinel walls
 
 Human review checkpoints:
 
-1. review the `SPECIFY` artifact before starting `R4-2`
+1. review the `SPECIFY` artifact before starting `R4-1`
 2. review this `PLAN` artifact before treating the packet order as implementation-ready
-3. review the `TASKS` artifact before starting code changes under `R4-2+`
+3. review the `TASKS` artifact before starting code changes under `R4-1+`
 
 Parallel-safe work after the contract is locked:
 
@@ -213,7 +223,15 @@ Not parallel-safe:
 
 ## Major Risks And Mitigations
 
-### Risk 1: `R4` Quietly Becomes `R5`
+### Risk 1: `R4` Ignores The Landed Delegation Boundary
+
+Mitigation:
+
+- consume the existing analyzer-local `DelegationContext` instead of re-deriving delegation ad hoc
+- cap confidence and add counter-evidence for delegated-parent plus opaque-child cases
+- keep `R7` as the first packet allowed to claim supported parent/child semantics
+
+### Risk 2: `R4` Quietly Becomes `R5`
 
 Mitigation:
 
@@ -221,7 +239,7 @@ Mitigation:
 - reject any field that claims frontier advance, convergence, or review completeness
 - keep success criteria focused on explicit session-mode exposure
 
-### Risk 2: Prompt Wording Overpowers Observable Evidence
+### Risk 3: Prompt Wording Overpowers Observable Evidence
 
 Mitigation:
 
@@ -229,15 +247,25 @@ Mitigation:
 - bias single-signal or keyword-only classifications to lower confidence
 - expose evidence and counter-evidence so misclassifications are auditable
 
-### Risk 3: Additive `v0.4` Growth Creates Contract Ambiguity
+### Risk 4: Additive `v0.4` Growth Creates Contract Ambiguity
 
 Mitigation:
 
 - widen to explicit schema `v0.5`
-- keep `v0.4` compatibility isolated to sentinel loaders
+- keep the shared DTO serde backward-compatible while making `v0.5` requiredness explicit in
+  schema-aware validation
 - test legacy fallback and `v0.5` preferred behavior side by side
 
-### Risk 4: Replay/Live Surfaces Drift Apart
+### Risk 5: Broad Command Families Produce Bad Archetype Evidence
+
+Mitigation:
+
+- add low-hanging command-role parsing for common verification, format, build, dependency, and
+  inspect-vcs commands
+- combine command role with file-role context before strengthening a label
+- keep the first pass deterministic and conservative rather than building a shell parser
+
+### Risk 6: Replay/Live Surfaces Drift Apart
 
 Mitigation:
 
@@ -245,7 +273,7 @@ Mitigation:
 - prove replay/live parity with existing `live_end_to_end` style tests
 - avoid custom formatting branches that exist only in one path
 
-### Risk 5: Archetype Labels Start Acting Like Quality Judgments
+### Risk 7: Archetype Labels Start Acting Like Quality Judgments
 
 Mitigation:
 
@@ -253,7 +281,7 @@ Mitigation:
 - keep confidence separate from severity
 - defer progress and drift judgments to `R5` and `R6`
 
-### Risk 6: Prompt Priors Overfit Repo-Specific Wording
+### Risk 8: Prompt Priors Overfit Repo-Specific Wording
 
 Mitigation:
 
@@ -285,7 +313,8 @@ cargo test -p agent-drift-analyzer end_to_end -- --nocapture
 Pass means:
 
 - checkpoints emit `schema_version = "v0.5"`
-- each checkpoint carries explicit `session_archetype`
+- each `v0.5` checkpoint carries explicit `session_archetype`
+- legacy `v0.2` through `v0.4` artifacts still deserialize cleanly
 - summary output exposes compact archetype inspection
 
 ### Checkpoint 3: Archetype Regressions Hold
@@ -300,6 +329,10 @@ Pass means:
 
 - deterministic cases cover troubleshooting, planning, autonomous implementation, and
   verification-closeout shapes
+- ambiguous mixed cases stay capped at `low` or `medium` confidence
+- delegated-parent plus opaque-child cases cap confidence conservatively
+- transition / hysteresis cases avoid one-checkpoint flapping
+- PR-response and proof-closeout loops keep their intended boundary
 - ambiguous cases degrade confidence instead of inventing new archetypes
 - reruns on the same bundle preserve identical archetype output
 

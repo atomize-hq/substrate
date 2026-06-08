@@ -3,10 +3,9 @@
 ## Assumptions I'm Making
 
 1. Live repo truth on `2026-06-08` is the authority: the analyzer outcome-evidence `R1` family,
-   acceptance-fixture `R2`, turn-context `R3`, and sentinel trigger-headline `R3.5` packets are
-   landed on this worktree; `R3.75-1` through `R3.75-3` are also landed, `R3.75-4` remains the
-   remaining delegation-aware analyzer packet, and `R4` session-archetype classification remains
-   the next packet family after that boundary fully lands.
+   acceptance-fixture `R2`, turn-context `R3`, sentinel trigger-headline `R3.5`, and the bounded
+   delegation-aware analyzer boundary `R3.75` are landed on this worktree, so `R4`
+   session-archetype classification is now the next packet family rather than a blocked follow-on.
 2. `R4` is intentionally narrower than `R5+`. Its job is to add explicit checkpoint-local
    archetype state, not archetype-aware progress semantics, drift-scorer retuning, or sentinel
    scheduler changes.
@@ -21,7 +20,9 @@
    `v0.4`.
 5. Sentinel replay/live consumers still need to load legacy `v0.2`, `v0.3`, and `v0.4`
    checkpoints after `R4` lands, so `R4` must preserve those compatibility paths while preferring
-   `v0.5` when `session_archetype` is present.
+   `v0.5` when `session_archetype` is present. The shared Rust DTO therefore needs to remain
+   backward-compatible for legacy schema deserialization while version-aware validation enforces
+   `session_archetype` for `v0.5`.
 6. Archetype classification must be analyzer-computed and deterministic. `R4` should not invoke a
    model, rely on free-form commentary alone, or depend on prompt-time intent labeling to decide
    whether a checkpoint is troubleshooting, planning, autonomous implementation, or verification /
@@ -32,7 +33,7 @@
 8. External research can shape the module boundary and taxonomy, but `R4` should not adopt a broad
    learned failure taxonomy or multi-trajectory evaluation contract as the canonical artifact.
 
-If any of these assumptions are wrong, correct them before `R4-2+` implementation starts.
+If any of these assumptions are wrong, correct them before `R4-1+` implementation starts.
 
 ## Objective
 
@@ -65,6 +66,13 @@ Success means:
 - `R4` does not widen into `R5` progress semantics, `R6` scorer cutover, `R7` full
   delegated-session support, or `R8` sentinel
   interpretation consolidation
+
+Implementation-status note:
+
+- the `SPECIFY`, `PLAN`, and `TASKS` artifacts now exist for `R4`
+- `R4` implementation has not started yet
+- packet numbering in the companion `PLAN` and `TASKS` docs should therefore begin at the first
+  code-bearing unit of work, not at the spec-review gate
 
 ## Tech Stack
 
@@ -127,6 +135,12 @@ crates/agent-drift-analyzer/src/checkpoint/mod.rs
   Owns checkpoint analysis and checkpoint construction. R4 should classify session archetype during
   checkpoint assembly using existing task-frame, diagnostics, and turn-context evidence.
 
+crates/agent-drift-analyzer/src/checkpoint/intent.rs
+crates/agent-drift-analyzer/src/checkpoint/archetype.rs
+  Recommended internal seam split for the first code landing: a lower deterministic
+  `IntentEvidenceProfile` helper plus a public-session-archetype aggregation helper. Equivalent
+  internal helper placement is acceptable if the same boundary stays explicit and testable.
+
 crates/agent-drift-analyzer/src/checkpoint/export.rs
   Owns `summary.md`. R4 should render compact archetype inspection here without replacing the
   existing session-shape metrics.
@@ -155,6 +169,10 @@ crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs
 crates/agent-drift-sentinel/tests/operator_surface.rs
 crates/agent-drift-sentinel/tests/live_end_to_end.rs
   Sentinel regression walls that should lock `v0.5` loading and replay/live presentation parity.
+
+docs/specs/agent-drift-analyzer-session-archetype-r4-fixtures.md
+  Fixture manifest authority for the first R4 labeling matrix: expected label, confidence
+  floor/ceiling, decisive evidence, counter-evidence, and why nearby labels lose.
 ```
 
 ## Code Style
@@ -171,21 +189,25 @@ pub enum SessionArchetypeLabel {
     VerificationCloseout,
 }
 
-fn classify_session_archetype(turn_context: &TurnContext) -> SessionArchetypeLabel {
-    if matches!(turn_context.execution_mode, TurnExecutionMode::VerificationHeavy) {
-        return SessionArchetypeLabel::Troubleshooting;
-    }
-
-    SessionArchetypeLabel::Planning
+fn build_session_archetype(
+    analysis: &CheckpointAnalysis,
+    delegation: &DelegationContext,
+) -> SessionArchetype {
+    let intent = build_intent_evidence_profile(analysis);
+    aggregate_session_archetype(intent, analysis, delegation)
 }
 ```
 
 Conventions:
 
 - keep new checkpoint types in `schema.rs` with the existing serde and enum-derive pattern
+- keep the shared `Checkpoint` DTO legacy-safe by serializing `session_archetype` as optional at
+  the serde layer, then make `v0.5` validation require it explicitly
 - use snake_case function names and `snake_case` serialized enum labels
 - keep helpers deterministic and conservative; ambiguous cases should lower confidence instead of
   inventing a new label
+- keep the first code landing behavior-first: kickoff priors may stay disabled or weak-only behind a
+  narrow internal gate until behavior regressions are stable
 - keep presentation-only formatting in sentinel/operator-surface code, not analyzer scoring code
 
 ## Testing Strategy
@@ -203,7 +225,15 @@ Conventions:
   - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
 - Coverage expectation for this packet:
   - deterministic cases for the four initial archetypes
-  - legacy schema fallback coverage for `v0.4`
+  - at least one ambiguous mixed case that must stay `low` or `medium` confidence
+  - at least one mode-shift / hysteresis case across adjacent checkpoints
+  - delegated-parent plus opaque-child cases that cap confidence conservatively
+  - PR-response loops that stay `autonomous_implementation` while targeted edits plus local
+    verification remain dominant
+  - proof-oriented closeout loops where successful narrowing beats residual implementation
+  - failing verification loops where troubleshooting beats verification-closeout
+  - legacy schema fallback coverage for `v0.2` through `v0.4`
+  - `v0.5` required-field coverage for `session_archetype`
   - replay/live parity coverage for `v0.5` presentation
 
 Two-layer expectation:
@@ -222,6 +252,10 @@ Two-layer expectation:
 - Always:
   - keep `R4` limited to checkpoint-local session-archetype classification
   - widen the checkpoint schema explicitly from `v0.4` to `v0.5`
+  - consume the landed `R3.75` delegation boundary as a confidence cap / counter-evidence seam
+    rather than reopening delegation detection inside `R4`
+  - keep the first code landing behavior-first; kickoff priors may only be deferred, disabled, or
+    capped at weak internal influence
   - preserve `v0.2` through `v0.4` sentinel compatibility while adding `v0.5`
   - keep classification deterministic, evidence-backed, and auditable
   - run the focused analyzer and sentinel validation commands before claiming the packet landed
@@ -232,17 +266,25 @@ Two-layer expectation:
   - changing compactor schema or analyzer input artifacts upstream of this packet
 - Never:
   - silently add `session_archetype` under `v0.4`
+  - make `session_archetype` a non-optional shared deserialization field if that would break
+    `v0.2` through `v0.4` artifact loading before schema-aware validation runs
   - couple archetype labels to drift severity or scheduler triggers in this packet
   - replace deterministic evidence with prompt-only or commentary-only classification
   - treat review-draft docs as proof that implementation is complete
 
 ## Success Criteria
 
-- Analyzer checkpoints emitted by `R4` use `schema_version = "v0.5"` and serialize required
-  `session_archetype` state on every checkpoint.
+- The shared analyzer `Checkpoint` DTO remains backward-compatible for `v0.2` through `v0.4`
+  artifacts, while `v0.5` checkpoints serialize required `session_archetype` state on every
+  checkpoint and sentinel validation enforces that requiredness by schema version.
 - `session_archetype` exposes one of the four initial labels plus explicit confidence and evidence.
 - the four initial labels are `troubleshooting`, `planning`, `autonomous_implementation`, and
   `verification_closeout`
+- the first code landing is behavior-first and delegation-aware: landed `DelegationContext` can cap
+  confidence, and kickoff priors do not outrank contradictory observed behavior
+- classifier inputs include low-hanging command-role and file-role interpretation so `cargo test`,
+  `cargo fmt`, source edits, test-only edits, and doc/spec work do not collapse into one-family
+  heuristics
 - Analyzer summary output renders compact archetype inspection without removing existing
   turn-context or calibration reporting.
 - Sentinel replay/live loaders accept `v0.5` while preserving `v0.2`, `v0.3`, and `v0.4`.
@@ -255,8 +297,8 @@ Two-layer expectation:
 
 - Should `planning` and `brainstorming` remain one combined initial archetype, or do you want that
   split deferred but called out explicitly in the docs?
-- Should explicit kickoff-prompt priors ship in the first `R4` implementation packet, or should
-  the first code landing stay fully behavior-only and defer prompt priors to a narrow follow-on?
+- Should the first landing expose a debug-only `IntentEvidenceProfile` dump for tests/reviews, or
+  should that stay internal unless regressions prove it necessary?
 
 ## Packet Boundary
 
@@ -272,11 +314,17 @@ In scope:
   - `verification_closeout`
 - attach confidence plus evidence / counter-evidence to the archetype decision
 - widen analyzer checkpoint export from schema `v0.4` to `v0.5`
+- keep the shared checkpoint DTO legacy-safe for `v0.2` through `v0.4` deserialization while
+  making `session_archetype` required by contract for `v0.5`
 - derive archetype deterministically from existing task-frame, turn-context, diagnostics, and
   command-observation signals
+- consume the landed analyzer-local delegation boundary to cap confidence and record
+  counter-evidence when child work is opaque
+- add low-hanging command-role and file-role interpretation so broad command families do not become
+  one-step label proxies
 - allow kickoff prompt shape, explicit skill calls, and orchestration-prompt markers only as
-  bounded prior evidence; they may influence confidence but must not override contradictory
-  behavioral evidence
+  bounded prior evidence; the first implementation may keep them disabled or weak-only behind an
+  internal gate, and they must not override contradictory behavioral evidence
 - render compact archetype information in analyzer `summary.md`
 - preserve replay/live loading by extending sentinel compatibility from
   `v0.2 | v0.3 | v0.4` to `v0.2 | v0.3 | v0.4 | v0.5`
@@ -298,10 +346,11 @@ Out of scope:
 
 ## Checkpoint Contract
 
-`R4` should add one new analyzer-owned field to `Checkpoint`:
+`R4` should add one new analyzer-owned field to `Checkpoint` with legacy-safe serde semantics:
 
-```text
-session_archetype: SessionArchetype
+```rust
+#[serde(default, skip_serializing_if = "Option::is_none")]
+pub session_archetype: Option<SessionArchetype>,
 ```
 
 `SessionArchetype` should carry:
@@ -324,8 +373,11 @@ State-scope rule:
 - it may use current-turn evidence, but it should not collapse to turn archetype alone
 - later checkpoints may legitimately carry a different session type if the session mode shifts
 
-`R4` should treat `session_archetype` as required for `v0.5` checkpoints and absent for older
-schemas.
+Version rule:
+
+- `v0.2` through `v0.4`: `session_archetype` remains absent or optional
+- `v0.5`: `session_archetype` is required by contract and must fail closed in sentinel validation if
+  missing
 
 ## Classification Rules
 
@@ -333,12 +385,19 @@ schemas.
 
 Preferred evidence sources:
 
-- kickoff prompt shape, explicit skills mentioned, and orchestration-prompt markers
-- kickoff objective shape and expected-next-step language already extracted into analyzer state
+- landed `DelegationContext` topology / visibility / confidence, especially delegated-parent plus
+  opaque-child cases that should cap certainty
 - truth-artifact density and working-set concentration
 - turn-context execution mode, activity mix, checkpoint density, and prompt cadence
-- write/test cadence from command-family and verification observations
-- diagnostics such as task-frame transitions and verification density
+- write/test cadence from command observations interpreted through command role rather than family
+  alone
+- file-role context such as source, test/golden, docs/spec, config/build, generated/artifact, or
+  unknown scope
+- diagnostics and recent checkpoint-local recovery context such as task-frame transitions,
+  verification density, repeated failures, clean verification intervals, and recovered-versus-active
+  streaks
+- kickoff objective shape, explicit skills, and orchestration markers only as bounded priors after
+  behavior-first evidence is accounted for
 
 Conservative first-pass guidance:
 
@@ -364,6 +423,8 @@ Conservative bias:
 - use multiple signals before assigning high confidence
 - bias ambiguous cases to `low` or `medium` confidence rather than overclaiming
 - do not let one keyword in a prompt override contradictory turn-context or command evidence
+- if visible evidence is sparse after accounting for delegation opacity, prefer `planning` with low
+  confidence over inventing a stronger mode claim
 
 Kickoff-prompt rule:
 

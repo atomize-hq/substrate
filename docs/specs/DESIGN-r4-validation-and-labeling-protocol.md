@@ -111,8 +111,19 @@ The first `R4` validation set should include at least:
 4. one clear `verification_closeout` case,
 5. at least one ambiguous mixed case that must stay `low` or `medium` confidence,
 6. at least one legitimate mode-shift case across adjacent checkpoints,
-7. at least one case proving replay/live parity for the same checkpoint output,
-8. at least one case proving legacy schema fallback remains intact.
+7. at least one PR-response loop where targeted edits plus local verification stay
+   `autonomous_implementation`,
+8. at least one proof-oriented closeout case where successful verification beats residual
+   implementation,
+9. at least one failing verification loop where `troubleshooting` beats
+   `verification_closeout`,
+10. at least one delegated-parent plus opaque-child case that caps confidence conservatively,
+11. at least one case proving replay/live parity for the same checkpoint output,
+12. at least one case proving legacy schema fallback remains intact,
+13. at least one case proving `v0.5` requiredness fails closed when `session_archetype` is
+   missing,
+14. at least one case where kickoff priors are contradicted by later behavior and therefore do not
+   win the final label.
 
 ## Labeling Rules For Fixtures
 
@@ -142,6 +153,8 @@ The cleanest initial placement is:
    `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`,
    `crates/agent-drift-sentinel/tests/operator_surface.rs`, and
    `crates/agent-drift-sentinel/tests/live_end_to_end.rs`.
+4. fixture labeling authority in
+   `docs/specs/agent-drift-analyzer-session-archetype-r4-fixtures.md`.
 
 ## Review Protocol
 
@@ -160,6 +173,5 @@ Before calling `R4` review-clean, the packet should show:
    small number of screened real-session prefixes?
 2. Should expected lower-layer bucket strengths be asserted directly in tests, or only indirectly
    through final label and evidence output?
-3. Do we want a dedicated `R4` fixture manifest doc that names the canonical cases once the first
-   implementation packet starts?
-
+3. Do we want to assert debug-only lower-layer bucket strengths directly, or is the fixture
+   manifest plus final public label enough for the first landing?

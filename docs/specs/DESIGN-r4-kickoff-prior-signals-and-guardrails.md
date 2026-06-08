@@ -111,12 +111,12 @@ The prior seam may bias only the existing four labels. It must not create quasi-
 
 ## Recommended First Landing
 
-The initial draft recommendation is:
+The initial first-landing recommendation is:
 
 1. freeze this design now,
 2. keep the first active `R4` code landing behavior-first,
-3. either defer prior contribution entirely to a follow-on sub-packet or keep it disabled behind a
-   narrow internal gate until behavior-only regressions are stable.
+3. defer prior contribution entirely or keep it disabled by default behind a narrow internal gate
+   until behavior-only regressions are stable.
 
 This keeps the first classifier easier to reason about while preserving a clear place for priors
 later if they prove useful.
@@ -137,4 +137,3 @@ later if they prove useful.
    explicitly now?
 3. Should resume or handoff prompts contribute any prior signal at all, or should they be treated
    as too noisy for the first version?
-

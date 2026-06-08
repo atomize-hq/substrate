@@ -21,9 +21,8 @@ But the current repo truth also says delegated runs were screened out rather tha
 
 1. `R1C` and `R1E` excluded sessions with `multi_agent_v1` delegation markers,
 2. `R2` froze only the non-subagent acceptance corpus,
-3. `R3.75-1` through `R3.75-3` are now landed, `R3.75-4` remains the final bounded
-   delegation-boundary packet, and `R4` through `R8` are the downstream semantic refinement family
-   on top of that simpler world.
+3. `R3.75` is now landed, and `R4` through `R8` are the downstream semantic refinement family on
+   top of that simpler world.
 4. in real delegated/subagent runs, the child work may be emitted as its own ordinary
    `rollout-*.jsonl` with a distinct session id, so the visible parent rollout can be genuinely
    incomplete rather than merely sparse.

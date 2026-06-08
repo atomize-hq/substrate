@@ -14,14 +14,14 @@ Completion status on `2026-06-08`:
 - `R3.75-1` repo-doc lock, `R3.75-2` analyzer-local delegation contract / marker harvesting, and
   `R3.75-3` checkpoint-local derivation plus analyzer-owned proof surface are landed on this
   worktree.
-- `R3.75-4` bounded delegated regression coverage is now the remaining open packet before `R4`,
-  and `R7` remains distinct from this boundary.
+- `R3.75-4` bounded delegated regression coverage is also landed on this worktree, so `R3.75` is
+  complete and `R4` is now the next packet family.
+- `R7` remains distinct from this boundary.
 
 Validation gate for this phase:
 
-- this task list is the `TASKS` phase artifact and progress ledger for `R3.75`
-- do not treat `R3.75` as complete or begin `R4` implementation until `R3.75-4` is reviewed and
-  accepted
+- this task list is now the landed `R3.75` packet ledger and history artifact
+- `R4` may proceed without treating `R3.75` as an open blocker
 - if scope or packet boundaries change, update the spec first, then the plan, then this task list
 
 ## Packet R3.75-1: Repo Doc Contract Lock
@@ -113,7 +113,7 @@ Packet `R3.75-1` historical exit condition before `R3.75-2+` lands:
 
 ## Packet R3.75-4: Bounded Delegated Regression Wall
 
-- [ ] Task: Add bounded delegated regression coverage without reopening the `R2` acceptance corpus
+- [x] Task: Add bounded delegated regression coverage without reopening the `R2` acceptance corpus
   - Acceptance:
     - one known delegated case,
       `019e93f8-a5e9-7490-ac1a-955b74c92ad0`, proves conservative non-single-agent classification
@@ -141,3 +141,9 @@ Packet `R3.75` exit condition:
 - the `R2` non-subagent acceptance corpus remains unchanged
 - no sentinel compatibility, operator-surface, progress, scorer, or full delegated-session
   semantics land in this packet
+
+Packet `R3.75` completion note on `2026-06-08`:
+
+- the bounded delegated regression wall is landed
+- the delegation-aware analyzer boundary is now complete and reusable by `R4`
+- `R4` session archetype is now the next packet family

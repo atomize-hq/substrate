@@ -630,11 +630,13 @@ Packet 18 note:
   - `R3.75-1` through `R3.75-3` are now landed: repo-doc lock, analyzer-local delegation
     harvesting, checkpoint-local topology / visibility derivation, and analyzer-owned summary proof
     all stay within `schema_version = "v0.4"` and keep sentinel replay/live behavior unchanged
-  - the next open packet after those landings is `R3.75-4` bounded delegated regression coverage
+  - `R3.75-4` bounded delegated regression coverage is now also landed, so the delegation-aware
+    analyzer boundary is complete
   - under `R3.75`, a separate child `rollout-*.jsonl` or child session id only justifies
     `partial` or `opaque` visibility; bounded parent/child linkage is deferred to `R7`
-  - `R4`, `R5`, `R6`, `R7`, and `R8` remain explicitly out of scope until the remaining `R3.75-4`
-    cutover is landed
+  - `R4` is now the next semantic packet and should consume the landed delegation boundary rather
+    than reopening it
+  - `R5`, `R6`, `R7`, and `R8` remain explicitly out of scope for the `R4` packet family
 
 ## If You Want Fewer Packets
 

@@ -89,4 +89,6 @@ Packet `R3.5` completion note on `2026-06-07`:
   checkpoint presentation
 - focused replay/live regressions exist for ordinary checkpoint headlines and synthetic scheduler
   fast-path distinction
-- the next open packet moves to `R4` session-archetype classification
+- the follow-on analyzer-semantic packet family moved next to `R3.75` delegation-aware boundary
+  work, which is now also landed; the current next packet is `R4` session-archetype
+  classification
