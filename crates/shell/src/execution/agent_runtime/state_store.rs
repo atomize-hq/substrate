@@ -2600,6 +2600,13 @@ impl AgentRuntimeStateStore {
         let _write_guard = snapshot_write_lock()
             .lock()
             .expect("snapshot write mutex poisoned");
+        self.persist_obligation_unlocked(obligation)
+    }
+
+    fn persist_obligation_unlocked(
+        &self,
+        obligation: &OrchestrationObligationRecord,
+    ) -> Result<()> {
         self.validate_obligation_record(obligation)?;
         let mut session = self
             .load_authoritative_session(&obligation.orchestration_session_id)?
@@ -2658,6 +2665,10 @@ impl AgentRuntimeStateStore {
         let _write_guard = snapshot_write_lock()
             .lock()
             .expect("snapshot write mutex poisoned");
+        self.persist_host_inbox_record_unlocked(record)
+    }
+
+    fn persist_host_inbox_record_unlocked(&self, record: &HostInboxRecord) -> Result<()> {
         self.validate_host_inbox_record(record)?;
         write_atomic_json(&self.host_inbox_record_path(&record.record_id)?, record)
     }
@@ -2668,6 +2679,9 @@ impl AgentRuntimeStateStore {
         record_id: &str,
         local_host_id: &str,
     ) -> Result<HostInboxRecord> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
         if local_host_id.trim().is_empty() {
             anyhow::bail!("host inbox materialization requires non-empty local_host_id");
         }
@@ -2678,13 +2692,14 @@ impl AgentRuntimeStateStore {
 
         match record.materialization_state {
             HostInboxMaterializationState::Materialized => {
+                record.ensure_targets_local_host(local_host_id)?;
                 let obligation_id = record.materialized_obligation_id.as_deref().ok_or_else(|| {
                     anyhow::anyhow!(
                         "materialized_host_inbox_record_missing_obligation: host inbox record {} is missing obligation linkage",
                         record.record_id
                     )
                 })?;
-                let Some(_obligation) =
+                let Some(obligation) =
                     self.load_obligation(&record.orchestration_session_id, obligation_id)?
                 else {
                     anyhow::bail!(
@@ -2693,6 +2708,13 @@ impl AgentRuntimeStateStore {
                         obligation_id
                     );
                 };
+                if !record.matches_materialized_obligation(&obligation) {
+                    anyhow::bail!(
+                        "materialized_host_inbox_record_mismatch: host inbox record {} no longer matches obligation {}",
+                        record.record_id,
+                        obligation_id
+                    );
+                }
                 return Ok(record);
             }
             HostInboxMaterializationState::FailedClosed => {
@@ -2707,7 +2729,7 @@ impl AgentRuntimeStateStore {
         {
             let failed_closed_at = Utc::now();
             record.mark_failed_closed(err.to_string(), failed_closed_at);
-            self.persist_host_inbox_record(&record)?;
+            self.persist_host_inbox_record_unlocked(&record)?;
             return Ok(record);
         }
 
@@ -2723,33 +2745,38 @@ impl AgentRuntimeStateStore {
                 ),
                 failed_closed_at,
             );
-            self.persist_host_inbox_record(&record)?;
+            self.persist_host_inbox_record_unlocked(&record)?;
             return Ok(record);
         }
 
         let obligation_id = record.local_obligation_id();
+        let materialized_at = Utc::now();
         let obligation = match self
             .load_obligation(&record.orchestration_session_id, &obligation_id)?
         {
             Some(existing) => {
                 if !record.matches_materialized_obligation(&existing) {
-                    anyhow::bail!(
-                        "host inbox record {} expected canonical obligation {} to preserve exact materialized truth",
-                        record.record_id,
-                        obligation_id
+                    record.mark_failed_closed(
+                        format!(
+                            "materialized_obligation_conflict: host inbox record {} expected canonical obligation {} to preserve exact materialized truth",
+                            record.record_id, obligation_id
+                        ),
+                        materialized_at,
                     );
+                    self.persist_host_inbox_record_unlocked(&record)?;
+                    return Ok(record);
                 }
                 existing
             }
             None => {
-                let obligation = record.materialize_as_local_obligation(Utc::now())?;
-                self.persist_obligation(&obligation)?;
+                let obligation = record.materialize_as_local_obligation(materialized_at)?;
+                self.persist_obligation_unlocked(&obligation)?;
                 obligation
             }
         };
 
-        record.mark_materialized(obligation.obligation_id.clone(), Utc::now());
-        self.persist_host_inbox_record(&record)?;
+        record.mark_materialized(obligation.obligation_id.clone(), materialized_at);
+        self.persist_host_inbox_record_unlocked(&record)?;
 
         Ok(record)
     }
@@ -4794,6 +4821,7 @@ pub(crate) fn born_unattached_status_anchor(
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::{Arc, Barrier};
 
     use serde_json::{json, Value};
     use tempfile::TempDir;
@@ -11346,8 +11374,73 @@ mod tests {
                 store
                     .list_obligations("sess_host_idempotent")
                     .expect("list obligations")
+                .len(),
+                1
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_materialization_is_serialized_for_concurrent_repeat_runs() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_host_concurrent", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
+            let record = pending_host_inbox_record(
+                "sess_host_concurrent",
+                "host_record_concurrent",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            store
+                .persist_host_inbox_record(&record)
+                .expect("persist host inbox record");
+
+            let barrier = Arc::new(Barrier::new(2));
+            std::thread::scope(|scope| {
+                let first_barrier = Arc::clone(&barrier);
+                let first = scope.spawn(move || {
+                    first_barrier.wait();
+                    store
+                        .materialize_host_inbox_record_for_local_host(
+                            "host_record_concurrent",
+                            "host-local",
+                        )
+                        .expect("first concurrent materialization")
+                });
+                let second_barrier = Arc::clone(&barrier);
+                let second = scope.spawn(move || {
+                    second_barrier.wait();
+                    store
+                        .materialize_host_inbox_record_for_local_host(
+                            "host_record_concurrent",
+                            "host-local",
+                        )
+                        .expect("second concurrent materialization")
+                });
+
+                let first = first.join().expect("first thread joins");
+                let second = second.join().expect("second thread joins");
+                assert_eq!(first, second);
+            });
+
+            assert_eq!(
+                store
+                    .list_obligations("sess_host_concurrent")
+                    .expect("list obligations")
                     .len(),
                 1
+            );
+            let persisted = store
+                .load_host_inbox_record("host_record_concurrent")
+                .expect("load persisted host inbox record")
+                .expect("persisted record exists");
+            assert_eq!(
+                persisted.materialization_state,
+                HostInboxMaterializationState::Materialized
             );
         });
     }
@@ -11427,6 +11520,57 @@ mod tests {
                 .list_obligations("sess_host_missing_session")
                 .expect("list obligations")
                 .is_empty());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_materialized_fast_path_rejects_drifted_obligation_truth() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_host_drifted", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
+            let record = pending_host_inbox_record(
+                "sess_host_drifted",
+                "host_record_drifted",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            store
+                .persist_host_inbox_record(&record)
+                .expect("persist host inbox record");
+
+            let materialized = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_drifted",
+                    "host-local",
+                )
+                .expect("materialize host inbox record");
+            let obligation_id = materialized
+                .materialized_obligation_id
+                .clone()
+                .expect("materialized obligation id");
+            let mut drifted = store
+                .load_obligation("sess_host_drifted", &obligation_id)
+                .expect("load obligation")
+                .expect("obligation exists");
+            drifted.summary = "drifted summary".to_string();
+            store
+                .persist_obligation(&drifted)
+                .expect("persist drifted obligation");
+
+            let err = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_drifted",
+                    "host-local",
+                )
+                .expect_err("drifted obligation truth must not report materialized success");
+            assert_eq!(
+                err.to_string(),
+                "materialized_host_inbox_record_mismatch: host inbox record host_record_drifted no longer matches obligation host_inbox_host_record_drifted"
+            );
         });
     }
 }
