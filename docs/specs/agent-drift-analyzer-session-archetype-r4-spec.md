@@ -4,9 +4,9 @@
 
 1. Live repo truth on `2026-06-08` is the authority: the analyzer outcome-evidence `R1` family,
    acceptance-fixture `R2`, turn-context `R3`, and sentinel trigger-headline `R3.5` packets are
-   landed on this worktree; the immediate next packet is `R3.75` delegation-aware analyzer
-   boundary, and `R4` session-archetype classification remains the next packet family after that
-   boundary lands.
+   landed on this worktree; `R3.75-1` through `R3.75-3` are also landed, `R3.75-4` remains the
+   remaining delegation-aware analyzer packet, and `R4` session-archetype classification remains
+   the next packet family after that boundary fully lands.
 2. `R4` is intentionally narrower than `R5+`. Its job is to add explicit checkpoint-local
    archetype state, not archetype-aware progress semantics, drift-scorer retuning, or sentinel
    scheduler changes.

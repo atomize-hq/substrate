@@ -9,7 +9,8 @@ Implementation status on `2026-06-08`:
   success-tail corpus.
 - `R3` turn-context promotion is landed with analyzer checkpoint schema `v0.4`.
 - `R3.5` replay/live trigger-headline canonicalization is landed.
-- Repo-root sequencing and the design note now treat `R3.75` as the immediate next packet.
+- `R3.75-1` through `R3.75-3` are now landed on this worktree.
+- `R3.75-4` bounded delegated regression coverage remains the only open packet before `R4`.
 - `R4`, `R5`, `R6`, `R7`, and `R8` remain outside the `R3.75` packet boundary.
 
 This plan implements:
@@ -18,8 +19,10 @@ This plan implements:
 
 Validation gate for this phase:
 
-- this plan is the `PLAN` phase artifact for review, not implementation approval by itself
-- do not start `R3.75-2+` code work until the `SPECIFY` artifact is reviewed and accepted
+- this plan remains the `PLAN` phase artifact for `R3.75`, now serving as the packet-progress
+  reference through `R3.75-4`
+- do not treat `R3.75` as complete or begin `R4` code work until the remaining `R3.75-4` packet
+  is reviewed and accepted
 - if the spec changes materially, update the spec first and then re-align this plan
 
 `R3.75` is the narrow delegation guardrail packet between the landed `R3` structure family and the

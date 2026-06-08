@@ -786,20 +786,22 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5` is now landed on this worktree, so the next open packet is `R3.75`.
+`R3.5` is now landed on this worktree, and `R3.75-1` through `R3.75-3` are also landed, so the
+next open packet is `R3.75-4`.
 
 The next honest implementation target is:
 
 - keep `R3` closed as the completed turn-context packet family
 - keep `R3.5` closed as the completed replay/live trigger-headline canonicalization packet
-- start `R3.75` as the next analyzer packet for delegation-aware topology and child-visibility
-  classification
+- close `R3.75-4` as the remaining bounded delegated regression packet for the delegation-aware
+  analyzer boundary
 - keep `R4` session archetype, `R5` progress semantics, and `R6` scorer cutover queued behind
-  `R3.75`
+  full `R3.75` completion
 - keep full delegated-session support as `R7` behind `R6`
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
-That is the current top-of-stack action after `R3.5`.
+That is the current top-of-stack action after the landed `R3.5` and `R3.75-1` through `R3.75-3`
+packets.
 
 ## Research-Informed Design Directions
 

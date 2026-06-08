@@ -627,13 +627,13 @@ Packet 18 note:
   - the narrower `R3.5` follow-on packet is now landed: replay/live ordinary checkpoint headlines
     stay canonicalized on `checkpoint_ready`, while `scheduler_repeated_failure_trigger` remains
     reserved for true synthetic scheduler fast-path events
-  - the next open packet after `R3.5` is `R3.75` delegation-aware analyzer boundary
-  - `R3.75-1` is repo-doc lock only: analyzer-local `DelegationContext`, `DelegationTopology`, and
-    `ChildWorkVisibility`; exported checkpoints stay on `schema_version = "v0.4"` and sentinel
-    replay/live behavior stays unchanged
+  - `R3.75-1` through `R3.75-3` are now landed: repo-doc lock, analyzer-local delegation
+    harvesting, checkpoint-local topology / visibility derivation, and analyzer-owned summary proof
+    all stay within `schema_version = "v0.4"` and keep sentinel replay/live behavior unchanged
+  - the next open packet after those landings is `R3.75-4` bounded delegated regression coverage
   - under `R3.75`, a separate child `rollout-*.jsonl` or child session id only justifies
     `partial` or `opaque` visibility; bounded parent/child linkage is deferred to `R7`
-  - `R4`, `R5`, `R6`, `R7`, and `R8` remain explicitly out of scope until that narrower `R3.75`
+  - `R4`, `R5`, `R6`, `R7`, and `R8` remain explicitly out of scope until the remaining `R3.75-4`
     cutover is landed
 
 ## If You Want Fewer Packets

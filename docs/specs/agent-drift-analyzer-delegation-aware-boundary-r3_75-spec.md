@@ -4,8 +4,8 @@
 
 1. Live repo truth on `2026-06-08` is the authority: the analyzer outcome-evidence `R1` family,
    acceptance-fixture `R2`, turn-context `R3`, and trigger-headline `R3.5` packets are landed on
-   this worktree; the immediate next packet is `R3.75`, and `R4` through `R8` remain queued
-   behind it.
+   this worktree; `R3.75-1` through `R3.75-3` are now landed, `R3.75-4` remains open, and `R4`
+   through `R8` remain queued behind completion of `R3.75`.
 2. The first `R3.75` landing should keep `DelegationContext` analyzer-local rather than widening
    checkpoint schema. That preserves the already-frozen `R4` intent to own the next explicit
    checkpoint widening as `v0.5`.
@@ -26,7 +26,8 @@
 8. If current evidence cannot honestly distinguish `delegated_child` from
    `mixed_or_ambiguous`, the first landing should degrade conservatively instead of guessing.
 
-If any of these assumptions are wrong, correct them before `R3.75-2+` implementation starts.
+If any of these assumptions are wrong, correct them before the remaining `R3.75` packet work
+continues.
 
 ## Objective
 
@@ -259,7 +260,5 @@ Coverage expectation for this packet:
 
 ## Open Questions
 
-- Should the first operator-facing proof be summary-only, or should `R3.75` emit a separate
-  analyzer report artifact without changing checkpoint schema?
 - If the current evidence surface never cleanly proves `delegated_child`, is it acceptable for the
   first landing to leave that label effectively dormant until later delegated corpus work?

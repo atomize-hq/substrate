@@ -7,12 +7,13 @@ This task list implements:
 
 ## Task List
 
-Completion status on `2026-06-07`:
+Completion status on `2026-06-08`:
 
 - The analyzer outcome-evidence `R1` family is landed on this worktree.
 - `R2`, `R3`, and `R3.5` are landed on this worktree.
-- `R3.75` is now the immediate next packet before `R4`.
-- `R4` remains the next session-archetype packet family after `R3.75`.
+- `R3.75-1` through `R3.75-3` are landed on this worktree.
+- `R3.75-4` remains the immediate next packet before `R4`.
+- `R4` remains the next session-archetype packet family after the remaining `R3.75` packet lands.
 - `R5`, `R6`, `R7`, and `R8` remain outside the `R4` boundary.
 
 Validation gate for this phase:

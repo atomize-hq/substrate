@@ -2,14 +2,15 @@
 
 ## Scope
 
-Implementation status on `2026-06-07`:
+Implementation status on `2026-06-08`:
 
 - The analyzer outcome-evidence `R1` family is landed end-to-end.
 - `R2` acceptance-fixture hardening is landed.
 - `R3` turn-context promotion is landed with analyzer checkpoint schema `v0.4`.
 - `R3.5` replay/live trigger-headline canonicalization is landed and closes the last known
   sentinel-local checkpoint headline mismatch from the `R3` family.
-- `R3.75` delegation-aware analyzer boundary is now the immediate next packet before `R4`.
+- `R3.75-1` through `R3.75-3` are landed on this worktree.
+- `R3.75-4` remains the only open delegation-aware analyzer packet before `R4`.
 - `R5`, `R6`, `R7`, and `R8` remain outside the next-packet boundary.
 
 This plan implements:
