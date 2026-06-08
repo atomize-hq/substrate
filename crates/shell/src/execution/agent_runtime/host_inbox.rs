@@ -2,6 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::path::Path;
 
 use super::obligation_ledger::{OrchestrationObligationKind, OrchestrationObligationSeverity};
 
@@ -55,6 +56,10 @@ pub(crate) struct HostInboxRecord {
 }
 
 impl HostInboxRecord {
+    pub(crate) fn validate_record_id(record_id: &str) -> Result<()> {
+        validate_host_inbox_record_id(record_id)
+    }
+
     #[allow(dead_code)]
     pub(crate) fn new(
         orchestration_session_id: impl Into<String>,
@@ -100,12 +105,12 @@ impl HostInboxRecord {
             "orchestration_session_id",
             "host inbox record",
         )?;
+        Self::validate_record_id(&self.record_id)?;
         validate_required_exact_identity(
-            Some(self.record_id.as_str()),
-            "record_id",
+            Some(self.summary.as_str()),
+            "summary",
             "host inbox record",
         )?;
-        validate_required_exact_identity(Some(self.summary.as_str()), "summary", "host inbox record")?;
         validate_optional_exact_identity(
             self.source_participant_id.as_deref(),
             "source_participant_id",
@@ -202,6 +207,28 @@ impl HostInboxRecord {
 
         Ok(())
     }
+}
+
+fn validate_host_inbox_record_id(record_id: &str) -> Result<()> {
+    validate_required_exact_identity(Some(record_id), "record_id", "host inbox record")?;
+
+    if Path::new(record_id).is_absolute() || looks_like_windows_absolute_path(record_id) {
+        anyhow::bail!("host inbox record must not persist an absolute record_id");
+    }
+
+    if record_id.contains('/') || record_id.contains('\\') {
+        anyhow::bail!("host inbox record must not persist path separators in record_id");
+    }
+
+    Ok(())
+}
+
+fn looks_like_windows_absolute_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 3
+        && bytes[1] == b':'
+        && bytes[0].is_ascii_alphabetic()
+        && matches!(bytes[2], b'/' | b'\\')
 }
 
 #[allow(dead_code)]
@@ -383,5 +410,36 @@ mod tests {
         assert!(err.to_string().contains(
             "failed_closed host inbox records must not persist materialized obligation truth"
         ));
+    }
+
+    #[test]
+    fn host_inbox_record_rejects_separator_and_absolute_record_ids() {
+        let mut record = HostInboxRecord::new(
+            "sess_packet_one",
+            "host_record_five",
+            OrchestrationObligationKind::ApprovalRequired,
+            "approval requested",
+            "host-local",
+            "remote_router",
+            "ingress-005",
+        );
+
+        record.record_id = "nested/record".to_string();
+        let err = record
+            .validate()
+            .expect_err("record_id with separators must fail validation");
+        assert!(err.to_string().contains("path separators in record_id"));
+
+        record.record_id = "/tmp/record".to_string();
+        let err = record
+            .validate()
+            .expect_err("absolute record_id must fail validation");
+        assert!(err.to_string().contains("absolute record_id"));
+
+        record.record_id = r"C:\tmp\record".to_string();
+        let err = record
+            .validate()
+            .expect_err("windows absolute record_id must fail validation");
+        assert!(err.to_string().contains("absolute record_id"));
     }
 }

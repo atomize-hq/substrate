@@ -727,8 +727,9 @@ impl AgentRuntimeStateStore {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn host_inbox_record_path(&self, record_id: &str) -> PathBuf {
-        self.host_inbox_dir().join(format!("{record_id}.json"))
+    pub(crate) fn host_inbox_record_path(&self, record_id: &str) -> Result<PathBuf> {
+        HostInboxRecord::validate_record_id(record_id)?;
+        Ok(self.host_inbox_dir().join(format!("{record_id}.json")))
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -2658,7 +2659,7 @@ impl AgentRuntimeStateStore {
             .lock()
             .expect("snapshot write mutex poisoned");
         self.validate_host_inbox_record(record)?;
-        write_atomic_json(&self.host_inbox_record_path(&record.record_id), record)
+        write_atomic_json(&self.host_inbox_record_path(&record.record_id)?, record)
     }
 
     #[allow(dead_code)]
@@ -2761,8 +2762,11 @@ impl AgentRuntimeStateStore {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn load_host_inbox_record(&self, record_id: &str) -> Result<Option<HostInboxRecord>> {
-        let path = self.host_inbox_record_path(record_id);
+    pub(crate) fn load_host_inbox_record(
+        &self,
+        record_id: &str,
+    ) -> Result<Option<HostInboxRecord>> {
+        let path = self.host_inbox_record_path(record_id)?;
         let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
             return Ok(None);
         };
@@ -11037,7 +11041,10 @@ mod tests {
                 "host inbox namespace must root at SUBSTRATE_HOME/host_inbox"
             );
             assert!(
-                store.host_inbox_record_path("host_record_one").is_file(),
+                store
+                    .host_inbox_record_path("host_record_one")
+                    .expect("valid record_id path")
+                    .is_file(),
                 "host inbox records must live under SUBSTRATE_HOME/host_inbox"
             );
             assert_eq!(
@@ -11088,6 +11095,46 @@ mod tests {
                     .list_host_inbox_records()
                     .expect("list host inbox records"),
                 vec![first, second]
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_rejects_separator_and_absolute_record_ids() {
+        with_store(|store| {
+            let err = store
+                .host_inbox_record_path("nested/record")
+                .expect_err("separator-containing record_id must fail closed");
+            assert!(err.to_string().contains("path separators in record_id"));
+
+            let err = store
+                .host_inbox_record_path("/tmp/record")
+                .expect_err("absolute record_id must fail closed");
+            assert!(err.to_string().contains("absolute record_id"));
+
+            let err = store
+                .host_inbox_record_path(r"C:\tmp\record")
+                .expect_err("windows absolute record_id must fail closed");
+            assert!(err.to_string().contains("absolute record_id"));
+
+            let mut record = pending_host_inbox_record(
+                "sess_host_inbox",
+                "host_record_gamma",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            record.record_id = "nested/record".to_string();
+
+            let err = store
+                .persist_host_inbox_record(&record)
+                .expect_err("persist must reject separator-containing record_id");
+            assert!(err.to_string().contains("path separators in record_id"));
+
+            assert_eq!(
+                store
+                    .list_host_inbox_records()
+                    .expect("list host inbox records after rejected persist"),
+                Vec::<HostInboxRecord>::new()
             );
         });
     }
