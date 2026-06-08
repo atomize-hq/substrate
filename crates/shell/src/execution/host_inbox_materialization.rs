@@ -52,6 +52,16 @@ pub(crate) fn materialize_pending_host_inbox_records_for_local_host(
             local_host_id,
         )?);
     }
+    // Invalid path stems never become router work; we preserve them as
+    // durable failed-closed host-inbox outcomes instead.
+    for path in store.list_invalid_host_inbox_artifact_paths()? {
+        let after = store.record_invalid_host_inbox_artifact_failure(&path)?;
+        executions.push(build_host_inbox_materialization_execution(
+            None,
+            &after,
+            local_host_id,
+        ));
+    }
     Ok(executions)
 }
 
@@ -397,7 +407,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn host_inbox_materialization_entrypoint_skips_malformed_path_stems_without_blocking_router_candidates(
+    fn host_inbox_materialization_entrypoint_fails_closed_malformed_path_stems_without_blocking_router_candidates(
     ) {
         with_store(|store| {
             persist_session(store, "sess_host_inbox_malformed_path");
@@ -429,17 +439,38 @@ mod tests {
             let executions =
                 materialize_pending_host_inbox_records_for_local_host(store, "host-local")
                     .expect("malformed path stems must not abort host inbox pre-pass");
+            assert_eq!(executions.len(), 1);
+            assert_eq!(
+                executions[0].outcome,
+                HostInboxMaterializationOutcome::FailedClosed
+            );
             assert!(
-                executions.is_empty(),
-                "malformed path-stem artifacts should be ignored by the bounded pre-pass"
+                executions[0]
+                    .reason
+                    .contains("invalid_host_inbox_artifact_path"),
+                "malformed path-stem artifacts should produce an explanation-ready failed-closed outcome"
+            );
+            assert!(
+                executions[0].obligation_id.is_none(),
+                "malformed path-stem artifacts must never materialize router work directly"
             );
 
             let candidates = store
                 .list_router_auto_attach_candidate_session_ids()
-                .expect("list router candidates after malformed path-stem skip");
+                .expect("list router candidates after malformed path-stem failure");
             assert_eq!(
                 candidates,
                 vec!["sess_host_inbox_malformed_path".to_string()]
+            );
+
+            let failed_closed_records = store
+                .list_host_inbox_record_ids()
+                .expect("list persisted host inbox record ids after malformed path-stem failure");
+            assert!(
+                failed_closed_records
+                    .iter()
+                    .any(|record_id| record_id.starts_with("invalid_host_inbox_artifact_")),
+                "malformed path-stem artifacts should persist a durable failed-closed host inbox record"
             );
         });
     }

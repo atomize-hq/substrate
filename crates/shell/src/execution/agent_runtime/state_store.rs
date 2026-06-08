@@ -8,6 +8,7 @@ use std::sync::{Mutex, OnceLock};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 
 use substrate_common::paths as substrate_paths;
@@ -2724,6 +2725,42 @@ impl AgentRuntimeStateStore {
         Ok(record)
     }
 
+    fn invalid_host_inbox_artifact_record_id(path: &Path) -> String {
+        let artifact_name = path
+            .file_name()
+            .map(|value| value.to_string_lossy())
+            .unwrap_or_else(|| path.to_string_lossy());
+        let mut hasher = Sha256::new();
+        hasher.update(artifact_name.as_bytes());
+        let digest = hasher.finalize();
+        let mut suffix = String::with_capacity(16);
+        for byte in &digest[..8] {
+            suffix.push_str(&format!("{byte:02x}"));
+        }
+        format!("invalid_host_inbox_artifact_{suffix}")
+    }
+
+    pub(crate) fn record_invalid_host_inbox_artifact_failure(
+        &self,
+        path: &Path,
+    ) -> Result<HostInboxRecord> {
+        let record_id = Self::invalid_host_inbox_artifact_record_id(path);
+        let reason = match Self::host_inbox_record_id_from_path(path) {
+            Ok(_) => format!("invalid_host_inbox_artifact_path: {}", path.display()),
+            Err(err) => format!("invalid_host_inbox_artifact_path: {err:#}"),
+        };
+
+        if let Some(existing) = self.load_host_inbox_record_unvalidated(&record_id)? {
+            if existing.materialization_state == HostInboxMaterializationState::FailedClosed
+                && existing.failed_closed_reason.as_deref() == Some(reason.as_str())
+            {
+                return Ok(existing);
+            }
+        }
+
+        self.synthesize_failed_closed_host_inbox_record(&record_id, reason, Utc::now())
+    }
+
     fn validate_host_inbox_record_artifact_identity(
         record: &HostInboxRecord,
         expected_record_id: &str,
@@ -3084,6 +3121,30 @@ impl AgentRuntimeStateStore {
         record_ids.sort();
         record_ids.dedup();
         Ok(record_ids)
+    }
+
+    pub(crate) fn list_invalid_host_inbox_artifact_paths(&self) -> Result<Vec<PathBuf>> {
+        let host_inbox_dir = self.host_inbox_dir();
+        let Some(entries) = safe_read_dir(&host_inbox_dir)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut invalid_paths = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", host_inbox_dir.display()))?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            if Self::host_inbox_record_id_from_path(&path).is_err() {
+                invalid_paths.push(path);
+            }
+        }
+
+        invalid_paths.sort();
+        invalid_paths.dedup();
+        Ok(invalid_paths)
     }
 
     #[allow(dead_code)]

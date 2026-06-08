@@ -1658,11 +1658,21 @@ fn run_router_owned_auto_attach_discovery_once(
             "local_host_id_unavailable: host inbox materialization requires exact local host identity before router discovery"
         );
     }
-    let materializations =
-        crate::execution::host_inbox_materialization::materialize_pending_host_inbox_records_for_local_host(
+    let materializations = match crate::execution::host_inbox_materialization::materialize_pending_host_inbox_records_for_local_host(
             store,
             &local_host_id,
-        )?;
+        ) {
+        Ok(materializations) => materializations,
+        Err(err) => {
+            warn!(
+                target = "substrate::shell",
+                local_host_id = %local_host_id,
+                error = %err,
+                "host inbox materialization pre-pass failed; continuing router discovery from canonical obligations only"
+            );
+            Vec::new()
+        }
+    };
     emit_host_inbox_materialization_execution_outcomes(&materializations);
     let executions = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
         store,
@@ -7823,6 +7833,60 @@ mod tests {
         );
         assert_eq!(
             target.attach_claim_owner.as_deref(),
+            Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn router_owned_auto_attach_discovery_continues_when_host_inbox_pre_pass_cannot_read_directory()
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-18", 3);
+        persist_pending_continue_approval_obligation(
+            &store,
+            "obl_continue_router_resilient",
+            "world-18",
+            3,
+        );
+
+        let host_inbox_dir = store.host_inbox_dir();
+        fs::create_dir_all(&host_inbox_dir).expect("create host inbox dir");
+        let mut restricted = fs::metadata(&host_inbox_dir)
+            .expect("host inbox dir metadata")
+            .permissions();
+        let original_mode = restricted.mode();
+        restricted.set_mode(0o000);
+        fs::set_permissions(&host_inbox_dir, restricted)
+            .expect("restrict host inbox dir permissions");
+
+        let discovery = run_router_owned_auto_attach_discovery_once(&store, &Policy::default());
+
+        let mut restored = fs::metadata(&host_inbox_dir)
+            .expect("restricted host inbox dir metadata")
+            .permissions();
+        restored.set_mode(original_mode);
+        fs::set_permissions(&host_inbox_dir, restored).expect("restore host inbox dir permissions");
+
+        discovery.expect("router discovery should continue from canonical obligations only");
+
+        let obligation = store
+            .load_obligation("sess_dispatch", "obl_continue_router_resilient")
+            .expect("load canonical obligation after host inbox failure")
+            .expect("canonical obligation exists");
+        assert_eq!(
+            obligation.attach_state,
+            OrchestrationObligationAttachState::FailedClosed,
+            "router discovery should still evaluate canonical obligations when host inbox discovery is unavailable"
+        );
+        assert_eq!(
+            obligation.attach_claim_owner.as_deref(),
             Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
         );
     }
