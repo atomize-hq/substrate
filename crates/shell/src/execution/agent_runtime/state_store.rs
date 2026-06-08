@@ -32,6 +32,7 @@ use super::{
     obligation_ledger::{
         OrchestrationObligationAttachState, OrchestrationObligationKind,
         OrchestrationObligationRecord, OrchestrationObligationReviewState,
+        OrchestrationObligationSeverity,
     },
     orchestration_session::{
         HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -2703,6 +2704,29 @@ impl AgentRuntimeStateStore {
         read_regular_json_if_exists::<HostInboxRecord>(path)
     }
 
+    fn synthesize_failed_closed_host_inbox_record(
+        &self,
+        record_id: &str,
+        reason: impl Into<String>,
+        failed_closed_at: chrono::DateTime<Utc>,
+    ) -> Result<HostInboxRecord> {
+        let mut record = HostInboxRecord::new(
+            String::new(),
+            record_id.to_string(),
+            OrchestrationObligationKind::RuntimeAlert,
+            "malformed host inbox artifact",
+            String::new(),
+            String::new(),
+            String::new(),
+        );
+        record.severity = OrchestrationObligationSeverity::Error;
+        record.created_at = failed_closed_at;
+        record.ingress_received_at = failed_closed_at;
+        record.mark_failed_closed(reason, failed_closed_at);
+        self.persist_host_inbox_record_unlocked(&record)?;
+        Ok(record)
+    }
+
     fn validate_host_inbox_record_artifact_identity(
         record: &HostInboxRecord,
         expected_record_id: &str,
@@ -2739,7 +2763,21 @@ impl AgentRuntimeStateStore {
         }
 
         let path = self.host_inbox_record_path(record_id)?;
-        let Some(mut record) = self.load_host_inbox_record_artifact(&path)? else {
+        let Some(mut record) = (match self.load_host_inbox_record_artifact(&path) {
+            Ok(record) => record,
+            Err(err)
+                if err
+                    .chain()
+                    .any(|cause| cause.downcast_ref::<serde_json::Error>().is_some()) =>
+            {
+                return self.synthesize_failed_closed_host_inbox_record(
+                    record_id,
+                    format!("malformed_host_inbox_artifact: {err}"),
+                    Utc::now(),
+                );
+            }
+            Err(err) => return Err(err),
+        }) else {
             anyhow::bail!("host_inbox_record_not_found: no host inbox record {record_id}");
         };
         if let Err(err) =
@@ -11959,6 +11997,48 @@ mod tests {
                 .load_host_inbox_record("host_record_failed_closed_malformed")
                 .expect("reload normalized failed_closed artifact")
                 .expect("normalized failed_closed artifact persists");
+            assert_eq!(persisted, failed);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_fail_closes_unparseable_artifacts() {
+        with_store(|store| {
+            let path = store
+                .host_inbox_record_path("host_record_unparseable")
+                .expect("valid record path");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
+            fs::write(&path, b"{\"record_id\":").expect("write unparseable host inbox artifact");
+
+            let failed = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_unparseable",
+                    "host-local",
+                )
+                .expect("unparseable host inbox artifact should fail closed durably");
+
+            assert_eq!(
+                failed.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+            assert_eq!(failed.record_id, "host_record_unparseable");
+            assert_eq!(failed.summary, "malformed host inbox artifact");
+            assert_eq!(failed.severity, OrchestrationObligationSeverity::Error);
+            assert_eq!(failed.kind, OrchestrationObligationKind::RuntimeAlert);
+            let reason = failed
+                .failed_closed_reason
+                .as_deref()
+                .expect("failed_closed reason");
+            assert!(
+                reason.starts_with("malformed_host_inbox_artifact: failed to parse "),
+                "unparseable artifacts should normalize into a stable malformed-artifact reason: {reason}"
+            );
+
+            let persisted = store
+                .load_host_inbox_record("host_record_unparseable")
+                .expect("reload failed closed unparseable artifact")
+                .expect("failed closed artifact persists");
             assert_eq!(persisted, failed);
         });
     }
