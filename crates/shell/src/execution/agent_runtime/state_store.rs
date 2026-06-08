@@ -27,7 +27,7 @@ use super::{
         SessionAutoAttachSettleResult,
     },
     control::PublicSessionPosture,
-    host_inbox::HostInboxRecord,
+    host_inbox::{HostInboxMaterializationState, HostInboxRecord},
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
         OrchestrationObligationAttachState, OrchestrationObligationKind,
@@ -2660,6 +2660,98 @@ impl AgentRuntimeStateStore {
             .expect("snapshot write mutex poisoned");
         self.validate_host_inbox_record(record)?;
         write_atomic_json(&self.host_inbox_record_path(&record.record_id)?, record)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn materialize_host_inbox_record_for_local_host(
+        &self,
+        record_id: &str,
+        local_host_id: &str,
+    ) -> Result<HostInboxRecord> {
+        if local_host_id.trim().is_empty() {
+            anyhow::bail!("host inbox materialization requires non-empty local_host_id");
+        }
+
+        let Some(mut record) = self.load_host_inbox_record(record_id)? else {
+            anyhow::bail!("host_inbox_record_not_found: no host inbox record {record_id}");
+        };
+
+        match record.materialization_state {
+            HostInboxMaterializationState::Materialized => {
+                let obligation_id = record.materialized_obligation_id.as_deref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "materialized_host_inbox_record_missing_obligation: host inbox record {} is missing obligation linkage",
+                        record.record_id
+                    )
+                })?;
+                let Some(_obligation) =
+                    self.load_obligation(&record.orchestration_session_id, obligation_id)?
+                else {
+                    anyhow::bail!(
+                        "materialized_host_inbox_record_missing_obligation: host inbox record {} references missing obligation {}",
+                        record.record_id,
+                        obligation_id
+                    );
+                };
+                return Ok(record);
+            }
+            HostInboxMaterializationState::FailedClosed => {
+                return Ok(record);
+            }
+            HostInboxMaterializationState::Pending => {}
+        }
+
+        if let Err(err) = record
+            .ensure_pending_materialization_candidate()
+            .and_then(|_| record.ensure_targets_local_host(local_host_id))
+        {
+            let failed_closed_at = Utc::now();
+            record.mark_failed_closed(err.to_string(), failed_closed_at);
+            self.persist_host_inbox_record(&record)?;
+            return Ok(record);
+        }
+
+        if self
+            .load_authoritative_session(&record.orchestration_session_id)?
+            .is_none()
+        {
+            let failed_closed_at = Utc::now();
+            record.mark_failed_closed(
+                format!(
+                    "missing_authoritative_session: host inbox record {} targets orchestration session {} with no authoritative local session",
+                    record.record_id, record.orchestration_session_id
+                ),
+                failed_closed_at,
+            );
+            self.persist_host_inbox_record(&record)?;
+            return Ok(record);
+        }
+
+        let obligation_id = record.local_obligation_id();
+        let obligation = match self
+            .load_obligation(&record.orchestration_session_id, &obligation_id)?
+        {
+            Some(existing) => {
+                if !record.matches_materialized_obligation(&existing) {
+                    anyhow::bail!(
+                        "host inbox record {} expected canonical obligation {} to preserve exact materialized truth",
+                        record.record_id,
+                        obligation_id
+                    );
+                }
+                existing
+            }
+            None => {
+                let obligation = record.materialize_as_local_obligation(Utc::now())?;
+                self.persist_obligation(&obligation)?;
+                obligation
+            }
+        };
+
+        record.mark_materialized(obligation.obligation_id.clone(), Utc::now());
+        self.persist_host_inbox_record(&record)?;
+
+        Ok(record)
     }
 
     #[allow(dead_code)]
@@ -11141,6 +11233,200 @@ mod tests {
                     .expect("list host inbox records after rejected persist"),
                 Vec::<HostInboxRecord>::new()
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_materializes_valid_records_into_one_local_obligation() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_host_materialize", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
+            let mut record = pending_host_inbox_record(
+                "sess_host_materialize",
+                "host_record_materialize",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            record.source_participant_id = Some("worker-host".to_string());
+            record.causation_event_id = Some("evt-materialize".to_string());
+            record.causation_message_id = Some("msg-materialize".to_string());
+            record.causation_request_id = Some("req-materialize".to_string());
+            record.target_backend_id = Some("cli:codex_world".to_string());
+            record.payload = Some(json!({
+                "event_class": "approval_request",
+            }));
+            store
+                .persist_host_inbox_record(&record)
+                .expect("persist host inbox record");
+
+            let materialized = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_materialize",
+                    "host-local",
+                )
+                .expect("materialize host inbox record");
+
+            assert_eq!(
+                materialized.materialization_state,
+                HostInboxMaterializationState::Materialized
+            );
+            assert_eq!(
+                materialized.materialized_obligation_id.as_deref(),
+                Some("host_inbox_host_record_materialize")
+            );
+
+            let obligation = store
+                .load_obligation(
+                    "sess_host_materialize",
+                    "host_inbox_host_record_materialize",
+                )
+                .expect("load materialized obligation")
+                .expect("materialized obligation exists");
+
+            assert!(materialized.matches_materialized_obligation(&obligation));
+            assert_eq!(
+                obligation.source_participant_id.as_deref(),
+                Some("worker-host")
+            );
+            assert_eq!(
+                obligation.target_backend_id.as_deref(),
+                Some("cli:codex_world")
+            );
+            assert_eq!(
+                obligation.causation_event_id.as_deref(),
+                Some("evt-materialize")
+            );
+            assert_eq!(
+                store
+                    .list_obligations("sess_host_materialize")
+                    .expect("list obligations"),
+                vec![obligation]
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_materialization_is_idempotent_for_repeat_runs() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_host_idempotent", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
+            let record = pending_host_inbox_record(
+                "sess_host_idempotent",
+                "host_record_idempotent",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            store
+                .persist_host_inbox_record(&record)
+                .expect("persist host inbox record");
+
+            let first = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_idempotent",
+                    "host-local",
+                )
+                .expect("first materialization");
+            let second = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_idempotent",
+                    "host-local",
+                )
+                .expect("second materialization should be idempotent");
+
+            assert_eq!(first, second);
+            assert_eq!(
+                store
+                    .list_obligations("sess_host_idempotent")
+                    .expect("list obligations")
+                    .len(),
+                1
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_fail_closes_wrong_host_records_without_creating_obligations() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_host_wrong", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
+            let mut record = pending_host_inbox_record(
+                "sess_host_wrong",
+                "host_record_wrong",
+                OrchestrationObligationKind::Blocked,
+            );
+            record.target_host_id = "host-remote".to_string();
+            store
+                .persist_host_inbox_record(&record)
+                .expect("persist wrong-host inbox record");
+
+            let failed = store
+                .materialize_host_inbox_record_for_local_host("host_record_wrong", "host-local")
+                .expect("wrong-host materialization should fail closed durably");
+
+            assert_eq!(
+                failed.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+            assert_eq!(
+                failed.failed_closed_reason.as_deref(),
+                Some(
+                    "wrong_target_host: host inbox record host_record_wrong targets host host-remote not local host host-local"
+                )
+            );
+            assert!(store
+                .list_obligations("sess_host_wrong")
+                .expect("list obligations")
+                .is_empty());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_fail_closes_records_without_authoritative_local_session() {
+        with_store(|store| {
+            let record = pending_host_inbox_record(
+                "sess_host_missing_session",
+                "host_record_missing_session",
+                OrchestrationObligationKind::RuntimeAlert,
+            );
+            store
+                .persist_host_inbox_record(&record)
+                .expect("persist host inbox record");
+
+            let failed = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_missing_session",
+                    "host-local",
+                )
+                .expect("missing-session materialization should fail closed durably");
+
+            assert_eq!(
+                failed.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+            assert_eq!(
+                failed.failed_closed_reason.as_deref(),
+                Some(
+                    "missing_authoritative_session: host inbox record host_record_missing_session targets orchestration session sess_host_missing_session with no authoritative local session"
+                )
+            );
+            assert!(store
+                .list_obligations("sess_host_missing_session")
+                .expect("list obligations")
+                .is_empty());
         });
     }
 }

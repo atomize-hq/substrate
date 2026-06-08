@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
-use super::obligation_ledger::{OrchestrationObligationKind, OrchestrationObligationSeverity};
+use super::obligation_ledger::{
+    OrchestrationObligationAttachState, OrchestrationObligationKind, OrchestrationObligationRecord,
+    OrchestrationObligationSeverity,
+};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -207,6 +210,121 @@ impl HostInboxRecord {
 
         Ok(())
     }
+
+    pub(crate) fn local_obligation_id(&self) -> String {
+        format!("host_inbox_{}", self.record_id)
+    }
+
+    pub(crate) fn ensure_pending_materialization_candidate(&self) -> Result<()> {
+        self.validate()?;
+        if self.materialization_state != HostInboxMaterializationState::Pending {
+            anyhow::bail!(
+                "host inbox materialization requires record {} to remain pending",
+                self.record_id
+            );
+        }
+        Ok(())
+    }
+
+    pub(crate) fn ensure_targets_local_host(&self, local_host_id: &str) -> Result<()> {
+        validate_required_host_id(
+            Some(local_host_id),
+            "local_host_id",
+            "host inbox materialization",
+        )?;
+        if self.target_host_id != local_host_id {
+            anyhow::bail!(
+                "wrong_target_host: host inbox record {} targets host {} not local host {}",
+                self.record_id,
+                self.target_host_id,
+                local_host_id,
+            );
+        }
+        Ok(())
+    }
+
+    pub(crate) fn materialize_as_local_obligation(
+        &self,
+        materialized_at: DateTime<Utc>,
+    ) -> Result<OrchestrationObligationRecord> {
+        self.ensure_pending_materialization_candidate()?;
+
+        let mut obligation = OrchestrationObligationRecord::new(
+            self.orchestration_session_id.clone(),
+            self.local_obligation_id(),
+            self.kind,
+            self.summary.clone(),
+        );
+        obligation.severity = self.severity;
+        obligation.attention_required = true;
+        if self.kind.supports_router_auto_attach() {
+            obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+        }
+        obligation.created_at = materialized_at;
+        obligation.updated_at = materialized_at;
+        obligation.source_participant_id = self.source_participant_id.clone();
+        obligation.ingress_source_kind = Some(self.ingress_source_kind.clone());
+        obligation.ingress_source_id = Some(self.ingress_source_id.clone());
+        obligation.ingress_received_at = Some(self.ingress_received_at);
+        obligation.origin_host_id = self.origin_host_id.clone();
+        obligation.target_host_id = Some(self.target_host_id.clone());
+        obligation.causation_event_id = self.causation_event_id.clone();
+        obligation.causation_message_id = self.causation_message_id.clone();
+        obligation.causation_request_id = self.causation_request_id.clone();
+        obligation.target_backend_id = self.target_backend_id.clone();
+        obligation.payload = self.payload.clone();
+        obligation.validate()?;
+
+        Ok(obligation)
+    }
+
+    pub(crate) fn matches_materialized_obligation(
+        &self,
+        obligation: &OrchestrationObligationRecord,
+    ) -> bool {
+        obligation.orchestration_session_id == self.orchestration_session_id
+            && obligation.obligation_id == self.local_obligation_id()
+            && obligation.kind == self.kind
+            && obligation.severity == self.severity
+            && obligation.summary == self.summary
+            && obligation.source_participant_id == self.source_participant_id
+            && obligation.ingress_source_kind.as_deref() == Some(self.ingress_source_kind.as_str())
+            && obligation.ingress_source_id.as_deref() == Some(self.ingress_source_id.as_str())
+            && obligation.ingress_received_at == Some(self.ingress_received_at)
+            && obligation.origin_host_id == self.origin_host_id
+            && obligation.target_host_id.as_deref() == Some(self.target_host_id.as_str())
+            && obligation.causation_event_id == self.causation_event_id
+            && obligation.causation_message_id == self.causation_message_id
+            && obligation.causation_request_id == self.causation_request_id
+            && obligation.target_backend_id == self.target_backend_id
+            && obligation.payload == self.payload
+    }
+
+    pub(crate) fn mark_materialized(
+        &mut self,
+        obligation_id: impl Into<String>,
+        materialized_at: DateTime<Utc>,
+    ) {
+        self.materialization_state = HostInboxMaterializationState::Materialized;
+        self.materialized_obligation_id = Some(obligation_id.into());
+        self.materialized_at = Some(materialized_at);
+        self.failed_closed_at = None;
+        self.failed_closed_reason = None;
+        self.updated_at = materialized_at;
+    }
+
+    pub(crate) fn mark_failed_closed(
+        &mut self,
+        failed_closed_reason: impl Into<String>,
+        failed_closed_at: DateTime<Utc>,
+    ) {
+        self.materialization_state = HostInboxMaterializationState::FailedClosed;
+        self.materialized_obligation_id = None;
+        self.materialized_at = None;
+        self.failed_closed_at = Some(failed_closed_at);
+        self.failed_closed_reason = Some(failed_closed_reason.into());
+        self.updated_at = failed_closed_at;
+    }
 }
 
 fn validate_host_inbox_record_id(record_id: &str) -> Result<()> {
@@ -225,9 +343,7 @@ fn validate_host_inbox_record_id(record_id: &str) -> Result<()> {
 
 fn looks_like_windows_drive_qualified_path(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes.len() >= 2
-        && bytes[1] == b':'
-        && bytes[0].is_ascii_alphabetic()
+    bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic()
 }
 
 #[allow(dead_code)]
@@ -446,5 +562,76 @@ mod tests {
             .validate()
             .expect_err("windows drive-relative record_id must fail validation");
         assert!(err.to_string().contains("absolute record_id"));
+    }
+
+    #[test]
+    fn host_inbox_record_materializes_local_obligation_with_preserved_envelope_truth() {
+        let materialized_at = Utc::now();
+        let mut record = HostInboxRecord::new(
+            "sess_packet_two",
+            "host_record_six",
+            OrchestrationObligationKind::ApprovalRequired,
+            "approval requested",
+            "host-local",
+            "remote_router",
+            "ingress-006",
+        );
+        record.source_participant_id = Some("worker-007".to_string());
+        record.origin_host_id = Some("host-origin".to_string());
+        record.causation_event_id = Some("evt-006".to_string());
+        record.causation_message_id = Some("msg-006".to_string());
+        record.causation_request_id = Some("req-006".to_string());
+        record.target_backend_id = Some("cli:codex_world".to_string());
+        record.payload = Some(serde_json::json!({
+            "event_class": "approval_request",
+        }));
+
+        let obligation = record
+            .materialize_as_local_obligation(materialized_at)
+            .expect("pending host inbox record should materialize");
+
+        assert_eq!(obligation.obligation_id, "host_inbox_host_record_six");
+        assert!(record.matches_materialized_obligation(&obligation));
+        assert_eq!(obligation.created_at, materialized_at);
+        assert_eq!(obligation.updated_at, materialized_at);
+        assert!(obligation.attention_required);
+        assert_eq!(
+            obligation.attach_state,
+            OrchestrationObligationAttachState::Eligible
+        );
+    }
+
+    #[test]
+    fn host_inbox_record_tracks_materialized_and_failed_closed_outcomes() {
+        let now = Utc::now();
+        let mut record = HostInboxRecord::new(
+            "sess_packet_two",
+            "host_record_seven",
+            OrchestrationObligationKind::RuntimeAlert,
+            "runtime alert",
+            "host-local",
+            "remote_router",
+            "ingress-007",
+        );
+
+        record.mark_materialized("host_inbox_host_record_seven", now);
+        record
+            .validate()
+            .expect("materialized host inbox record remains valid");
+        assert_eq!(
+            record.materialized_obligation_id.as_deref(),
+            Some("host_inbox_host_record_seven")
+        );
+
+        record.mark_failed_closed("wrong_target_host", now + Duration::seconds(1));
+        record
+            .validate()
+            .expect("failed closed host inbox record remains valid");
+        assert_eq!(
+            record.failed_closed_reason.as_deref(),
+            Some("wrong_target_host")
+        );
+        assert!(record.materialized_obligation_id.is_none());
+        assert!(record.materialized_at.is_none());
     }
 }
