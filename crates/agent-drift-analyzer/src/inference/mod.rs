@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
-use agent_session_compactor::{CompactionKind, CompactionRow};
+use agent_session_compactor::CompactionRow;
+use camino::Utf8Path;
 use serde_json::Value;
 
 use crate::checkpoint::{Confidence, EvidenceRef, TaskFrame};
@@ -72,7 +73,7 @@ pub(crate) fn infer_delegation_context(
 ) -> DelegationContext {
     let marker_evidence = collect_marker_evidence(delegation_rows(session));
     let context_signal_evidence = collect_context_signal_evidence(
-        delegation_rows(session),
+        &session.session_id,
         context,
         !marker_evidence.markers.is_empty(),
     );
@@ -207,8 +208,8 @@ enum ContextSignalCategory {
     Visibility,
 }
 
-fn collect_context_signal_evidence<'a>(
-    rows: impl IntoIterator<Item = &'a CompactionRow>,
+fn collect_context_signal_evidence(
+    session_id: &str,
     context: &ContextPack,
     has_explicit_markers: bool,
 ) -> Vec<ContextSignalEvidence> {
@@ -221,9 +222,8 @@ fn collect_context_signal_evidence<'a>(
 
     for candidate in collect_tool_signal_evidence(context)
         .into_iter()
-        .chain(collect_command_signal_evidence(context))
-        .chain(collect_supporting_signal_evidence(context))
-        .chain(collect_raw_context_signal_evidence(rows))
+        .chain(collect_command_signal_evidence(session_id, context))
+        .chain(collect_supporting_signal_evidence(session_id, context))
     {
         let key = evidence_key(&candidate.evidence);
         if seen.insert(key) {
@@ -254,13 +254,16 @@ fn collect_tool_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEvide
         .collect()
 }
 
-fn collect_command_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEvidence> {
+fn collect_command_signal_evidence(
+    session_id: &str,
+    context: &ContextPack,
+) -> Vec<ContextSignalEvidence> {
     let mut evidence = Vec::new();
     for command in &context.command_observations {
         for path in &command.paths {
-            if !looks_like_child_rollout_artifact(path) {
+            let Some(child_session_id) = separate_child_rollout_session_id(path, session_id) else {
                 continue;
-            }
+            };
 
             evidence.extend(command.evidence.iter().map(|item| ContextSignalEvidence {
                 category: ContextSignalCategory::Visibility,
@@ -268,8 +271,8 @@ fn collect_command_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEv
                 evidence: EvidenceRef {
                     row: item.row.clone(),
                     reason: format!(
-                        "delegation child rollout command via {}: {path}",
-                        command.family
+                        "delegation child rollout command via {}: {path} (session {child_session_id})",
+                        command.family,
                     ),
                 },
             }));
@@ -293,16 +296,22 @@ fn collect_command_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEv
     evidence
 }
 
-fn collect_supporting_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEvidence> {
+fn collect_supporting_signal_evidence(
+    session_id: &str,
+    context: &ContextPack,
+) -> Vec<ContextSignalEvidence> {
     context
         .supporting_evidence
         .iter()
         .filter_map(|evidence| {
             let reason = evidence.reason.to_ascii_lowercase();
-            if let Some(path) = reason
+            if let Some((path, child_session_id)) = reason
                 .split_once(": ")
                 .map(|(_, value)| value)
-                .filter(|path| looks_like_child_rollout_artifact(path))
+                .and_then(|path| {
+                    separate_child_rollout_session_id(path, session_id)
+                        .map(|child_session_id| (path, child_session_id))
+                })
             {
                 return Some(ContextSignalEvidence {
                     category: ContextSignalCategory::Visibility,
@@ -310,7 +319,7 @@ fn collect_supporting_signal_evidence(context: &ContextPack) -> Vec<ContextSigna
                     evidence: EvidenceRef {
                         row: evidence.row.clone(),
                         reason: format!(
-                            "delegation supporting hint references child rollout: {path}"
+                            "delegation supporting hint references child rollout: {path} (session {child_session_id})"
                         ),
                     },
                 });
@@ -332,60 +341,6 @@ fn collect_supporting_signal_evidence(context: &ContextPack) -> Vec<ContextSigna
             None
         })
         .collect()
-}
-
-fn collect_raw_context_signal_evidence<'a>(
-    rows: impl IntoIterator<Item = &'a CompactionRow>,
-) -> Vec<ContextSignalEvidence> {
-    rows.into_iter()
-        .filter_map(|row| {
-            let signal = anchored_child_context_signal(row)?;
-            Some(ContextSignalEvidence {
-                category: ContextSignalCategory::Visibility,
-                visibility: Some(ChildWorkVisibility::Opaque),
-                evidence: EvidenceRef {
-                    row: agent_session_compactor::RowRef::from_row(row),
-                    reason: format!("delegation context row anchors {signal}"),
-                },
-            })
-        })
-        .collect()
-}
-
-fn anchored_child_context_signal(row: &CompactionRow) -> Option<&'static str> {
-    if !matches!(
-        row.kind,
-        CompactionKind::AssistantMessage
-            | CompactionKind::UserMessage
-            | CompactionKind::DeveloperMessage
-            | CompactionKind::SystemMessage
-    ) {
-        return None;
-    }
-
-    let text = row.text.trim_start();
-    if text.is_empty() || text.len() > 2_000 {
-        return None;
-    }
-
-    let anchored = if let Some(stripped) = text.strip_prefix("- ") {
-        stripped
-    } else if let Some(stripped) = text.strip_prefix("* ") {
-        stripped
-    } else {
-        text
-    };
-    let normalized = anchored.to_ascii_lowercase();
-
-    if normalized.starts_with("child session id") && normalized.contains("separate rollout") {
-        Some("child session id")
-    } else if normalized.starts_with("child rollout") {
-        Some("child rollout")
-    } else if normalized.starts_with("separate rollout") {
-        Some("separate rollout")
-    } else {
-        None
-    }
 }
 
 fn dedupe_evidence<'a>(items: impl Iterator<Item = &'a EvidenceRef>) -> Vec<EvidenceRef> {
@@ -511,8 +466,50 @@ fn has_visibility_signal(context_signal_evidence: &[ContextSignalEvidence]) -> b
         .any(|evidence| evidence.category == ContextSignalCategory::Visibility)
 }
 
-fn looks_like_child_rollout_artifact(path: &str) -> bool {
-    path.contains(".codex/sessions/") || (path.contains("rollout-") && path.ends_with(".jsonl"))
+fn separate_child_rollout_session_id<'a>(path: &'a str, session_id: &str) -> Option<&'a str> {
+    if !path.contains(".codex/sessions/") {
+        return None;
+    }
+
+    let file_name = Utf8Path::new(path).file_name()?;
+    let stem = file_name.strip_suffix(".jsonl")?;
+    let rollout_name = stem.strip_prefix("rollout-")?;
+    let child_session_id = rollout_session_id_suffix(rollout_name)?;
+
+    (child_session_id != session_id).then_some(child_session_id)
+}
+
+fn rollout_session_id_suffix(rollout_name: &str) -> Option<&str> {
+    let hyphen_offsets = rollout_name
+        .match_indices('-')
+        .map(|(offset, _)| offset)
+        .collect::<Vec<_>>();
+    if hyphen_offsets.len() < 5 {
+        return None;
+    }
+
+    let split_index = hyphen_offsets[hyphen_offsets.len() - 5] + 1;
+    let candidate = rollout_name.get(split_index..)?;
+    let candidate = candidate.split('-').collect::<Vec<_>>();
+    let matches_uuid = matches!(
+        candidate.as_slice(),
+        [a, b, c, d, e]
+            if a.len() == 8
+                && b.len() == 4
+                && c.len() == 4
+                && d.len() == 4
+                && e.len() == 12
+                && candidate.iter().all(|segment| segment.chars().all(is_ascii_hex))
+    );
+    if !matches_uuid {
+        return None;
+    }
+
+    rollout_name.get(split_index..)
+}
+
+fn is_ascii_hex(ch: char) -> bool {
+    ch.is_ascii_hexdigit()
 }
 
 fn infer_delegation_counter_evidence(
@@ -649,7 +646,7 @@ mod tests {
         assert!(!delegation
             .supporting_evidence
             .iter()
-            .any(|evidence| evidence.reason.contains("delegation context signal")));
+            .any(|evidence| evidence.reason.contains("context row anchors")));
     }
 
     #[test]
@@ -661,7 +658,7 @@ mod tests {
                 tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
                 tool_call(
                     "functions.shell_command",
-                    "{\"command\":\"sed -n '1,40p' /tmp/child/rollout-019e-test.jsonl\",\"workdir\":\"/repo\"}",
+                    "{\"command\":\"sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl\",\"workdir\":\"/repo\"}",
                 ),
             ],
         };
@@ -688,7 +685,7 @@ mod tests {
             archival_rows: vec![tool_call("spawn_agent", "{\"agent_type\":\"worker\"}")],
             compact_rows: vec![tool_call(
                 "functions.shell_command",
-                "{\"command\":\"sed -n '1,40p' /tmp/child/rollout-019e-test.jsonl\",\"workdir\":\"/repo\"}",
+                "{\"command\":\"sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl\",\"workdir\":\"/repo\"}",
             )],
         };
         let context = assemble_context(&session);
@@ -709,15 +706,15 @@ mod tests {
     }
 
     #[test]
-    fn delegation_harvests_anchored_child_boundary_rows() {
+    fn delegation_does_not_promote_anchored_prompt_bullets_to_child_visibility() {
         let session = BundleSession {
             session_id: "session-alpha".to_string(),
             archival_rows: Vec::new(),
             compact_rows: vec![
                 tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
                 row(
-                    CompactionKind::AssistantMessage,
-                    "Child session id 019e-test lives in a separate rollout file after the spawned agent completed work.",
+                    CompactionKind::UserMessage,
+                    "- Child session id 019e-test lives in a separate rollout file after the spawned agent completed work.",
                 ),
             ],
         };
@@ -733,13 +730,98 @@ mod tests {
         assert!(delegation
             .supporting_evidence
             .iter()
-            .any(|evidence| evidence
-                .reason
-                .contains("delegation context row anchors child session id")));
+            .all(|evidence| !evidence.reason.contains("context row anchors")));
         assert_eq!(delegation.counter_evidence.len(), 1);
         assert!(delegation.counter_evidence[0]
             .reason
-            .contains("remained child-opaque"));
+            .contains("lacked child visibility/context evidence"));
+    }
+
+    #[test]
+    fn delegation_does_not_promote_copied_spec_text_to_child_visibility() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+                row(
+                    CompactionKind::AssistantMessage,
+                    "Child rollout files / child session ids only justify partial or opaque visibility in R3.75; they do not authorize parent/child stitching in this packet.",
+                ),
+            ],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Opaque
+        );
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .all(|evidence| !evidence.reason.contains("context row anchors")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
+    }
+
+    #[test]
+    fn delegation_does_not_treat_current_parent_rollout_as_child_visible() {
+        let session = BundleSession {
+            session_id: "019ea000-0000-7000-8000-000000000000".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+                tool_call(
+                    "functions.shell_command",
+                    "{\"command\":\"sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea000-0000-7000-8000-000000000000.jsonl\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Opaque
+        );
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .all(|evidence| !evidence.reason.contains("child rollout command")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
+    }
+
+    #[test]
+    fn delegation_does_not_treat_fixture_rollout_as_child_visible() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+                tool_call(
+                    "functions.shell_command",
+                    "{\"command\":\"sed -n '1,40p' crates/agent-drift-analyzer/tests/fixtures/acceptance/sample/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Opaque
+        );
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .all(|evidence| !evidence.reason.contains("child rollout command")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
     }
 
     #[test]
