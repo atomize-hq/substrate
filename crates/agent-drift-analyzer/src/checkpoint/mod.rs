@@ -841,7 +841,6 @@ mod tests {
     use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind};
     use camino::Utf8PathBuf;
 
-    use crate::inference::{ChildWorkVisibility, DelegationTopology};
     use crate::input::BundleSession;
 
     use super::{checkpoint_analyses, tool_output_is_unambiguous_failure};
@@ -897,13 +896,10 @@ mod tests {
         assert_eq!(analyses.len(), 1);
 
         let delegation = &analyses[0].delegation;
-        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
-        assert_eq!(
-            delegation.child_work_visibility,
-            ChildWorkVisibility::Partial
-        );
+        assert!(delegation.topology.is_none());
+        assert!(delegation.child_work_visibility.is_none());
+        assert!(delegation.confidence.is_none());
         assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
-        assert_eq!(delegation.confidence, super::Confidence::Medium);
         assert!(delegation
             .supporting_evidence
             .iter()
