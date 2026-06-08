@@ -26,17 +26,26 @@ pub(crate) fn materialize_pending_host_inbox_records_for_local_host(
     store: &AgentRuntimeStateStore,
     local_host_id: &str,
 ) -> Result<Vec<HostInboxMaterializationExecution>> {
-    let mut executions = Vec::new();
+    let mut pending_records = Vec::new();
     for record_id in store.list_host_inbox_record_ids()? {
         let before = match store.load_host_inbox_record(&record_id) {
             Ok(record) => record,
             Err(_) => None,
         };
-        if before.as_ref().is_some_and(|record| {
-            record.materialization_state != HostInboxMaterializationState::Pending
-        }) {
-            continue;
+        match before {
+            Some(record)
+                if record.materialization_state == HostInboxMaterializationState::Pending =>
+            {
+                pending_records.push((Some(record.created_at), record.record_id));
+            }
+            Some(_) => continue,
+            None => pending_records.push((None, record_id)),
         }
+    }
+    pending_records.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+
+    let mut executions = Vec::new();
+    for (_, record_id) in pending_records {
         executions.push(materialize_host_inbox_record_for_local_host(
             store,
             &record_id,
@@ -115,6 +124,7 @@ fn build_host_inbox_materialization_execution(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::agent_runtime::auto_attach::select_attach_candidate;
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::obligation_ledger::OrchestrationObligationKind;
     use crate::execution::agent_runtime::orchestration_session::{
@@ -337,6 +347,50 @@ mod tests {
                 obligations[0].obligation_id,
                 "host_inbox_host_record_router"
             );
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn host_inbox_materialization_entrypoint_preserves_durable_order_for_same_kind_router_work() {
+        with_store(|store| {
+            persist_session(store, "sess_host_inbox_order");
+
+            let durable_first =
+                pending_record("sess_host_inbox_order", "host_record_z_first", "host-local");
+            let mut durable_second = pending_record(
+                "sess_host_inbox_order",
+                "host_record_a_second",
+                "host-local",
+            );
+            durable_second.created_at = durable_first.created_at + chrono::Duration::seconds(1);
+            durable_second.updated_at = durable_second.created_at;
+
+            store
+                .persist_host_inbox_record(&durable_second)
+                .expect("persist later durable host inbox record");
+            store
+                .persist_host_inbox_record(&durable_first)
+                .expect("persist earlier durable host inbox record");
+
+            let executions =
+                materialize_pending_host_inbox_records_for_local_host(store, "host-local")
+                    .expect("materialize pending host inbox records in durable order");
+
+            assert_eq!(
+                executions
+                    .iter()
+                    .map(|execution| execution.record_id.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["host_record_z_first", "host_record_a_second"]
+            );
+
+            let obligations = store
+                .list_obligations("sess_host_inbox_order")
+                .expect("list materialized obligations");
+            let selected = select_attach_candidate(&obligations)
+                .expect("same-kind router candidate should exist after materialization");
+            assert_eq!(selected.obligation_id, "host_inbox_host_record_z_first");
         });
     }
 }
