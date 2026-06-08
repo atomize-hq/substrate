@@ -4,7 +4,7 @@ Source spec: [SPEC-50-internal-family-2-ingress-ready-obligation-identity-and-ca
 Source prior slice: [PLAN-49.md](./PLAN-49.md)  
 Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
 Plan type: first post-`49` ingress-ready identity-envelope slice  
-Status: drafted on `2026-06-07`
+Status: implemented and validation-aligned on `2026-06-08`
 
 ## Objective
 

@@ -1065,11 +1065,8 @@ struct ForkChildPersistenceConfig {
 fn member_stream_event(
     event_class: &str,
     message: &str,
-    participant_id: &str,
-    backend_id: &str,
-    orchestration_session_id: &str,
-    world_id: &str,
-    world_generation: u64,
+    submit: &transport_api_types::MemberTurnSubmitRequestV1,
+    world_id: Option<&str>,
 ) -> substrate_common::agent_events::AgentEvent {
     substrate_common::agent_events::AgentEvent {
         ts: chrono::Utc::now(),
@@ -1081,17 +1078,17 @@ fn member_stream_event(
             }
         }),
         agent_id: "codex".to_string(),
-        orchestration_session_id: orchestration_session_id.to_string(),
-        run_id: "req_toolbox_control_directive".to_string(),
+        orchestration_session_id: submit.orchestration_session_id.clone(),
+        run_id: submit.run_id.clone(),
         parent_run_id: None,
-        participant_id: Some(participant_id.to_string()),
+        participant_id: Some(submit.participant_id.clone()),
         parent_participant_id: None,
         resumed_from_participant_id: None,
-        backend_id: Some(backend_id.to_string()),
+        backend_id: Some(submit.backend_id.clone()),
         thread_id: Some("thread-control-43".to_string()),
         role: Some("member".to_string()),
-        world_id: Some(world_id.to_string()),
-        world_generation: Some(world_generation),
+        world_id: Some(world_id.unwrap_or(&submit.world_id).to_string()),
+        world_generation: Some(submit.world_generation),
         cmd_id: None,
         span_id: Some("member-turn-span".to_string()),
         channel: Some("worker.reply".to_string()),
@@ -1103,21 +1100,9 @@ fn member_stream_event(
 
 #[cfg(target_os = "linux")]
 fn control_ack_stream_event(
-    participant_id: &str,
-    backend_id: &str,
-    orchestration_session_id: &str,
-    world_id: &str,
-    world_generation: u64,
+    submit: &transport_api_types::MemberTurnSubmitRequestV1,
 ) -> substrate_common::agent_events::AgentEvent {
-    member_stream_event(
-        "control_ack",
-        "prepare_handoff received",
-        participant_id,
-        backend_id,
-        orchestration_session_id,
-        world_id,
-        world_generation,
-    )
+    member_stream_event("control_ack", "prepare_handoff received", submit, None)
 }
 
 #[cfg(target_os = "linux")]
@@ -1301,13 +1286,7 @@ fn start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
                             {
                                 let event = match script {
                                     MemberTurnInterceptScript::ControlAck => {
-                                        control_ack_stream_event(
-                                            &parsed.participant_id,
-                                            &parsed.backend_id,
-                                            &parsed.orchestration_session_id,
-                                            &parsed.world_id,
-                                            parsed.world_generation,
-                                        )
+                                        control_ack_stream_event(&parsed)
                                     }
                                     MemberTurnInterceptScript::GenericReply => {
                                         generic_reply_stream_event(
@@ -1323,24 +1302,13 @@ fn start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
                                     ) => member_stream_event(
                                         "control_ack",
                                         "prepare_handoff received",
-                                        &parsed.participant_id,
-                                        &parsed.backend_id,
-                                        &parsed.orchestration_session_id,
-                                        &world_id,
-                                        parsed.world_generation,
+                                        &parsed,
+                                        Some(&world_id),
                                     ),
                                     MemberTurnInterceptScript::UnsupportedWorkerEvent {
                                         event_class,
                                         message,
-                                    } => member_stream_event(
-                                        &event_class,
-                                        &message,
-                                        &parsed.participant_id,
-                                        &parsed.backend_id,
-                                        &parsed.orchestration_session_id,
-                                        &parsed.world_id,
-                                        parsed.world_generation,
-                                    ),
+                                    } => member_stream_event(&event_class, &message, &parsed, None),
                                 };
 
                                 write_http_stream_start(&mut client);

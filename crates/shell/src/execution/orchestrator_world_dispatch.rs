@@ -7376,11 +7376,11 @@ mod tests {
                 obligation.ingress_source_kind.as_deref(),
                 Some("local_runtime")
             );
-            assert_eq!(obligation.ingress_source_id.as_deref(), Some(run_id.as_str()));
             assert_eq!(
-                obligation.ingress_received_at,
-                Some(obligation.created_at)
+                obligation.ingress_source_id.as_deref(),
+                Some(run_id.as_str())
             );
+            assert_eq!(obligation.ingress_received_at, Some(obligation.created_at));
             assert_eq!(obligation.origin_host_id, expected_local_host_id.clone());
             assert_eq!(obligation.target_host_id, expected_local_host_id.clone());
             assert_eq!(obligation.causation_event_id, None);
@@ -7978,12 +7978,15 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
-                                "event_class": "fork_request",
-                                "payload": {
-                                    "message": "please allocate a child later"
-                                }
-                            })),
+                            event: sample_continue_stream_event_for_run(
+                                &parsed.run_id,
+                                serde_json::json!({
+                                    "event_class": "fork_request",
+                                    "payload": {
+                                        "message": "please allocate a child later"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -8131,24 +8134,30 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
-                                "event_class": "fork_request",
-                                "payload": {
-                                    "message": "please allocate a child later"
-                                }
-                            })),
+                            event: sample_continue_stream_event_for_run(
+                                &parsed.run_id,
+                                serde_json::json!({
+                                    "event_class": "fork_request",
+                                    "payload": {
+                                        "message": "please allocate a child later"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
-                                "event_class": "blocked",
-                                "payload": {
-                                    "message": "waiting on host"
-                                }
-                            })),
+                            event: sample_continue_stream_event_for_run(
+                                &parsed.run_id,
+                                serde_json::json!({
+                                    "event_class": "blocked",
+                                    "payload": {
+                                        "message": "waiting on host"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -8326,14 +8335,17 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
-                                event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
-                                    "event_class": continue_worker_event_label(event_class),
-                                    "payload": {
-                                        "message": expected_message,
-                                        "event_id": case.exact_event_id,
-                                        "message_id": case.exact_message_id
-                                    }
-                                })),
+                                event: sample_continue_stream_event_for_run(
+                                    &parsed.run_id,
+                                    json!({
+                                        "event_class": continue_worker_event_label(event_class),
+                                        "payload": {
+                                            "message": expected_message,
+                                            "event_id": case.exact_event_id,
+                                            "message_id": case.exact_message_id
+                                        }
+                                    }),
+                                ),
                             },
                         )
                         .await;
@@ -8456,10 +8468,7 @@ agents:
                 obligation.ingress_source_id.as_deref(),
                 Some(request_id.as_str())
             );
-            assert_eq!(
-                obligation.ingress_received_at,
-                Some(obligation.created_at)
-            );
+            assert_eq!(obligation.ingress_received_at, Some(obligation.created_at));
             assert_eq!(
                 obligation.causation_event_id.as_deref(),
                 case.exact_event_id
@@ -8574,12 +8583,15 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
-                                event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
-                                    "event_class": continue_worker_event_label(event_class),
-                                    "payload": {
-                                        "message": "denied packet-three event"
-                                    }
-                                })),
+                                event: sample_continue_stream_event_for_run(
+                                    &parsed.run_id,
+                                    json!({
+                                        "event_class": continue_worker_event_label(event_class),
+                                        "payload": {
+                                            "message": "denied packet-three event"
+                                        }
+                                    }),
+                                ),
                             },
                         )
                         .await;
@@ -9097,17 +9109,20 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-delivered-progress-ack",
-                                "turn_id": "turn-progress-ack",
-                                "item_id": "msg-progress-ack",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "progress acknowledgement delivered"
-                                }
-                            })),
+                            event: sample_continue_stream_uaa_event_for_run(
+                                &run_id,
+                                json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-delivered-progress-ack",
+                                    "turn_id": "turn-progress-ack",
+                                    "item_id": "msg-progress-ack",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "progress acknowledgement delivered"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -9243,12 +9258,15 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
-                                "event_class": "progress_update",
-                                "payload": {
-                                    "message": "still making progress"
-                                }
-                            })),
+                            event: sample_continue_stream_event_for_run(
+                                &parsed.run_id,
+                                json!({
+                                    "event_class": "progress_update",
+                                    "payload": {
+                                        "message": "still making progress"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -9441,17 +9459,20 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-delivered-fork-command",
-                                "turn_id": "turn-fork-command",
-                                "item_id": "msg-fork-command",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "fork command delivered"
-                                }
-                            })),
+                            event: sample_continue_stream_uaa_event_for_run(
+                                &run_id,
+                                json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-delivered-fork-command",
+                                    "turn_id": "turn-fork-command",
+                                    "item_id": "msg-fork-command",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "fork command delivered"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -9703,35 +9724,36 @@ agents:
         let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
         let store = AgentRuntimeStateStore::new().expect("state store");
         let store_for_server = store.clone();
-        let server = tokio::spawn(async move {
-            while let Ok((mut stream, _addr)) = listener.accept().await {
-                let Some((header, body)) = read_http_request(&mut stream).await else {
-                    continue;
-                };
-                let first_line = header.lines().next().unwrap_or("");
+        let server =
+            tokio::spawn(async move {
+                while let Ok((mut stream, _addr)) = listener.accept().await {
+                    let Some((header, body)) = read_http_request(&mut stream).await else {
+                        continue;
+                    };
+                    let first_line = header.lines().next().unwrap_or("");
 
-                if first_line.starts_with("GET /v1/capabilities ") {
-                    write_http_json(
-                        &mut stream,
-                        "200 OK",
-                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
-                    )
-                    .await;
-                    continue;
-                }
+                    if first_line.starts_with("GET /v1/capabilities ") {
+                        write_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
 
-                if first_line.starts_with("POST /v1/member_turn/stream ") {
-                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
-                        serde_json::from_slice(&body).expect("member turn submit request");
-                    write_http_stream_start(&mut stream).await;
-                    write_chunked_frame(
-                        &mut stream,
-                        &transport_api_types::ExecuteStreamFrame::Start {
-                            span_id: "member-turn-span".to_string(),
-                        },
-                    )
-                    .await;
-                    write_chunked_frame(
+                    if first_line.starts_with("POST /v1/member_turn/stream ") {
+                        let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                            serde_json::from_slice(&body).expect("member turn submit request");
+                        write_http_stream_start(&mut stream).await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Start {
+                                span_id: "member-turn-span".to_string(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
                             event: sample_continue_stream_uaa_event_for_run(&parsed.run_id, json!({
@@ -9749,34 +9771,34 @@ agents:
                     )
                     .await;
 
-                    let mut source = store_for_server
-                        .load_participant("ash_member")
-                        .expect("load authoritative source")
-                        .expect("authoritative source exists");
-                    source.mark_terminal_state("worker invalidated after delivery");
-                    source.transition_state(AgentRuntimeSessionState::Invalidated);
-                    store_for_server
-                        .persist_participant(&source)
-                        .expect("persist invalidated authoritative source");
+                        let mut source = store_for_server
+                            .load_participant("ash_member")
+                            .expect("load authoritative source")
+                            .expect("authoritative source exists");
+                        source.mark_terminal_state("worker invalidated after delivery");
+                        source.transition_state(AgentRuntimeSessionState::Invalidated);
+                        store_for_server
+                            .persist_participant(&source)
+                            .expect("persist invalidated authoritative source");
 
-                    write_chunked_frame(
-                        &mut stream,
-                        &transport_api_types::ExecuteStreamFrame::Exit {
-                            exit: 0,
-                            span_id: "member-turn-span".to_string(),
-                            scopes_used: Vec::new(),
-                            fs_diff: None,
-                            process_telemetry: Default::default(),
-                        },
-                    )
-                    .await;
-                    finish_chunked_stream(&mut stream).await;
-                    break;
+                        write_chunked_frame(
+                            &mut stream,
+                            &transport_api_types::ExecuteStreamFrame::Exit {
+                                exit: 0,
+                                span_id: "member-turn-span".to_string(),
+                                scopes_used: Vec::new(),
+                                fs_diff: None,
+                                process_telemetry: Default::default(),
+                            },
+                        )
+                        .await;
+                        finish_chunked_stream(&mut stream).await;
+                        break;
+                    }
+
+                    write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
                 }
-
-                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
-            }
-        });
+            });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
         let workspace_root = tempdir().expect("workspace root tempdir");
@@ -9870,12 +9892,15 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
-                                "event_class": "fork_request",
-                                "payload": {
-                                    "message": "persist me before child bootstrap fails"
-                                }
-                            })),
+                            event: sample_continue_stream_event_for_run(
+                                &parsed.run_id,
+                                serde_json::json!({
+                                    "event_class": "fork_request",
+                                    "payload": {
+                                        "message": "persist me before child bootstrap fails"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -10041,17 +10066,20 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-delivered-control",
-                                "turn_id": "turn-control",
-                                "item_id": "msg-control",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "control directive delivered"
-                                }
-                            })),
+                            event: sample_continue_stream_uaa_event_for_run(
+                                &run_id,
+                                json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-delivered-control",
+                                    "turn_id": "turn-control",
+                                    "item_id": "msg-control",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "control directive delivered"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -10187,12 +10215,15 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
-                                "event_class": "control_ack",
-                                "payload": {
-                                    "message": "prepare_handoff received"
-                                }
-                            })),
+                            event: sample_continue_stream_event_for_run(
+                                &parsed.run_id,
+                                json!({
+                                    "event_class": "control_ack",
+                                    "payload": {
+                                        "message": "prepare_handoff received"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;
@@ -10389,17 +10420,20 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
-                                "type": "item.completed",
-                                "thread_id": format!("thread-delivered-{suffix}"),
-                                "turn_id": format!("turn-{suffix}"),
-                                "item_id": format!("msg-{suffix}"),
-                                "status": "completed",
-                                    "item_type": "agent_message",
-                                    "content": {
-                                        "text": "approval response delivered"
-                                    }
-                                })),
+                                event: sample_continue_stream_uaa_event_for_run(
+                                    &run_id,
+                                    json!({
+                                    "type": "item.completed",
+                                    "thread_id": format!("thread-delivered-{suffix}"),
+                                    "turn_id": format!("turn-{suffix}"),
+                                    "item_id": format!("msg-{suffix}"),
+                                    "status": "completed",
+                                        "item_type": "agent_message",
+                                        "content": {
+                                            "text": "approval response delivered"
+                                        }
+                                    }),
+                                ),
                             },
                         )
                         .await;
@@ -10623,17 +10657,20 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-delivered-clarification",
-                                "turn_id": "turn-clarification",
-                                "item_id": "msg-clarification",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "clarification response delivered"
-                                }
-                            })),
+                            event: sample_continue_stream_uaa_event_for_run(
+                                &run_id,
+                                json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-delivered-clarification",
+                                    "turn_id": "turn-clarification",
+                                    "item_id": "msg-clarification",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "clarification response delivered"
+                                    }
+                                }),
+                            ),
                         },
                     )
                     .await;

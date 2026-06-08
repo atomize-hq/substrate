@@ -5,7 +5,7 @@ Source plan: [PLAN-50.md](./PLAN-50.md)
 Source prior slice: [TASKS-49.md](./TASKS-49.md)  
 Phase: `TASKS`  
 Execution model: four sequential `/incremental-implementation` sessions  
-Status: drafted on `2026-06-07`
+Status: Packets 1-4 landed; slice 50 closed on `2026-06-08` after Packet 4 aligned docs and reran the validation wall
 
 ## Phase Gate
 
@@ -13,14 +13,14 @@ These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `50` have been r
 
 ## Execution Packets
 
-This slice should run as four sequential `/incremental-implementation` sessions:
+This slice was planned as four sequential `/incremental-implementation` sessions, but Packets 1-3 are already landed in code and now serve as the frozen floor for Packet 4 closeout.
 
-1. Packet 1 freezes the six-field ingress-ready envelope contract and backward-compatible persistence boundary.
-2. Packet 2 widens local producers and persistence to preserve exact local ingress and request-causation truth.
-3. Packet 3 either threads exact event/message causation through the current producer seam or explicitly freezes those fields as absent when exact truth is unavailable.
-4. Packet 4 aligns docs and runs the validation wall.
+- Packet 1 is landed and should not be reopened unless the contract changes.
+- Packet 2 is landed and should not be reopened unless the contract changes.
+- Packet 3 is landed and should not be reopened unless the contract changes.
+- Packet 4 is landed; no active implementation packets remain for slice 50.
 
-Do not collapse these packets unless a later validation pass proves one is empty on the live tree.
+Treat the Packet 4 checkpoint as green repo floor for this slice. Slice 50 is now closed against the landed Packet 1-4 floor.
 
 ## Packet 1: Ingress-Ready Envelope Contract Freeze
 
@@ -32,7 +32,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add the six deferred ingress-ready fields to the canonical obligation artifact
+- [x] Task 1.1: Add the six deferred ingress-ready fields to the canonical obligation artifact
   - Acceptance: the canonical obligation record preserves room for `ingress_source_kind`, `ingress_source_id`, `ingress_received_at`, `causation_event_id`, `causation_message_id`, and `causation_request_id`, round-trips them when present, and does not widen into `host_inbox`, remote ingress materialization, or broader federation state.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -41,7 +41,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 1.2: Freeze exactness and no-synthesis semantics for canonical causation fields
+- [x] Task 1.2: Freeze exactness and no-synthesis semantics for canonical causation fields
   - Acceptance: the slice makes it explicit that `causation_event_id` and `causation_message_id` are optional exact-identity fields, `thread_id` is not silently reinterpreted as message identity, and missing exact truth remains absent rather than synthetic.
   - Verify:
     - targeted unit coverage for the chosen validation/classification helper behavior
@@ -71,7 +71,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Stamp exact local ingress truth on locally produced obligations where the runtime already knows it
+- [x] Task 2.1: Stamp exact local ingress truth on locally produced obligations where the runtime already knows it
   - Acceptance: local Family-2 obligation producers preserve exact session/backend/world truth and add bounded ingress metadata such as `ingress_source_kind`, `ingress_source_id`, and `ingress_received_at` only when the current local runtime can state them exactly, without widening into host-global ingress or cross-host routing.
   - Verify:
     - `cargo test -p shell orchestrator_world_dispatch -- --nocapture`
@@ -80,7 +80,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task 2.2: Stamp exact local request causation where the current producer already knows it
+- [x] Task 2.2: Stamp exact local request causation where the current producer already knows it
   - Acceptance: locally produced obligations preserve exact request/run identity in `causation_request_id` when the current producer already has it, while preserving current behavior for obligations that do not yet have exact event/message identity.
   - Verify:
     - `cargo test -p shell orchestrator_world_dispatch -- --nocapture`
@@ -89,7 +89,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs)
 
-- [ ] Task 2.3: Keep persistence and reload behavior compatible for obligations with no new ingress-ready metadata
+- [x] Task 2.3: Keep persistence and reload behavior compatible for obligations with no new ingress-ready metadata
   - Acceptance: obligations that do not carry the new ingress or causation fields continue to round-trip and remain usable by the landed Slice `49` paths, while new records remain explanation-ready after reload.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -119,7 +119,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Surface exact worker event/message causation only if the current producer seam already has it
+- [x] Task 3.1: Surface exact worker event/message causation only if the current producer seam already has it
   - Acceptance: if the retained-worker event seam already surfaces one exact event or message identifier, the persisted obligation canonicalizes it into `causation_event_id` or `causation_message_id` without reopening broader messaging design; otherwise the slice leaves the corresponding field absent.
   - Verify:
     - `cargo test -p shell orchestrator_world_dispatch -- --nocapture`
@@ -128,7 +128,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs) only if narrowly required
 
-- [ ] Task 3.2: Prove the no-synthesis boundary for missing exact event/message truth
+- [x] Task 3.2: Prove the no-synthesis boundary for missing exact event/message truth
   - Acceptance: missing exact event/message identifiers remain `None`, `thread_id` remains thread identity only, and no synthetic placeholder ids are persisted into canonical obligation fields.
   - Verify:
     - `cargo test -p shell obligation -- --nocapture`
@@ -158,7 +158,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align docs with the landed Slice `50` boundary
+- [x] Task 4.1: Align docs with the landed Slice `50` boundary
   - Acceptance: docs describe Slice `50` as ingress-ready local identity-envelope widening only, and do not imply `host_inbox`, remote ingress, or broader federation support has landed.
   - Verify:
     - manual diff review
@@ -169,7 +169,7 @@ Session goal:
     - [`llm-last-mile/PLAN-50.md`](./PLAN-50.md)
     - [`llm-last-mile/TASKS-50.md`](./TASKS-50.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests are green against the bounded Slice `50` file set; this task validates the slice and does not become an open-ended cleanup bucket.
   - Verify:
     - `cargo fmt --all -- --check`

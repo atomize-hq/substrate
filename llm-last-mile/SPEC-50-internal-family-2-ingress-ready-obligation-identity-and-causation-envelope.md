@@ -13,7 +13,7 @@ Related design stack:
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)  
 Phase: `SPECIFY`  
-Status: drafted on `2026-06-07`
+Status: implemented and validation-aligned on `2026-06-08`
 
 ## Assumptions
 
@@ -59,14 +59,14 @@ The current repo already has most of the local Family-2 floor this slice should 
 4. Slice `49` already landed bounded `origin_host_id` and `target_host_id` support plus wrong-host fail-closed behavior,
 5. the router-owned auto-attach path already consumes only local obligations and does not currently need the broader ingress-ready envelope to preserve its existing behavior.
 
-What is still missing in the live tree is the rest of the ingress-ready envelope:
+What this slice now lands in the live tree is the rest of the ingress-ready envelope:
 
-1. the obligation record does not yet carry `ingress_source_kind`, `ingress_source_id`, or `ingress_received_at`,
-2. the obligation record does not yet carry `causation_event_id`, `causation_message_id`, or `causation_request_id`,
-3. locally produced obligations still keep some joinable identity only inside payload-side metadata rather than in canonical obligation fields,
-4. the current retained-worker event surface does not yet guarantee an exact canonical worker `event_id` or `message_id` field for every obligation-producing path.
+1. the obligation record now carries `ingress_source_kind`, `ingress_source_id`, `ingress_received_at`, `causation_event_id`, `causation_message_id`, and `causation_request_id`,
+2. locally produced retained-worker obligations now stamp exact `local_runtime` ingress classification plus exact `request.run_id` receipt/request-causation truth in canonical fields,
+3. exact worker event/message identifiers are preserved only when surfaced directly from worker payload metadata,
+4. `thread_id` remains payload-only thread identity and is not promoted to canonical message causation truth when exact message identity is absent.
 
-That makes Slice `50` the narrowest honest follow-on: preserve the remaining envelope fields now, canonicalize exact local ingress and request causation truth, and keep absent exact event/message ids explicit rather than synthetic.
+That keeps Slice `50` honest: the local-only boundary is widened just enough for ingress-ready identity and exact local causation truth, but no `host_inbox`, remote ingress, or broader federation machinery is implied.
 
 ## Tech Stack
 
