@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use serde_json::Value;
 
 use crate::checkpoint::{Confidence, EvidenceRef, TaskFrame};
-use crate::context::{row_text_is_focusable, ContextPack};
+use crate::context::ContextPack;
 use crate::input::{extract_path_hints, parse_tool_payload, BundleSession};
 
 const EXPLICIT_DELEGATION_MARKERS: [&str; 4] =
@@ -306,15 +306,7 @@ fn collect_directive_signal_evidence(
 ) -> Vec<ContextSignalEvidence> {
     let mut evidence = Vec::new();
 
-    for row in delegation_rows(session).filter(|row| {
-        row_text_is_focusable(row)
-            && matches!(
-                row.kind,
-                CompactionKind::UserMessage
-                    | CompactionKind::DeveloperMessage
-                    | CompactionKind::SystemMessage
-            )
-    }) {
+    for row in delegation_directive_rows(session) {
         let lowered = row.text.to_ascii_lowercase();
         let mentions_child_surface = EXPLICIT_CHILD_LINK_SIGNALS
             .iter()
@@ -371,6 +363,18 @@ fn collect_directive_signal_evidence(
     }
 
     evidence
+}
+
+fn delegation_directive_rows(session: &BundleSession) -> impl Iterator<Item = &CompactionRow> + '_ {
+    delegation_rows(session).filter(|row| {
+        matches!(
+            row.kind,
+            CompactionKind::UserMessage
+                | CompactionKind::DeveloperMessage
+                | CompactionKind::SystemMessage
+        ) && !row.text.contains("AGENTS.md instructions")
+            && !row.text.contains("Available skills")
+    })
 }
 
 fn command_observation_has_child_visibility_evidence(
@@ -1021,6 +1025,56 @@ mod tests {
         let delegation = infer_delegation_context(&session, &assemble_context(&session));
 
         assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence.reason.contains(
+                "delegation directive surface references separate child session id: 019ea111-1111-7111-8111-111111111111"
+            )));
+        assert_eq!(delegation.counter_evidence.len(), 1);
+        assert!(delegation.counter_evidence[0]
+            .reason
+            .contains("remained child-opaque"));
+    }
+
+    #[test]
+    fn delegation_harvests_long_directive_child_rollout_surface() {
+        let directive = format!(
+            "/goal {} Inspect the spawned agent child rollout at /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl before checkpoint analysis.",
+            "context ".repeat(260)
+        );
+        assert!(directive.len() > 2_000);
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![row(CompactionKind::UserMessage, directive.as_str())],
+            compact_rows: vec![tool_call("spawn_agent", "{\"agent_type\":\"worker\"}")],
+        };
+
+        let delegation = infer_delegation_context(&session, &assemble_context(&session));
+
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence
+                .reason
+                .contains("delegation directive surface references separate child rollout")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
+        assert!(delegation.counter_evidence[0]
+            .reason
+            .contains("remained child-opaque"));
+    }
+
+    #[test]
+    fn delegation_harvests_skill_wrapped_directive_child_session_surface() {
+        let directive = "<skill>\n<name>incremental-implementation</name>\n</skill>\n/goal Inspect the spawned agent handoff before checkpoint analysis; child session id 019ea111-1111-7111-8111-111111111111 remains in a separate rollout file.";
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![row(CompactionKind::DeveloperMessage, directive)],
+            compact_rows: vec![tool_call("spawn_agent", "{\"agent_type\":\"worker\"}")],
+        };
+
+        let delegation = infer_delegation_context(&session, &assemble_context(&session));
+
         assert!(delegation
             .supporting_evidence
             .iter()
