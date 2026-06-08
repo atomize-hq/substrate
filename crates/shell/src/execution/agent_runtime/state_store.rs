@@ -27,6 +27,7 @@ use super::{
         SessionAutoAttachSettleResult,
     },
     control::PublicSessionPosture,
+    host_inbox::HostInboxRecord,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
         OrchestrationObligationAttachState, OrchestrationObligationKind,
@@ -651,6 +652,11 @@ impl AgentRuntimeStateStore {
             .join("sessions")
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn host_inbox_dir(&self) -> PathBuf {
+        self.substrate_home.join("host_inbox")
+    }
+
     fn canonical_session_dir(&self, orchestration_session_id: &str) -> PathBuf {
         self.sessions_dir().join(orchestration_session_id)
     }
@@ -718,6 +724,11 @@ impl AgentRuntimeStateStore {
     ) -> PathBuf {
         self.canonical_obligations_dir(orchestration_session_id)
             .join(format!("{obligation_id}.json"))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn host_inbox_record_path(&self, record_id: &str) -> PathBuf {
+        self.host_inbox_dir().join(format!("{record_id}.json"))
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -2520,6 +2531,11 @@ impl AgentRuntimeStateStore {
         obligation.validate()
     }
 
+    #[allow(dead_code)]
+    fn validate_host_inbox_record(&self, record: &HostInboxRecord) -> Result<()> {
+        record.validate()
+    }
+
     pub(crate) fn persist_orchestration_session(
         &self,
         session: &OrchestrationSessionRecord,
@@ -2637,6 +2653,15 @@ impl AgentRuntimeStateStore {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn persist_host_inbox_record(&self, record: &HostInboxRecord) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        self.validate_host_inbox_record(record)?;
+        write_atomic_json(&self.host_inbox_record_path(&record.record_id), record)
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn acknowledge_inbox_item(
         &self,
         orchestration_session_id: &str,
@@ -2733,6 +2758,57 @@ impl AgentRuntimeStateStore {
                 .then(left.item_id.cmp(&right.item_id))
         });
         Ok(items)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn load_host_inbox_record(&self, record_id: &str) -> Result<Option<HostInboxRecord>> {
+        let path = self.host_inbox_record_path(record_id);
+        let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
+            return Ok(None);
+        };
+        self.validate_host_inbox_record(&record)
+            .with_context(|| format!("invalid host inbox record in {}", path.display()))?;
+        if record.record_id != record_id {
+            anyhow::bail!(
+                "host inbox artifact {} stored mismatched record_id {}",
+                path.display(),
+                record.record_id
+            );
+        }
+
+        Ok(Some(record))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn list_host_inbox_records(&self) -> Result<Vec<HostInboxRecord>> {
+        let host_inbox_dir = self.host_inbox_dir();
+        let Some(entries) = safe_read_dir(&host_inbox_dir)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut records = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", host_inbox_dir.display()))?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+
+            let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
+                continue;
+            };
+            self.validate_host_inbox_record(&record)
+                .with_context(|| format!("invalid host inbox record in {}", path.display()))?;
+            records.push(record);
+        }
+
+        records.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.record_id.cmp(&right.record_id))
+        });
+        Ok(records)
     }
 
     #[allow(dead_code)]
@@ -4628,6 +4704,7 @@ mod tests {
 
     use super::*;
     use crate::execution::agent_runtime::{
+        host_inbox::HostInboxMaterializationState,
         mapping::AgentRuntimeBackendKind,
         session::{AgentRuntimeForkParticipantInit, AgentRuntimeSessionState},
         validator::RuntimeSelectionDescriptor,
@@ -4798,6 +4875,24 @@ mod tests {
             "request_id": format!("req_{obligation_id}"),
         }));
         obligation
+    }
+
+    fn pending_host_inbox_record(
+        orchestration_session_id: &str,
+        record_id: &str,
+        kind: OrchestrationObligationKind,
+    ) -> HostInboxRecord {
+        let mut record = HostInboxRecord::new(
+            orchestration_session_id.to_string(),
+            record_id.to_string(),
+            kind,
+            format!("summary for {record_id}"),
+            "host-local",
+            "remote_router",
+            format!("ingress_{record_id}"),
+        );
+        record.origin_host_id = Some("host-origin".to_string());
+        record
     }
 
     fn write_legacy_handle_file(
@@ -10918,6 +11013,82 @@ mod tests {
                 .expect("count live retained workers");
 
             assert_eq!(count, 1);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_persists_records_under_substrate_home_host_inbox() {
+        with_store(|store| {
+            let record = pending_host_inbox_record(
+                "sess_host_inbox",
+                "host_record_one",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+
+            store
+                .persist_host_inbox_record(&record)
+                .expect("persist host inbox record");
+
+            assert!(
+                store
+                    .host_inbox_dir()
+                    .ends_with(std::path::Path::new("host_inbox")),
+                "host inbox namespace must root at SUBSTRATE_HOME/host_inbox"
+            );
+            assert!(
+                store.host_inbox_record_path("host_record_one").is_file(),
+                "host inbox records must live under SUBSTRATE_HOME/host_inbox"
+            );
+            assert_eq!(
+                store
+                    .load_host_inbox_record("host_record_one")
+                    .expect("load host inbox record"),
+                Some(record)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_lists_records_in_creation_order() {
+        with_store(|store| {
+            let first = pending_host_inbox_record(
+                "sess_host_inbox",
+                "host_record_alpha",
+                OrchestrationObligationKind::FollowUpRequired,
+            );
+            let mut second = pending_host_inbox_record(
+                "sess_host_inbox",
+                "host_record_beta",
+                OrchestrationObligationKind::RuntimeAlert,
+            );
+            second.created_at = first.created_at + chrono::Duration::seconds(1);
+            second.updated_at = second.created_at;
+            second.materialization_state = HostInboxMaterializationState::Materialized;
+            second.materialized_at = Some(second.created_at);
+            second.materialized_obligation_id = Some("obl-beta".to_string());
+            second
+                .validate()
+                .expect("materialized host inbox record remains valid");
+
+            store
+                .persist_host_inbox_record(&second)
+                .expect("persist later host inbox record");
+            store
+                .persist_host_inbox_record(&first)
+                .expect("persist earlier host inbox record");
+
+            let ignored_path = store.host_inbox_dir().join("README.txt");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
+            fs::write(&ignored_path, b"ignore").expect("write ignored artifact");
+
+            assert_eq!(
+                store
+                    .list_host_inbox_records()
+                    .expect("list host inbox records"),
+                vec![first, second]
+            );
         });
     }
 }
