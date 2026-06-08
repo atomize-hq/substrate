@@ -13,6 +13,7 @@ Related design stack:
 - [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
 Phase: `SPECIFY`  
 Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-08`
+Validation note: Packet 4's validation wall is green. Final validation required one narrow in-scope stabilization follow-up in [`crates/shell/src/execution/host_inbox_materialization.rs`](../crates/shell/src/execution/host_inbox_materialization.rs): the pre-existing `load_host_inbox_record` fallback was simplified to `unwrap_or_default()` in two helper reads without changing Slice `51` behavior or reopening broader Family-2 scope.
 
 ## Assumptions
 

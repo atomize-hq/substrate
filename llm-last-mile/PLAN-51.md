@@ -5,6 +5,7 @@ Source prior slice: [PLAN-50.md](./PLAN-50.md)
 Source remaining-scope note: [REMAINING-family-2-scope-2026-06-07.md](./REMAINING-family-2-scope-2026-06-07.md)  
 Plan type: first post-`50` host-global inbox layering slice  
 Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-08`
+Validation note: Packet 4's validation wall is green. Final validation required one narrow in-scope stabilization follow-up in [`crates/shell/src/execution/host_inbox_materialization.rs`](../crates/shell/src/execution/host_inbox_materialization.rs): two helper reads now use `unwrap_or_default()` for the existing unreadable-record fallback, which kept the closeout behavior-neutral and did not widen Slice `51`.
 
 ## Objective
 
@@ -25,7 +26,7 @@ This slice is complete only when all of the following are true:
 Implementation status on the current tree:
 
 1. Packets `1` through `3` are already landed in runtime code before this session.
-2. Packet `4` is the remaining closeout pass: align docs to the landed `host_inbox -> local obligation -> router` boundary and rerun the full validation wall.
+2. Packet `4` aligned docs to the landed `host_inbox -> local obligation -> router` boundary, reran the full validation wall, and carried one explicit bounded runtime follow-up discovered during validation: a behavior-neutral helper simplification in `host_inbox_materialization.rs`.
 3. `docs/TRACE.md` stays untouched because the implementation logs explanation-ready materialization outcomes through the existing dispatch logging surface rather than adding a new canonical trace record family.
 
 ## Phase Gate

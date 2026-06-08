@@ -14,7 +14,7 @@ These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `51` have been r
 Current tree note:
 
 1. Packets `1` through `3` are already landed and verified on the live repo before this session.
-2. This Packet `4` pass owns only doc alignment plus the validation wall.
+2. This Packet `4` pass primarily owns doc alignment plus the validation wall, but the landed closeout also includes one explicit bounded runtime follow-up proven necessary by validation: a behavior-neutral helper simplification in `crates/shell/src/execution/host_inbox_materialization.rs`.
 3. The checklist below remains the slice ledger; this session marks only Packet `4` tasks directly after the validation wall reran green.
 
 ## Execution Packets
@@ -198,7 +198,9 @@ Session goal:
     - `cargo test -p shell auto_attach -- --nocapture` if Packet 3 touched coexistence with router sequencing
     - `cargo test --workspace -- --nocapture`
   - Files:
-    - none
+    - final validation exposed one narrow in-scope stabilization follow-up in the landed Packet 4 commit:
+      [`crates/shell/src/execution/host_inbox_materialization.rs`](../crates/shell/src/execution/host_inbox_materialization.rs) simplified the pre-existing unreadable-record fallback to `unwrap_or_default()` in two helper reads;
+      no broader runtime feature work, routing redesign, or later Family-2 scope was reopened
   - Stop condition: if a validation command fails because Slice `51` needs more code or doc changes, stop and add an explicit follow-up task against the concrete failing files instead of treating this validation step as implicit cleanup.
 
 ### Packet 4 Checkpoint
