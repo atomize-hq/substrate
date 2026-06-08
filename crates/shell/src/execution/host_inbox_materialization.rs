@@ -136,6 +136,7 @@ mod tests {
     };
     use crate::execution::config_model::AgentExecutionScope;
     use serial_test::serial;
+    use std::fs;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
@@ -391,6 +392,55 @@ mod tests {
             let selected = select_attach_candidate(&obligations)
                 .expect("same-kind router candidate should exist after materialization");
             assert_eq!(selected.obligation_id, "host_inbox_host_record_z_first");
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn host_inbox_materialization_entrypoint_skips_malformed_path_stems_without_blocking_router_candidates(
+    ) {
+        with_store(|store| {
+            persist_session(store, "sess_host_inbox_malformed_path");
+            store
+                .persist_obligation(
+                    &crate::execution::agent_runtime::obligation_ledger::OrchestrationObligationRecord::new(
+                        "sess_host_inbox_malformed_path",
+                        "obl_follow_up",
+                        OrchestrationObligationKind::FollowUpRequired,
+                        "follow up needed",
+                    ),
+                )
+                .expect("persist canonical obligation");
+            let mut obligation = store
+                .load_obligation("sess_host_inbox_malformed_path", "obl_follow_up")
+                .expect("load canonical obligation")
+                .expect("canonical obligation exists");
+            obligation.attention_required = true;
+            obligation.attach_state =
+                crate::execution::agent_runtime::obligation_ledger::OrchestrationObligationAttachState::Eligible;
+            store
+                .persist_obligation(&obligation)
+                .expect("persist eligible canonical obligation");
+
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
+            fs::write(store.host_inbox_dir().join("C:.json"), b"{}")
+                .expect("write malformed path-stem artifact");
+
+            let executions =
+                materialize_pending_host_inbox_records_for_local_host(store, "host-local")
+                    .expect("malformed path stems must not abort host inbox pre-pass");
+            assert!(
+                executions.is_empty(),
+                "malformed path-stem artifacts should be ignored by the bounded pre-pass"
+            );
+
+            let candidates = store
+                .list_router_auto_attach_candidate_session_ids()
+                .expect("list router candidates after malformed path-stem skip");
+            assert_eq!(
+                candidates,
+                vec!["sess_host_inbox_malformed_path".to_string()]
+            );
         });
     }
 }

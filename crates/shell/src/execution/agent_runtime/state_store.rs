@@ -3075,7 +3075,10 @@ impl AgentRuntimeStateStore {
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
-            record_ids.push(Self::host_inbox_record_id_from_path(&path)?);
+            let Ok(record_id) = Self::host_inbox_record_id_from_path(&path) else {
+                continue;
+            };
+            record_ids.push(record_id);
         }
 
         record_ids.sort();
