@@ -888,7 +888,7 @@ mod tests {
                 tool_call(
                     2,
                     "functions.shell_command",
-                    "{\"command\":\"sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl\",\"workdir\":\"/repo\"}",
+                    "{\"command\":\"printf 'child rollout ' && sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl\",\"workdir\":\"/repo\"}",
                 ),
             ],
         };
@@ -907,7 +907,9 @@ mod tests {
         assert!(delegation
             .supporting_evidence
             .iter()
-            .any(|evidence| evidence.reason.contains("child rollout command")));
+            .any(|evidence| evidence
+                .reason
+                .contains("child rollout surface links child/subagent work")));
         assert!(delegation.counter_evidence.is_empty());
     }
 
