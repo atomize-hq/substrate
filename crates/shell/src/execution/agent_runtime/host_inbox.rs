@@ -316,7 +316,7 @@ impl HostInboxRecord {
         if self.kind.supports_router_auto_attach() {
             obligation.attach_state = OrchestrationObligationAttachState::Eligible;
         }
-        obligation.created_at = materialized_at;
+        obligation.created_at = self.created_at;
         obligation.updated_at = materialized_at;
         obligation.source_participant_id = self.source_participant_id.clone();
         obligation.ingress_source_kind = Some(self.ingress_source_kind.clone());
@@ -648,7 +648,7 @@ mod tests {
 
         assert_eq!(obligation.obligation_id, "host_inbox_host_record_six");
         assert!(record.matches_materialized_obligation(&obligation));
-        assert_eq!(obligation.created_at, materialized_at);
+        assert_eq!(obligation.created_at, record.created_at);
         assert_eq!(obligation.updated_at, materialized_at);
         assert!(obligation.attention_required);
         assert_eq!(

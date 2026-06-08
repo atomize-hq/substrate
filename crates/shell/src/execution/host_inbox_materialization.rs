@@ -26,26 +26,29 @@ pub(crate) fn materialize_pending_host_inbox_records_for_local_host(
     store: &AgentRuntimeStateStore,
     local_host_id: &str,
 ) -> Result<Vec<HostInboxMaterializationExecution>> {
-    let mut pending_records = Vec::new();
+    let mut candidate_records = Vec::new();
     for record_id in store.list_host_inbox_record_ids()? {
         let before = match store.load_host_inbox_record(&record_id) {
             Ok(record) => record,
             Err(_) => None,
         };
         match before {
-            Some(record)
-                if record.materialization_state == HostInboxMaterializationState::Pending =>
-            {
-                pending_records.push((Some(record.created_at), record.record_id));
+            Some(record) => {
+                if record.materialization_state == HostInboxMaterializationState::Materialized
+                    && !record.target_host_id.is_empty()
+                    && record.target_host_id != local_host_id
+                {
+                    continue;
+                }
+                candidate_records.push((Some(record.created_at), record.record_id));
             }
-            Some(_) => continue,
-            None => pending_records.push((None, record_id)),
+            None => candidate_records.push((None, record_id)),
         }
     }
-    pending_records.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+    candidate_records.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
 
     let mut executions = Vec::new();
-    for (_, record_id) in pending_records {
+    for (_, record_id) in candidate_records {
         executions.push(materialize_host_inbox_record_for_local_host(
             store,
             &record_id,
@@ -278,22 +281,21 @@ mod tests {
                 "host-local",
             )
             .expect("first materialization");
-            let second = materialize_host_inbox_record_for_local_host(
-                store,
-                "host_record_repeat",
-                "host-local",
-            )
-            .expect("idempotent rerun");
+            let second = materialize_pending_host_inbox_records_for_local_host(store, "host-local")
+                .expect("idempotent rerun via host-side entrypoint");
 
             assert_eq!(first.outcome, HostInboxMaterializationOutcome::Materialized);
             assert_eq!(
-                second.outcome,
+                second[0].outcome,
                 HostInboxMaterializationOutcome::AlreadyMaterialized
             );
-            assert_eq!(second.reason, "already_materialized_exact_local_obligation");
-            assert_eq!(second.local_host_id, "host-local");
             assert_eq!(
-                second.obligation_id.as_deref(),
+                second[0].reason,
+                "already_materialized_exact_local_obligation"
+            );
+            assert_eq!(second[0].local_host_id, "host-local");
+            assert_eq!(
+                second[0].obligation_id.as_deref(),
                 Some("host_inbox_host_record_repeat")
             );
 
@@ -402,6 +404,65 @@ mod tests {
             let selected = select_attach_candidate(&obligations)
                 .expect("same-kind router candidate should exist after materialization");
             assert_eq!(selected.obligation_id, "host_inbox_host_record_z_first");
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn host_inbox_materialization_preserves_durable_order_across_retryable_materialization() {
+        with_store(|store| {
+            let older = pending_record(
+                "sess_host_inbox_retry_order",
+                "host_record_older",
+                "host-local",
+            );
+            store
+                .persist_host_inbox_record(&older)
+                .expect("persist older host inbox record before session exists");
+
+            let first_pass =
+                materialize_pending_host_inbox_records_for_local_host(store, "host-local")
+                    .expect("older record should remain pending without session");
+            assert_eq!(first_pass.len(), 1);
+            assert_eq!(
+                first_pass[0].outcome,
+                HostInboxMaterializationOutcome::Pending
+            );
+
+            persist_session(store, "sess_host_inbox_retry_order");
+            let mut newer = pending_record(
+                "sess_host_inbox_retry_order",
+                "host_record_newer",
+                "host-local",
+            );
+            newer.created_at = older.created_at + chrono::Duration::seconds(1);
+            newer.updated_at = newer.created_at;
+            store
+                .persist_host_inbox_record(&newer)
+                .expect("persist newer host inbox record after session exists");
+
+            let executions =
+                materialize_pending_host_inbox_records_for_local_host(store, "host-local")
+                    .expect("retryable materialization should preserve durable order");
+            assert_eq!(
+                executions
+                    .iter()
+                    .map(|execution| execution.outcome)
+                    .collect::<Vec<_>>(),
+                vec![
+                    HostInboxMaterializationOutcome::Materialized,
+                    HostInboxMaterializationOutcome::Materialized
+                ]
+            );
+
+            let obligations = store
+                .list_obligations("sess_host_inbox_retry_order")
+                .expect("list obligations after retryable materialization");
+            let selected = select_attach_candidate(&obligations)
+                .expect("same-kind router candidate should exist after retryable materialization");
+            assert_eq!(selected.obligation_id, "host_inbox_host_record_older");
+            assert_eq!(obligations[0].created_at, older.created_at);
+            assert_eq!(obligations[1].created_at, newer.created_at);
         });
     }
 

@@ -2809,6 +2809,7 @@ impl AgentRuntimeStateStore {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn load_invalid_host_inbox_artifact_failure_record(
         &self,
         source_path: &Path,
