@@ -8,6 +8,7 @@ use std::sync::{Mutex, OnceLock};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+#[cfg(any(target_os = "linux", test))]
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 
@@ -659,6 +660,7 @@ impl AgentRuntimeStateStore {
         self.substrate_home.join("host_inbox")
     }
 
+    #[cfg(any(target_os = "linux", test))]
     fn invalid_host_inbox_artifacts_dir(&self) -> PathBuf {
         self.host_inbox_dir().join(".invalid_artifacts")
     }
@@ -738,6 +740,7 @@ impl AgentRuntimeStateStore {
         Ok(self.host_inbox_dir().join(format!("{record_id}.json")))
     }
 
+    #[cfg(any(target_os = "linux", test))]
     fn invalid_host_inbox_artifact_record_path(&self, record_id: &str) -> Result<PathBuf> {
         HostInboxRecord::validate_record_id(record_id)?;
         Ok(self
@@ -2736,6 +2739,7 @@ impl AgentRuntimeStateStore {
         Ok(record)
     }
 
+    #[cfg(any(target_os = "linux", test))]
     fn synthesize_failed_closed_invalid_host_inbox_artifact_record(
         &self,
         record_id: &str,
@@ -2762,6 +2766,7 @@ impl AgentRuntimeStateStore {
         Ok(record)
     }
 
+    #[cfg(any(target_os = "linux", test))]
     fn invalid_host_inbox_artifact_record_id(path: &Path) -> String {
         let artifact_name = path
             .file_name()
@@ -2777,6 +2782,7 @@ impl AgentRuntimeStateStore {
         format!("invalid_host_inbox_artifact_{suffix}")
     }
 
+    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn record_invalid_host_inbox_artifact_failure(
         &self,
         path: &Path,
@@ -3161,6 +3167,7 @@ impl AgentRuntimeStateStore {
         Ok(records)
     }
 
+    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn list_host_inbox_record_ids(&self) -> Result<Vec<String>> {
         let host_inbox_dir = self.host_inbox_dir();
         let Some(entries) = safe_read_dir(&host_inbox_dir)? else {
@@ -3186,6 +3193,7 @@ impl AgentRuntimeStateStore {
         Ok(record_ids)
     }
 
+    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn list_invalid_host_inbox_artifact_paths(&self) -> Result<Vec<PathBuf>> {
         let host_inbox_dir = self.host_inbox_dir();
         let Some(entries) = safe_read_dir(&host_inbox_dir)? else {

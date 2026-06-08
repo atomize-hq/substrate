@@ -10,6 +10,7 @@ mod config_cmd;
 pub(crate) mod config_model;
 mod env_scripts;
 mod home_bootstrap;
+#[cfg(any(target_os = "linux", test))]
 pub(crate) mod host_inbox_materialization;
 mod invocation;
 pub mod lock;
