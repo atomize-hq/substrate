@@ -2697,10 +2697,7 @@ impl AgentRuntimeStateStore {
         Ok(record.clone())
     }
 
-    fn load_host_inbox_record_artifact(
-        &self,
-        path: &Path,
-    ) -> Result<Option<HostInboxRecord>> {
+    fn load_host_inbox_record_artifact(&self, path: &Path) -> Result<Option<HostInboxRecord>> {
         read_regular_json_if_exists::<HostInboxRecord>(path)
     }
 
@@ -3062,6 +3059,28 @@ impl AgentRuntimeStateStore {
                 .then(left.record_id.cmp(&right.record_id))
         });
         Ok(records)
+    }
+
+    pub(crate) fn list_host_inbox_record_ids(&self) -> Result<Vec<String>> {
+        let host_inbox_dir = self.host_inbox_dir();
+        let Some(entries) = safe_read_dir(&host_inbox_dir)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut record_ids = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", host_inbox_dir.display()))?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            record_ids.push(Self::host_inbox_record_id_from_path(&path)?);
+        }
+
+        record_ids.sort();
+        record_ids.dedup();
+        Ok(record_ids)
     }
 
     #[allow(dead_code)]
@@ -11771,8 +11790,7 @@ mod tests {
     #[serial_test::serial]
     fn host_inbox_state_store_missing_record_id_artifacts_fail_closed_without_reconstruction() {
         with_store(|store| {
-            let orchestrator =
-                live_orchestrator("codex", "sess_host_missing_id", "orch_host");
+            let orchestrator = live_orchestrator("codex", "sess_host_missing_id", "orch_host");
             let parent = active_parent(&orchestrator);
             store
                 .persist_orchestration_session(&parent)
@@ -11864,16 +11882,16 @@ mod tests {
             let load_err = store
                 .load_host_inbox_record("host_record_path_stem")
                 .expect_err("load must enforce path-stem versus record_id truth");
-            assert!(load_err.to_string().contains(
-                "stored mismatched record_id host_record_other"
-            ));
+            assert!(load_err
+                .to_string()
+                .contains("stored mismatched record_id host_record_other"));
 
             let list_err = store
                 .list_host_inbox_records()
                 .expect_err("list must enforce path-stem versus record_id truth");
-            assert!(list_err.to_string().contains(
-                "stored mismatched record_id host_record_other"
-            ));
+            assert!(list_err
+                .to_string()
+                .contains("stored mismatched record_id host_record_other"));
         });
     }
 
@@ -11881,8 +11899,7 @@ mod tests {
     #[serial_test::serial]
     fn host_inbox_state_store_fail_closes_mismatched_record_id_artifacts() {
         with_store(|store| {
-            let orchestrator =
-                live_orchestrator("codex", "sess_host_record_mismatch", "orch_host");
+            let orchestrator = live_orchestrator("codex", "sess_host_record_mismatch", "orch_host");
             let parent = active_parent(&orchestrator);
             store
                 .persist_orchestration_session(&parent)

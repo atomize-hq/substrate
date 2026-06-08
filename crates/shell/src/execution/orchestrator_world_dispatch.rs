@@ -1652,6 +1652,18 @@ fn run_router_owned_auto_attach_discovery_once(
     store: &AgentRuntimeStateStore,
     policy: &Policy,
 ) -> Result<()> {
+    let local_host_id = gethostname().to_string_lossy().trim().to_string();
+    if local_host_id.is_empty() {
+        anyhow::bail!(
+            "local_host_id_unavailable: host inbox materialization requires exact local host identity before router discovery"
+        );
+    }
+    let materializations =
+        crate::execution::host_inbox_materialization::materialize_pending_host_inbox_records_for_local_host(
+            store,
+            &local_host_id,
+        )?;
+    emit_host_inbox_materialization_execution_outcomes(&materializations);
     let executions = crate::execution::agent_runtime::auto_attach::execute_router_auto_attach_for_eligible_sessions(
         store,
         CONTINUE_WORLD_WORKER_ROUTER_IDENTITY,
@@ -1661,6 +1673,69 @@ fn run_router_owned_auto_attach_discovery_once(
     )?;
     emit_router_owned_auto_attach_execution_outcomes(store, &executions);
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn emit_host_inbox_materialization_execution_outcomes(
+    executions: &[crate::execution::host_inbox_materialization::HostInboxMaterializationExecution],
+) {
+    for execution in executions {
+        log_host_inbox_materialization_outcome(execution);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn log_host_inbox_materialization_outcome(
+    execution: &crate::execution::host_inbox_materialization::HostInboxMaterializationExecution,
+) {
+    let target_host_id = execution.target_host_id.as_deref().unwrap_or("<unknown>");
+    let obligation_id = execution.obligation_id.as_deref().unwrap_or("<none>");
+    let orchestration_session_id = execution
+        .orchestration_session_id
+        .as_deref()
+        .unwrap_or("<unknown>");
+    match execution.outcome {
+        crate::execution::host_inbox_materialization::HostInboxMaterializationOutcome::FailedClosed => warn!(
+            target = "substrate::shell",
+            record_id = %execution.record_id,
+            orchestration_session_id = %orchestration_session_id,
+            local_host_id = %execution.local_host_id,
+            target_host_id = %target_host_id,
+            obligation_id = %obligation_id,
+            reason = %execution.reason,
+            "host inbox materialization failed closed before router discovery"
+        ),
+        crate::execution::host_inbox_materialization::HostInboxMaterializationOutcome::Materialized => info!(
+            target = "substrate::shell",
+            record_id = %execution.record_id,
+            orchestration_session_id = %orchestration_session_id,
+            local_host_id = %execution.local_host_id,
+            target_host_id = %target_host_id,
+            obligation_id = %obligation_id,
+            reason = %execution.reason,
+            "host inbox materialized exact local obligation before router discovery"
+        ),
+        crate::execution::host_inbox_materialization::HostInboxMaterializationOutcome::AlreadyMaterialized => info!(
+            target = "substrate::shell",
+            record_id = %execution.record_id,
+            orchestration_session_id = %orchestration_session_id,
+            local_host_id = %execution.local_host_id,
+            target_host_id = %target_host_id,
+            obligation_id = %obligation_id,
+            reason = %execution.reason,
+            "host inbox materialization reused exact local obligation before router discovery"
+        ),
+        crate::execution::host_inbox_materialization::HostInboxMaterializationOutcome::Pending => info!(
+            target = "substrate::shell",
+            record_id = %execution.record_id,
+            orchestration_session_id = %orchestration_session_id,
+            local_host_id = %execution.local_host_id,
+            target_host_id = %target_host_id,
+            obligation_id = %obligation_id,
+            reason = %execution.reason,
+            "host inbox materialization left record pending before router discovery"
+        ),
+    }
 }
 
 #[cfg(target_os = "linux")]
