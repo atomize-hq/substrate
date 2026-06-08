@@ -732,6 +732,18 @@ impl AgentRuntimeStateStore {
         Ok(self.host_inbox_dir().join(format!("{record_id}.json")))
     }
 
+    fn host_inbox_record_id_from_path(path: &Path) -> Result<String> {
+        let Some(record_id) = path.file_stem().and_then(|value| value.to_str()) else {
+            anyhow::bail!(
+                "host inbox artifact {} must have a UTF-8 json path stem",
+                path.display()
+            );
+        };
+        HostInboxRecord::validate_record_id(record_id)
+            .with_context(|| format!("invalid host inbox artifact path {}", path.display()))?;
+        Ok(record_id.to_string())
+    }
+
     #[cfg(any(target_os = "linux", test))]
     pub(crate) fn canonical_active_ephemeral_task_path(
         &self,
@@ -2684,6 +2696,35 @@ impl AgentRuntimeStateStore {
         Ok(record.clone())
     }
 
+    fn load_host_inbox_record_artifact(
+        &self,
+        path: &Path,
+    ) -> Result<Option<HostInboxRecord>> {
+        read_regular_json_if_exists::<HostInboxRecord>(path)
+    }
+
+    fn validate_host_inbox_record_artifact_identity(
+        record: &HostInboxRecord,
+        expected_record_id: &str,
+        path: &Path,
+    ) -> Result<()> {
+        if record.record_id.is_empty() {
+            anyhow::bail!(
+                "host inbox artifact {} is missing required record_id",
+                path.display()
+            );
+        }
+        if record.record_id != expected_record_id {
+            anyhow::bail!(
+                "host inbox artifact {} stored mismatched record_id {}",
+                path.display(),
+                record.record_id
+            );
+        }
+
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub(crate) fn materialize_host_inbox_record_for_local_host(
         &self,
@@ -2697,9 +2738,20 @@ impl AgentRuntimeStateStore {
             anyhow::bail!("host inbox materialization requires non-empty local_host_id");
         }
 
-        let Some(mut record) = self.load_host_inbox_record_unvalidated(record_id)? else {
+        let path = self.host_inbox_record_path(record_id)?;
+        let Some(mut record) = self.load_host_inbox_record_artifact(&path)? else {
             anyhow::bail!("host_inbox_record_not_found: no host inbox record {record_id}");
         };
+        if let Err(err) =
+            Self::validate_host_inbox_record_artifact_identity(&record, record_id, &path)
+        {
+            record.record_id = record_id.to_string();
+            return self.mark_host_inbox_record_failed_closed_unlocked(
+                &mut record,
+                err.to_string(),
+                Utc::now(),
+            );
+        }
 
         match record.materialization_state {
             HostInboxMaterializationState::Materialized => {
@@ -2928,22 +2980,10 @@ impl AgentRuntimeStateStore {
         record_id: &str,
     ) -> Result<Option<HostInboxRecord>> {
         let path = self.host_inbox_record_path(record_id)?;
-        let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
+        let Some(record) = self.load_host_inbox_record_artifact(&path)? else {
             return Ok(None);
         };
-        if record.record_id.is_empty() {
-            anyhow::bail!(
-                "host inbox artifact {} is missing required record_id",
-                path.display()
-            );
-        }
-        if record.record_id != record_id {
-            anyhow::bail!(
-                "host inbox artifact {} stored mismatched record_id {}",
-                path.display(),
-                record.record_id
-            );
-        }
+        Self::validate_host_inbox_record_artifact_identity(&record, record_id, &path)?;
 
         Ok(Some(record))
     }
@@ -2964,9 +3004,15 @@ impl AgentRuntimeStateStore {
                 continue;
             }
 
-            let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
+            let expected_record_id = Self::host_inbox_record_id_from_path(&path)?;
+            let Some(record) = self.load_host_inbox_record_artifact(&path)? else {
                 continue;
             };
+            Self::validate_host_inbox_record_artifact_identity(
+                &record,
+                &expected_record_id,
+                &path,
+            )?;
             self.validate_host_inbox_record(&record)
                 .with_context(|| format!("invalid host inbox record in {}", path.display()))?;
             records.push(record);
@@ -11687,6 +11733,13 @@ mod tests {
     #[serial_test::serial]
     fn host_inbox_state_store_missing_record_id_artifacts_fail_closed_without_reconstruction() {
         with_store(|store| {
+            let orchestrator =
+                live_orchestrator("codex", "sess_host_missing_id", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
             let path = store.host_inbox_dir().join("host_record_missing_id.json");
             fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
             fs::write(
@@ -11708,15 +11761,149 @@ mod tests {
             )
             .expect("write host inbox artifact missing record_id");
 
-            let err = store
+            let failed = store
                 .materialize_host_inbox_record_for_local_host(
                     "host_record_missing_id",
                     "host-local",
                 )
-                .expect_err("missing record_id must fail closed instead of being reconstructed");
-            assert!(err.to_string().contains("is missing required record_id"));
+                .expect("missing record_id must fail closed durably");
+            assert_eq!(
+                failed.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+            assert_eq!(
+                failed.record_id, "host_record_missing_id",
+                "failed_closed rewrite must adopt the path-stem identity"
+            );
+            let expected_reason = format!(
+                "host inbox artifact {} is missing required record_id",
+                path.display()
+            );
+            assert_eq!(
+                failed.failed_closed_reason.as_deref(),
+                Some(expected_reason.as_str())
+            );
+            let persisted = store
+                .load_host_inbox_record("host_record_missing_id")
+                .expect("reload failed closed missing-id artifact")
+                .expect("failed closed artifact persists");
+            assert_eq!(persisted, failed);
             assert!(store
                 .list_obligations("sess_host_missing_id")
+                .expect("list obligations")
+                .is_empty());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_read_paths_reject_path_stem_record_id_mismatch() {
+        with_store(|store| {
+            let path = store
+                .host_inbox_record_path("host_record_path_stem")
+                .expect("valid record path");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
+            fs::write(
+                &path,
+                serde_json::to_vec_pretty(&json!({
+                    "orchestration_session_id": "sess_host_path_stem",
+                    "record_id": "host_record_other",
+                    "kind": "approval_required",
+                    "severity": "info",
+                    "created_at": "2026-06-08T00:00:00Z",
+                    "updated_at": "2026-06-08T00:00:00Z",
+                    "summary": "approval requested",
+                    "ingress_source_kind": "host_message",
+                    "ingress_source_id": "ingress-host-record-path-stem",
+                    "ingress_received_at": "2026-06-08T00:00:00Z",
+                    "target_host_id": "host-local",
+                    "materialization_state": "pending"
+                }))
+                .expect("serialize mismatched host inbox artifact"),
+            )
+            .expect("write mismatched host inbox artifact");
+
+            let load_err = store
+                .load_host_inbox_record("host_record_path_stem")
+                .expect_err("load must enforce path-stem versus record_id truth");
+            assert!(load_err.to_string().contains(
+                "stored mismatched record_id host_record_other"
+            ));
+
+            let list_err = store
+                .list_host_inbox_records()
+                .expect_err("list must enforce path-stem versus record_id truth");
+            assert!(list_err.to_string().contains(
+                "stored mismatched record_id host_record_other"
+            ));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_fail_closes_mismatched_record_id_artifacts() {
+        with_store(|store| {
+            let orchestrator =
+                live_orchestrator("codex", "sess_host_record_mismatch", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
+            let path = store
+                .host_inbox_record_path("host_record_path_truth")
+                .expect("valid record path");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
+            fs::write(
+                &path,
+                serde_json::to_vec_pretty(&json!({
+                    "orchestration_session_id": "sess_host_record_mismatch",
+                    "record_id": "host_record_wrong_truth",
+                    "kind": "approval_required",
+                    "severity": "info",
+                    "created_at": "2026-06-08T00:00:00Z",
+                    "updated_at": "2026-06-08T00:00:00Z",
+                    "summary": "approval requested",
+                    "ingress_source_kind": "host_message",
+                    "ingress_source_id": "ingress-host-record-mismatch",
+                    "ingress_received_at": "2026-06-08T00:00:00Z",
+                    "target_host_id": "host-local",
+                    "materialization_state": "pending"
+                }))
+                .expect("serialize mismatched record_id host inbox artifact"),
+            )
+            .expect("write mismatched record_id host inbox artifact");
+
+            let failed = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_path_truth",
+                    "host-local",
+                )
+                .expect("mismatched record_id must fail closed durably");
+
+            assert_eq!(
+                failed.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+            assert_eq!(
+                failed.record_id, "host_record_path_truth",
+                "failed_closed rewrite must preserve path-stem identity"
+            );
+            let expected_reason = format!(
+                "host inbox artifact {} stored mismatched record_id host_record_wrong_truth",
+                path.display()
+            );
+            assert_eq!(
+                failed.failed_closed_reason.as_deref(),
+                Some(expected_reason.as_str())
+            );
+            let persisted = store
+                .load_host_inbox_record("host_record_path_truth")
+                .expect("reload failed closed mismatched-id artifact")
+                .expect("failed closed artifact persists");
+            assert_eq!(persisted, failed);
+            assert!(store
+                .list_obligations("sess_host_record_mismatch")
                 .expect("list obligations")
                 .is_empty());
         });
