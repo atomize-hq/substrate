@@ -22,39 +22,71 @@ pub(crate) struct HostInboxMaterializationExecution {
     pub reason: String,
 }
 
-pub(crate) fn materialize_pending_host_inbox_records_for_local_host(
+fn discover_pending_host_inbox_materialization_candidates(
     store: &AgentRuntimeStateStore,
-    local_host_id: &str,
-) -> Result<Vec<HostInboxMaterializationExecution>> {
-    let mut candidate_records = Vec::new();
+) -> Result<Vec<(Option<chrono::DateTime<chrono::Utc>>, String)>> {
+    let mut pending_records = Vec::new();
     for record_id in store.list_host_inbox_record_ids()? {
         let before = match store.load_host_inbox_record(&record_id) {
             Ok(record) => record,
             Err(_) => None,
         };
         match before {
-            Some(record) => {
-                if record.materialization_state == HostInboxMaterializationState::Materialized
-                    && !record.target_host_id.is_empty()
-                    && record.target_host_id != local_host_id
-                {
-                    continue;
-                }
-                candidate_records.push((Some(record.created_at), record.record_id));
+            Some(record)
+                if record.materialization_state == HostInboxMaterializationState::Pending =>
+            {
+                pending_records.push((Some(record.created_at), record.record_id));
             }
-            None => candidate_records.push((None, record_id)),
+            Some(_) => continue,
+            None => pending_records.push((None, record_id)),
         }
     }
-    candidate_records.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+    pending_records.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+    Ok(pending_records)
+}
 
-    let mut executions = Vec::new();
-    for (_, record_id) in candidate_records {
-        executions.push(materialize_host_inbox_record_for_local_host(
-            store,
-            &record_id,
-            local_host_id,
-        )?);
+fn build_host_inbox_materialization_retry_execution(
+    record_id: &str,
+    local_host_id: &str,
+    err: &anyhow::Error,
+) -> HostInboxMaterializationExecution {
+    HostInboxMaterializationExecution {
+        record_id: record_id.to_string(),
+        orchestration_session_id: None,
+        local_host_id: local_host_id.to_string(),
+        target_host_id: None,
+        obligation_id: None,
+        outcome: HostInboxMaterializationOutcome::Pending,
+        reason: format!("pending_local_materialization_retry: {err:#}"),
     }
+}
+
+fn materialize_discovered_host_inbox_records_for_local_host(
+    store: &AgentRuntimeStateStore,
+    candidates: Vec<(Option<chrono::DateTime<chrono::Utc>>, String)>,
+    local_host_id: &str,
+) -> Vec<HostInboxMaterializationExecution> {
+    let mut executions = Vec::new();
+    for (_, record_id) in candidates {
+        match materialize_host_inbox_record_for_local_host(store, &record_id, local_host_id) {
+            Ok(execution) => executions.push(execution),
+            Err(err) => executions.push(build_host_inbox_materialization_retry_execution(
+                &record_id,
+                local_host_id,
+                &err,
+            )),
+        }
+    }
+    executions
+}
+
+pub(crate) fn materialize_pending_host_inbox_records_for_local_host(
+    store: &AgentRuntimeStateStore,
+    local_host_id: &str,
+) -> Result<Vec<HostInboxMaterializationExecution>> {
+    let candidates = discover_pending_host_inbox_materialization_candidates(store)?;
+    let mut executions =
+        materialize_discovered_host_inbox_records_for_local_host(store, candidates, local_host_id);
     // Invalid path stems never become router work; we preserve them as
     // durable failed-closed host-inbox outcomes instead.
     for path in store.list_invalid_host_inbox_artifact_paths()? {
@@ -274,6 +306,8 @@ mod tests {
                     "host-local",
                 ))
                 .expect("persist repeatable host inbox record");
+            let discovered = discover_pending_host_inbox_materialization_candidates(store)
+                .expect("discover pending host inbox candidates before concurrent rerun");
 
             let first = materialize_host_inbox_record_for_local_host(
                 store,
@@ -281,8 +315,11 @@ mod tests {
                 "host-local",
             )
             .expect("first materialization");
-            let second = materialize_pending_host_inbox_records_for_local_host(store, "host-local")
-                .expect("idempotent rerun via host-side entrypoint");
+            let second = materialize_discovered_host_inbox_records_for_local_host(
+                store,
+                discovered,
+                "host-local",
+            );
 
             assert_eq!(first.outcome, HostInboxMaterializationOutcome::Materialized);
             assert_eq!(
@@ -463,6 +500,73 @@ mod tests {
             assert_eq!(selected.obligation_id, "host_inbox_host_record_older");
             assert_eq!(obligations[0].created_at, older.created_at);
             assert_eq!(obligations[1].created_at, newer.created_at);
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn host_inbox_materialization_continues_other_pending_records_after_unreadable_artifact() {
+        use std::os::unix::fs::PermissionsExt;
+
+        with_store(|store| {
+            persist_session(store, "sess_host_inbox_continue_after_error");
+            let unreadable = pending_record(
+                "sess_host_inbox_continue_after_error",
+                "host_record_unreadable",
+                "host-local",
+            );
+            let readable = pending_record(
+                "sess_host_inbox_continue_after_error",
+                "host_record_readable",
+                "host-local",
+            );
+            store
+                .persist_host_inbox_record(&unreadable)
+                .expect("persist unreadable host inbox record");
+            store
+                .persist_host_inbox_record(&readable)
+                .expect("persist readable host inbox record");
+
+            let unreadable_path = store
+                .host_inbox_record_path("host_record_unreadable")
+                .expect("unreadable record path");
+            let mut perms = fs::metadata(&unreadable_path)
+                .expect("unreadable record metadata")
+                .permissions();
+            let original_mode = perms.mode();
+            perms.set_mode(0o000);
+            fs::set_permissions(&unreadable_path, perms)
+                .expect("restrict unreadable record permissions");
+
+            let executions =
+                materialize_pending_host_inbox_records_for_local_host(store, "host-local")
+                    .expect("unreadable artifact should not abort other pending records");
+
+            let mut restored = fs::metadata(&unreadable_path)
+                .expect("restricted unreadable record metadata")
+                .permissions();
+            restored.set_mode(original_mode);
+            fs::set_permissions(&unreadable_path, restored)
+                .expect("restore unreadable record permissions");
+
+            assert_eq!(executions.len(), 2);
+            assert!(
+                executions.iter().any(|execution| {
+                    execution.record_id == "host_record_unreadable"
+                        && execution.outcome == HostInboxMaterializationOutcome::Pending
+                        && execution
+                            .reason
+                            .contains("pending_local_materialization_retry")
+                }),
+                "unreadable artifacts should become explanation-ready retry outcomes"
+            );
+            assert!(
+                executions.iter().any(|execution| {
+                    execution.record_id == "host_record_readable"
+                        && execution.outcome == HostInboxMaterializationOutcome::Materialized
+                }),
+                "readable sibling records should still materialize in the same batch"
+            );
         });
     }
 
