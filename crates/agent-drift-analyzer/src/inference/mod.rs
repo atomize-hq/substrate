@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use agent_session_compactor::{CompactionKind, CompactionRow};
+use agent_session_compactor::CompactionRow;
 use serde_json::Value;
 
 use crate::checkpoint::{Confidence, EvidenceRef, TaskFrame};
@@ -11,7 +11,6 @@ const EXPLICIT_DELEGATION_MARKERS: [&str; 4] =
     ["multi_agent_v1", "spawn_agent", "wait_agent", "close_agent"];
 const OPAQUE_CHILD_CONTEXT_SIGNALS: [&str; 3] =
     ["child session id", "child rollout", "separate rollout"];
-const ORCHESTRATION_CONTEXT_SIGNALS: [&str; 1] = ["spawned agent"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DelegationContext {
@@ -205,7 +204,7 @@ enum ContextSignalCategory {
 }
 
 fn collect_context_signal_evidence(
-    rows: &[CompactionRow],
+    _rows: &[CompactionRow],
     context: &ContextPack,
 ) -> Vec<ContextSignalEvidence> {
     let mut seen = BTreeSet::new();
@@ -223,53 +222,6 @@ fn collect_context_signal_evidence(
         let key = evidence_key(&candidate.evidence);
         if seen.insert(key) {
             evidence.push(candidate);
-        }
-    }
-
-    if has_visibility_signal(&evidence) {
-        return evidence;
-    }
-
-    for row in rows {
-        if !matches!(
-            row.kind,
-            CompactionKind::AssistantMessage
-                | CompactionKind::Status
-                | CompactionKind::ToolOutput
-                | CompactionKind::ToolCall
-        ) {
-            continue;
-        }
-
-        let row_text = row.text.to_ascii_lowercase();
-        for signal in OPAQUE_CHILD_CONTEXT_SIGNALS
-            .iter()
-            .chain(ORCHESTRATION_CONTEXT_SIGNALS.iter())
-        {
-            if !row_text.contains(signal) {
-                continue;
-            }
-
-            let candidate = ContextSignalEvidence {
-                category: if *signal == "spawned agent" {
-                    ContextSignalCategory::Orchestration
-                } else {
-                    ContextSignalCategory::Visibility
-                },
-                visibility: if *signal == "spawned agent" {
-                    None
-                } else {
-                    Some(ChildWorkVisibility::Opaque)
-                },
-                evidence: EvidenceRef {
-                    row: agent_session_compactor::RowRef::from_row(row),
-                    reason: format!("delegation context signal: {signal}"),
-                },
-            };
-            let key = evidence_key(&candidate.evidence);
-            if seen.insert(key) {
-                evidence.push(candidate);
-            }
         }
     }
 
@@ -396,11 +348,7 @@ fn infer_delegation_topology(
         return DelegationTopology::SingleAgent;
     }
 
-    if markers.iter().any(|marker| marker == "spawn_agent")
-        || markers.iter().any(|marker| marker == "wait_agent")
-        || markers.iter().any(|marker| marker == "close_agent")
-        || markers.iter().any(|marker| marker == "multi_agent_v1")
-    {
+    if markers.iter().any(|marker| marker == "spawn_agent") {
         return DelegationTopology::DelegatingParent;
     }
 
@@ -409,7 +357,7 @@ fn infer_delegation_topology(
 
 fn infer_child_work_visibility(
     topology: DelegationTopology,
-    markers: &[String],
+    _markers: &[String],
     context_signal_evidence: &[ContextSignalEvidence],
 ) -> ChildWorkVisibility {
     let has_partial_visibility = has_partial_child_signal(context_signal_evidence);
@@ -422,14 +370,10 @@ fn infer_child_work_visibility(
         DelegationTopology::DelegatingParent => {
             if has_partial_visibility {
                 ChildWorkVisibility::Partial
-            } else if has_opaque_visibility
-                || markers
-                    .iter()
-                    .any(|marker| matches!(marker.as_str(), "spawn_agent" | "wait_agent"))
-            {
+            } else if has_opaque_visibility {
                 ChildWorkVisibility::Opaque
             } else {
-                ChildWorkVisibility::Partial
+                ChildWorkVisibility::Opaque
             }
         }
         DelegationTopology::MixedOrAmbiguous => {
@@ -438,7 +382,7 @@ fn infer_child_work_visibility(
             } else if has_partial_visibility {
                 ChildWorkVisibility::Partial
             } else {
-                ChildWorkVisibility::Partial
+                ChildWorkVisibility::None
             }
         }
     }
@@ -575,7 +519,7 @@ fn evidence_key(evidence: &EvidenceRef) -> String {
 
 #[cfg(test)]
 mod tests {
-    use agent_session_compactor::SourceKind;
+    use agent_session_compactor::{CompactionKind, SourceKind};
     use camino::Utf8PathBuf;
 
     use crate::context::assemble_context;
@@ -626,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn delegation_treats_explicit_child_rollout_boundaries_as_opaque() {
+    fn delegation_does_not_use_quoted_prose_as_child_visibility() {
         let session = BundleSession {
             session_id: "session-alpha".to_string(),
             archival_rows: Vec::new(),
@@ -634,7 +578,7 @@ mod tests {
                 tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
                 row(
                     CompactionKind::AssistantMessage,
-                    "Child session id 019e-test lives in a separate rollout file.",
+                    "Quoted review text: \"Child session id 019e-test lives in a separate rollout file.\"",
                 ),
             ],
         };
@@ -649,6 +593,10 @@ mod tests {
         );
         assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
         assert_eq!(delegation.counter_evidence.len(), 1);
+        assert!(!delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence.reason.contains("delegation context signal")));
     }
 
     #[test]
@@ -700,6 +648,25 @@ mod tests {
         assert!(delegation.counter_evidence[0]
             .reason
             .contains("lacked child visibility/context evidence"));
+    }
+
+    #[test]
+    fn delegation_degrades_non_spawn_markers_to_mixed_or_ambiguous() {
+        for marker in ["multi_agent_v1", "wait_agent", "close_agent"] {
+            let session = BundleSession {
+                session_id: format!("session-{marker}"),
+                archival_rows: Vec::new(),
+                compact_rows: vec![tool_call(marker, "{\"agent_type\":\"worker\"}")],
+            };
+            let context = assemble_context(&session);
+
+            let delegation = infer_delegation_context(&session, &context);
+
+            assert_eq!(delegation.topology, DelegationTopology::MixedOrAmbiguous);
+            assert_eq!(delegation.child_work_visibility, ChildWorkVisibility::None);
+            assert_eq!(delegation.markers, vec![marker.to_string()]);
+            assert_eq!(delegation.counter_evidence.len(), 1);
+        }
     }
 
     fn row(kind: CompactionKind, text: &str) -> CompactionRow {
