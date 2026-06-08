@@ -708,18 +708,16 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-If only one packet lands next, it should be `R3.5`.
+`R3.5` is now landed on this worktree, so the next open packet is `R4`.
 
 The next honest implementation target is:
 
 - keep `R3` closed as the completed turn-context packet family
-- land the narrow replay/live trigger-headline canonicalization seam before deeper analyzer
-  packets
-- start `R4` only after that headline seam is closed, if the next task really is session-level
-  archetype classification
+- keep `R3.5` closed as the completed replay/live trigger-headline canonicalization packet
+- start `R4` as the next analyzer packet for session-level archetype classification
 - keep `R5` progress semantics and `R6` scorer cutover queued behind `R4`
 
-That is the current top-of-stack action after `R3`.
+That is the current top-of-stack action after `R3.5`.
 
 ## Research-Informed Design Directions
 

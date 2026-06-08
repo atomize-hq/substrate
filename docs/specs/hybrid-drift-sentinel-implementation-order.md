@@ -624,16 +624,12 @@ Packet 18 note:
   - replay/live operator presentation renders the same compact turn-context view for matching
     checkpoints
   - the focused `R3` analyzer and sentinel verification wall is green
-  - real-rollout proof also exposed one remaining sentinel-local seam: replay still headlines some
-    ordinary flagged checkpoints as `scheduler_repeated_failure_trigger` while live headlines the
-    same checkpoints as `checkpoint_ready`
-  - the next packet is `R3.5`, not the already-landed `R3-5` turn-context packet; repo docs and
-    file names for this follow-on use `r3_5` to keep that distinction explicit
-  - `R3.5` is the next open packet after `R3`; it is limited to sentinel-local trigger-headline
-    canonicalization, keeps ordinary checkpoint arrivals on `checkpoint_ready`, and reserves
-    `scheduler_repeated_failure_trigger` for true synthetic scheduler fast-path events
-  - `R4`, `R5`, `R6`, and `R7` remain explicitly out of scope until that narrower `R3.5` cutover
-    is landed
+  - the narrower `R3.5` follow-on packet is now landed: replay/live ordinary checkpoint headlines
+    stay canonicalized on `checkpoint_ready`, while `scheduler_repeated_failure_trigger` remains
+    reserved for true synthetic scheduler fast-path events
+  - the next open packet after `R3.5` is `R4` session-archetype classification
+  - `R5`, `R6`, and `R7` remain explicitly out of scope until that narrower `R4` cutover is
+    landed
 
 ## If You Want Fewer Packets
 

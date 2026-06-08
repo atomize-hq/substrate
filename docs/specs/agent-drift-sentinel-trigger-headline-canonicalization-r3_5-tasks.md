@@ -10,9 +10,10 @@ This task list implements:
 Completion status on `2026-06-07`:
 
 - `R3` is landed on this worktree.
-- `R3.5` authority docs are now present and intentionally use `r3_5` naming to avoid confusion
-  with the already-landed `R3-5` packet from the turn-context family.
-- `R4`, `R5`, `R6`, and `R7` remain outside the `R3.5` boundary.
+- `R3.5` is landed on this worktree and intentionally uses `r3_5` naming to avoid confusion with
+  the already-landed `R3-5` packet from the turn-context family.
+- `R4` is now the next open packet family.
+- `R5`, `R6`, and `R7` remain outside the completed `R3.5` boundary.
 
 ## Packet R3.5-1: Repo Doc Contract Lock
 
@@ -38,7 +39,7 @@ Completion status on `2026-06-07`:
 
 ## Packet R3.5-2: Canonical Checkpoint Headlines
 
-- [ ] Task: Canonicalize ordinary checkpoint presentation across replay and live
+- [x] Task: Canonicalize ordinary checkpoint presentation across replay and live
   - Acceptance:
     - replay ordinary checkpoint presentation headlines `checkpoint_ready`
     - live ordinary checkpoint-ready presentation continues to headline `checkpoint_ready`
@@ -55,7 +56,7 @@ Completion status on `2026-06-07`:
 
 ## Packet R3.5-3: Fast-Path Preservation And Focused Proof
 
-- [ ] Task: Preserve synthetic repeated-failure labeling and lock focused regressions
+- [x] Task: Preserve synthetic repeated-failure labeling and lock focused regressions
   - Acceptance:
     - synthetic repeated-failure events still render
       `scheduler_repeated_failure_trigger`
@@ -81,3 +82,11 @@ Packet `R3.5` exit condition:
 - analyzer posture, diagnostics, drift summary, and turn-context rendering remain intact
 - the packet lands without widening into analyzer semantics or sentinel interpretation
   consolidation
+
+Packet `R3.5` completion note on `2026-06-07`:
+
+- the repo now contains the checkpoint-ready headline canonicalization for ordinary replay/live
+  checkpoint presentation
+- focused replay/live regressions exist for ordinary checkpoint headlines and synthetic scheduler
+  fast-path distinction
+- the next open packet moves to `R4` session-archetype classification
