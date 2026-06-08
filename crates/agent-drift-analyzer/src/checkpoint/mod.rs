@@ -7,7 +7,8 @@ use crate::input::BundleSession;
 use crate::{
     context::assemble_context, context::collect_command_observations,
     context::focusable_directive_rows, context::CommandObservation, context::ContextPack,
-    inference::infer_task_frame, scoring::DriftStateHint, scoring::ScoredDrift,
+    inference::infer_delegation_context, inference::infer_task_frame, inference::DelegationContext,
+    scoring::DriftStateHint, scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -29,6 +30,7 @@ pub(crate) struct CheckpointAnalysis {
     pub ordinal: usize,
     pub current: CheckpointSlice,
     pub previous: Option<CheckpointSlice>,
+    pub delegation: DelegationContext,
     pub interval: IntervalSlice,
     pub turn_context: TurnContext,
     pub repetition: RepetitionSlice,
@@ -99,6 +101,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
         let context = assemble_context(&window);
         let task_frame = infer_task_frame(&context);
+        let delegation = infer_delegation_context(&window, &context);
         let current = CheckpointSlice {
             window,
             context,
@@ -121,6 +124,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             ordinal: index + 1,
             current: current.clone(),
             previous: previous.clone(),
+            delegation,
             interval,
             turn_context,
             repetition,
