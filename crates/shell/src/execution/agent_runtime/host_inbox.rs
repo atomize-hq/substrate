@@ -237,8 +237,7 @@ impl HostInboxRecord {
                     );
                 }
                 validate_optional_exact_identity(
-                    Some(self.orchestration_session_id.as_str())
-                        .filter(|value| !value.is_empty()),
+                    Some(self.orchestration_session_id.as_str()).filter(|value| !value.is_empty()),
                     "orchestration_session_id",
                     "host inbox record",
                 )?;
