@@ -3597,18 +3597,60 @@ fn continue_world_worker_attention_required(
 fn continue_world_worker_event_payload(
     event: &substrate_common::agent_events::AgentEvent,
 ) -> serde_json::Value {
+    let mut payload = None;
     for pointer in [
         "/payload",
         "/uaa_event/payload",
         "/uaa_event/raw_event/payload",
         "/raw_event/payload",
     ] {
-        if let Some(payload) = event.data.pointer(pointer) {
-            return payload.clone();
+        if let Some(candidate) = event.data.pointer(pointer) {
+            payload = Some(candidate.clone());
+            break;
+        }
+    }
+    let mut payload = payload.unwrap_or_else(|| event.data.clone());
+
+    let payload_missing_event_id =
+        continue_world_worker_string_field(&payload, &["/event_id"]).is_none();
+    let payload_missing_message_id =
+        continue_world_worker_string_field(&payload, &["/message_id"]).is_none();
+    if let Some(object) = payload.as_object_mut() {
+        if payload_missing_event_id {
+            if let Some(event_id) = continue_world_worker_string_field(
+                &event.data,
+                &[
+                    "/event_id",
+                    "/uaa_event/event_id",
+                    "/uaa_event/raw_event/event_id",
+                    "/raw_event/event_id",
+                ],
+            ) {
+                object.insert(
+                    "event_id".to_string(),
+                    serde_json::Value::String(event_id.to_string()),
+                );
+            }
+        }
+        if payload_missing_message_id {
+            if let Some(message_id) = continue_world_worker_string_field(
+                &event.data,
+                &[
+                    "/message_id",
+                    "/uaa_event/message_id",
+                    "/uaa_event/raw_event/message_id",
+                    "/raw_event/message_id",
+                ],
+            ) {
+                object.insert(
+                    "message_id".to_string(),
+                    serde_json::Value::String(message_id.to_string()),
+                );
+            }
         }
     }
 
-    event.data.clone()
+    payload
 }
 
 #[cfg(target_os = "linux")]
@@ -5871,6 +5913,40 @@ mod tests {
         assert_eq!(
             classified.event_class,
             ContinueWorldWorkerEventClassV1::Result
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_preserves_exact_causation_ids_from_outer_event_envelope(
+    ) {
+        let submit = sample_continue_submit_request();
+        let classified = classify_continue_world_worker_event(
+            &submit,
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &sample_continue_stream_event(json!({
+                "event_class": "follow_up_question",
+                "event_id": "evt-envelope",
+                "message_id": "msg-envelope",
+                "payload": {
+                    "message": "need host confirmation"
+                }
+            })),
+        )
+        .expect("classification should succeed")
+        .expect("event should surface");
+
+        assert_eq!(
+            classified.payload.get("message"),
+            Some(&json!("need host confirmation"))
+        );
+        assert_eq!(
+            classified.payload.get("event_id"),
+            Some(&json!("evt-envelope"))
+        );
+        assert_eq!(
+            classified.payload.get("message_id"),
+            Some(&json!("msg-envelope"))
         );
     }
 
