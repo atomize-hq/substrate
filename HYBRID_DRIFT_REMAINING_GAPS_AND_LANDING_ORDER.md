@@ -405,6 +405,8 @@ The following work is intentionally not part of the `R1` family as currently sco
   - falls under `R2`
 - per-checkpoint turn context, long-turn detection, and turn-local checkpoint density
   - falls under `R3`
+- delegation-aware analyzer topology and child-work visibility boundary for delegated/subagent runs
+  - falls under `R3.75`
 - session archetype classification such as troubleshooting vs planning vs review / closeout
   - falls under `R4`
 - archetype-aware progress semantics such as frontier movement, narrowing candidate sets, or
@@ -413,8 +415,11 @@ The following work is intentionally not part of the `R1` family as currently sco
 - broader drift-scorer redesign that combines typed outcome evidence with turn context, archetype,
   and progress modules
   - falls under `R6`
-- broader replay/live checkpoint interpretation redesign inside sentinel
+- full delegated-session semantic support beyond the narrow delegation-aware boundary, including
+  supported parent/child progress and drift interpretation
   - falls under `R7`
+- broader replay/live checkpoint interpretation redesign inside sentinel
+  - falls under `R8`
 
 The `R1` family is only the analyzer-local evidence-surface correction, the repeated
 verification-loop honesty fix it exposed, the bounded replay proof needed to show those narrower
@@ -592,7 +597,7 @@ inconsistency.
 - keep `scheduler_repeated_failure_trigger` available only when the operator surface is actually
   describing a synthetic scheduler fast path rather than an ordinary checkpoint arrival
 - keep the fix sentinel-local to replay/live presentation plumbing and focused regression proof
-- keep `R4`, `R5`, `R6`, and `R7` explicitly out of scope for this packet
+- keep `R3.75`, `R4`, `R5`, `R6`, and `R8` explicitly out of scope for this packet
 
 ### Acceptance
 
@@ -604,15 +609,45 @@ inconsistency.
 - the fix does not widen into analyzer schema changes, analyzer scorer changes, or full sentinel
   interpretation consolidation
 
+## Packet R3.75: Delegation-Aware Analyzer Boundary
+
+### Objective
+
+Add one analyzer-owned delegation boundary that records visible delegation topology and child-work
+visibility before later semantic packets harden single-agent assumptions into archetype, progress,
+and scorer logic.
+
+### Why After R3.5
+
+`R3` and `R3.5` established the ordinary checkpoint structure and replay/live compatibility, but
+delegated sessions are still screened out rather than modeled. The stack needs one narrow
+delegation-aware seam before `R4` through `R6` start making deeper semantic claims.
+
+### Scope
+
+- classify ordinary single-agent versus visible delegated-session topology
+- record whether child work is visible, partially visible, or opaque from the current checkpoint
+- keep the first seam descriptive and confidence-bearing rather than evaluative
+- avoid claiming child intent, child progress, or delegated-specific failure modes in this packet
+
+### Acceptance
+
+- delegated sessions are recognized as delegated rather than silently treated as ordinary
+  single-agent sessions
+- non-delegated sessions remain unchanged on the existing bounded non-subagent corpus
+- later semantic packets have an analyzer-owned boundary they can use to cap confidence or suppress
+  over-claims when child work is opaque
+
 ## Packet R4: Session Archetype Classification
 
 ### Objective
 
 Add one analyzer-owned `session_archetype` module.
 
-### Why After R3.5
+### Why After R3.75
 
-Turn context provides the raw structure; archetype turns that structure into meaning.
+Turn context provides the raw structure, and the delegation-aware boundary limits over-claiming on
+delegated runs. Archetype turns that bounded structure into explicit session meaning.
 
 ### Scope
 
@@ -674,7 +709,41 @@ analyzer modules rather than home-grown heuristic islands.
 - long autonomous turns are evaluated differently from multi-turn conversational sessions
 - flagged sessions become materially more honest on known replay artifacts
 
-## Packet R7: Sentinel Interpretation Consolidation
+## Packet R7: Full Delegated-Session Support
+
+### Objective
+
+Extend the analyzer from delegation-aware boundary detection into supported delegated-session
+semantics so parent-visible orchestration and child-visible work can be interpreted honestly before
+sentinel interpretation is consolidated.
+
+### Why After R6
+
+`R3.75` only records delegation topology and visibility limits. `R4` through `R6` then make the
+ordinary single-session semantics explicit and honest. Full delegated-session support should come
+only after those ordinary semantics are stable, otherwise the repo risks mixing baseline semantic
+uncertainty with delegation-specific complexity.
+
+### Scope
+
+- define supported delegated-session semantics beyond mere topology detection
+- distinguish parent orchestration activity from child execution activity
+- allow analyzer modules to describe parent-visible progress separately from child-visible progress
+  when child evidence is available
+- add bounded delegated-session regression coverage for supported cases
+- keep the packet analyzer-owned; do not broaden into sentinel interpretation consolidation here
+
+### Acceptance
+
+- delegated sessions are no longer only "detected and downgraded"; at least a bounded supported
+  subset receives explicit semantic handling
+- parent waiting or orchestration is not misread as direct child implementation progress
+- delegated-session drift semantics are materially more honest on known delegated artifacts than the
+  `R3.75` boundary alone
+- `R8` can consume one stabilized analyzer semantic seam rather than inventing delegated-session
+  interpretation itself
+
+## Packet R8: Sentinel Interpretation Consolidation
 
 ### Objective
 
@@ -708,14 +777,18 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5` is now landed on this worktree, so the next open packet is `R4`.
+`R3.5` is now landed on this worktree, so the next open packet is `R3.75`.
 
 The next honest implementation target is:
 
 - keep `R3` closed as the completed turn-context packet family
 - keep `R3.5` closed as the completed replay/live trigger-headline canonicalization packet
-- start `R4` as the next analyzer packet for session-level archetype classification
-- keep `R5` progress semantics and `R6` scorer cutover queued behind `R4`
+- start `R3.75` as the next analyzer packet for delegation-aware topology and child-visibility
+  classification
+- keep `R4` session archetype, `R5` progress semantics, and `R6` scorer cutover queued behind
+  `R3.75`
+- keep full delegated-session support as `R7` behind `R6`
+- keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 That is the current top-of-stack action after `R3.5`.
 

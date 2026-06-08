@@ -615,7 +615,7 @@ Packet 18 note:
   - `R3-3`: deterministic turn-slice derivation, analyzer summary output, and long-turn vs
     many-short-turn analyzer regressions
   - `R3-4`: sentinel `v0.4` compatibility and compact replay/live turn-context presentation
-  - `R4`, `R5`, and `R6` stay explicitly out of scope for the `R3` family
+  - `R3.75`, `R4`, `R5`, and `R6` stay explicitly out of scope for the `R3` family
 - `2026-06-07`: the `R3` turn-context family is landed end-to-end:
   - analyzer checkpoints now emit `schema_version = "v0.4"` with structured `turn_context`
   - analyzer summary renders compact turn-context inspection that distinguishes long autonomous
@@ -627,9 +627,9 @@ Packet 18 note:
   - the narrower `R3.5` follow-on packet is now landed: replay/live ordinary checkpoint headlines
     stay canonicalized on `checkpoint_ready`, while `scheduler_repeated_failure_trigger` remains
     reserved for true synthetic scheduler fast-path events
-  - the next open packet after `R3.5` is `R4` session-archetype classification
-  - `R5`, `R6`, and `R7` remain explicitly out of scope until that narrower `R4` cutover is
-    landed
+  - the next open packet after `R3.5` is `R3.75` delegation-aware analyzer boundary
+  - `R4`, `R5`, `R6`, `R7`, and `R8` remain explicitly out of scope until that narrower `R3.75`
+    cutover is landed
 
 ## If You Want Fewer Packets
 

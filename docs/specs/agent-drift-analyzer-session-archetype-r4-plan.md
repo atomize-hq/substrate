@@ -9,7 +9,8 @@ Implementation status on `2026-06-07`:
 - `R3` turn-context promotion is landed with analyzer checkpoint schema `v0.4`.
 - `R3.5` replay/live trigger-headline canonicalization is landed and closes the last known
   sentinel-local checkpoint headline mismatch from the `R3` family.
-- `R5`, `R6`, and `R7` remain outside the next-packet boundary.
+- `R3.75` delegation-aware analyzer boundary is now the immediate next packet before `R4`.
+- `R5`, `R6`, `R7`, and `R8` remain outside the next-packet boundary.
 
 This plan implements:
 
@@ -21,8 +22,8 @@ Validation gate for this phase:
 - do not start `R4-2+` code work until the `SPECIFY` artifact is reviewed and accepted
 - if the spec changes materially, update the spec first and then re-align this plan
 
-`R4` is the first session-meaning packet after the landed `R3` structure family and the landed
-`R3.5` presentation cleanup.
+`R4` is the first session-meaning packet after the landed `R3` structure family, the landed
+`R3.5` presentation cleanup, and the now-required `R3.75` delegation-aware analyzer boundary.
 
 Its job is to promote session archetype from an implicit human inference into explicit
 analyzer-owned checkpoint state that later packets can consume directly.
@@ -267,7 +268,8 @@ Confirm the spec, plan, and tasks all agree that:
 
 - `R4` is checkpoint-local session-archetype classification only
 - schema widening is explicit and versioned
-- `R5` progress, `R6` scorer changes, and `R7` sentinel consolidation stay out of scope
+- `R5` progress, `R6` scorer changes, `R7` full delegated-session support, and `R8` sentinel
+  consolidation stay out of scope
 
 ### Checkpoint 2: Analyzer `v0.5` Contract Passes
 

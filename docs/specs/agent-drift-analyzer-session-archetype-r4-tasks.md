@@ -11,8 +11,9 @@ Completion status on `2026-06-07`:
 
 - The analyzer outcome-evidence `R1` family is landed on this worktree.
 - `R2`, `R3`, and `R3.5` are landed on this worktree.
-- `R4` is now the next open packet family.
-- `R5`, `R6`, and `R7` remain outside the `R4` boundary.
+- `R3.75` is now the immediate next packet before `R4`.
+- `R4` remains the next session-archetype packet family after `R3.75`.
+- `R5`, `R6`, `R7`, and `R8` remain outside the `R4` boundary.
 
 Validation gate for this phase:
 
@@ -25,8 +26,8 @@ Validation gate for this phase:
 - [x] Task: Lock the `R4` packet boundary and `v0.5` session-archetype contract in repo docs
   - Acceptance:
     - docs define `R4` as checkpoint-local session-archetype classification only
-    - docs explicitly keep `R5` progress, `R6` scorer cutover, and `R7` sentinel consolidation
-      out of scope
+    - docs explicitly keep `R5` progress, `R6` scorer cutover, `R7` full delegated-session
+      support, and `R8` sentinel consolidation out of scope
     - docs define `SessionArchetype` and `SessionArchetypeLabel`
     - docs state that analyzer checkpoints widen explicitly from `v0.4` to `v0.5`
     - docs define the initial archetypes:
@@ -55,7 +56,7 @@ Packet `R4-1` historical exit condition before `R4-2+` lands:
 - repo docs lock the four initial archetype labels and the evidence-backed classification rule
 - repo docs lock the AgentLens-style lower intent-evidence layer as the preferred implementation
   direction
-- `R4-2`, `R4-3`, `R4-4`, `R5`, `R6`, and `R7` remain unstarted here
+- `R4-2`, `R4-3`, `R4-4`, `R5`, `R6`, `R7`, and `R8` remain unstarted here
 
 ## Packet R4-2: Analyzer Session-Archetype Contract And Export
 

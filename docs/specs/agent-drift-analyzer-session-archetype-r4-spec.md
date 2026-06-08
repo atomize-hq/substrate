@@ -2,9 +2,11 @@
 
 ## Assumptions I'm Making
 
-1. Live repo truth on `2026-06-07` is the authority: the analyzer outcome-evidence `R1` family,
+1. Live repo truth on `2026-06-08` is the authority: the analyzer outcome-evidence `R1` family,
    acceptance-fixture `R2`, turn-context `R3`, and sentinel trigger-headline `R3.5` packets are
-   landed on this worktree, so the next open packet is `R4` session-archetype classification.
+   landed on this worktree; the immediate next packet is `R3.75` delegation-aware analyzer
+   boundary, and `R4` session-archetype classification remains the next packet family after that
+   boundary lands.
 2. `R4` is intentionally narrower than `R5+`. Its job is to add explicit checkpoint-local
    archetype state, not archetype-aware progress semantics, drift-scorer retuning, or sentinel
    scheduler changes.
@@ -60,7 +62,8 @@ Success means:
   - planning / brainstorming that expects directive synthesis more than verification density
   - autonomous implementation that expects sustained write/test loops against a stable objective
   - verification / closeout that expects narrowing scope and proof-oriented verification
-- `R4` does not widen into `R5` progress semantics, `R6` scorer cutover, or `R7` sentinel
+- `R4` does not widen into `R5` progress semantics, `R6` scorer cutover, `R7` full
+  delegated-session support, or `R8` sentinel
   interpretation consolidation
 
 ## Tech Stack
