@@ -228,10 +228,7 @@ impl OrchestrationObligationRecord {
         validate_optional_exact_identity(self.ingress_source_id.as_deref(), "ingress_source_id")?;
         validate_optional_host_id(self.origin_host_id.as_deref(), "origin_host_id")?;
         validate_optional_host_id(self.target_host_id.as_deref(), "target_host_id")?;
-        validate_optional_exact_identity(
-            self.causation_event_id.as_deref(),
-            "causation_event_id",
-        )?;
+        validate_optional_exact_identity(self.causation_event_id.as_deref(), "causation_event_id")?;
         validate_optional_exact_identity(
             self.causation_message_id.as_deref(),
             "causation_message_id",
