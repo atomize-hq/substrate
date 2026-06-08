@@ -324,15 +324,19 @@ fn collect_directive_signal_evidence(
             continue;
         }
 
-        for path in extract_path_hints(&row.text) {
-            let Some(child_session_id) = separate_child_rollout_session_id(&path, session_id)
-            else {
-                continue;
-            };
+        let separate_child_rollouts = extract_path_hints(&row.text)
+            .into_iter()
+            .filter_map(|path| {
+                let child_session_id =
+                    separate_child_rollout_session_id(&path, session_id)?.to_string();
+                Some((path, child_session_id))
+            })
+            .collect::<Vec<_>>();
 
+        for (path, child_session_id) in &separate_child_rollouts {
             let already_observed_with_delegation_visibility =
                 context.command_observations.iter().any(|command| {
-                    command_observation_has_child_visibility_evidence(command, &path, session_id)
+                    command_observation_has_child_visibility_evidence(command, path, session_id)
                 });
             if already_observed_with_delegation_visibility {
                 continue;
@@ -348,6 +352,21 @@ fn collect_directive_signal_evidence(
                     ),
                 },
             });
+        }
+
+        if separate_child_rollouts.is_empty() {
+            for child_session_id in collect_separate_child_session_ids(&row.text, session_id) {
+                evidence.push(ContextSignalEvidence {
+                    category: ContextSignalCategory::Visibility,
+                    visibility: Some(ChildWorkVisibility::Opaque),
+                    evidence: EvidenceRef {
+                        row: agent_session_compactor::RowRef::from_row(row),
+                        reason: format!(
+                            "delegation directive surface references separate child session id: {child_session_id}"
+                        ),
+                    },
+                });
+            }
         }
     }
 
@@ -984,6 +1003,30 @@ mod tests {
             .all(|evidence| !evidence
                 .reason
                 .contains("child rollout surface links child/subagent work")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
+        assert!(delegation.counter_evidence[0]
+            .reason
+            .contains("remained child-opaque"));
+    }
+
+    #[test]
+    fn delegation_harvests_directive_child_session_id_without_rollout_path() {
+        let directive = "/goal Inspect the spawned agent handoff before checkpoint analysis; child session id 019ea111-1111-7111-8111-111111111111 remains in a separate rollout file.";
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![row(CompactionKind::UserMessage, directive)],
+            compact_rows: vec![tool_call("spawn_agent", "{\"agent_type\":\"worker\"}")],
+        };
+
+        let delegation = infer_delegation_context(&session, &assemble_context(&session));
+
+        assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence.reason.contains(
+                "delegation directive surface references separate child session id: 019ea111-1111-7111-8111-111111111111"
+            )));
         assert_eq!(delegation.counter_evidence.len(), 1);
         assert!(delegation.counter_evidence[0]
             .reason
