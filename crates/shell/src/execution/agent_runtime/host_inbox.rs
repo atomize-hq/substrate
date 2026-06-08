@@ -212,7 +212,7 @@ impl HostInboxRecord {
 fn validate_host_inbox_record_id(record_id: &str) -> Result<()> {
     validate_required_exact_identity(Some(record_id), "record_id", "host inbox record")?;
 
-    if Path::new(record_id).is_absolute() || looks_like_windows_absolute_path(record_id) {
+    if Path::new(record_id).is_absolute() || looks_like_windows_drive_qualified_path(record_id) {
         anyhow::bail!("host inbox record must not persist an absolute record_id");
     }
 
@@ -223,12 +223,11 @@ fn validate_host_inbox_record_id(record_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn looks_like_windows_absolute_path(value: &str) -> bool {
+fn looks_like_windows_drive_qualified_path(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes.len() >= 3
+    bytes.len() >= 2
         && bytes[1] == b':'
         && bytes[0].is_ascii_alphabetic()
-        && matches!(bytes[2], b'/' | b'\\')
 }
 
 #[allow(dead_code)]
@@ -440,6 +439,12 @@ mod tests {
         let err = record
             .validate()
             .expect_err("windows absolute record_id must fail validation");
+        assert!(err.to_string().contains("absolute record_id"));
+
+        record.record_id = "C:host_record".to_string();
+        let err = record
+            .validate()
+            .expect_err("windows drive-relative record_id must fail validation");
         assert!(err.to_string().contains("absolute record_id"));
     }
 }

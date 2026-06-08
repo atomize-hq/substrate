@@ -11118,6 +11118,11 @@ mod tests {
                 .expect_err("windows absolute record_id must fail closed");
             assert!(err.to_string().contains("absolute record_id"));
 
+            let err = store
+                .host_inbox_record_path("C:host_record")
+                .expect_err("windows drive-relative record_id must fail closed");
+            assert!(err.to_string().contains("absolute record_id"));
+
             let mut record = pending_host_inbox_record(
                 "sess_host_inbox",
                 "host_record_gamma",
