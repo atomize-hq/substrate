@@ -73,7 +73,11 @@ pub(crate) fn infer_delegation_context(
 ) -> DelegationContext {
     let rows = delegation_rows(session);
     let marker_evidence = collect_marker_evidence(rows);
-    let context_signal_evidence = collect_context_signal_evidence(rows, context);
+    let context_signal_evidence = if marker_evidence.markers.is_empty() {
+        Vec::new()
+    } else {
+        collect_context_signal_evidence(rows, context)
+    };
     let supporting_evidence = dedupe_evidence(
         marker_evidence.evidence.iter().chain(
             context_signal_evidence
@@ -253,13 +257,10 @@ fn dedupe_evidence<'a>(items: impl Iterator<Item = &'a EvidenceRef>) -> Vec<Evid
 
 fn infer_delegation_topology(
     markers: &[String],
-    context_signal_evidence: &[ContextSignalEvidence],
+    _context_signal_evidence: &[ContextSignalEvidence],
 ) -> DelegationTopology {
     if markers.is_empty() {
-        if context_signal_evidence.is_empty() {
-            return DelegationTopology::SingleAgent;
-        }
-        return DelegationTopology::MixedOrAmbiguous;
+        return DelegationTopology::SingleAgent;
     }
 
     if markers.iter().any(|marker| marker == "spawn_agent")
@@ -385,6 +386,26 @@ mod tests {
             compact_rows: vec![tool_call(
                 "functions.shell_command",
                 "{\"command\":\"rg -n 'rollout-.*session' docs/specs\",\"workdir\":\"/repo\"}",
+            )],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::SingleAgent);
+        assert_eq!(delegation.child_work_visibility, ChildWorkVisibility::None);
+        assert!(delegation.markers.is_empty());
+        assert!(delegation.supporting_evidence.is_empty());
+    }
+
+    #[test]
+    fn delegation_requires_explicit_markers_before_harvesting_context_signals() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![row(
+                CompactionKind::AssistantMessage,
+                "Child session id 019e-test lives in a separate rollout file after the spawned agent completed work.",
             )],
         };
         let context = assemble_context(&session);
