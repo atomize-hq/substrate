@@ -11,16 +11,15 @@ The repo already has:
 3. retained world-member launch and follow-up seams on the runtime side,
 4. a narrow public human control plane under `substrate agent start|turn|reattach|fork|stop`.
 
-What the repo does not yet have is a frozen contract for how a host orchestration agent asks Substrate to create, steer, inspect, or stop world-side agent work.
+What the repo did not yet have when this design was first drafted was a frozen contract for how a host orchestration agent asks Substrate to create, steer, inspect, or stop world-side agent work.
 
-That gap is real:
+That historical gap mattered because:
 
-1. there is no landed orchestrator-to-world steering protocol,
-2. there is no frozen request/response envelope for host agent dispatch into world,
-3. the queued toolbox ADRs are still control-plane placeholders rather than live implementation truth,
-4. the existing toolbox posture is intentionally introspection-only and must not be mistaken for a world-execution surface.
+1. the repo needed one semantic control-plane contract before implementation could widen safely,
+2. the queued toolbox ADRs were placeholders rather than live implementation truth,
+3. the existing toolbox posture was intentionally introspection-only and could not be mistaken for a world-execution surface.
 
-This design fills that exact gap.
+This design filled that semantic gap and now sits above the newer landed transport/runtime truth documented in the companion toolbox DESIGN docs.
 
 ## Relationship To Existing Decisions
 
@@ -29,7 +28,9 @@ This design must compose with the following existing repo truth:
 1. [ADR-0047](../docs/adr/implemented/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md): the durable authority is the orchestration session, not any one attached host client.
 2. [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](./29-shared-agent-dispatch-envelope-and-capability-override-contract.md): inventory-backed and persisted-attach-backed dispatch already share one internal contract family.
 3. [11-in-world-member-dispatch-over-existing-host-world-transport.md](./11-in-world-member-dispatch-over-existing-host-world-transport.md): world-scoped member execution is a real runtime seam and should stay agent-native rather than being replaced by generic tools.
-4. [ADR-0026](../docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md) and [ADR-0045](../docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md): the future toolbox remains an internal control-plane surface and must not become a second execution plane.
+4. [DESIGN-internal-toolbox-transport-and-session-binding.md](./DESIGN-internal-toolbox-transport-and-session-binding.md): the toolbox transport and session-binding floor are now landed runtime truth.
+5. [DESIGN-host-orchestrator-tool-invocation-surface.md](./DESIGN-host-orchestrator-tool-invocation-surface.md): the remaining gap is the agent-facing invocation surface above the landed internal transport.
+6. [ADR-0026](../docs/adr/draft/ADR-0026-orchestration-toolbox-mcp.md) and [ADR-0045](../docs/adr/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md): the queued ADRs remain placeholders and must not be mistaken for current wire-contract truth.
 
 ## Problem Statement
 
@@ -65,18 +66,19 @@ This design does not:
 5. define the durable obligation-ledger payload schema in full,
 6. define the full policy schema in final implementation syntax.
 
-## Current Gap: No Frozen Steering Contract Exists Yet
+## Current Gap: The Remaining Missing Seam Is Agent-Facing Invocation
 
-The user concern is correct: there is not yet a landed protocol/contract/tool surface for host orchestration agents sending messages to world agents or vice versa.
+The original concern behind this design is still valid, but current repo truth has moved forward.
 
 Current repo posture:
 
-1. retained world-member execution exists as a runtime capability,
-2. exact public human follow-up to world members exists through narrow `(orchestration_session_id, backend_id)` paths,
-3. the queued toolbox ADRs still describe a control-plane direction, not landed steering verbs,
-4. no current doc freezes the internal orchestrator-to-world request and response envelopes.
+1. retained and ephemeral world dispatch verbs are now landed through the internal control plane,
+2. the internal toolbox transport and typed request/outcome contract now exist,
+3. exact public human follow-up to world members still exists only through narrow sanctioned caller paths,
+4. the queued toolbox ADRs still describe placeholder direction rather than the landed transport/runtime truth,
+5. what is still missing is the live host orchestrator’s actual tool/invocation surface above that landed transport.
 
-This design therefore introduces that missing seam explicitly.
+This design therefore remains the semantic authority for the dispatch contract, while the newer toolbox transport and tool-invocation docs close the runtime and agent-surface gaps around it.
 
 ## Conceptual Model
 
