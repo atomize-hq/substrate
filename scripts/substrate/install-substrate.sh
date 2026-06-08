@@ -2414,8 +2414,8 @@ install_macos() {
   local doctor_original_path
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
-  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
-  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" run_world_checks "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
   update_shell_path "${bin_dir}"

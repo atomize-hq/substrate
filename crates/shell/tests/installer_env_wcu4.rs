@@ -35,6 +35,35 @@ fn installer_scripts_do_not_export_substrate_override_by_default() {
 }
 
 #[test]
+fn installer_scripts_export_substrate_home_for_runtime_state() {
+    let release_windows_installer = read_repo_file("scripts/windows/install-substrate.ps1");
+    assert!(
+        release_windows_installer.contains("`$env:SUBSTRATE_HOME = `$substrateRoot"),
+        "windows release installer profile must export SUBSTRATE_HOME so runtime state follows the install prefix"
+    );
+
+    let dev_windows_installer = read_repo_file("scripts/windows/dev-install-substrate.ps1");
+    assert!(
+        dev_windows_installer.contains("`$env:SUBSTRATE_HOME = '$Prefix'"),
+        "windows dev installer profile must export SUBSTRATE_HOME so runtime state follows the install prefix"
+    );
+
+    let unix_installer = read_repo_file("scripts/substrate/install-substrate.sh");
+    assert!(
+        unix_installer.contains(
+            "SHIM_ORIGINAL_PATH=\"${ORIGINAL_PATH}\" SUBSTRATE_ROOT=\"${PREFIX}\" SUBSTRATE_HOME=\"${PREFIX}\" run_world_checks"
+        ),
+        "unix release installer must pass SUBSTRATE_HOME during post-install doctor checks"
+    );
+    assert!(
+        unix_installer.contains(
+            "SHIM_ORIGINAL_PATH=\"${ORIGINAL_PATH}\" SUBSTRATE_ROOT=\"${PREFIX}\" SUBSTRATE_HOME=\"${PREFIX}\" sync_world_deps"
+        ),
+        "unix release installer must pass SUBSTRATE_HOME during post-install world deps sync"
+    );
+}
+
+#[test]
 fn dev_install_scripts_explicitly_select_gateway_package() {
     let unix_installer = read_repo_file("scripts/substrate/dev-install-substrate.sh");
     assert!(

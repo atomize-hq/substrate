@@ -270,6 +270,7 @@ $profileContent = @"
 `$shimDir = "$Prefix\shims"
 `$binDir = "$Prefix\bin"
 `$env:SUBSTRATE_ROOT = `$substrateRoot
+`$env:SUBSTRATE_HOME = `$substrateRoot
 if (-not `$env:SHIM_ORIGINAL_PATH) {
     `$env:SHIM_ORIGINAL_PATH = `$env:PATH
 }
