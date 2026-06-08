@@ -3231,6 +3231,18 @@ fn classify_continue_world_worker_event(
         );
     }
 
+    let surfaced_run_id = event.run_id.trim();
+    if surfaced_run_id.is_empty() {
+        anyhow::bail!("protocol error: continue_world_worker surfaced worker event without run_id");
+    }
+    if surfaced_run_id != request.run_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event run_id {} did not match targeted request {}",
+            surfaced_run_id,
+            request.run_id,
+        );
+    }
+
     let requires_explicit_identity =
         continue_world_worker_event_requires_explicit_identity(event_class);
     let requires_exact_session_world_binding =
@@ -4906,6 +4918,17 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_continue_stream_event_for_run(
+        run_id: &str,
+        data: serde_json::Value,
+    ) -> substrate_common::agent_events::AgentEvent {
+        substrate_common::agent_events::AgentEvent {
+            run_id: run_id.to_string(),
+            ..sample_continue_stream_event(data)
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_continue_stream_uaa_event(
         raw_event: serde_json::Value,
     ) -> substrate_common::agent_events::AgentEvent {
@@ -4913,6 +4936,20 @@ mod tests {
             "uaa_event": raw_event,
             "protocol": "substrate.agent.session",
         }))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_continue_stream_uaa_event_for_run(
+        run_id: &str,
+        raw_event: serde_json::Value,
+    ) -> substrate_common::agent_events::AgentEvent {
+        sample_continue_stream_event_for_run(
+            run_id,
+            json!({
+                "uaa_event": raw_event,
+                "protocol": "substrate.agent.session",
+            }),
+        )
     }
 
     #[cfg(target_os = "linux")]
@@ -5895,6 +5932,33 @@ mod tests {
             err.to_string().contains(
                 "participant_id ash_other did not match targeted retained worker ash_member"
             ),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn continue_world_worker_dispatch_contract_rejects_worker_event_run_id_drift() {
+        let submit = sample_continue_submit_request();
+        let drifted = substrate_common::agent_events::AgentEvent {
+            run_id: "req_other".to_string(),
+            ..sample_continue_stream_event(json!({
+                "event_class": "follow_up_question",
+                "payload": {
+                    "message": "run drift"
+                }
+            }))
+        };
+
+        let err = classify_continue_world_worker_event(
+            &submit,
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &drifted,
+        )
+        .expect_err("run_id drift must fail");
+        assert!(
+            err.to_string()
+                .contains("run_id req_other did not match targeted request req_continue"),
             "unexpected error: {err}"
         );
     }
@@ -7680,7 +7744,7 @@ mod tests {
                 }
 
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
-                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -7693,7 +7757,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event(serde_json::json!({
+                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
                                 "event_class": "fork_request",
                                 "payload": {
                                     "message": "please allocate a child later"
@@ -7833,7 +7897,7 @@ agents:
                 }
 
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
-                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -7846,7 +7910,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event(serde_json::json!({
+                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
                                 "event_class": "fork_request",
                                 "payload": {
                                     "message": "please allocate a child later"
@@ -7858,7 +7922,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event(serde_json::json!({
+                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
                                 "event_class": "blocked",
                                 "payload": {
                                     "message": "waiting on host"
@@ -8022,7 +8086,7 @@ agents:
                     }
 
                     if first_line.starts_with("POST /v1/member_turn/stream ") {
-                        let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                             serde_json::from_slice(&body).expect("member turn submit request");
                         write_http_stream_start(&mut stream).await;
                         write_chunked_frame(
@@ -8035,7 +8099,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
-                                event: sample_continue_stream_event(json!({
+                                event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
                                     "event_class": continue_worker_event_label(event_class),
                                     "payload": {
                                         "message": expected_message
@@ -8262,7 +8326,7 @@ agents:
                     }
 
                     if first_line.starts_with("POST /v1/member_turn/stream ") {
-                        let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                             serde_json::from_slice(&body).expect("member turn submit request");
                         write_http_stream_start(&mut stream).await;
                         write_chunked_frame(
@@ -8275,7 +8339,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
-                                event: sample_continue_stream_event(json!({
+                                event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
                                     "event_class": continue_worker_event_label(event_class),
                                     "payload": {
                                         "message": "denied packet-three event"
@@ -8782,6 +8846,7 @@ agents:
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
                     let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
+                    let run_id = parsed.run_id.clone();
                     recorded_requests_for_server
                         .lock()
                         .expect("recorded requests mutex poisoned")
@@ -8797,7 +8862,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
+                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
                                 "type": "item.completed",
                                 "thread_id": "thread-delivered-progress-ack",
                                 "turn_id": "turn-progress-ack",
@@ -8930,7 +8995,7 @@ agents:
                 }
 
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
-                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -8943,7 +9008,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event(json!({
+                            event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
                                 "event_class": "progress_update",
                                 "payload": {
                                     "message": "still making progress"
@@ -9125,6 +9190,7 @@ agents:
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
                     let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
+                    let run_id = parsed.run_id.clone();
                     recorded_requests_for_server
                         .lock()
                         .expect("recorded requests mutex poisoned")
@@ -9140,7 +9206,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
+                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
                                 "type": "item.completed",
                                 "thread_id": "thread-delivered-fork-command",
                                 "turn_id": "turn-fork-command",
@@ -9420,7 +9486,7 @@ agents:
                 }
 
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
-                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -9433,7 +9499,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
+                            event: sample_continue_stream_uaa_event_for_run(&parsed.run_id, json!({
                                 "type": "item.completed",
                                 "thread_id": "thread-delivered-fork-command",
                                 "turn_id": "turn-fork-command",
@@ -9556,7 +9622,7 @@ agents:
                 }
 
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
-                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -9569,7 +9635,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event(serde_json::json!({
+                            event: sample_continue_stream_event_for_run(&parsed.run_id, serde_json::json!({
                                 "event_class": "fork_request",
                                 "payload": {
                                     "message": "persist me before child bootstrap fails"
@@ -9724,6 +9790,7 @@ agents:
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
                     let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
+                    let run_id = parsed.run_id.clone();
                     recorded_requests_for_server
                         .lock()
                         .expect("recorded requests mutex poisoned")
@@ -9739,7 +9806,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
+                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
                                 "type": "item.completed",
                                 "thread_id": "thread-delivered-control",
                                 "turn_id": "turn-control",
@@ -9872,7 +9939,7 @@ agents:
                 }
 
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
-                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -9885,7 +9952,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event(json!({
+                            event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
                                 "event_class": "control_ack",
                                 "payload": {
                                     "message": "prepare_handoff received"
@@ -10071,6 +10138,7 @@ agents:
                     if first_line.starts_with("POST /v1/member_turn/stream ") {
                         let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                             serde_json::from_slice(&body).expect("member turn submit request");
+                        let run_id = parsed.run_id.clone();
                         recorded_requests_for_server
                             .lock()
                             .expect("recorded requests mutex poisoned")
@@ -10086,12 +10154,12 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
-                                event: sample_continue_stream_uaa_event(json!({
-                                    "type": "item.completed",
-                                    "thread_id": format!("thread-delivered-{suffix}"),
-                                    "turn_id": format!("turn-{suffix}"),
-                                    "item_id": format!("msg-{suffix}"),
-                                    "status": "completed",
+                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
+                                "type": "item.completed",
+                                "thread_id": format!("thread-delivered-{suffix}"),
+                                "turn_id": format!("turn-{suffix}"),
+                                "item_id": format!("msg-{suffix}"),
+                                "status": "completed",
                                     "item_type": "agent_message",
                                     "content": {
                                         "text": "approval response delivered"
@@ -10304,6 +10372,7 @@ agents:
                 if first_line.starts_with("POST /v1/member_turn/stream ") {
                     let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
                         serde_json::from_slice(&body).expect("member turn submit request");
+                    let run_id = parsed.run_id.clone();
                     recorded_requests_for_server
                         .lock()
                         .expect("recorded requests mutex poisoned")
@@ -10319,7 +10388,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
+                            event: sample_continue_stream_uaa_event_for_run(&run_id, json!({
                                 "type": "item.completed",
                                 "thread_id": "thread-delivered-clarification",
                                 "turn_id": "turn-clarification",
