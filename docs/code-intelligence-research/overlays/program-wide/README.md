@@ -20,6 +20,7 @@ Use this directory when forcing the concern into one crate or into the
 
 ## Active notes
 
+- [handbook-context-integration.md](./handbook-context-integration.md)
 - [structural-intelligence-as-evidence.md](./structural-intelligence-as-evidence.md)
 - [freshness-provenance-and-trust.md](./freshness-provenance-and-trust.md)
 - [planning-and-execution-continuity.md](./planning-and-execution-continuity.md)

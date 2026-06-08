@@ -47,6 +47,7 @@ Everything under `docs/code-intelligence-research/` is supporting material.
 
 ### Crate-local notes
 
+- [context](./crates/context/README.md)
 - [lift](./crates/lift/README.md)
 - [effort](./crates/effort/README.md)
 - [exec](./crates/exec/README.md)
@@ -76,6 +77,7 @@ For the present research set, the clean default is:
 
 - keep imported captures in `raw/`
 - use `overlays/program-wide/` when the concern spans Lift plus downstream consumers or the contract/evidence membrane
+- use `crates/context/` when the concern is specifically about canonical-truth ingestion, provider composition, or context-packet assembly
 - keep `effort` + `exec` shared concerns in `overlays/effort-exec/`
 - keep Lift-specific takeaways in `crates/lift/`
 - keep crate-specific takeaways in `crates/effort/` and `crates/exec/`

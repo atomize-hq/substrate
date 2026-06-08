@@ -160,9 +160,25 @@ That includes:
 
 That includes:
 
+- canonical-truth provenance for provider-supplied context
 - retrieval provenance
 - freshness and trust evidence
 - packet completeness against declared context requirements
+
+### Handbook-derived canonical truth
+
+Handbook-derived truth should be treated as authored truth and context input by
+default, not as the owning contract layer for this program.
+
+The practical meaning is:
+
+- handbook canonical artifacts may be cited, fingerprinted, and carried through
+  `context` packet evidence
+- handbook-derived facts may later support claim evaluation
+- handbook artifacts are not automatically `ContractV1` just because they are
+  canonical in their own namespace
+- even if handbook eventually exposes its own contract-like documents, this
+  program still owns its executable contract, evidence, verdict, and gate model
 
 ### `effort`
 
@@ -233,6 +249,10 @@ These rules are program-wide.
 
 10. This layer remains an overlay across the program.
     It must not become a second competing top-level architecture.
+
+11. Authored truth and executable contracts remain distinct.
+    A handbook-derived truth engine may feed `context` and evidence records, but
+    it does not replace locked program contracts by default.
 
 ---
 
@@ -561,6 +581,9 @@ Let `intake` define task-brief completeness claims and evidence expectations.
 
 Let `context` define provenance, trust, and freshness evidence for context packets.
 
+That includes provider-derived canonical truth evidence when a handbook-derived
+provider eventually lands.
+
 ### A4
 
 Freeze the minimum Lift export and contract-evidence surfaces needed by peer crates.
@@ -590,7 +613,9 @@ The contracts-and-gates layer is on the intended path when all are true:
 5. missing required evidence can block a gate
 6. runtime gate decisions consume verdicts rather than bypassing them
 7. external validator ecosystems are used as adapters, not silently promoted to program authority
-8. orchestration closeout semantics can explain why a gate passed or blocked in claim-level terms
+8. handbook-derived canonical truth remains distinguishable from locked
+   executable contracts unless explicitly wrapped or referenced as such
+9. orchestration closeout semantics can explain why a gate passed or blocked in claim-level terms
 
 ---
 
@@ -604,8 +629,10 @@ If any answer below becomes "yes", this design is drifting.
 4. Can `exec` bypass verdict evaluation and close gates using only ad hoc pass/fail checks?
 5. Can required claims succeed without explicit evidence or an explicit waiver?
 6. Can adapters such as OpenAPI or Storybook become the owning contract model by default?
-7. Can the same locked contract and evidence set produce different verdict bytes or fingerprints?
-8. Can a reader mistake this document for a second competing top-level program architecture?
+7. Can handbook canonical artifacts silently become locked program contracts
+   without an explicit contract boundary?
+8. Can the same locked contract and evidence set produce different verdict bytes or fingerprints?
+9. Can a reader mistake this document for a second competing top-level program architecture?
 
 ---
 

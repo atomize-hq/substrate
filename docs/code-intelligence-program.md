@@ -51,6 +51,26 @@ Cargo package names use the `substrate-*` prefix:
 - `crates/effort` -> `substrate-effort`
 - `crates/exec` -> `substrate-exec`
 
+### Adjacent provider crates
+
+The peer-crate map above covers the primary code-intelligence ownership split.
+
+It does not forbid adjacent workspace crates that feed one peer crate without
+changing that ownership model.
+
+The clearest current candidate is a handbook-derived engine crate that would
+feed `substrate-context` as a provider of canonical authored truth rather than
+replace `context` itself.
+
+If that landing happens, the current likely shape is:
+
+- directory name like `crates/handbook-engine`
+- package name like `substrate-handbook-engine`
+
+That crate is not part of the frozen core peer-crate map yet.
+Its current status is a likely provider seam that the program should plan
+around.
+
 ### Current inherited baseline
 
 This program is not starting from zero.
@@ -170,11 +190,40 @@ That includes:
 
 That includes:
 
+- canonical authored-truth ingestion
 - retrieval policy
 - scope selection
 - trust and freshness filtering
 - provider composition
 - context packet assembly
+
+`context` does not own:
+
+- the public authored-truth namespace of an external provider
+- general planning semantics
+- runtime gate execution
+
+### Handbook-derived provider direction
+
+The current best-fit direction is that handbook-derived truth should enter the
+code-intelligence program through `context`, not by replacing `context` and not
+by becoming the cross-program contract layer.
+
+The likely migration sequence is:
+
+1. split the current handbook compiler into engine core, reusable pipeline
+   core, and handbook product shell
+2. move only the reusable engine into the Substrate workspace first
+3. let `substrate-context` consume that engine through a stable provider or
+   artifact boundary
+
+The working ownership model is:
+
+- handbook-derived engine owns canonical authored truth
+- `context` owns provider composition, trust and freshness filtering, and
+  packet assembly
+- downstream crates consume context packets rather than handbook internals by
+  default
 
 ### `effort`
 
@@ -236,6 +285,10 @@ These rules are program-wide.
 
 10. This program remains inside the parent Substrate Cargo workspace.
     Any future change to that topology must be called out explicitly rather than implied.
+
+11. `context` owns assembly, not every provider's authored-truth namespace.
+    A handbook-derived engine may land beside the program, but `context`
+    remains the integration owner and the contract layer remains separate.
 
 ---
 
@@ -309,6 +362,17 @@ These are the contract families the program should converge on.
 - `RetrievalPolicyV1`
 - `ContextItemV1`
 - `ContextPacketV1`
+
+The current strongest direction is that at least one real provider should be
+able to supply canonical authored-truth inputs into these artifacts.
+
+The clearest current candidate is a handbook-derived engine providing:
+
+- canonical artifact refs for `CHARTER`, `PROJECT_CONTEXT`,
+  `ENVIRONMENT_INVENTORY`, and `FEATURE_SPEC`
+- provenance and trust metadata
+- freshness status
+- provider-root metadata for repo-local versus Substrate-managed roots
 
 ### Effort artifacts
 
@@ -411,6 +475,10 @@ flowchart TB
 
 6. Crate-local provider traits may exist inside Lift first, but cross-crate coupling should freeze at schema-backed artifact boundaries.
 
+7. A handbook-derived engine may feed `context`, but downstream crates should
+   consume `context` packets or other reviewed boundaries rather than handbook
+   internals by default.
+
 ---
 
 ## 9. Roadmap namespaces
@@ -496,6 +564,12 @@ May start with:
 - fake or static providers
 - stubbed checkpoint-like inputs
 
+Should preserve from the start:
+
+- a reviewed provider boundary for future handbook-derived truth ingestion
+- enough root and provenance metadata to support repo-local and
+  Substrate-managed provider roots later
+
 ### A4 — freeze early Lift export contracts
 
 Mission:
@@ -549,6 +623,8 @@ The safe start conditions are:
 - `A4` may begin once the minimum Lift export contracts are understood well enough to freeze
 - `A5` may begin once `IntakeBundleV1` is frozen
 - `A6` may begin once `WorkGraphV1` and `HandoffPacketV1` are frozen
+- a handbook-derived engine split may proceed in parallel so long as `context`
+  only depends on reviewed provider boundaries rather than handbook internals
 - Lift may continue in parallel as soon as `A1` is stable enough to prevent contract churn from leaking outward
 
 The key rule is:
@@ -609,7 +685,9 @@ The code-intelligence program is on the intended path when all of these are true
 5. deterministic fingerprints exist for all top-level cross-crate artifacts
 6. `intake` and `context` can land before Lift is complete
 7. `effort` and `exec` consume earlier artifacts rather than reinventing earlier logic
-8. the code-intelligence program remains clearly distinguished from the parent Substrate Cargo workspace
+8. handbook-derived truth, if landed in the workspace, enters through reviewed
+   provider boundaries and does not collapse `context` or the contract layer
+9. the code-intelligence program remains clearly distinguished from the parent Substrate Cargo workspace
 
 ---
 
@@ -623,8 +701,10 @@ If any answer below becomes "yes", the program is drifting.
 4. Can `exec` start replanning the work graph?
 5. Can `context` start defining planning semantics instead of composing packets?
 6. Can peer crates require Lift internals instead of Lift artifacts?
-7. Can the same inputs produce different artifact bytes or fingerprints?
-8. Can a reader mistake this program for a separate Cargo workspace because the topology is not stated clearly?
+7. Can downstream crates require handbook internals instead of reviewed
+   provider boundaries or context packets?
+8. Can the same inputs produce different artifact bytes or fingerprints?
+9. Can a reader mistake this program for a separate Cargo workspace because the topology is not stated clearly?
 
 ---
 
@@ -634,6 +714,8 @@ If any answer below becomes "yes", the program is drifting.
 - it is a logical code-intelligence sub-workspace, not a separate Cargo workspace root
 - Lift remains a peer crate and the repository intelligence engine
 - new peer crates land under `crates/kernel`, `crates/intake`, `crates/context`, `crates/effort`, and `crates/exec`
+- a handbook-derived engine may later land as an adjacent provider crate, but
+  `context` remains the assembly owner
 - package names use `substrate-*`, directory names follow repo convention
 - start with `A0` by extracting the minimal shared `kernel`
 - do not finish all of Lift before starting peer crates

@@ -81,8 +81,9 @@ Parallel Workstream Orchestration
 
 Short version:
 
-> Lift says what is touched, risky, reusable, connected, testable, and likely to conflict.  
-> Effort turns that into a deterministic work graph, lane plan, and worker handoff surface.  
+> Lift says what is touched, risky, reusable, connected, testable, and likely to conflict.
+> Context assembles high-trust read context, including handbook-derived truth when available.
+> Effort turns that into a deterministic work graph, lane plan, and worker handoff surface.
 > Exec materializes worktrees, records branch/runtime state, evaluates gates, and manages resumable runtime truth.
 
 This preserves the program rule that Lift remains the repository/code-intelligence engine and does not absorb planning or execution ownership back into itself.
@@ -247,7 +248,8 @@ Exec does not own:
 These remain supporting inputs:
 
 - `intake` provides task shaping and the normalized task brief
-- `context` provides context packet assembly
+- `context` provides context packet assembly, including composition of
+  handbook-derived canonical truth when that provider path exists
 
 They do not own lane planning or runtime materialization.
 
@@ -257,8 +259,9 @@ They do not own lane planning or runtime materialization.
 
 ```mermaid
 flowchart TB
+    H["Handbook-derived truth provider"] --> C["ContextPacketV1"]
     I["IntakeBundleV1"] --> E["substrate-effort"]
-    C["ContextPacketV1"] --> E
+    C --> E
 
     subgraph L["substrate-lift"]
         LR["ImpactReportV1"]
@@ -393,6 +396,27 @@ Must not contain:
 - worktree allocation
 - runtime state
 
+### `ContextPacketV1`
+
+Purpose:
+assemble read context for planning and runtime consumers without collapsing
+provider ownership into the planner.
+
+Likely content:
+
+- high-trust context items
+- canonical artifact refs and fingerprints when handbook-derived truth is
+  available
+- provenance, trust, and freshness metadata
+- provider-root metadata for repo-local versus Substrate-managed roots
+- explicit missing-input markers
+
+Must not contain:
+
+- lane plans
+- worktree materialization state
+- provider-private mutable runtime state
+
 ### `EffortRequestV1`
 
 Purpose:
@@ -510,6 +534,10 @@ No repo mutation.
 - optional `ContextPacketV1`
 - Lift artifact refs
 - explicit user constraints
+
+When present, `ContextPacketV1` should be treated as read context.
+It may narrow or clarify planning surfaces, but it does not own planning
+semantics.
 
 ### Planner stages
 
@@ -760,6 +788,13 @@ Land `crates/effort` and the static planner.
 
 Land `crates/exec` and worktree/runtime materialization.
 
+The current handbook-derived provider direction fits earlier in the sequence:
+
+- `A3` should preserve a provider boundary that can later ingest handbook
+  truth
+- `A5` and `A6` should consume that truth through `ContextPacketV1` or other
+  reviewed context boundaries, not handbook internals
+
 This keeps the feature aligned with the program rule:
 
 ```text
@@ -794,7 +829,9 @@ The feature is on track when all are true:
 7. Low-confidence Lift signals never silently parallelize risky work.
 8. Handoff packets include ownership, read context, forbidden surfaces, checks, stop conditions, and return contract.
 9. Worktree materialization is opt-in and never happens during static planning.
-10. Runtime state transitions live in `exec`, not `effort`.
+10. Handbook-derived truth, when present, enters planning through reviewed
+    context boundaries rather than planner-side handbook imports.
+11. Runtime state transitions live in `exec`, not `effort`.
 
 ---
 
@@ -814,6 +851,9 @@ The feature is on track when all are true:
 12. Parallel lanes require disjoint ownership or explicitly frozen shared surfaces.
 13. Merge order is deterministic and topologically valid.
 14. A need to touch a frozen hotspot becomes a blocked condition, not silent replanning.
+15. `context` may carry handbook-derived truth, but planning and runtime still
+    consume it through reviewed context artifacts rather than provider-private
+    mutable state.
 
 ---
 
@@ -835,6 +875,8 @@ If any answer becomes "yes", the design is drifting.
 12. Can final acceptance happen without one merged validation wall?
 13. Can a plan depend on nondeterministic ordering from maps, filesystem reads, or artifact refs?
 14. Can one manual `ORCH_PLAN.md` shape force artifact design without broader validation?
+15. Can planning or runtime depend directly on handbook product-shell behavior
+    instead of reviewed context boundaries?
 
 ---
 
@@ -858,6 +900,8 @@ The durable lesson is that the code-intelligence program needs:
 
 - a static planner in `crates/effort`
 - a runtime materializer/state owner in `crates/exec`
+- context-packet assembly that can carry handbook-derived truth without turning
+  handbook into the planner or contract layer
 - Lift-produced planning inputs that can be consumed without deep Lift imports
 
 That is the shape this document freezes.

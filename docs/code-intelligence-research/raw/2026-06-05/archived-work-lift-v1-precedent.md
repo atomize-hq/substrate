@@ -85,6 +85,13 @@ It is precedent only, not authority for the current `9b83/substrate` worktree.
 2. planning-pack or impact-map derivation from `validate_impact_map.py --emit-json`
 3. git-diff calibration through `git diff --name-status -M`
 
+## Exact confidence mechanics preserved from v1
+
+- missing or `null` numeric inputs scored as `0`
+- those missing fields were still appended to `missing_inputs`
+- any non-empty `missing_inputs` forced `confidence = low`
+- prefix-derived touch sets also forced `confidence = low`
+
 ## Strong precedent worth keeping
 
 - strict structured input contract
@@ -124,6 +131,28 @@ It is precedent only, not authority for the current `9b83/substrate` worktree.
   same signal family
 - scalar-only planning posture
 - file-list-only parallelization heuristics
+
+## Confirmed trigger behavior preserved from v1
+
+### Code-evaluated triggers
+
+- `split_required:behavior_deltas>1`
+- `likely_split:crates_touched>2`
+- `likely_split:touch_files_sum>12`
+- `likely_split:contract_surface_sum>4`
+- `likely_split:lift_score>24`
+- `split_required:estimated_slices>3`
+
+### Prompt-guidance threshold
+
+- `lift_score > 60` appeared in some user-facing guidance as a strong split
+  signal, but this was prompt guidance rather than a trigger evaluated by the
+  implementation itself
+
+### Implementation quirk
+
+- the config declared both `adr_candidate` and `workstream` trigger families
+- `pm_lift.py` v1 only evaluated the `adr_candidate` rules in code
 
 ## Boundary caution
 
