@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use serde_json::Value;
 
 use crate::checkpoint::{Confidence, EvidenceRef, TaskFrame};
-use crate::context::ContextPack;
+use crate::context::{focusable_directive_rows, ContextPack};
 use crate::input::{extract_path_hints, parse_tool_payload, BundleSession};
 
 const EXPLICIT_DELEGATION_MARKERS: [&str; 4] =
@@ -80,6 +80,7 @@ pub(crate) fn infer_delegation_context(
     let marker_evidence = collect_marker_evidence(delegation_rows(session));
     let context_signal_evidence = collect_context_signal_evidence(
         session,
+        context,
         &session.session_id,
         !marker_evidence.markers.is_empty(),
     );
@@ -93,8 +94,12 @@ pub(crate) fn infer_delegation_context(
     let topology = infer_delegation_topology(&marker_evidence.markers, &context_signal_evidence);
     let child_work_visibility =
         infer_child_work_visibility(topology, &marker_evidence.markers, &context_signal_evidence);
-    let confidence =
-        infer_delegation_confidence(topology, &marker_evidence.markers, &context_signal_evidence);
+    let confidence = infer_delegation_confidence(
+        topology,
+        child_work_visibility,
+        &marker_evidence.markers,
+        &context_signal_evidence,
+    );
     let counter_evidence =
         infer_delegation_counter_evidence(context, &marker_evidence, &context_signal_evidence);
 
@@ -215,6 +220,7 @@ enum ContextSignalCategory {
 
 fn collect_context_signal_evidence(
     session: &BundleSession,
+    context: &ContextPack,
     session_id: &str,
     has_explicit_markers: bool,
 ) -> Vec<ContextSignalEvidence> {
@@ -226,6 +232,13 @@ fn collect_context_signal_evidence(
     }
 
     for candidate in collect_row_signal_evidence(session, session_id) {
+        let key = evidence_key(&candidate.evidence);
+        if seen.insert(key) {
+            evidence.push(candidate);
+        }
+    }
+
+    for candidate in collect_directive_signal_evidence(&session.compact_rows, context, session_id) {
         let key = evidence_key(&candidate.evidence);
         if seen.insert(key) {
             evidence.push(candidate);
@@ -284,6 +297,53 @@ fn collect_row_signal_evidence(
             });
         }
     }
+    evidence
+}
+
+fn collect_directive_signal_evidence(
+    rows: &[CompactionRow],
+    context: &ContextPack,
+    session_id: &str,
+) -> Vec<ContextSignalEvidence> {
+    let mut evidence = Vec::new();
+
+    for row in focusable_directive_rows(rows) {
+        let lowered = row.text.to_ascii_lowercase();
+        let mentions_child_surface = EXPLICIT_CHILD_LINK_SIGNALS
+            .iter()
+            .chain(OPAQUE_CHILD_CONTEXT_SIGNALS.iter())
+            .any(|signal| lowered.contains(signal));
+        if !mentions_child_surface {
+            continue;
+        }
+
+        for path in extract_path_hints(&row.text) {
+            let Some(child_session_id) = separate_child_rollout_session_id(&path, session_id)
+            else {
+                continue;
+            };
+
+            let already_observed = context
+                .command_observations
+                .iter()
+                .any(|command| command.paths.iter().any(|candidate| candidate == &path));
+            if already_observed {
+                continue;
+            }
+
+            evidence.push(ContextSignalEvidence {
+                category: ContextSignalCategory::Visibility,
+                visibility: Some(ChildWorkVisibility::Opaque),
+                evidence: EvidenceRef {
+                    row: agent_session_compactor::RowRef::from_row(row),
+                    reason: format!(
+                        "delegation directive surface references separate child rollout: {path} (session {child_session_id})"
+                    ),
+                },
+            });
+        }
+    }
+
     evidence
 }
 
@@ -369,13 +429,17 @@ fn infer_child_work_visibility(
 
 fn infer_delegation_confidence(
     topology: DelegationTopology,
+    child_work_visibility: ChildWorkVisibility,
     markers: &[String],
     context_signal_evidence: &[ContextSignalEvidence],
 ) -> Confidence {
     match topology {
         DelegationTopology::SingleAgent => Confidence::High,
         DelegationTopology::DelegatingParent => {
-            if markers.iter().any(|marker| marker == "multi_agent_v1") && markers.len() >= 2 {
+            if child_work_visibility == ChildWorkVisibility::Partial
+                && markers.iter().any(|marker| marker == "multi_agent_v1")
+                && markers.len() >= 2
+            {
                 Confidence::High
             } else {
                 Confidence::Medium
@@ -642,6 +706,65 @@ mod tests {
                 .reason
                 .contains("child rollout surface links child/subagent work")));
         assert!(delegation.counter_evidence.is_empty());
+    }
+
+    #[test]
+    fn delegation_caps_opaque_parent_confidence_despite_multi_agent_markers() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![
+                tool_call("multi_agent_v1", "{\"agent_type\":\"worker\"}"),
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+            ],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Opaque
+        );
+        assert_eq!(delegation.confidence, Confidence::Medium);
+        assert_eq!(
+            delegation.markers,
+            vec!["multi_agent_v1".to_string(), "spawn_agent".to_string()]
+        );
+        assert_eq!(delegation.counter_evidence.len(), 1);
+    }
+
+    #[test]
+    fn delegation_harvests_opaque_child_rollout_from_directive_path_surface() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![
+                row(
+                    CompactionKind::UserMessage,
+                    "/goal Inspect the spawned agent child rollout at /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl before checkpoint analysis.",
+                ),
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+            ],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Opaque
+        );
+        assert_eq!(delegation.confidence, Confidence::Medium);
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence
+                .reason
+                .contains("delegation directive surface references separate child rollout")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
     }
 
     #[test]
