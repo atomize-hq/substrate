@@ -229,10 +229,8 @@ fn live_end_to_end_replay_ordinary_flagged_checkpoints_do_not_take_repeated_fail
             &["flagged score for session-policy-split:2"],
         ),
     ];
-    let replay_fixture = support::ReplayFixture::from_checkpoints(
-        checkpoints.clone(),
-        support::sample_summary(),
-    );
+    let replay_fixture =
+        support::ReplayFixture::from_checkpoints(checkpoints.clone(), support::sample_summary());
     let replay = execute(&SentinelRequest {
         checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
         mode: SentinelMode::Replay,
