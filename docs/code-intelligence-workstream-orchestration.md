@@ -86,6 +86,12 @@ Short version:
 > Effort turns that into a deterministic work graph, lane plan, and worker handoff surface.
 > Exec materializes worktrees, records branch/runtime state, evaluates gates, and manages resumable runtime truth.
 
+The handbook-derived truth provider may ultimately be handbook-owned and
+imported into Substrate or may land as a workspace-adjacent crate. That repo
+ownership choice does not change the orchestration boundary: `context` still
+assembles the reviewed read surface, and downstream crates still consume
+reviewed context boundaries rather than handbook internals.
+
 This preserves the program rule that Lift remains the repository/code-intelligence engine and does not absorb planning or execution ownership back into itself.
 
 ---
@@ -794,6 +800,11 @@ The current handbook-derived provider direction fits earlier in the sequence:
   truth
 - `A5` and `A6` should consume that truth through `ContextPacketV1` or other
   reviewed context boundaries, not handbook internals
+
+Whether that provider is handbook-owned and imported or lands as a
+workspace-adjacent crate is a later ownership decision. The orchestration
+contract here should stay neutral and only require the reviewed provider and
+context-packet boundary.
 
 This keeps the feature aligned with the program rule:
 

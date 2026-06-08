@@ -175,6 +175,9 @@ The practical meaning is:
 - handbook canonical artifacts may be cited, fingerprinted, and carried through
   `context` packet evidence
 - handbook-derived facts may later support claim evaluation
+- the provider that emits those artifacts may remain handbook-owned and be
+  imported into Substrate, or may later land as a workspace-adjacent crate;
+  that repo ownership choice does not change the contract boundary here
 - handbook artifacts are not automatically `ContractV1` just because they are
   canonical in their own namespace
 - even if handbook eventually exposes its own contract-like documents, this

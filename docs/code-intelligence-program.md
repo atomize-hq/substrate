@@ -62,14 +62,18 @@ The clearest current candidate is a handbook-derived engine crate that would
 feed `substrate-context` as a provider of canonical authored truth rather than
 replace `context` itself.
 
-If that landing happens, the current likely shape is:
+If that landing happens, there are two plausible ownership shapes:
 
-- directory name like `crates/handbook-engine`
-- package name like `substrate-handbook-engine`
+- a workspace-adjacent Substrate crate such as `crates/handbook-engine`
+  with a package name like `substrate-handbook-engine`
+- a handbook-owned crate that remains outside this workspace and is imported
+  into Substrate through a reviewed provider boundary
 
 That crate is not part of the frozen core peer-crate map yet.
 Its current status is a likely provider seam that the program should plan
-around.
+around, while leaving final repo ownership open until the handbook extraction
+work proves whether the reusable crate is still fundamentally handbook-domain
+or has become substrate-specific.
 
 ### Current inherited baseline
 
@@ -209,13 +213,17 @@ The current best-fit direction is that handbook-derived truth should enter the
 code-intelligence program through `context`, not by replacing `context` and not
 by becoming the cross-program contract layer.
 
-The likely migration sequence is:
+The likely extraction and integration sequence is:
 
 1. split the current handbook compiler into engine core, reusable pipeline
    core, and handbook product shell
-2. move only the reusable engine into the Substrate workspace first
-3. let `substrate-context` consume that engine through a stable provider or
-   artifact boundary
+2. parameterize layout, target, and template assumptions until the reusable
+   crates have a clear center of gravity
+3. decide per crate whether handbook remains the architectural owner and
+   Substrate imports it, or whether the crate has become substrate-specific and
+   should move into the workspace
+4. let `substrate-context` consume handbook-derived truth through a stable
+   provider or artifact boundary regardless of which ownership path wins
 
 The working ownership model is:
 
@@ -224,6 +232,15 @@ The working ownership model is:
   packet assembly
 - downstream crates consume context packets rather than handbook internals by
   default
+
+The current bias is:
+
+- a reusable handbook engine may remain handbook-owned and be imported by
+  Substrate if it stays fundamentally handbook-domain after extraction
+- a reusable handbook pipeline/provider layer may or may not stay handbook-owned
+  depending on how generic it remains after parameterization
+- ownership should follow the stable domain boundary, not a premature assumption
+  that every reusable handbook crate belongs inside the Substrate workspace
 
 ### `effort`
 
@@ -476,8 +493,9 @@ flowchart TB
 6. Crate-local provider traits may exist inside Lift first, but cross-crate coupling should freeze at schema-backed artifact boundaries.
 
 7. A handbook-derived engine may feed `context`, but downstream crates should
-   consume `context` packets or other reviewed boundaries rather than handbook
-   internals by default.
+   consume `context` packets or other reviewed provider boundaries rather than
+   handbook internals by default, regardless of whether the provider crate is
+   handbook-owned or workspace-adjacent.
 
 ---
 
