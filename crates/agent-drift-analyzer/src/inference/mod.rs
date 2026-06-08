@@ -152,7 +152,10 @@ fn infer_confidence(context: &ContextPack, counter_evidence: &[EvidenceRef]) -> 
 }
 
 fn delegation_rows(session: &BundleSession) -> impl Iterator<Item = &CompactionRow> + '_ {
-    session.archival_rows.iter().chain(session.compact_rows.iter())
+    session
+        .archival_rows
+        .iter()
+        .chain(session.compact_rows.iter())
 }
 
 #[derive(Debug, Default)]
@@ -161,7 +164,9 @@ struct MarkerEvidence {
     evidence: Vec<EvidenceRef>,
 }
 
-fn collect_marker_evidence<'a>(rows: impl IntoIterator<Item = &'a CompactionRow>) -> MarkerEvidence {
+fn collect_marker_evidence<'a>(
+    rows: impl IntoIterator<Item = &'a CompactionRow>,
+) -> MarkerEvidence {
     let mut seen_markers = BTreeSet::new();
     let mut seen_evidence = BTreeSet::new();
     let mut markers = Vec::new();
@@ -728,7 +733,9 @@ mod tests {
         assert!(delegation
             .supporting_evidence
             .iter()
-            .any(|evidence| evidence.reason.contains("delegation context row anchors child session id")));
+            .any(|evidence| evidence
+                .reason
+                .contains("delegation context row anchors child session id")));
         assert_eq!(delegation.counter_evidence.len(), 1);
         assert!(delegation.counter_evidence[0]
             .reason

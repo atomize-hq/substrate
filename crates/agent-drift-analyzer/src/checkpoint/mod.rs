@@ -38,18 +38,6 @@ pub(crate) struct CheckpointAnalysis {
     pub recovery: RecoveryState,
 }
 
-#[doc(hidden)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CheckpointDelegationSummary {
-    pub checkpoint_ordinal: usize,
-    pub topology: String,
-    pub child_work_visibility: String,
-    pub confidence: Confidence,
-    pub markers: Vec<String>,
-    pub supporting_evidence: Vec<EvidenceRef>,
-    pub counter_evidence: Vec<EvidenceRef>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CheckpointSlice {
     pub window: BundleSession,
@@ -148,25 +136,6 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     }
 
     analyses
-}
-
-#[doc(hidden)]
-pub fn inspect_checkpoint_delegation(session: &BundleSession) -> Vec<CheckpointDelegationSummary> {
-    checkpoint_analyses(session)
-        .into_iter()
-        .map(|analysis| CheckpointDelegationSummary {
-            checkpoint_ordinal: analysis.ordinal,
-            topology: delegation_topology_label(analysis.delegation.topology).to_string(),
-            child_work_visibility: child_work_visibility_label(
-                analysis.delegation.child_work_visibility,
-            )
-            .to_string(),
-            confidence: analysis.delegation.confidence,
-            markers: analysis.delegation.markers,
-            supporting_evidence: analysis.delegation.supporting_evidence,
-            counter_evidence: analysis.delegation.counter_evidence,
-        })
-        .collect()
 }
 
 pub(crate) fn build_session_checkpoint_from_analysis(
@@ -278,23 +247,6 @@ fn checkpoint_diagnostics_from_analysis(
         interval_command_count: analysis.interval.command_observations.len(),
         interval_verification_command_count: analysis.recovery.interval_verification_command_count,
         evidence_item_count: evidence_item_count(task_frame, drift_scores),
-    }
-}
-
-fn delegation_topology_label(topology: crate::inference::DelegationTopology) -> &'static str {
-    match topology {
-        crate::inference::DelegationTopology::SingleAgent => "single_agent",
-        crate::inference::DelegationTopology::DelegatingParent => "delegating_parent",
-        crate::inference::DelegationTopology::DelegatedChild => "delegated_child",
-        crate::inference::DelegationTopology::MixedOrAmbiguous => "mixed_or_ambiguous",
-    }
-}
-
-fn child_work_visibility_label(visibility: crate::inference::ChildWorkVisibility) -> &'static str {
-    match visibility {
-        crate::inference::ChildWorkVisibility::None => "none",
-        crate::inference::ChildWorkVisibility::Partial => "partial",
-        crate::inference::ChildWorkVisibility::Opaque => "opaque",
     }
 }
 
@@ -886,7 +838,13 @@ fn is_failure_row(row: &CompactionRow) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::tool_output_is_unambiguous_failure;
+    use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind};
+    use camino::Utf8PathBuf;
+
+    use crate::inference::{ChildWorkVisibility, DelegationTopology};
+    use crate::input::BundleSession;
+
+    use super::{checkpoint_analyses, tool_output_is_unambiguous_failure};
 
     #[test]
     fn tool_output_unambiguous_failure_subset_stays_tiny_and_deterministic() {
@@ -907,5 +865,76 @@ mod tests {
         ] {
             assert!(!tool_output_is_unambiguous_failure(text), "{text}");
         }
+    }
+
+    #[test]
+    fn checkpoints_wire_delegation_from_checkpoint_analysis_without_public_api() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Inspect delegation wiring only.",
+                ),
+                tool_call(1, "spawn_agent", "{\"agent_type\":\"worker\"}"),
+            ],
+            compact_rows: vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Inspect delegation wiring only.",
+                ),
+                tool_call(
+                    2,
+                    "functions.shell_command",
+                    "{\"command\":\"sed -n '1,40p' /tmp/child/rollout-019e-child.jsonl\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 1);
+
+        let delegation = &analyses[0].delegation;
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Partial
+        );
+        assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
+        assert_eq!(delegation.confidence, super::Confidence::Medium);
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence.reason.contains("child rollout command")));
+        assert!(delegation.counter_evidence.is_empty());
+    }
+
+    fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
+        CompactionRow {
+            source_file: Utf8PathBuf::from("/tmp/rollout.jsonl"),
+            source_kind: SourceKind::CodexRolloutJsonl,
+            session_id: Some("session-alpha".to_string()),
+            turn_id: Some("turn-001".to_string()),
+            event_index,
+            line_number: event_index + 1,
+            row_ordinal: event_index,
+            timestamp: None,
+            kind,
+            user_message_role: None,
+            dedupe_identity: None,
+            text: text.to_string(),
+            canonical_text: text.to_string(),
+            text_hash_hex: format!("{kind:?}-{event_index}"),
+        }
+    }
+
+    fn tool_call(event_index: usize, tool_name: &str, text: &str) -> CompactionRow {
+        let mut row = row(event_index, CompactionKind::ToolCall, text);
+        row.dedupe_identity = Some(format!(
+            "{{\"call_id\":\"call-{event_index}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
+        ));
+        row
     }
 }
