@@ -1827,6 +1827,8 @@ fn persist_continue_world_worker_obligation(
         obligation.target_host_id = Some(local_host_id);
     }
     obligation.attention_required = worker_event.attention_required;
+    obligation.causation_event_id = continue_world_worker_causation_event_id(worker_event);
+    obligation.causation_message_id = continue_world_worker_causation_message_id(worker_event);
     obligation.causation_request_id = Some(request.run_id.clone());
     obligation.attach_state = continue_world_worker_obligation_attach_state(obligation_kind);
     obligation.source_participant_id = Some(worker_event.source_participant_id.clone());
@@ -1848,6 +1850,38 @@ fn persist_continue_world_worker_obligation(
             obligation.obligation_id, request.participant_id
         )
     })
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_causation_event_id(
+    worker_event: &ContinueWorldWorkerEventV1,
+) -> Option<String> {
+    continue_world_worker_string_field(
+        &worker_event.payload,
+        &[
+            "/event_id",
+            "/uaa_event/event_id",
+            "/uaa_event/raw_event/event_id",
+            "/raw_event/event_id",
+        ],
+    )
+    .map(ToOwned::to_owned)
+}
+
+#[cfg(target_os = "linux")]
+fn continue_world_worker_causation_message_id(
+    worker_event: &ContinueWorldWorkerEventV1,
+) -> Option<String> {
+    continue_world_worker_string_field(
+        &worker_event.payload,
+        &[
+            "/message_id",
+            "/uaa_event/message_id",
+            "/uaa_event/raw_event/message_id",
+            "/raw_event/message_id",
+        ],
+    )
+    .map(ToOwned::to_owned)
 }
 
 #[cfg(target_os = "linux")]
@@ -7344,6 +7378,117 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[serial]
+    fn dispatch_contract_persist_continue_world_worker_obligation_canonicalizes_exact_causation_ids_when_present(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let submit_request =
+            sample_continue_submit_request_for_run("req_continue_packet3_exact", "world-17", 2);
+        let worker_event = ContinueWorldWorkerEventV1 {
+            event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
+            source_participant_id: "ash_member".to_string(),
+            target_participant_id: "orch_dispatch".to_string(),
+            source_backend_id: "cli:codex_world".to_string(),
+            attention_required: true,
+            thread_id: Some("thread_packet3_exact".to_string()),
+            stream_channel: Some("worker.request".to_string()),
+            payload: serde_json::json!({
+                "event_class": "follow_up_question",
+                "event_id": "evt-packet3-exact",
+                "message_id": "msg-packet3-exact",
+                "payload": {
+                    "message": "need host confirmation"
+                }
+            }),
+        };
+
+        persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
+            .expect("persist continue-world-worker obligation with exact ids");
+
+        let obligation = store
+            .load_obligation(
+                &submit_request.orchestration_session_id,
+                "obl_continue_req_continue_packet3_exact_follow_up_required",
+            )
+            .expect("load persisted obligation")
+            .expect("persisted obligation exists");
+        assert_eq!(
+            obligation.causation_event_id.as_deref(),
+            Some("evt-packet3-exact")
+        );
+        assert_eq!(
+            obligation.causation_message_id.as_deref(),
+            Some("msg-packet3-exact")
+        );
+        assert_eq!(
+            obligation
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.get("thread_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("thread_packet3_exact")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn dispatch_contract_persist_continue_world_worker_obligation_keeps_ambiguous_item_ids_out_of_canonical_message_identity(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let submit_request =
+            sample_continue_submit_request_for_run("req_continue_packet3_ambiguous", "world-17", 2);
+        let worker_event = ContinueWorldWorkerEventV1 {
+            event_class: ContinueWorldWorkerEventClassV1::Blocked,
+            source_participant_id: "ash_member".to_string(),
+            target_participant_id: "orch_dispatch".to_string(),
+            source_backend_id: "cli:codex_world".to_string(),
+            attention_required: true,
+            thread_id: Some("thread_packet3_ambiguous".to_string()),
+            stream_channel: Some("worker.request".to_string()),
+            payload: serde_json::json!({
+                "event_class": "blocked",
+                "item_id": "cmd-packet3-ambiguous",
+                "payload": {
+                    "message": "waiting on host"
+                }
+            }),
+        };
+
+        persist_continue_world_worker_obligation(&store, &submit_request, &worker_event)
+            .expect("persist continue-world-worker obligation with ambiguous item id");
+
+        let obligation = store
+            .load_obligation(
+                &submit_request.orchestration_session_id,
+                "obl_continue_req_continue_packet3_ambiguous_blocked",
+            )
+            .expect("load persisted obligation")
+            .expect("persisted obligation exists");
+        assert_eq!(obligation.causation_event_id, None);
+        assert_eq!(obligation.causation_message_id, None);
+        assert_eq!(
+            obligation
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.get("thread_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("thread_packet3_ambiguous")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
     fn router_owned_auto_attach_session_trigger_fails_closed_for_detached_continue_world_worker_obligations_when_router_policy_is_disabled(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
@@ -8045,6 +8190,8 @@ agents:
             event_class: ContinueWorldWorkerEventClassV1,
             expected_kind: OrchestrationObligationKind,
             expected_message: &'static str,
+            exact_event_id: Option<&'static str>,
+            exact_message_id: Option<&'static str>,
         }
 
         for case in [
@@ -8052,11 +8199,15 @@ agents:
                 event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
                 expected_kind: OrchestrationObligationKind::FollowUpRequired,
                 expected_message: "need host confirmation",
+                exact_event_id: Some("evt-live-follow-up"),
+                exact_message_id: Some("msg-live-follow-up"),
             },
             Case {
                 event_class: ContinueWorldWorkerEventClassV1::Blocked,
                 expected_kind: OrchestrationObligationKind::Blocked,
                 expected_message: "waiting on host",
+                exact_event_id: None,
+                exact_message_id: None,
             },
         ] {
             let _env_guard = world_env_guard();
@@ -8102,7 +8253,9 @@ agents:
                                 event: sample_continue_stream_event_for_run(&parsed.run_id, json!({
                                     "event_class": continue_worker_event_label(event_class),
                                     "payload": {
-                                        "message": expected_message
+                                        "message": expected_message,
+                                        "event_id": case.exact_event_id,
+                                        "message_id": case.exact_message_id
                                     }
                                 })),
                             },
@@ -8231,8 +8384,14 @@ agents:
                 obligation.ingress_received_at,
                 Some(obligation.created_at)
             );
-            assert_eq!(obligation.causation_event_id, None);
-            assert_eq!(obligation.causation_message_id, None);
+            assert_eq!(
+                obligation.causation_event_id.as_deref(),
+                case.exact_event_id
+            );
+            assert_eq!(
+                obligation.causation_message_id.as_deref(),
+                case.exact_message_id
+            );
             assert_eq!(
                 obligation.causation_request_id.as_deref(),
                 Some(request_id.as_str())
