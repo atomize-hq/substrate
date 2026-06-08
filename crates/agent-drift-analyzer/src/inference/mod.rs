@@ -330,11 +330,11 @@ fn collect_directive_signal_evidence(
                 continue;
             };
 
-            let already_observed = context
-                .command_observations
-                .iter()
-                .any(|command| command.paths.iter().any(|candidate| candidate == &path));
-            if already_observed {
+            let already_observed_with_delegation_visibility =
+                context.command_observations.iter().any(|command| {
+                    command_observation_has_child_visibility_evidence(command, &path, session_id)
+                });
+            if already_observed_with_delegation_visibility {
                 continue;
             }
 
@@ -352,6 +352,25 @@ fn collect_directive_signal_evidence(
     }
 
     evidence
+}
+
+fn command_observation_has_child_visibility_evidence(
+    command: &crate::context::CommandObservation,
+    path: &str,
+    session_id: &str,
+) -> bool {
+    if !command.paths.iter().any(|candidate| candidate == path) {
+        return false;
+    }
+
+    if separate_child_rollout_session_id(path, session_id).is_none() {
+        return false;
+    }
+
+    let lowered = command.raw_command.to_ascii_lowercase();
+    EXPLICIT_CHILD_LINK_SIGNALS
+        .iter()
+        .any(|signal| lowered.contains(signal))
 }
 
 fn visibility_surface(row: &CompactionRow) -> Option<String> {
@@ -934,6 +953,41 @@ mod tests {
             archival_delegation.counter_evidence.len(),
             compact_delegation.counter_evidence.len()
         );
+    }
+
+    #[test]
+    fn delegation_keeps_directive_child_visibility_when_generic_read_repeats_path() {
+        let directive = "/goal Inspect the spawned agent child rollout at /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl before checkpoint analysis.";
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![row(CompactionKind::UserMessage, directive)],
+            compact_rows: vec![
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+                tool_call(
+                    "functions.shell_command",
+                    "{\"command\":\"sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+        };
+
+        let delegation = infer_delegation_context(&session, &assemble_context(&session));
+
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence
+                .reason
+                .contains("delegation directive surface references separate child rollout")));
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .all(|evidence| !evidence
+                .reason
+                .contains("child rollout surface links child/subagent work")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
+        assert!(delegation.counter_evidence[0]
+            .reason
+            .contains("remained child-opaque"));
     }
 
     #[test]
