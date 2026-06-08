@@ -20,21 +20,27 @@ pub(crate) enum HostInboxMaterializationState {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct HostInboxRecord {
+    #[serde(default)]
     pub orchestration_session_id: String,
+    #[serde(default)]
     pub record_id: String,
     pub kind: OrchestrationObligationKind,
     #[serde(default)]
     pub severity: OrchestrationObligationSeverity,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
     pub summary: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_participant_id: Option<String>,
+    #[serde(default)]
     pub ingress_source_kind: String,
+    #[serde(default)]
     pub ingress_source_id: String,
     pub ingress_received_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin_host_id: Option<String>,
+    #[serde(default)]
     pub target_host_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub causation_event_id: Option<String>,
@@ -103,40 +109,15 @@ impl HostInboxRecord {
 
     #[allow(dead_code)]
     pub(crate) fn validate(&self) -> Result<()> {
-        validate_required_exact_identity(
-            Some(self.orchestration_session_id.as_str()),
-            "orchestration_session_id",
-            "host inbox record",
-        )?;
         Self::validate_record_id(&self.record_id)?;
-        validate_required_exact_identity(
-            Some(self.summary.as_str()),
-            "summary",
-            "host inbox record",
-        )?;
         validate_optional_exact_identity(
             self.source_participant_id.as_deref(),
             "source_participant_id",
             "host inbox record",
         )?;
-        validate_required_exact_identity(
-            Some(self.ingress_source_kind.as_str()),
-            "ingress_source_kind",
-            "host inbox record",
-        )?;
-        validate_required_exact_identity(
-            Some(self.ingress_source_id.as_str()),
-            "ingress_source_id",
-            "host inbox record",
-        )?;
         validate_optional_host_id(
             self.origin_host_id.as_deref(),
             "origin_host_id",
-            "host inbox record",
-        )?;
-        validate_required_host_id(
-            Some(self.target_host_id.as_str()),
-            "target_host_id",
             "host inbox record",
         )?;
         validate_optional_exact_identity(
@@ -172,6 +153,31 @@ impl HostInboxRecord {
 
         match self.materialization_state {
             HostInboxMaterializationState::Pending => {
+                validate_required_exact_identity(
+                    Some(self.orchestration_session_id.as_str()),
+                    "orchestration_session_id",
+                    "host inbox record",
+                )?;
+                validate_required_exact_identity(
+                    Some(self.summary.as_str()),
+                    "summary",
+                    "host inbox record",
+                )?;
+                validate_required_exact_identity(
+                    Some(self.ingress_source_kind.as_str()),
+                    "ingress_source_kind",
+                    "host inbox record",
+                )?;
+                validate_required_exact_identity(
+                    Some(self.ingress_source_id.as_str()),
+                    "ingress_source_id",
+                    "host inbox record",
+                )?;
+                validate_required_host_id(
+                    Some(self.target_host_id.as_str()),
+                    "target_host_id",
+                    "host inbox record",
+                )?;
                 if self.materialized_obligation_id.is_some()
                     || self.materialized_at.is_some()
                     || self.failed_closed_at.is_some()
@@ -183,6 +189,31 @@ impl HostInboxRecord {
                 }
             }
             HostInboxMaterializationState::Materialized => {
+                validate_required_exact_identity(
+                    Some(self.orchestration_session_id.as_str()),
+                    "orchestration_session_id",
+                    "host inbox record",
+                )?;
+                validate_required_exact_identity(
+                    Some(self.summary.as_str()),
+                    "summary",
+                    "host inbox record",
+                )?;
+                validate_required_exact_identity(
+                    Some(self.ingress_source_kind.as_str()),
+                    "ingress_source_kind",
+                    "host inbox record",
+                )?;
+                validate_required_exact_identity(
+                    Some(self.ingress_source_id.as_str()),
+                    "ingress_source_id",
+                    "host inbox record",
+                )?;
+                validate_required_host_id(
+                    Some(self.target_host_id.as_str()),
+                    "target_host_id",
+                    "host inbox record",
+                )?;
                 if self.materialized_obligation_id.is_none() || self.materialized_at.is_none() {
                     anyhow::bail!(
                         "materialized host inbox records must include obligation linkage"
@@ -205,6 +236,32 @@ impl HostInboxRecord {
                         "failed_closed host inbox records must not persist materialized obligation truth"
                     );
                 }
+                validate_optional_exact_identity(
+                    Some(self.orchestration_session_id.as_str())
+                        .filter(|value| !value.is_empty()),
+                    "orchestration_session_id",
+                    "host inbox record",
+                )?;
+                validate_optional_exact_identity(
+                    Some(self.summary.as_str()).filter(|value| !value.is_empty()),
+                    "summary",
+                    "host inbox record",
+                )?;
+                validate_optional_exact_identity(
+                    Some(self.ingress_source_kind.as_str()).filter(|value| !value.is_empty()),
+                    "ingress_source_kind",
+                    "host inbox record",
+                )?;
+                validate_optional_exact_identity(
+                    Some(self.ingress_source_id.as_str()).filter(|value| !value.is_empty()),
+                    "ingress_source_id",
+                    "host inbox record",
+                )?;
+                validate_optional_host_id(
+                    Some(self.target_host_id.as_str()).filter(|value| !value.is_empty()),
+                    "target_host_id",
+                    "host inbox record",
+                )?;
             }
         }
 
@@ -633,5 +690,14 @@ mod tests {
         );
         assert!(record.materialized_obligation_id.is_none());
         assert!(record.materialized_at.is_none());
+
+        record.orchestration_session_id.clear();
+        record.summary.clear();
+        record.ingress_source_kind.clear();
+        record.ingress_source_id.clear();
+        record.target_host_id.clear();
+        record
+            .validate()
+            .expect("failed closed host inbox record may preserve missing exact truth");
     }
 }

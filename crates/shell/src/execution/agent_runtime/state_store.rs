@@ -2686,7 +2686,7 @@ impl AgentRuntimeStateStore {
             anyhow::bail!("host inbox materialization requires non-empty local_host_id");
         }
 
-        let Some(mut record) = self.load_host_inbox_record(record_id)? else {
+        let Some(mut record) = self.load_host_inbox_record_unvalidated(record_id)? else {
             anyhow::bail!("host_inbox_record_not_found: no host inbox record {record_id}");
         };
 
@@ -2737,15 +2737,6 @@ impl AgentRuntimeStateStore {
             .load_authoritative_session(&record.orchestration_session_id)?
             .is_none()
         {
-            let failed_closed_at = Utc::now();
-            record.mark_failed_closed(
-                format!(
-                    "missing_authoritative_session: host inbox record {} targets orchestration session {} with no authoritative local session",
-                    record.record_id, record.orchestration_session_id
-                ),
-                failed_closed_at,
-            );
-            self.persist_host_inbox_record_unlocked(&record)?;
             return Ok(record);
         }
 
@@ -2886,11 +2877,23 @@ impl AgentRuntimeStateStore {
         record_id: &str,
     ) -> Result<Option<HostInboxRecord>> {
         let path = self.host_inbox_record_path(record_id)?;
-        let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
+        let Some(record) = self.load_host_inbox_record_unvalidated(record_id)? else {
             return Ok(None);
         };
         self.validate_host_inbox_record(&record)
             .with_context(|| format!("invalid host inbox record in {}", path.display()))?;
+
+        Ok(Some(record))
+    }
+
+    fn load_host_inbox_record_unvalidated(&self, record_id: &str) -> Result<Option<HostInboxRecord>> {
+        let path = self.host_inbox_record_path(record_id)?;
+        let Some(mut record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
+            return Ok(None);
+        };
+        if record.record_id.is_empty() {
+            record.record_id = record_id.to_string();
+        }
         if record.record_id != record_id {
             anyhow::bail!(
                 "host inbox artifact {} stored mismatched record_id {}",
@@ -11488,7 +11491,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn host_inbox_state_store_fail_closes_records_without_authoritative_local_session() {
+    fn host_inbox_state_store_keeps_missing_session_records_pending_for_later_retry() {
         with_store(|store| {
             let record = pending_host_inbox_record(
                 "sess_host_missing_session",
@@ -11499,23 +11502,18 @@ mod tests {
                 .persist_host_inbox_record(&record)
                 .expect("persist host inbox record");
 
-            let failed = store
+            let pending = store
                 .materialize_host_inbox_record_for_local_host(
                     "host_record_missing_session",
                     "host-local",
                 )
-                .expect("missing-session materialization should fail closed durably");
+                .expect("missing-session materialization should stay retryable");
 
             assert_eq!(
-                failed.materialization_state,
-                HostInboxMaterializationState::FailedClosed
+                pending.materialization_state,
+                HostInboxMaterializationState::Pending
             );
-            assert_eq!(
-                failed.failed_closed_reason.as_deref(),
-                Some(
-                    "missing_authoritative_session: host inbox record host_record_missing_session targets orchestration session sess_host_missing_session with no authoritative local session"
-                )
-            );
+            assert!(pending.failed_closed_reason.is_none());
             assert!(store
                 .list_obligations("sess_host_missing_session")
                 .expect("list obligations")
@@ -11571,6 +11569,65 @@ mod tests {
                 err.to_string(),
                 "materialized_host_inbox_record_mismatch: host inbox record host_record_drifted no longer matches obligation host_inbox_host_record_drifted"
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn host_inbox_state_store_fail_closes_malformed_pending_artifacts() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_host_malformed", "orch_host");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+
+            let path = store
+                .host_inbox_record_path("host_record_malformed")
+                .expect("valid record path");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox dir");
+            fs::write(
+                &path,
+                serde_json::to_vec_pretty(&json!({
+                    "orchestration_session_id": "sess_host_malformed",
+                    "record_id": "host_record_malformed",
+                    "kind": "approval_required",
+                    "severity": "info",
+                    "created_at": "2026-06-08T00:00:00Z",
+                    "updated_at": "2026-06-08T00:00:00Z",
+                    "summary": "approval requested",
+                    "ingress_source_id": "ingress-host-record-malformed",
+                    "ingress_received_at": "2026-06-08T00:00:00Z",
+                    "materialization_state": "pending"
+                }))
+                .expect("serialize malformed host inbox artifact"),
+            )
+            .expect("write malformed host inbox artifact");
+
+            let failed = store
+                .materialize_host_inbox_record_for_local_host(
+                    "host_record_malformed",
+                    "host-local",
+                )
+                .expect("malformed host inbox artifact should fail closed durably");
+
+            assert_eq!(
+                failed.materialization_state,
+                HostInboxMaterializationState::FailedClosed
+            );
+            assert_eq!(
+                failed.failed_closed_reason.as_deref(),
+                Some("host inbox record must not persist an empty ingress_source_kind")
+            );
+            let persisted = store
+                .load_host_inbox_record("host_record_malformed")
+                .expect("reload failed closed malformed artifact")
+                .expect("failed closed artifact persists");
+            assert_eq!(persisted, failed);
+            assert!(store
+                .list_obligations("sess_host_malformed")
+                .expect("list obligations")
+                .is_empty());
         });
     }
 }
