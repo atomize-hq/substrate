@@ -2,6 +2,8 @@
 
 mod support;
 
+use std::fs;
+
 use agent_drift_analyzer::AnalyzeRequest;
 use support::{analyze_sample_bundle, load_sample_bundle, BundleFixture};
 use time::macros::datetime;
@@ -480,4 +482,19 @@ fn checkpoints_degrade_conservatively_when_no_turn_id_is_available() {
     assert_eq!(second_turn.rows_since_turn_start, 4);
     assert_eq!(second_turn.checkpoints_in_turn, 1);
     assert_eq!(second_turn.prompts_observed_in_session, 1);
+}
+
+#[test]
+fn checkpoints_render_single_agent_delegation_summary_as_none() {
+    let fixture = BundleFixture::sample();
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze sample bundle");
+    let summary = fs::read_to_string(&result.summary_path).expect("summary");
+
+    assert!(summary.contains(
+        "  delegation: `topology=single_agent visibility=none confidence=high markers=none support[none] counter[none]`"
+    ));
 }

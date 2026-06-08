@@ -7,7 +7,8 @@ use crate::input::BundleSession;
 use crate::{
     context::assemble_context, context::collect_command_observations,
     context::focusable_directive_rows, context::CommandObservation, context::ContextPack,
-    inference::infer_delegation_context, inference::infer_task_frame, inference::DelegationContext,
+    inference::infer_delegation_context, inference::infer_task_frame,
+    inference::ChildWorkVisibility, inference::DelegationContext, inference::DelegationTopology,
     scoring::DriftStateHint, scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
@@ -101,7 +102,8 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
         let context = assemble_context(&window);
         let task_frame = infer_task_frame(&context);
-        let delegation = infer_delegation_context(&window, &context);
+        let delegation =
+            classify_checkpoint_delegation(infer_delegation_context(&window, &context));
         let current = CheckpointSlice {
             window,
             context,
@@ -136,6 +138,81 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     }
 
     analyses
+}
+
+fn classify_checkpoint_delegation(mut delegation: DelegationContext) -> DelegationContext {
+    let topology = derive_delegation_topology(&delegation);
+    let child_work_visibility = derive_child_work_visibility(&delegation, topology);
+    let confidence = derive_delegation_confidence(&delegation, topology, child_work_visibility);
+
+    delegation.topology = Some(topology);
+    delegation.child_work_visibility = Some(child_work_visibility);
+    delegation.confidence = Some(confidence);
+    delegation
+}
+
+fn derive_delegation_topology(delegation: &DelegationContext) -> DelegationTopology {
+    if delegation.markers.is_empty() {
+        return DelegationTopology::SingleAgent;
+    }
+
+    if delegation.markers.iter().any(|marker| {
+        matches!(
+            marker.as_str(),
+            "spawn_agent" | "wait_agent" | "close_agent"
+        )
+    }) {
+        return DelegationTopology::DelegatingParent;
+    }
+
+    DelegationTopology::MixedOrAmbiguous
+}
+
+fn derive_child_work_visibility(
+    delegation: &DelegationContext,
+    topology: DelegationTopology,
+) -> ChildWorkVisibility {
+    if matches!(topology, DelegationTopology::SingleAgent) {
+        return ChildWorkVisibility::None;
+    }
+
+    if delegation_supports_partial_child_visibility(delegation) {
+        return ChildWorkVisibility::Partial;
+    }
+
+    ChildWorkVisibility::Opaque
+}
+
+fn delegation_supports_partial_child_visibility(delegation: &DelegationContext) -> bool {
+    delegation.supporting_evidence.iter().any(|evidence| {
+        evidence
+            .reason
+            .contains("delegation child rollout surface links child/subagent work")
+    })
+}
+
+fn derive_delegation_confidence(
+    delegation: &DelegationContext,
+    topology: DelegationTopology,
+    child_work_visibility: ChildWorkVisibility,
+) -> Confidence {
+    match topology {
+        DelegationTopology::SingleAgent => Confidence::High,
+        DelegationTopology::DelegatingParent => match child_work_visibility {
+            ChildWorkVisibility::Partial => Confidence::Medium,
+            ChildWorkVisibility::Opaque => {
+                if delegation.counter_evidence.is_empty() {
+                    Confidence::Medium
+                } else {
+                    Confidence::Low
+                }
+            }
+            ChildWorkVisibility::None => Confidence::Low,
+        },
+        DelegationTopology::DelegatedChild | DelegationTopology::MixedOrAmbiguous => {
+            Confidence::Low
+        }
+    }
 }
 
 pub(crate) fn build_session_checkpoint_from_analysis(
@@ -896,9 +973,18 @@ mod tests {
         assert_eq!(analyses.len(), 1);
 
         let delegation = &analyses[0].delegation;
-        assert!(delegation.topology.is_none());
-        assert!(delegation.child_work_visibility.is_none());
-        assert!(delegation.confidence.is_none());
+        assert_eq!(
+            delegation.topology,
+            Some(crate::inference::DelegationTopology::DelegatingParent)
+        );
+        assert_eq!(
+            delegation.child_work_visibility,
+            Some(crate::inference::ChildWorkVisibility::Partial)
+        );
+        assert_eq!(
+            delegation.confidence,
+            Some(crate::checkpoint::Confidence::Medium)
+        );
         assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
         assert!(delegation
             .supporting_evidence
@@ -907,6 +993,63 @@ mod tests {
                 .reason
                 .contains("child rollout surface links child/subagent work")));
         assert!(delegation.counter_evidence.is_empty());
+    }
+
+    #[test]
+    fn checkpoints_degrade_generic_delegation_markers_to_ambiguous_and_opaque() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Inspect delegation wiring only.",
+                ),
+                tool_call(1, "multi_agent_v1", "{\"mode\":\"delegated\"}"),
+                row(
+                    2,
+                    CompactionKind::DeveloperMessage,
+                    "Child session id 019ea222-2222-7222-8222-222222222222 remains in separate rollout /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-30-00-019ea222-2222-7222-8222-222222222222.jsonl",
+                ),
+            ],
+            compact_rows: vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Inspect delegation wiring only.",
+                ),
+                tool_call(1, "multi_agent_v1", "{\"mode\":\"delegated\"}"),
+                row(
+                    2,
+                    CompactionKind::DeveloperMessage,
+                    "Child session id 019ea222-2222-7222-8222-222222222222 remains in separate rollout /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-30-00-019ea222-2222-7222-8222-222222222222.jsonl",
+                ),
+            ],
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 2);
+
+        let delegation = &analyses[1].delegation;
+        assert_eq!(
+            delegation.topology,
+            Some(crate::inference::DelegationTopology::MixedOrAmbiguous)
+        );
+        assert_eq!(
+            delegation.child_work_visibility,
+            Some(crate::inference::ChildWorkVisibility::Opaque)
+        );
+        assert_eq!(
+            delegation.confidence,
+            Some(crate::checkpoint::Confidence::Low)
+        );
+        assert_eq!(delegation.markers, vec!["multi_agent_v1".to_string()]);
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence
+                .reason
+                .contains("delegation directive surface references separate child rollout")));
     }
 
     fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {

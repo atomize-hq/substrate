@@ -6,10 +6,11 @@ use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessage
 use camino::{Utf8Path, Utf8PathBuf};
 use time::OffsetDateTime;
 
+use super::checkpoint_analyses;
 use crate::checkpoint::{
-    Checkpoint, Confidence, DriftClass, TaskFrame, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    Checkpoint, Confidence, DriftClass, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
+use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
 use crate::input::BundleSession;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -447,6 +448,14 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
                 "  turn: `{}`",
                 format_checkpoint_turn_context(checkpoint.turn_context.as_ref())
             ));
+            lines.push(format!(
+                "  delegation: `{}`",
+                format_checkpoint_delegation(
+                    session_summary
+                        .delegation_by_ordinal
+                        .get(&checkpoint.ordinal)
+                )
+            ));
         }
         lines.push(String::new());
     }
@@ -471,6 +480,7 @@ struct SessionSummary {
     diagnostics: SessionDiagnostics,
     spacing: SpacingAccumulator,
     checkpoints: Vec<Checkpoint>,
+    delegation_by_ordinal: BTreeMap<usize, DelegationContext>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -550,6 +560,10 @@ fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> Se
     let user_message_roles = user_message_role_counts(&session.compact_rows);
     let spacing = checkpoint_spacing(session, &sorted_checkpoints);
     let checkpoint_stats = summarize_checkpoint_diagnostics(&sorted_checkpoints);
+    let delegation_by_ordinal = checkpoint_analyses(session)
+        .into_iter()
+        .map(|analysis| (analysis.ordinal, analysis.delegation))
+        .collect::<BTreeMap<_, _>>();
     let metrics = SessionSummaryMetrics {
         turns_observed: session_turn_count(session),
         user_prompts_observed: user_message_roles.prompt,
@@ -578,6 +592,7 @@ fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> Se
         diagnostics,
         spacing,
         checkpoints: sorted_checkpoints,
+        delegation_by_ordinal,
     }
 }
 
@@ -811,9 +826,7 @@ fn format_turn_context_overview(checkpoints: &[Checkpoint]) -> String {
         })
         .join(" -> ");
 
-    format!(
-        "{turn_path}; checkpoints in turn {checkpoints_in_turn}; modes {mode_path}"
-    )
+    format!("{turn_path}; checkpoints in turn {checkpoints_in_turn}; modes {mode_path}")
 }
 
 fn format_checkpoint_turn_context(turn_context: Option<&TurnContext>) -> String {
@@ -833,13 +846,93 @@ fn format_checkpoint_turn_context(turn_context: Option<&TurnContext>) -> String 
             "mode={}",
             format_turn_execution_mode(turn_context.execution_mode)
         ),
-        format!("activity[{}]", format_turn_activity_mix(&turn_context.activity_mix)),
+        format!(
+            "activity[{}]",
+            format_turn_activity_mix(&turn_context.activity_mix)
+        ),
     ];
     if let Some(seconds_since_turn_start) = turn_context.seconds_since_turn_start {
         parts.insert(3, format!("elapsed={}s", seconds_since_turn_start));
     }
 
     parts.join(" ")
+}
+
+fn format_checkpoint_delegation(delegation: Option<&DelegationContext>) -> String {
+    let Some(delegation) = delegation else {
+        return "unavailable".to_string();
+    };
+
+    let topology = delegation
+        .topology
+        .map(format_delegation_topology)
+        .unwrap_or("unavailable");
+    let visibility = delegation
+        .child_work_visibility
+        .map(format_child_work_visibility)
+        .unwrap_or("unavailable");
+    let confidence = delegation
+        .confidence
+        .map(format_confidence)
+        .unwrap_or("unavailable");
+    let markers = if delegation.markers.is_empty() {
+        "none".to_string()
+    } else {
+        delegation.markers.join(",")
+    };
+
+    format!(
+        "topology={topology} visibility={visibility} confidence={confidence} markers={markers} support[{}] counter[{}]",
+        format_delegation_evidence(&delegation.supporting_evidence),
+        format_delegation_evidence(&delegation.counter_evidence)
+    )
+}
+
+fn format_delegation_topology(topology: DelegationTopology) -> &'static str {
+    match topology {
+        DelegationTopology::SingleAgent => "single_agent",
+        DelegationTopology::DelegatingParent => "delegating_parent",
+        DelegationTopology::DelegatedChild => "delegated_child",
+        DelegationTopology::MixedOrAmbiguous => "mixed_or_ambiguous",
+    }
+}
+
+fn format_child_work_visibility(visibility: ChildWorkVisibility) -> &'static str {
+    match visibility {
+        ChildWorkVisibility::None => "none",
+        ChildWorkVisibility::Partial => "partial",
+        ChildWorkVisibility::Opaque => "opaque",
+    }
+}
+
+fn format_confidence(confidence: Confidence) -> &'static str {
+    match confidence {
+        Confidence::Low => "low",
+        Confidence::Medium => "medium",
+        Confidence::High => "high",
+    }
+}
+
+fn format_delegation_evidence(evidence: &[crate::checkpoint::EvidenceRef]) -> String {
+    if evidence.is_empty() {
+        return "none".to_string();
+    }
+
+    evidence
+        .iter()
+        .map(|item| {
+            let source = item
+                .row
+                .source_file
+                .file_name()
+                .unwrap_or(item.row.source_file.as_str());
+            format!(
+                "{source}@{}:{} {}",
+                item.row.event_index, item.row.row_ordinal, item.reason
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn format_turn_label(turn_context: &TurnContext) -> String {

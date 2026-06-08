@@ -42,6 +42,9 @@ fn end_to_end_analysis_is_stable_across_reruns() {
     assert!(first_summary.contains(
         "  turn: `turn-001 (#1) rows=13 checkpoints=2 session-prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=6 verify=4 out=2]`"
     ));
+    assert!(first_summary.contains(
+        "  delegation: `topology=single_agent visibility=none confidence=high markers=none support[none] counter[none]`"
+    ));
 }
 
 #[test]

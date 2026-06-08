@@ -116,6 +116,130 @@ fn export_bundle_writes_checkpoints_and_summary() {
     assert!(summary.contains(
         "  turn: `turn-001 (#1) rows=13 checkpoints=2 session-prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=6 verify=4 out=2]`"
     ));
+    assert!(summary.contains(
+        "  delegation: `topology=single_agent visibility=none confidence=high markers=none support[none] counter[none]`"
+    ));
+}
+
+#[test]
+fn export_bundle_renders_compact_delegation_inspection_for_delegated_parent_sessions() {
+    let session = BundleSession {
+        session_id: "session-delegation-summary".to_string(),
+        archival_rows: vec![
+            fixture_row(
+                "session-delegation-summary",
+                0,
+                CompactionKind::UserMessage,
+                "/goal Inspect delegation summary only.",
+                Some(UserMessageRole::Prompt),
+            ),
+            fixture_tool_row(
+                "session-delegation-summary",
+                1,
+                "spawn_agent",
+                "{\"agent_type\":\"worker\"}",
+            ),
+        ],
+        compact_rows: vec![fixture_tool_row(
+            "session-delegation-summary",
+            2,
+            "functions.shell_command",
+            "{\"command\":\"printf 'child rollout ' && sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl\",\"workdir\":\"/repo\"}",
+        )],
+    };
+    let task_frame = TaskFrame {
+        objective: "Inspect delegation summary".to_string(),
+        confidence: Confidence::Medium,
+        truth_artifacts: vec!["docs/spec.md".to_string()],
+        working_set_paths: vec!["crates/agent-drift-analyzer/src/checkpoint/mod.rs".to_string()],
+        tools: vec!["functions.shell_command".to_string()],
+        command_families: vec!["shell".to_string()],
+        verification_commands: vec![
+            "cargo test -p agent-drift-analyzer checkpoints -- --nocapture".to_string(),
+        ],
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    };
+    let checkpoint = build_session_checkpoint(&session, 1, &task_frame, Vec::new());
+    let summary = export_summary(vec![session], vec![checkpoint]);
+
+    assert!(summary.contains(
+        "topology=delegating_parent visibility=partial confidence=medium markers=spawn_agent"
+    ));
+    assert!(summary.contains("delegation marker: spawn_agent"));
+    assert!(summary.contains("delegation child rollout surface links child/subagent work"));
+    assert!(summary.contains("counter[none]"));
+}
+
+#[test]
+fn export_bundle_renders_compact_delegation_inspection_for_ambiguous_opaque_sessions() {
+    let session = BundleSession {
+        session_id: "session-delegation-ambiguous".to_string(),
+        archival_rows: vec![
+            fixture_row(
+                "session-delegation-ambiguous",
+                0,
+                CompactionKind::UserMessage,
+                "/goal Inspect delegation summary only.",
+                Some(UserMessageRole::Prompt),
+            ),
+            fixture_tool_row(
+                "session-delegation-ambiguous",
+                1,
+                "multi_agent_v1",
+                "{\"mode\":\"delegated\"}",
+            ),
+            fixture_row(
+                "session-delegation-ambiguous",
+                2,
+                CompactionKind::DeveloperMessage,
+                "Child session id 019ea222-2222-7222-8222-222222222222 remains in separate rollout /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-30-00-019ea222-2222-7222-8222-222222222222.jsonl",
+                None,
+            ),
+        ],
+        compact_rows: vec![
+            fixture_row(
+                "session-delegation-ambiguous",
+                0,
+                CompactionKind::UserMessage,
+                "/goal Inspect delegation summary only.",
+                Some(UserMessageRole::Prompt),
+            ),
+            fixture_tool_row(
+                "session-delegation-ambiguous",
+                1,
+                "multi_agent_v1",
+                "{\"mode\":\"delegated\"}",
+            ),
+            fixture_row(
+                "session-delegation-ambiguous",
+                2,
+                CompactionKind::DeveloperMessage,
+                "Child session id 019ea222-2222-7222-8222-222222222222 remains in separate rollout /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-30-00-019ea222-2222-7222-8222-222222222222.jsonl",
+                None,
+            ),
+        ],
+    };
+    let task_frame = TaskFrame {
+        objective: "Inspect delegation summary".to_string(),
+        confidence: Confidence::Medium,
+        truth_artifacts: vec!["docs/spec.md".to_string()],
+        working_set_paths: vec!["crates/agent-drift-analyzer/src/checkpoint/mod.rs".to_string()],
+        tools: vec!["functions.shell_command".to_string()],
+        command_families: vec!["shell".to_string()],
+        verification_commands: vec![
+            "cargo test -p agent-drift-analyzer checkpoints -- --nocapture".to_string(),
+        ],
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    };
+    let checkpoint = build_session_checkpoint(&session, 2, &task_frame, Vec::new());
+    let summary = export_summary(vec![session], vec![checkpoint]);
+
+    assert!(summary.contains(
+        "topology=mixed_or_ambiguous visibility=opaque confidence=low markers=multi_agent_v1"
+    ));
+    assert!(summary.contains("delegation directive surface references separate child rollout"));
 }
 
 #[test]
@@ -838,6 +962,25 @@ fn fixture_row(
         canonical_text: text.to_string(),
         text_hash_hex: format!("{session_id}-{event_index}"),
     }
+}
+
+fn fixture_tool_row(
+    session_id: &str,
+    event_index: usize,
+    tool_name: &str,
+    text: &str,
+) -> CompactionRow {
+    let mut row = fixture_row(
+        session_id,
+        event_index,
+        CompactionKind::ToolCall,
+        text,
+        None,
+    );
+    row.dedupe_identity = Some(format!(
+        "{{\"call_id\":\"call-{event_index}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
+    ));
+    row
 }
 
 fn fixture_checkpoint(
