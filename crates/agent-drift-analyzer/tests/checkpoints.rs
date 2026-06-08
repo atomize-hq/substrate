@@ -48,6 +48,49 @@ fn checkpoints_are_deterministic_and_session_scoped() {
 }
 
 #[test]
+fn checkpoints_wire_delegation_from_checkpoint_analysis() {
+    let mut bundle = load_sample_bundle();
+    let session = bundle.sessions.first_mut().expect("sample session");
+
+    let marker_row = session
+        .compact_rows
+        .iter_mut()
+        .find(|row| row.event_index == 2)
+        .expect("marker row");
+    marker_row.text = "{\"agent_type\":\"worker\"}".to_string();
+    marker_row.canonical_text = marker_row.text.clone();
+    marker_row.text_hash_hex = "hash-spawn-agent".to_string();
+    marker_row.dedupe_identity = Some(
+        "{\"call_id\":\"call-delegation\",\"name\":\"spawn_agent\",\"type\":\"function_call\"}"
+            .to_string(),
+    );
+
+    let child_rollout_row = session
+        .compact_rows
+        .iter_mut()
+        .find(|row| row.event_index == 8)
+        .expect("child rollout row");
+    child_rollout_row.text =
+        "{\"command\":\"sed -n '1,40p' /tmp/child/rollout-019e-child.jsonl\",\"workdir\":\"/repo\"}"
+            .to_string();
+    child_rollout_row.canonical_text = child_rollout_row.text.clone();
+    child_rollout_row.text_hash_hex = "hash-child-rollout".to_string();
+
+    let delegation = agent_drift_analyzer::checkpoint::inspect_checkpoint_delegation(session);
+
+    assert_eq!(delegation.len(), 2);
+    assert_eq!(delegation[0].checkpoint_ordinal, 1);
+    assert_eq!(delegation[0].topology, "delegating_parent");
+    assert_eq!(delegation[0].child_work_visibility, "partial");
+    assert_eq!(delegation[0].markers, vec!["spawn_agent".to_string()]);
+    assert!(delegation[0]
+        .supporting_evidence
+        .iter()
+        .any(|evidence| evidence.reason.contains("child rollout command")));
+    assert!(delegation[0].counter_evidence.is_empty());
+}
+
+#[test]
 fn checkpoints_compute_turn_timing_from_turn_slice_boundaries() {
     let mut bundle = load_sample_bundle();
     for row in &mut bundle.archival_rows {

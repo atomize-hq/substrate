@@ -38,6 +38,18 @@ pub(crate) struct CheckpointAnalysis {
     pub recovery: RecoveryState,
 }
 
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckpointDelegationSummary {
+    pub checkpoint_ordinal: usize,
+    pub topology: String,
+    pub child_work_visibility: String,
+    pub confidence: Confidence,
+    pub markers: Vec<String>,
+    pub supporting_evidence: Vec<EvidenceRef>,
+    pub counter_evidence: Vec<EvidenceRef>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CheckpointSlice {
     pub window: BundleSession,
@@ -136,6 +148,25 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     }
 
     analyses
+}
+
+#[doc(hidden)]
+pub fn inspect_checkpoint_delegation(session: &BundleSession) -> Vec<CheckpointDelegationSummary> {
+    checkpoint_analyses(session)
+        .into_iter()
+        .map(|analysis| CheckpointDelegationSummary {
+            checkpoint_ordinal: analysis.ordinal,
+            topology: delegation_topology_label(analysis.delegation.topology).to_string(),
+            child_work_visibility: child_work_visibility_label(
+                analysis.delegation.child_work_visibility,
+            )
+            .to_string(),
+            confidence: analysis.delegation.confidence,
+            markers: analysis.delegation.markers,
+            supporting_evidence: analysis.delegation.supporting_evidence,
+            counter_evidence: analysis.delegation.counter_evidence,
+        })
+        .collect()
 }
 
 pub(crate) fn build_session_checkpoint_from_analysis(
@@ -247,6 +278,23 @@ fn checkpoint_diagnostics_from_analysis(
         interval_command_count: analysis.interval.command_observations.len(),
         interval_verification_command_count: analysis.recovery.interval_verification_command_count,
         evidence_item_count: evidence_item_count(task_frame, drift_scores),
+    }
+}
+
+fn delegation_topology_label(topology: crate::inference::DelegationTopology) -> &'static str {
+    match topology {
+        crate::inference::DelegationTopology::SingleAgent => "single_agent",
+        crate::inference::DelegationTopology::DelegatingParent => "delegating_parent",
+        crate::inference::DelegationTopology::DelegatedChild => "delegated_child",
+        crate::inference::DelegationTopology::MixedOrAmbiguous => "mixed_or_ambiguous",
+    }
+}
+
+fn child_work_visibility_label(visibility: crate::inference::ChildWorkVisibility) -> &'static str {
+    match visibility {
+        crate::inference::ChildWorkVisibility::None => "none",
+        crate::inference::ChildWorkVisibility::Partial => "partial",
+        crate::inference::ChildWorkVisibility::Opaque => "opaque",
     }
 }
 

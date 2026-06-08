@@ -73,11 +73,7 @@ pub(crate) fn infer_delegation_context(
 ) -> DelegationContext {
     let rows = delegation_rows(session);
     let marker_evidence = collect_marker_evidence(rows);
-    let context_signal_evidence = if marker_evidence.markers.is_empty() {
-        Vec::new()
-    } else {
-        collect_context_signal_evidence(rows, context)
-    };
+    let context_signal_evidence = collect_context_signal_evidence(rows, context);
     let supporting_evidence = dedupe_evidence(
         marker_evidence.evidence.iter().chain(
             context_signal_evidence
@@ -90,6 +86,8 @@ pub(crate) fn infer_delegation_context(
         infer_child_work_visibility(topology, &marker_evidence.markers, &context_signal_evidence);
     let confidence =
         infer_delegation_confidence(topology, &marker_evidence.markers, &context_signal_evidence);
+    let counter_evidence =
+        infer_delegation_counter_evidence(context, &marker_evidence, &context_signal_evidence);
 
     DelegationContext {
         topology,
@@ -97,7 +95,7 @@ pub(crate) fn infer_delegation_context(
         confidence,
         markers: marker_evidence.markers,
         supporting_evidence,
-        counter_evidence: Vec::new(),
+        counter_evidence,
     }
 }
 
@@ -195,16 +193,42 @@ fn collect_marker_evidence(rows: &[CompactionRow]) -> MarkerEvidence {
 
 #[derive(Debug, Clone)]
 struct ContextSignalEvidence {
-    signal: &'static str,
+    category: ContextSignalCategory,
+    visibility: Option<ChildWorkVisibility>,
     evidence: EvidenceRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ContextSignalCategory {
+    Orchestration,
+    Visibility,
 }
 
 fn collect_context_signal_evidence(
     rows: &[CompactionRow],
-    _context: &ContextPack,
+    context: &ContextPack,
 ) -> Vec<ContextSignalEvidence> {
     let mut seen = BTreeSet::new();
     let mut evidence = Vec::new();
+
+    if !has_explicit_delegation_tool(context) {
+        return evidence;
+    }
+
+    for candidate in collect_tool_signal_evidence(context)
+        .into_iter()
+        .chain(collect_command_signal_evidence(context))
+        .chain(collect_supporting_signal_evidence(context))
+    {
+        let key = evidence_key(&candidate.evidence);
+        if seen.insert(key) {
+            evidence.push(candidate);
+        }
+    }
+
+    if has_visibility_signal(&evidence) {
+        return evidence;
+    }
 
     for row in rows {
         if !matches!(
@@ -227,7 +251,16 @@ fn collect_context_signal_evidence(
             }
 
             let candidate = ContextSignalEvidence {
-                signal: *signal,
+                category: if *signal == "spawned agent" {
+                    ContextSignalCategory::Orchestration
+                } else {
+                    ContextSignalCategory::Visibility
+                },
+                visibility: if *signal == "spawned agent" {
+                    None
+                } else {
+                    Some(ChildWorkVisibility::Opaque)
+                },
                 evidence: EvidenceRef {
                     row: agent_session_compactor::RowRef::from_row(row),
                     reason: format!("delegation context signal: {signal}"),
@@ -241,6 +274,106 @@ fn collect_context_signal_evidence(
     }
 
     evidence
+}
+
+fn collect_tool_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEvidence> {
+    context
+        .tools
+        .iter()
+        .filter(|tool| EXPLICIT_DELEGATION_MARKERS.contains(&tool.name.as_str()))
+        .flat_map(|tool| {
+            tool.evidence
+                .iter()
+                .map(move |evidence| ContextSignalEvidence {
+                    category: ContextSignalCategory::Orchestration,
+                    visibility: None,
+                    evidence: EvidenceRef {
+                        row: evidence.row.clone(),
+                        reason: format!("delegation tool observed via context pack: {}", tool.name),
+                    },
+                })
+        })
+        .collect()
+}
+
+fn collect_command_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEvidence> {
+    let mut evidence = Vec::new();
+    for command in &context.command_observations {
+        for path in &command.paths {
+            if !looks_like_child_rollout_artifact(path) {
+                continue;
+            }
+
+            evidence.extend(command.evidence.iter().map(|item| ContextSignalEvidence {
+                category: ContextSignalCategory::Visibility,
+                visibility: Some(ChildWorkVisibility::Partial),
+                evidence: EvidenceRef {
+                    row: item.row.clone(),
+                    reason: format!(
+                        "delegation child rollout command via {}: {path}",
+                        command.family
+                    ),
+                },
+            }));
+        }
+
+        let raw_command = command.raw_command.to_ascii_lowercase();
+        for signal in OPAQUE_CHILD_CONTEXT_SIGNALS {
+            if !raw_command.contains(signal) {
+                continue;
+            }
+            evidence.extend(command.evidence.iter().map(|item| ContextSignalEvidence {
+                category: ContextSignalCategory::Visibility,
+                visibility: Some(ChildWorkVisibility::Opaque),
+                evidence: EvidenceRef {
+                    row: item.row.clone(),
+                    reason: format!("delegation command surface mentions {signal}"),
+                },
+            }));
+        }
+    }
+    evidence
+}
+
+fn collect_supporting_signal_evidence(context: &ContextPack) -> Vec<ContextSignalEvidence> {
+    context
+        .supporting_evidence
+        .iter()
+        .filter_map(|evidence| {
+            let reason = evidence.reason.to_ascii_lowercase();
+            if let Some(path) = reason
+                .split_once(": ")
+                .map(|(_, value)| value)
+                .filter(|path| looks_like_child_rollout_artifact(path))
+            {
+                return Some(ContextSignalEvidence {
+                    category: ContextSignalCategory::Visibility,
+                    visibility: Some(ChildWorkVisibility::Opaque),
+                    evidence: EvidenceRef {
+                        row: evidence.row.clone(),
+                        reason: format!(
+                            "delegation supporting hint references child rollout: {path}"
+                        ),
+                    },
+                });
+            }
+
+            for signal in OPAQUE_CHILD_CONTEXT_SIGNALS {
+                if reason.contains(signal) {
+                    return Some(ContextSignalEvidence {
+                        category: ContextSignalCategory::Visibility,
+                        visibility: Some(ChildWorkVisibility::Opaque),
+                        evidence: EvidenceRef {
+                            row: evidence.row.clone(),
+                            reason: format!("delegation supporting evidence mentions {signal}"),
+                        },
+                    });
+                }
+            }
+
+            None
+        })
+        .collect()
 }
 
 fn dedupe_evidence<'a>(items: impl Iterator<Item = &'a EvidenceRef>) -> Vec<EvidenceRef> {
@@ -279,16 +412,20 @@ fn infer_child_work_visibility(
     markers: &[String],
     context_signal_evidence: &[ContextSignalEvidence],
 ) -> ChildWorkVisibility {
+    let has_partial_visibility = has_partial_child_signal(context_signal_evidence);
+    let has_opaque_visibility = has_opaque_child_signal(context_signal_evidence);
+
     match topology {
         DelegationTopology::SingleAgent | DelegationTopology::DelegatedChild => {
             ChildWorkVisibility::None
         }
         DelegationTopology::DelegatingParent => {
-            if has_opaque_child_signal(context_signal_evidence)
-                || (context_signal_evidence.is_empty()
-                    && markers
-                        .iter()
-                        .any(|marker| matches!(marker.as_str(), "spawn_agent" | "wait_agent")))
+            if has_partial_visibility {
+                ChildWorkVisibility::Partial
+            } else if has_opaque_visibility
+                || markers
+                    .iter()
+                    .any(|marker| matches!(marker.as_str(), "spawn_agent" | "wait_agent"))
             {
                 ChildWorkVisibility::Opaque
             } else {
@@ -296,8 +433,10 @@ fn infer_child_work_visibility(
             }
         }
         DelegationTopology::MixedOrAmbiguous => {
-            if has_opaque_child_signal(context_signal_evidence) {
+            if has_opaque_visibility {
                 ChildWorkVisibility::Opaque
+            } else if has_partial_visibility {
+                ChildWorkVisibility::Partial
             } else {
                 ChildWorkVisibility::Partial
             }
@@ -353,7 +492,75 @@ fn tool_name_from_row(row: &CompactionRow) -> Option<String> {
 fn has_opaque_child_signal(context_signal_evidence: &[ContextSignalEvidence]) -> bool {
     context_signal_evidence
         .iter()
-        .any(|evidence| OPAQUE_CHILD_CONTEXT_SIGNALS.contains(&evidence.signal))
+        .any(|evidence| evidence.visibility == Some(ChildWorkVisibility::Opaque))
+}
+
+fn has_partial_child_signal(context_signal_evidence: &[ContextSignalEvidence]) -> bool {
+    context_signal_evidence
+        .iter()
+        .any(|evidence| evidence.visibility == Some(ChildWorkVisibility::Partial))
+}
+
+fn has_visibility_signal(context_signal_evidence: &[ContextSignalEvidence]) -> bool {
+    context_signal_evidence
+        .iter()
+        .any(|evidence| evidence.category == ContextSignalCategory::Visibility)
+}
+
+fn has_explicit_delegation_tool(context: &ContextPack) -> bool {
+    context
+        .tools
+        .iter()
+        .any(|tool| EXPLICIT_DELEGATION_MARKERS.contains(&tool.name.as_str()))
+}
+
+fn looks_like_child_rollout_artifact(path: &str) -> bool {
+    path.contains(".codex/sessions/") || (path.contains("rollout-") && path.ends_with(".jsonl"))
+}
+
+fn infer_delegation_counter_evidence(
+    context: &ContextPack,
+    marker_evidence: &MarkerEvidence,
+    context_signal_evidence: &[ContextSignalEvidence],
+) -> Vec<EvidenceRef> {
+    if marker_evidence.markers.is_empty() || has_partial_child_signal(context_signal_evidence) {
+        return Vec::new();
+    }
+
+    let reason = if has_visibility_signal(context_signal_evidence) {
+        format!(
+            "explicit delegation markers remained child-opaque; no child-visible command evidence appeared across command families: {}",
+            summarize_command_families(&context.command_families)
+        )
+    } else {
+        format!(
+            "explicit delegation markers lacked child visibility/context evidence across command families: {}",
+            summarize_command_families(&context.command_families)
+        )
+    };
+
+    let candidates = marker_evidence
+        .evidence
+        .iter()
+        .map(|evidence| EvidenceRef {
+            row: evidence.row.clone(),
+            reason: reason.clone(),
+        })
+        .collect::<Vec<_>>();
+    dedupe_evidence(candidates.iter())
+}
+
+fn summarize_command_families(command_families: &[String]) -> String {
+    if command_families.is_empty() {
+        "none observed".to_string()
+    } else {
+        command_families
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 fn evidence_key(evidence: &EvidenceRef) -> String {
@@ -441,6 +648,58 @@ mod tests {
             ChildWorkVisibility::Opaque
         );
         assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
+        assert_eq!(delegation.counter_evidence.len(), 1);
+    }
+
+    #[test]
+    fn delegation_harvests_child_rollout_visibility_from_command_surfaces() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+                tool_call(
+                    "functions.shell_command",
+                    "{\"command\":\"sed -n '1,40p' /tmp/child/rollout-019e-test.jsonl\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Partial
+        );
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence.reason.contains("child rollout command")));
+        assert!(delegation.counter_evidence.is_empty());
+    }
+
+    #[test]
+    fn delegation_marks_missing_child_visibility_as_counter_evidence() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![tool_call("spawn_agent", "{\"agent_type\":\"worker\"}")],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Opaque
+        );
+        assert_eq!(delegation.counter_evidence.len(), 1);
+        assert!(delegation.counter_evidence[0]
+            .reason
+            .contains("lacked child visibility/context evidence"));
     }
 
     fn row(kind: CompactionKind, text: &str) -> CompactionRow {
