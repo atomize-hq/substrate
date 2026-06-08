@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use agent_session_compactor::CompactionRow;
+use agent_session_compactor::{CompactionKind, CompactionRow};
 use serde_json::Value;
 
 use crate::checkpoint::{Confidence, EvidenceRef, TaskFrame};
@@ -70,9 +70,12 @@ pub(crate) fn infer_delegation_context(
     session: &BundleSession,
     context: &ContextPack,
 ) -> DelegationContext {
-    let rows = delegation_rows(session);
-    let marker_evidence = collect_marker_evidence(rows);
-    let context_signal_evidence = collect_context_signal_evidence(rows, context);
+    let marker_evidence = collect_marker_evidence(delegation_rows(session));
+    let context_signal_evidence = collect_context_signal_evidence(
+        delegation_rows(session),
+        context,
+        !marker_evidence.markers.is_empty(),
+    );
     let supporting_evidence = dedupe_evidence(
         marker_evidence.evidence.iter().chain(
             context_signal_evidence
@@ -148,12 +151,8 @@ fn infer_confidence(context: &ContextPack, counter_evidence: &[EvidenceRef]) -> 
     }
 }
 
-fn delegation_rows(session: &BundleSession) -> &[CompactionRow] {
-    if session.compact_rows.is_empty() {
-        &session.archival_rows
-    } else {
-        &session.compact_rows
-    }
+fn delegation_rows(session: &BundleSession) -> impl Iterator<Item = &CompactionRow> + '_ {
+    session.archival_rows.iter().chain(session.compact_rows.iter())
 }
 
 #[derive(Debug, Default)]
@@ -162,7 +161,7 @@ struct MarkerEvidence {
     evidence: Vec<EvidenceRef>,
 }
 
-fn collect_marker_evidence(rows: &[CompactionRow]) -> MarkerEvidence {
+fn collect_marker_evidence<'a>(rows: impl IntoIterator<Item = &'a CompactionRow>) -> MarkerEvidence {
     let mut seen_markers = BTreeSet::new();
     let mut seen_evidence = BTreeSet::new();
     let mut markers = Vec::new();
@@ -203,14 +202,15 @@ enum ContextSignalCategory {
     Visibility,
 }
 
-fn collect_context_signal_evidence(
-    _rows: &[CompactionRow],
+fn collect_context_signal_evidence<'a>(
+    rows: impl IntoIterator<Item = &'a CompactionRow>,
     context: &ContextPack,
+    has_explicit_markers: bool,
 ) -> Vec<ContextSignalEvidence> {
     let mut seen = BTreeSet::new();
     let mut evidence = Vec::new();
 
-    if !has_explicit_delegation_tool(context) {
+    if !has_explicit_markers {
         return evidence;
     }
 
@@ -218,6 +218,7 @@ fn collect_context_signal_evidence(
         .into_iter()
         .chain(collect_command_signal_evidence(context))
         .chain(collect_supporting_signal_evidence(context))
+        .chain(collect_raw_context_signal_evidence(rows))
     {
         let key = evidence_key(&candidate.evidence);
         if seen.insert(key) {
@@ -326,6 +327,60 @@ fn collect_supporting_signal_evidence(context: &ContextPack) -> Vec<ContextSigna
             None
         })
         .collect()
+}
+
+fn collect_raw_context_signal_evidence<'a>(
+    rows: impl IntoIterator<Item = &'a CompactionRow>,
+) -> Vec<ContextSignalEvidence> {
+    rows.into_iter()
+        .filter_map(|row| {
+            let signal = anchored_child_context_signal(row)?;
+            Some(ContextSignalEvidence {
+                category: ContextSignalCategory::Visibility,
+                visibility: Some(ChildWorkVisibility::Opaque),
+                evidence: EvidenceRef {
+                    row: agent_session_compactor::RowRef::from_row(row),
+                    reason: format!("delegation context row anchors {signal}"),
+                },
+            })
+        })
+        .collect()
+}
+
+fn anchored_child_context_signal(row: &CompactionRow) -> Option<&'static str> {
+    if !matches!(
+        row.kind,
+        CompactionKind::AssistantMessage
+            | CompactionKind::UserMessage
+            | CompactionKind::DeveloperMessage
+            | CompactionKind::SystemMessage
+    ) {
+        return None;
+    }
+
+    let text = row.text.trim_start();
+    if text.is_empty() || text.len() > 2_000 {
+        return None;
+    }
+
+    let anchored = if let Some(stripped) = text.strip_prefix("- ") {
+        stripped
+    } else if let Some(stripped) = text.strip_prefix("* ") {
+        stripped
+    } else {
+        text
+    };
+    let normalized = anchored.to_ascii_lowercase();
+
+    if normalized.starts_with("child session id") && normalized.contains("separate rollout") {
+        Some("child session id")
+    } else if normalized.starts_with("child rollout") {
+        Some("child rollout")
+    } else if normalized.starts_with("separate rollout") {
+        Some("separate rollout")
+    } else {
+        None
+    }
 }
 
 fn dedupe_evidence<'a>(items: impl Iterator<Item = &'a EvidenceRef>) -> Vec<EvidenceRef> {
@@ -449,13 +504,6 @@ fn has_visibility_signal(context_signal_evidence: &[ContextSignalEvidence]) -> b
     context_signal_evidence
         .iter()
         .any(|evidence| evidence.category == ContextSignalCategory::Visibility)
-}
-
-fn has_explicit_delegation_tool(context: &ContextPack) -> bool {
-    context
-        .tools
-        .iter()
-        .any(|tool| EXPLICIT_DELEGATION_MARKERS.contains(&tool.name.as_str()))
 }
 
 fn looks_like_child_rollout_artifact(path: &str) -> bool {
@@ -626,6 +674,65 @@ mod tests {
             .iter()
             .any(|evidence| evidence.reason.contains("child rollout command")));
         assert!(delegation.counter_evidence.is_empty());
+    }
+
+    #[test]
+    fn delegation_combines_archival_markers_with_compact_child_visibility() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![tool_call("spawn_agent", "{\"agent_type\":\"worker\"}")],
+            compact_rows: vec![tool_call(
+                "functions.shell_command",
+                "{\"command\":\"sed -n '1,40p' /tmp/child/rollout-019e-test.jsonl\",\"workdir\":\"/repo\"}",
+            )],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Partial
+        );
+        assert_eq!(delegation.markers, vec!["spawn_agent".to_string()]);
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence.reason.contains("child rollout command")));
+        assert!(delegation.counter_evidence.is_empty());
+    }
+
+    #[test]
+    fn delegation_harvests_anchored_child_boundary_rows() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: Vec::new(),
+            compact_rows: vec![
+                tool_call("spawn_agent", "{\"agent_type\":\"worker\"}"),
+                row(
+                    CompactionKind::AssistantMessage,
+                    "Child session id 019e-test lives in a separate rollout file after the spawned agent completed work.",
+                ),
+            ],
+        };
+        let context = assemble_context(&session);
+
+        let delegation = infer_delegation_context(&session, &context);
+
+        assert_eq!(delegation.topology, DelegationTopology::DelegatingParent);
+        assert_eq!(
+            delegation.child_work_visibility,
+            ChildWorkVisibility::Opaque
+        );
+        assert!(delegation
+            .supporting_evidence
+            .iter()
+            .any(|evidence| evidence.reason.contains("delegation context row anchors child session id")));
+        assert_eq!(delegation.counter_evidence.len(), 1);
+        assert!(delegation.counter_evidence[0]
+            .reason
+            .contains("remained child-opaque"));
     }
 
     #[test]
