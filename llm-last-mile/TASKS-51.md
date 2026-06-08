@@ -5,11 +5,17 @@ Source plan: [PLAN-51.md](./PLAN-51.md)
 Source prior slice: [TASKS-50.md](./TASKS-50.md)  
 Phase: `TASKS`  
 Execution model: four sequential `/incremental-implementation` sessions  
-Status: draft for review on `2026-06-07`
+Status: Packet 4 closeout verified on `2026-06-08`
 
 ## Phase Gate
 
 These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `51` have been reviewed and accepted as the bounded source of truth before implementation begins.
+
+Current tree note:
+
+1. Packets `1` through `3` are already landed and verified on the live repo before this session.
+2. This Packet `4` pass owns only doc alignment plus the validation wall.
+3. The checklist below remains the slice ledger; this session marks only Packet `4` tasks directly after the validation wall reran green.
 
 ## Execution Packets
 
@@ -169,7 +175,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align docs with the landed Slice `51` host-global inbox boundary
+- [x] Task 4.1: Align docs with the landed Slice `51` host-global inbox boundary
   - Acceptance: docs describe Slice `51` as host-global inbox layering plus exact local obligation materialization only, preserve the rule that local obligations remain canonical local truth, and do not imply remote sync, lease coordination, or public host-inbox UX have landed.
   - Verify:
     - manual diff review
@@ -180,7 +186,7 @@ Session goal:
     - [`llm-last-mile/PLAN-51.md`](./PLAN-51.md)
     - [`llm-last-mile/TASKS-51.md`](./TASKS-51.md)
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests are green against the bounded Slice `51` file set; this task validates the slice and does not become an open-ended cleanup bucket.
   - Verify:
     - `cargo fmt --all -- --check`

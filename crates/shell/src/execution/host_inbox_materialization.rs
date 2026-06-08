@@ -27,10 +27,7 @@ fn discover_pending_host_inbox_materialization_candidates(
 ) -> Result<Vec<(Option<chrono::DateTime<chrono::Utc>>, String)>> {
     let mut pending_records = Vec::new();
     for record_id in store.list_host_inbox_record_ids()? {
-        let before = match store.load_host_inbox_record(&record_id) {
-            Ok(record) => record,
-            Err(_) => None,
-        };
+        let before = store.load_host_inbox_record(&record_id).unwrap_or_default();
         match before {
             Some(record)
                 if record.materialization_state == HostInboxMaterializationState::Pending =>
@@ -105,10 +102,7 @@ pub(crate) fn materialize_host_inbox_record_for_local_host(
     record_id: &str,
     local_host_id: &str,
 ) -> Result<HostInboxMaterializationExecution> {
-    let before = match store.load_host_inbox_record(record_id) {
-        Ok(record) => record,
-        Err(_) => None,
-    };
+    let before = store.load_host_inbox_record(record_id).unwrap_or_default();
     let after = store.materialize_host_inbox_record_for_local_host(record_id, local_host_id)?;
     Ok(build_host_inbox_materialization_execution(
         before.as_ref(),

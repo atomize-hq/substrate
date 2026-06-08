@@ -4,7 +4,7 @@ Source spec: [SPEC-51-internal-family-2-host-global-inbox-layering-and-local-obl
 Source prior slice: [PLAN-50.md](./PLAN-50.md)  
 Source remaining-scope note: [REMAINING-family-2-scope-2026-06-07.md](./REMAINING-family-2-scope-2026-06-07.md)  
 Plan type: first post-`50` host-global inbox layering slice  
-Status: draft for review on `2026-06-07`
+Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-08`
 
 ## Objective
 
@@ -19,6 +19,14 @@ This slice is complete only when all of the following are true:
 5. invalid local-boundary cases fail closed before local obligation creation,
 6. router-owned auto-attach and review/inbox projection still consume only local obligations after materialization,
 7. remote sync, lease/lock coordination, and broader federation delivery remain deferred.
+
+## Packet 4 Closeout Note
+
+Implementation status on the current tree:
+
+1. Packets `1` through `3` are already landed in runtime code before this session.
+2. Packet `4` is the remaining closeout pass: align docs to the landed `host_inbox -> local obligation -> router` boundary and rerun the full validation wall.
+3. `docs/TRACE.md` stays untouched because the implementation logs explanation-ready materialization outcomes through the existing dispatch logging surface rather than adding a new canonical trace record family.
 
 ## Phase Gate
 
@@ -177,7 +185,7 @@ Goal:
 Primary touch surface:
 
 1. `docs/CONFIGURATION.md`
-2. `docs/TRACE.md` if touched
+2. `docs/TRACE.md` only if a new canonical trace family lands
 3. `llm-last-mile/SPEC-51-internal-family-2-host-global-inbox-layering-and-local-obligation-materialization-boundary.md`
 4. `llm-last-mile/PLAN-51.md`
 5. `llm-last-mile/TASKS-51.md`

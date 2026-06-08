@@ -12,7 +12,7 @@ Related design stack:
 - [DESIGN-router-daemon-attach-trigger-integration.md](./DESIGN-router-daemon-attach-trigger-integration.md)
 - [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
 Phase: `SPECIFY`  
-Status: draft for review on `2026-06-07`
+Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-08`
 
 ## Assumptions
 
@@ -55,14 +55,15 @@ The current repo already has the local Family-2 floor this slice should reuse:
 4. Slice `49` already landed bounded host-targeting and wrong-host fail-closed posture for local obligations,
 5. Slice `50` already landed ingress-ready identity and causation fields on the local obligation envelope.
 
-What the repo does not yet have is the host-global inbox layer above that local floor:
+The current repo now has the bounded host-global inbox layer above that local floor:
 
-1. there is no `SUBSTRATE_HOME/host_inbox/` artifact family in the runtime,
-2. there is no sanctioned host-side materializer that converts host-global ingress into canonical local obligations,
-3. there is no persisted materialization outcome boundary that proves whether a host-global ingress record was materialized, rejected, or still pending,
-4. the router still correctly acts only on local obligations because there is no host-global inbox layer yet.
+1. `SUBSTRATE_HOME/host_inbox/` persistence and read/write ownership live behind the state-store seam,
+2. [`host_inbox.rs`](../crates/shell/src/execution/agent_runtime/host_inbox.rs) defines the internal host-inbox artifact plus exact `pending`, `materialized`, and `failed_closed` materialization-state truth,
+3. [`host_inbox_materialization.rs`](../crates/shell/src/execution/host_inbox_materialization.rs) provides the sanctioned host-side local materializer that converts eligible host-global ingress records into canonical local obligations,
+4. [`orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) runs that materialization pre-pass before router-owned auto-attach discovery while keeping the router consuming obligations only,
+5. persisted host-inbox outcomes now prove whether a record materialized, failed closed, or remains pending for retry.
 
-That makes Slice `51` the narrowest honest follow-on: add the host-global ingress layer and local materialization boundary without reopening local obligation semantics.
+Slice `51` therefore lands as the bounded host-global inbox layering and exact local materialization slice without reopening local obligation semantics.
 
 ## Tech Stack
 
@@ -74,7 +75,7 @@ That makes Slice `51` the narrowest honest follow-on: add the host-global ingres
   - [`crates/shell/src/execution/agent_runtime/obligation_ledger.rs`](../crates/shell/src/execution/agent_runtime/obligation_ledger.rs) only if a bounded helper is needed to keep materialized obligation construction exact and explanation-ready
 - Expected docs:
   - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md)
-  - [`docs/TRACE.md`](../docs/TRACE.md) only if a real materialization outcome trace family lands
+  - [`docs/TRACE.md`](../docs/TRACE.md) remains unchanged for this slice because the current implementation does not add a new canonical trace record family for host-inbox materialization outcomes
 
 ## Commands
 
@@ -225,4 +226,4 @@ This slice is complete only when all of the following are true:
 
 1. Should the first host-inbox slice require `target_host_id` on every host-inbox record, or permit a narrow local-only untargeted form for migration/bootstrap cases? Default assumption for this spec: require exact target-host truth for host-global records so the materialization boundary stays fail-closed and boring.
 2. What is the narrowest durable materialization-state vocabulary for host-inbox records: `pending`, `materialized`, and `failed_closed`, or is an explicit `superseded` state also needed in Slice `51`? Default assumption for this spec: keep the first slice to `pending`, `materialized`, and `failed_closed`.
-3. Should the first host-side materializer run as a bounded pre-pass near the existing router-owned host-side entrypoint, or in a separate internal-only entrypoint that the router path may call later? Default assumption for this spec: keep one bounded host-side materialization entrypoint and allow a later plan to decide whether it is sequenced immediately before router discovery or called by a higher-level internal loop.
+3. Resolved at implementation: the first host-side materializer runs as a bounded pre-pass near the existing router-owned host-side entrypoint, ahead of router auto-attach discovery, while still preserving the rule that only canonical local obligations become router work.
