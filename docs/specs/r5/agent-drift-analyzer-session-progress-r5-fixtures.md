@@ -41,7 +41,8 @@ Each fixture expectation must include:
 3. expected progress status,
 4. expected confidence floor or ceiling,
 5. decisive supporting evidence,
-6. required counter-evidence when ambiguous/negative/delegated,
+6. required limiting/counter-evidence for delegated cases, and counter-evidence for
+   ambiguous/negative cases when meaningful contradictory or limiting evidence exists,
 7. comparable attempts,
 8. window/reset expectation,
 9. why nearby statuses lose.
@@ -412,9 +413,9 @@ dimension:
 ## Fixture: r5_delegated_parent_opaque
 
 - Archetype: any R4 label, usually `planning` or `troubleshooting`
-- Expected dimension: `parent_visible_orchestration` or archetype default with limiting signal
-- Expected status: `insufficient_evidence` or low-confidence `mixed/stalled` for parent-visible
-  orchestration only
+- Expected dimension: `parent_visible_orchestration`
+- Expected status: `insufficient_evidence`, or low-confidence `stalled`/`mixed` when direct
+  parent-visible orchestration evidence exists
 - Expected confidence: `low`
 - Setup:
   1. parent shows `spawn_agent`, `wait_agent`, or `close_agent`,
@@ -423,7 +424,7 @@ dimension:
 - Decisive evidence:
   - `DelegationVisibilityLimited`
 - Counter-evidence:
-  - child-opaque evidence required
+  - include child-opaque limiting evidence; add contradictory counter-evidence only when it exists
 - Comparable attempts:
   - compare only parent-visible orchestration checkpoints for the same child objective while child
     outputs remain opaque; once child diagnostics/results become visible, the case exits this row

@@ -267,9 +267,10 @@ Public `SessionProgress` should carry both signal-local evidence and summary evi
 Rules:
 
 1. Every non-`insufficient_evidence` status should include at least one `supporting_evidence` item.
-2. `stalled` and `regressing` should also include counter-evidence when available.
-3. Opaque delegated-parent cases should include `DelegationVisibilityLimited` and a counter-evidence
-   item.
+2. `mixed`, `stalled`, and `regressing` should include counter-evidence when meaningful
+   contradictory or limiting evidence exists.
+3. Opaque delegated-parent cases should include `DelegationVisibilityLimited` and at least one
+   limiting counter-evidence item describing the child-opaque boundary.
 4. Evidence lists should be deduped using the existing `(source_file, event_index, row_ordinal,
    reason)` style.
 5. Public evidence reasons should describe the observation, not causal certainty. Prefer:

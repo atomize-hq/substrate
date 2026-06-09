@@ -38,7 +38,8 @@ A checkpoint progress label is correct only if it satisfies all of these:
 1. the status and dimension match the documented fixture expectation,
 2. confidence is within the fixture's ceiling/floor,
 3. supporting evidence names the observed signal,
-4. counter-evidence is present when the case is ambiguous, delegated, or negative,
+4. delegated cases include limiting counter-evidence, and ambiguous or negative cases include
+   counter-evidence when meaningful contradictory or limiting evidence exists,
 5. the label does not claim progress for an unexercised target,
 6. the label does not infer opaque child work,
 7. the output remains deterministic across reruns.
@@ -78,7 +79,7 @@ The first R5 implementation should cover at least these cases:
 | `r5_troubleshooting_frontier_advanced_compile_to_test` | compile/build failure becomes focused test/assertion failure on overlapping target | `advancing / troubleshooting_frontier` |
 | `r5_troubleshooting_failure_count_reduced` | many failing tests become fewer comparable failing tests | `advancing / troubleshooting_frontier` |
 | `r5_troubleshooting_same_signature_no_edit` | same diagnostic signature repeats with no overlapping edit | `stalled / troubleshooting_frontier` |
-| `r5_troubleshooting_previous_clean_broken` | previously clean focused verifier later breaks on same scope | `regressing / troubleshooting_frontier` |
+| `r5_troubleshooting_previous_clean_broken` | previously clean focused verifier later breaks on same scope | `regressing / troubleshooting_frontier` for `troubleshooting`, or `regressing / implementation_verification_wall` for `autonomous_implementation` |
 | `r5_planning_candidate_set_narrows_to_spec` | broad scan narrows into spec/plan/tasks artifact | `advancing / planning_convergence` |
 | `r5_planning_broad_scan_meanders` | repeated broad reads/searches expand candidate set with no artifact | `stalled` or low-confidence `mixed / planning_convergence` |
 | `r5_implementation_wall_advances` | source edits plus aligned tests move verifier from focused to broader proof | `advancing / implementation_verification_wall` |
@@ -87,7 +88,7 @@ The first R5 implementation should cover at least these cases:
 | `r5_closeout_scope_narrows_to_residual` | closeout proof narrows the remaining residual scope and emits `VerificationScopeNarrowed` plus `ResidualScopeShrank` | `advancing / verification_closeout_narrowing` |
 | `r5_closeout_reopens_source_churn` | closeout-labeled checkpoint introduces new source changes and breaks proof | `regressing` or `mixed / verification_closeout_narrowing` |
 | `r5_sparse_no_comparable_attempt` | archetype exists but no comparable progress evidence | `insufficient_evidence` |
-| `r5_delegated_parent_opaque` | parent-visible orchestration with opaque child work | `insufficient_evidence` or low-confidence `parent_visible_orchestration` |
+| `r5_delegated_parent_opaque` | parent-visible orchestration with opaque child work | low-confidence `insufficient_evidence / parent_visible_orchestration`, `stalled / parent_visible_orchestration`, or `mixed / parent_visible_orchestration` |
 | `r5_legacy_v0_5_still_loads` | v0.5 checkpoint without session_progress remains compatible | legacy load succeeds |
 | `r5_v0_6_requires_progress` | v0.6 checkpoint missing session_progress fails closed | contract error |
 | `r5_replay_live_v0_6_parity` | same v0.6 checkpoint renders same compact progress line | replay/live parity |
