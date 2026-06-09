@@ -1,13 +1,18 @@
 #![allow(dead_code)]
 
 use anyhow::bail;
+use serde::{Deserialize, Serialize};
 
 use crate::execution::config_model::AgentExecutionScope;
 
 use super::{
     dispatch_contract::{
+        CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventV1,
+        ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
+        RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, StopWorldWorkerOutcomeV1,
         TaskPayloadV1, WorkerSpawnPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
-        WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldTaskTerminalStateV1,
     },
     mapping::MEMBER_ROLE,
     state_store::AgentRuntimeStateStore,
@@ -186,6 +191,110 @@ pub(crate) enum HostToolFollowUpHandleV1 {
     RetainedWorker(RetainedWorkerHandleV1),
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolRunWorldTaskReceiptV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub task_run_id: String,
+    pub state: WorldTaskTerminalStateV1,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolSpawnWorldWorkerReceiptV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub launch_span_id: String,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolContinueWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    pub participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_event: Option<ContinueWorldWorkerEventV1>,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolInspectWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub participant_id: Option<String>,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub snapshot: RetainedWorkerInspectSnapshotV1,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolCancelWorldWorkOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub participant_id: Option<String>,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub state: CancelWorldWorkTerminalStateV1,
+    pub closeout: RetainedWorkerCancelCloseoutV1,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolStopWorldWorkerOutcomeV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub orchestrator_participant_id: String,
+    pub participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub closeout: RetainedWorkerStopCloseoutV1,
+    pub summary: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct HostToolContractV1 {
     pub tool_name: HostToolNameV1,
@@ -314,6 +423,58 @@ fn canonicalize_handle_value(
     Ok(Some(trimmed.to_string()))
 }
 
+fn canonicalize_required_identity_value(
+    field: &'static str,
+    value: Option<&str>,
+    action: &'static str,
+    contract_surface: &'static str,
+) -> anyhow::Result<String> {
+    canonicalize_handle_value(field, value)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing_adapter_visible_identity: action {} requires {} for {}",
+            action,
+            field,
+            contract_surface
+        )
+    })
+}
+
+fn ensure_expected_mode(
+    action: WorldDispatchActionV1,
+    actual_mode: WorldDispatchModeV1,
+    expected_mode: WorldDispatchModeV1,
+    contract_surface: &'static str,
+) -> anyhow::Result<()> {
+    if actual_mode != expected_mode {
+        bail!(
+            "invalid_adapter_visible_mode: action {} emitted mode {} but adapter {} requires {}",
+            action.as_str(),
+            actual_mode.as_str(),
+            contract_surface,
+            expected_mode.as_str()
+        );
+    }
+    Ok(())
+}
+
+fn normalize_dual_handle_identity(
+    action: WorldDispatchActionV1,
+    mode: WorldDispatchModeV1,
+    target_participant_id: &str,
+) -> anyhow::Result<(Option<String>, Option<String>)> {
+    let normalized_target = canonicalize_required_identity_value(
+        "target_participant_id",
+        Some(target_participant_id),
+        action.as_str(),
+        "exact follow-up result",
+    )?;
+
+    match mode {
+        WorldDispatchModeV1::Ephemeral => Ok((Some(normalized_target), None)),
+        WorldDispatchModeV1::Retained => Ok((None, Some(normalized_target))),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct HostToolRuntimeDispatchMetadataV1 {
     pub request_id: String,
@@ -398,6 +559,164 @@ pub(crate) fn translate_spawn_world_worker_to_internal_dispatch_request_v1(
         None,
         WorldDispatchPayloadV1::WorkerSpawn(call.payload),
     )
+}
+
+pub(crate) fn normalize_run_world_task_receipt_v1(
+    outcome: &RunWorldTaskOutcomeV1,
+) -> anyhow::Result<HostToolRunWorldTaskReceiptV1> {
+    let task_run_id = canonicalize_required_identity_value(
+        "task_run_id",
+        outcome.task_run_id.as_deref(),
+        "run_world_task",
+        "exact active-task receipt",
+    )?;
+
+    Ok(HostToolRunWorldTaskReceiptV1 {
+        request_id: outcome.request_id.clone(),
+        orchestration_session_id: outcome.orchestration_session_id.clone(),
+        action: outcome.action,
+        mode: outcome.mode,
+        task_run_id,
+        state: outcome.state,
+        summary: outcome.summary.clone(),
+    })
+}
+
+pub(crate) fn normalize_spawn_world_worker_receipt_v1(
+    outcome: &SpawnWorldWorkerOutcomeV1,
+) -> anyhow::Result<HostToolSpawnWorldWorkerReceiptV1> {
+    Ok(HostToolSpawnWorldWorkerReceiptV1 {
+        request_id: outcome.request_id.clone(),
+        orchestration_session_id: outcome.orchestration_session_id.clone(),
+        action: outcome.action,
+        mode: outcome.mode,
+        participant_id: canonicalize_required_identity_value(
+            "participant_id",
+            Some(&outcome.participant_id),
+            "spawn_world_worker",
+            "exact retained-worker receipt",
+        )?,
+        orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        parent_participant_id: outcome.parent_participant_id.clone(),
+        resumed_from_participant_id: outcome.resumed_from_participant_id.clone(),
+        target_backend_id: outcome.target_backend_id.clone(),
+        world_id: outcome.world_id.clone(),
+        world_generation: outcome.world_generation,
+        launch_span_id: outcome.launch_span_id.clone(),
+        summary: outcome.summary.clone(),
+    })
+}
+
+pub(crate) fn normalize_continue_world_worker_outcome_v1(
+    outcome: &ContinueWorldWorkerOutcomeV1,
+) -> anyhow::Result<HostToolContinueWorldWorkerOutcomeV1> {
+    ensure_expected_mode(
+        outcome.action,
+        outcome.mode,
+        WorldDispatchModeV1::Retained,
+        "retained-only follow-up result",
+    )?;
+    Ok(HostToolContinueWorldWorkerOutcomeV1 {
+        request_id: outcome.request_id.clone(),
+        orchestration_session_id: outcome.orchestration_session_id.clone(),
+        action: outcome.action,
+        mode: outcome.mode,
+        orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        participant_id: canonicalize_required_identity_value(
+            "target_participant_id",
+            Some(&outcome.target_participant_id),
+            "continue_world_worker",
+            "retained-only follow-up result",
+        )?,
+        target_backend_id: outcome.target_backend_id.clone(),
+        world_id: outcome.world_id.clone(),
+        world_generation: outcome.world_generation,
+        source_participant_id: outcome.source_participant_id.clone(),
+        child_participant_id: outcome.child_participant_id.clone(),
+        thread_id: outcome.thread_id.clone(),
+        worker_event: outcome.worker_event.clone(),
+        summary: outcome.summary.clone(),
+    })
+}
+
+pub(crate) fn normalize_inspect_world_worker_outcome_v1(
+    outcome: &InspectWorldWorkerOutcomeV1,
+) -> anyhow::Result<HostToolInspectWorldWorkerOutcomeV1> {
+    let (task_run_id, participant_id) = normalize_dual_handle_identity(
+        outcome.action,
+        outcome.mode,
+        &outcome.target_participant_id,
+    )?;
+
+    Ok(HostToolInspectWorldWorkerOutcomeV1 {
+        request_id: outcome.request_id.clone(),
+        orchestration_session_id: outcome.orchestration_session_id.clone(),
+        action: outcome.action,
+        mode: outcome.mode,
+        orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        task_run_id,
+        participant_id,
+        target_backend_id: outcome.target_backend_id.clone(),
+        world_id: outcome.world_id.clone(),
+        world_generation: outcome.world_generation,
+        snapshot: outcome.snapshot.clone(),
+        summary: outcome.summary.clone(),
+    })
+}
+
+pub(crate) fn normalize_cancel_world_work_outcome_v1(
+    outcome: &CancelWorldWorkOutcomeV1,
+) -> anyhow::Result<HostToolCancelWorldWorkOutcomeV1> {
+    let (task_run_id, participant_id) = normalize_dual_handle_identity(
+        outcome.action,
+        outcome.mode,
+        &outcome.target_participant_id,
+    )?;
+
+    Ok(HostToolCancelWorldWorkOutcomeV1 {
+        request_id: outcome.request_id.clone(),
+        orchestration_session_id: outcome.orchestration_session_id.clone(),
+        action: outcome.action,
+        mode: outcome.mode,
+        orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        task_run_id,
+        participant_id,
+        target_backend_id: outcome.target_backend_id.clone(),
+        world_id: outcome.world_id.clone(),
+        world_generation: outcome.world_generation,
+        state: outcome.state,
+        closeout: outcome.closeout.clone(),
+        summary: outcome.summary.clone(),
+    })
+}
+
+pub(crate) fn normalize_stop_world_worker_outcome_v1(
+    outcome: &StopWorldWorkerOutcomeV1,
+) -> anyhow::Result<HostToolStopWorldWorkerOutcomeV1> {
+    ensure_expected_mode(
+        outcome.action,
+        outcome.mode,
+        WorldDispatchModeV1::Retained,
+        "retained-only follow-up result",
+    )?;
+    Ok(HostToolStopWorldWorkerOutcomeV1 {
+        request_id: outcome.request_id.clone(),
+        orchestration_session_id: outcome.orchestration_session_id.clone(),
+        action: outcome.action,
+        mode: outcome.mode,
+        orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        participant_id: canonicalize_required_identity_value(
+            "target_participant_id",
+            Some(&outcome.target_participant_id),
+            "stop_world_worker",
+            "retained-only follow-up result",
+        )?,
+        target_backend_id: outcome.target_backend_id.clone(),
+        world_id: outcome.world_id.clone(),
+        world_generation: outcome.world_generation,
+        closeout: outcome.closeout.clone(),
+        summary: outcome.summary.clone(),
+    })
 }
 
 pub(crate) fn resolve_follow_up_dispatch_authority_v1(
@@ -678,6 +997,9 @@ mod tests {
 
     use super::{
         host_tool_contract, host_tool_contracts_v1, resolve_follow_up_dispatch_authority_v1,
+        normalize_cancel_world_work_outcome_v1, normalize_continue_world_worker_outcome_v1,
+        normalize_inspect_world_worker_outcome_v1, normalize_run_world_task_receipt_v1,
+        normalize_spawn_world_worker_receipt_v1, normalize_stop_world_worker_outcome_v1,
         translate_follow_up_tool_to_internal_dispatch_request_v1,
         translate_run_world_task_to_internal_dispatch_request_v1,
         translate_spawn_world_worker_to_internal_dispatch_request_v1,
@@ -686,7 +1008,13 @@ mod tests {
         HostToolRuntimeWorldBindingV1, RunWorldTaskToolCallV1, SpawnWorldWorkerToolCallV1,
     };
     use crate::execution::agent_runtime::dispatch_contract::{
-        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerStopPayloadV1,
+        CancelWorldWorkOutcomeV1, ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1,
+        ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
+        RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1,
+        StopWorldWorkerOutcomeV1,
+        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
+        WorkerStopPayloadV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::orchestration_session::{
@@ -1000,6 +1328,249 @@ mod tests {
         assert!(request.task_run_id.is_none());
         assert!(request.target_participant_id.is_none());
         assert_eq!(validated.target_backend_id, "cli:claude_code_world");
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_normalizes_run_world_task_into_exact_active_task_receipt() {
+        let receipt = normalize_run_world_task_receipt_v1(&RunWorldTaskOutcomeV1 {
+            request_id: "req-packet3-run".to_string(),
+            orchestration_session_id: "sess_packet3".to_string(),
+            action: WorldDispatchActionV1::RunWorldTask,
+            mode: WorldDispatchModeV1::Ephemeral,
+            task_run_id: Some("task-run-packet3".to_string()),
+            state: WorldTaskTerminalStateV1::NeedsRetainedFollowup,
+            summary: "run receipt keeps exact task identity".to_string(),
+        })
+        .expect("normalize run receipt");
+
+        assert_eq!(receipt.task_run_id, "task-run-packet3");
+        assert_eq!(receipt.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(receipt.state, WorldTaskTerminalStateV1::NeedsRetainedFollowup);
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_rejects_run_world_task_receipt_without_exact_task_run_id() {
+        let err = normalize_run_world_task_receipt_v1(&RunWorldTaskOutcomeV1 {
+            request_id: "req-packet3-run".to_string(),
+            orchestration_session_id: "sess_packet3".to_string(),
+            action: WorldDispatchActionV1::RunWorldTask,
+            mode: WorldDispatchModeV1::Ephemeral,
+            task_run_id: None,
+            state: WorldTaskTerminalStateV1::Failed,
+            summary: "run receipt is missing task identity".to_string(),
+        })
+        .expect_err("missing task_run_id must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "missing_adapter_visible_identity: action run_world_task requires task_run_id for exact active-task receipt"
+        );
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_normalizes_spawn_world_worker_into_exact_retained_receipt() {
+        let receipt = normalize_spawn_world_worker_receipt_v1(&SpawnWorldWorkerOutcomeV1 {
+            request_id: "req-packet3-spawn".to_string(),
+            orchestration_session_id: "sess_packet3".to_string(),
+            action: WorldDispatchActionV1::SpawnWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            participant_id: "ash_packet3".to_string(),
+            orchestrator_participant_id: "orch_packet3".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            launch_span_id: "spn-packet3".to_string(),
+            summary: "spawn receipt keeps exact retained identity".to_string(),
+        })
+        .expect("normalize spawn receipt");
+
+        assert_eq!(receipt.participant_id, "ash_packet3");
+        assert_eq!(receipt.target_backend_id, "cli:codex_world");
+        assert_eq!(receipt.world_id, "world-17");
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_normalizes_dual_handle_outcomes_to_exact_identity_family() {
+        let snapshot = RetainedWorkerInspectSnapshotV1 {
+            participant_state: crate::execution::agent_runtime::AgentRuntimeSessionState::Running,
+            session_state: OrchestrationSessionState::Active,
+            session_posture:
+                crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::ActiveAttached,
+            authoritative_live: true,
+            attention_required: false,
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+        };
+        let retained_cancel_closeout = RetainedWorkerCancelCloseoutV1 {
+            participant_state: None,
+            session_state: None,
+        };
+
+        let inspect_ephemeral = normalize_inspect_world_worker_outcome_v1(
+            &InspectWorldWorkerOutcomeV1 {
+                request_id: "req-packet3-inspect-e".to_string(),
+                orchestration_session_id: "sess_packet3".to_string(),
+                action: WorldDispatchActionV1::InspectWorldWorker,
+                mode: WorldDispatchModeV1::Ephemeral,
+                orchestrator_participant_id: "orch_packet3".to_string(),
+                target_participant_id: "task-run-packet3".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+                snapshot: snapshot.clone(),
+                summary: "inspect exposes canonical active-task identity".to_string(),
+            },
+        )
+        .expect("normalize ephemeral inspect");
+        assert_eq!(inspect_ephemeral.task_run_id.as_deref(), Some("task-run-packet3"));
+        assert_eq!(inspect_ephemeral.participant_id, None);
+
+        let inspect_retained = normalize_inspect_world_worker_outcome_v1(
+            &InspectWorldWorkerOutcomeV1 {
+                request_id: "req-packet3-inspect-r".to_string(),
+                orchestration_session_id: "sess_packet3".to_string(),
+                action: WorldDispatchActionV1::InspectWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                orchestrator_participant_id: "orch_packet3".to_string(),
+                target_participant_id: "ash_packet3".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+                snapshot: snapshot.clone(),
+                summary: "inspect exposes canonical retained identity".to_string(),
+            },
+        )
+        .expect("normalize retained inspect");
+        assert_eq!(inspect_retained.task_run_id, None);
+        assert_eq!(inspect_retained.participant_id.as_deref(), Some("ash_packet3"));
+
+        let cancel_ephemeral = normalize_cancel_world_work_outcome_v1(&CancelWorldWorkOutcomeV1 {
+            request_id: "req-packet3-cancel-e".to_string(),
+            orchestration_session_id: "sess_packet3".to_string(),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Ephemeral,
+            orchestrator_participant_id: "orch_packet3".to_string(),
+            target_participant_id: "task-run-cancel-packet3".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            state: crate::execution::agent_runtime::dispatch_contract::CancelWorldWorkTerminalStateV1::Cancelled,
+            closeout: retained_cancel_closeout.clone(),
+            summary: "cancel exposes canonical active-task identity".to_string(),
+        })
+        .expect("normalize ephemeral cancel");
+        assert_eq!(
+            cancel_ephemeral.task_run_id.as_deref(),
+            Some("task-run-cancel-packet3")
+        );
+        assert_eq!(cancel_ephemeral.participant_id, None);
+
+        let cancel_retained = normalize_cancel_world_work_outcome_v1(&CancelWorldWorkOutcomeV1 {
+            request_id: "req-packet3-cancel-r".to_string(),
+            orchestration_session_id: "sess_packet3".to_string(),
+            action: WorldDispatchActionV1::CancelWorldWork,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch_packet3".to_string(),
+            target_participant_id: "ash_packet3".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            state: crate::execution::agent_runtime::dispatch_contract::CancelWorldWorkTerminalStateV1::Cancelled,
+            closeout: retained_cancel_closeout,
+            summary: "cancel exposes canonical retained identity".to_string(),
+        })
+        .expect("normalize retained cancel");
+        assert_eq!(cancel_retained.task_run_id, None);
+        assert_eq!(cancel_retained.participant_id.as_deref(), Some("ash_packet3"));
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_normalizes_retained_only_follow_up_outcomes() {
+        let continue_outcome = normalize_continue_world_worker_outcome_v1(
+            &ContinueWorldWorkerOutcomeV1 {
+                request_id: "req-packet3-continue".to_string(),
+                orchestration_session_id: "sess_packet3".to_string(),
+                action: WorldDispatchActionV1::ContinueWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                orchestrator_participant_id: "orch_packet3".to_string(),
+                target_participant_id: "ash_packet3".to_string(),
+                target_backend_id: "cli:codex_world".to_string(),
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+                source_participant_id: None,
+                child_participant_id: None,
+                thread_id: Some("thread-packet3".to_string()),
+                worker_event: Some(ContinueWorldWorkerEventV1 {
+                    event_class: ContinueWorldWorkerEventClassV1::ProgressUpdate,
+                    source_participant_id: "ash_packet3".to_string(),
+                    target_participant_id: "ash_packet3".to_string(),
+                    source_backend_id: "cli:codex_world".to_string(),
+                    attention_required: false,
+                    thread_id: Some("thread-packet3".to_string()),
+                    stream_channel: Some("stderr".to_string()),
+                    payload: serde_json::json!({
+                        "event_kind": "progress_update",
+                        "detail": "kept retained-only"
+                    }),
+                }),
+                summary: "continue stays retained-only".to_string(),
+            },
+        )
+        .expect("normalize continue");
+        assert_eq!(continue_outcome.participant_id, "ash_packet3");
+        assert_eq!(
+            continue_outcome.thread_id.as_deref(),
+            Some("thread-packet3")
+        );
+
+        let stop_outcome = normalize_stop_world_worker_outcome_v1(&StopWorldWorkerOutcomeV1 {
+            request_id: "req-packet3-stop".to_string(),
+            orchestration_session_id: "sess_packet3".to_string(),
+            action: WorldDispatchActionV1::StopWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            orchestrator_participant_id: "orch_packet3".to_string(),
+            target_participant_id: "ash_packet3".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            closeout: RetainedWorkerStopCloseoutV1 {
+                participant_state:
+                    crate::execution::agent_runtime::AgentRuntimeSessionState::Stopped,
+                session_state: OrchestrationSessionState::Stopped,
+            },
+            summary: "stop stays retained-only".to_string(),
+        })
+        .expect("normalize stop");
+        assert_eq!(stop_outcome.participant_id, "ash_packet3");
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_rejects_non_retained_mode_for_retained_only_outcomes() {
+        let err = normalize_stop_world_worker_outcome_v1(&StopWorldWorkerOutcomeV1 {
+            request_id: "req-packet3-stop".to_string(),
+            orchestration_session_id: "sess_packet3".to_string(),
+            action: WorldDispatchActionV1::StopWorldWorker,
+            mode: WorldDispatchModeV1::Ephemeral,
+            orchestrator_participant_id: "orch_packet3".to_string(),
+            target_participant_id: "ash_packet3".to_string(),
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            closeout: RetainedWorkerStopCloseoutV1 {
+                participant_state:
+                    crate::execution::agent_runtime::AgentRuntimeSessionState::Stopped,
+                session_state: OrchestrationSessionState::Stopped,
+            },
+            summary: "invalid stop mode".to_string(),
+        })
+        .expect_err("stop normalization must fail closed on non-retained mode");
+
+        assert_eq!(
+            err.to_string(),
+            "invalid_adapter_visible_mode: action stop_world_worker emitted mode ephemeral but adapter retained-only follow-up result requires retained"
+        );
     }
 
     #[test]
