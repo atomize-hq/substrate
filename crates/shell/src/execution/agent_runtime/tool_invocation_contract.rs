@@ -2,7 +2,16 @@
 
 use anyhow::bail;
 
-use super::dispatch_contract::{WorldDispatchActionV1, WorldDispatchModeV1};
+use crate::execution::config_model::AgentExecutionScope;
+
+use super::{
+    dispatch_contract::{
+        TaskPayloadV1, WorkerSpawnPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        WorldDispatchPayloadV1, WorldDispatchRequestV1,
+    },
+    mapping::MEMBER_ROLE,
+    state_store::AgentRuntimeStateStore,
+};
 
 /// Frozen adapter-visible contract for host-owned tool invocation above the
 /// already-landed internal `WorldDispatchRequestV1` transport.
@@ -285,15 +294,373 @@ fn canonicalize_handle_value(
     Ok(Some(trimmed.to_string()))
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct HostToolRuntimeDispatchMetadataV1 {
+    pub request_id: String,
+    pub idempotency_key: String,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+}
+
+impl HostToolRuntimeDispatchMetadataV1 {
+    fn validate(&self) -> anyhow::Result<()> {
+        require_runtime_owned_field("request_id", &self.request_id)?;
+        require_runtime_owned_field("idempotency_key", &self.idempotency_key)?;
+        require_runtime_owned_field("orchestration_session_id", &self.orchestration_session_id)?;
+        require_runtime_owned_field("caller_participant_id", &self.caller_participant_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct HostToolRuntimeWorldBindingV1 {
+    pub world_id: String,
+    pub world_generation: u64,
+}
+
+impl HostToolRuntimeWorldBindingV1 {
+    fn validate(&self) -> anyhow::Result<()> {
+        require_runtime_owned_field("world_id", &self.world_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RunWorldTaskToolCallV1 {
+    pub target_backend_id: String,
+    pub payload: TaskPayloadV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SpawnWorldWorkerToolCallV1 {
+    pub target_backend_id: String,
+    pub payload: WorkerSpawnPayloadV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ResolvedFollowUpDispatchAuthorityV1 {
+    pub mode: WorldDispatchModeV1,
+    pub target_backend_id: String,
+    pub task_run_id: Option<String>,
+    pub target_participant_id: Option<String>,
+    pub world_binding: HostToolRuntimeWorldBindingV1,
+}
+
+pub(crate) fn translate_run_world_task_to_internal_dispatch_request_v1(
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    world_binding: &HostToolRuntimeWorldBindingV1,
+    call: RunWorldTaskToolCallV1,
+) -> anyhow::Result<WorldDispatchRequestV1> {
+    build_dispatch_request_v1(
+        metadata,
+        world_binding,
+        HostToolNameV1::RunWorldTask,
+        WorldDispatchModeV1::Ephemeral,
+        call.target_backend_id,
+        None,
+        None,
+        WorldDispatchPayloadV1::Task(call.payload),
+    )
+}
+
+pub(crate) fn translate_spawn_world_worker_to_internal_dispatch_request_v1(
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    world_binding: &HostToolRuntimeWorldBindingV1,
+    call: SpawnWorldWorkerToolCallV1,
+) -> anyhow::Result<WorldDispatchRequestV1> {
+    build_dispatch_request_v1(
+        metadata,
+        world_binding,
+        HostToolNameV1::SpawnWorldWorker,
+        WorldDispatchModeV1::Retained,
+        call.target_backend_id,
+        None,
+        None,
+        WorldDispatchPayloadV1::WorkerSpawn(call.payload),
+    )
+}
+
+pub(crate) fn resolve_follow_up_dispatch_authority_v1(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    tool_name: HostToolNameV1,
+    handle: &HostToolFollowUpHandleV1,
+) -> anyhow::Result<ResolvedFollowUpDispatchAuthorityV1> {
+    metadata.validate()?;
+    ensure_tool_accepts_follow_up_handle(tool_name, handle)?;
+
+    let authority = store.resolve_internal_world_dispatch_caller(
+        &metadata.orchestration_session_id,
+        &metadata.caller_participant_id,
+    )?;
+    let world_binding = authoritative_world_binding(&authority.session)?;
+
+    match handle {
+        HostToolFollowUpHandleV1::ActiveTask(active_task) => {
+            let Some(task) = store.load_active_ephemeral_world_task(
+                &metadata.orchestration_session_id,
+                &active_task.task_run_id,
+            )?
+            else {
+                bail!(
+                    "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+                    metadata.orchestration_session_id,
+                    active_task.task_run_id
+                );
+            };
+
+            if task.caller_participant_id != authority.caller_participant.participant_id() {
+                bail!(
+                    "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
+                    metadata.orchestration_session_id,
+                    active_task.task_run_id,
+                    authority.caller_participant.participant_id()
+                );
+            }
+            if task.world_id != world_binding.world_id
+                || task.world_generation != world_binding.world_generation
+            {
+                bail!(
+                    "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
+                    metadata.orchestration_session_id,
+                    active_task.task_run_id
+                );
+            }
+
+            Ok(ResolvedFollowUpDispatchAuthorityV1 {
+                mode: WorldDispatchModeV1::Ephemeral,
+                target_backend_id: task.target_backend_id,
+                task_run_id: Some(task.task_run_id),
+                target_participant_id: None,
+                world_binding,
+            })
+        }
+        HostToolFollowUpHandleV1::RetainedWorker(retained_worker) => {
+            let Some(record) = store.load_session(&metadata.orchestration_session_id)? else {
+                bail!(
+                    "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
+                    metadata.orchestration_session_id
+                );
+            };
+            let mut matching_participants = record
+                .participants
+                .iter()
+                .filter(|participant| {
+                    participant.participant_id() == retained_worker.participant_id
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            if matching_participants.is_empty() {
+                bail!(
+                    "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                    metadata.orchestration_session_id,
+                    retained_worker.participant_id
+                );
+            }
+            if matching_participants.len() > 1 {
+                bail!(
+                    "ambiguous_target_participant: orchestration session {} has multiple retained worker records for {}",
+                    metadata.orchestration_session_id,
+                    retained_worker.participant_id
+                );
+            }
+
+            let target_participant = matching_participants
+                .pop()
+                .expect("retained follow-up target count checked above");
+            if target_participant.handle.role != MEMBER_ROLE
+                || target_participant.handle.execution.scope != AgentExecutionScope::World
+            {
+                bail!(
+                    "invalid_target_participant: orchestration session {} participant {} is not a retained world worker",
+                    metadata.orchestration_session_id,
+                    retained_worker.participant_id
+                );
+            }
+            if target_participant
+                .handle
+                .orchestrator_participant_id
+                .as_deref()
+                != Some(authority.caller_participant.participant_id())
+            {
+                bail!(
+                    "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
+                    metadata.orchestration_session_id,
+                    retained_worker.participant_id,
+                    authority.caller_participant.participant_id()
+                );
+            }
+            if !target_participant.matches_authoritative_parent_world_binding(&authority.session) {
+                bail!(
+                    "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                    metadata.orchestration_session_id,
+                    retained_worker.participant_id
+                );
+            }
+            if record.live_participants().into_iter().all(|participant| {
+                participant.participant_id() != target_participant.participant_id()
+            }) {
+                bail!(
+                    "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
+                    metadata.orchestration_session_id,
+                    retained_worker.participant_id
+                );
+            }
+
+            Ok(ResolvedFollowUpDispatchAuthorityV1 {
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: target_participant.handle.backend_id,
+                task_run_id: None,
+                target_participant_id: Some(retained_worker.participant_id.clone()),
+                world_binding,
+            })
+        }
+    }
+}
+
+pub(crate) fn translate_follow_up_tool_to_internal_dispatch_request_v1(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    tool_name: HostToolNameV1,
+    handle: HostToolFollowUpHandleV1,
+    payload: WorldDispatchPayloadV1,
+) -> anyhow::Result<WorldDispatchRequestV1> {
+    let authority = resolve_follow_up_dispatch_authority_v1(store, metadata, tool_name, &handle)?;
+    build_dispatch_request_v1(
+        metadata,
+        &authority.world_binding,
+        tool_name,
+        authority.mode,
+        authority.target_backend_id,
+        authority.task_run_id,
+        authority.target_participant_id,
+        payload,
+    )
+}
+
+fn build_dispatch_request_v1(
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    world_binding: &HostToolRuntimeWorldBindingV1,
+    tool_name: HostToolNameV1,
+    mode: WorldDispatchModeV1,
+    target_backend_id: String,
+    task_run_id: Option<String>,
+    target_participant_id: Option<String>,
+    payload: WorldDispatchPayloadV1,
+) -> anyhow::Result<WorldDispatchRequestV1> {
+    metadata.validate()?;
+    world_binding.validate()?;
+    let contract = tool_name.contract();
+    if !contract.accepts_mode(mode) {
+        bail!(
+            "invalid_dispatch_action_mode: action {} is incompatible with mode {}",
+            tool_name.as_str(),
+            mode.as_str(),
+        );
+    }
+
+    let request = WorldDispatchRequestV1 {
+        request_id: Some(metadata.request_id.clone()),
+        idempotency_key: Some(metadata.idempotency_key.clone()),
+        orchestration_session_id: Some(metadata.orchestration_session_id.clone()),
+        caller_participant_id: Some(metadata.caller_participant_id.clone()),
+        action: tool_name.dispatch_action(),
+        mode,
+        target_backend_id: Some(target_backend_id),
+        task_run_id,
+        target_participant_id,
+        world_id: Some(world_binding.world_id.clone()),
+        world_generation: Some(world_binding.world_generation),
+        payload,
+    };
+    request.clone().validate()?;
+    Ok(request)
+}
+
+fn ensure_tool_accepts_follow_up_handle(
+    tool_name: HostToolNameV1,
+    handle: &HostToolFollowUpHandleV1,
+) -> anyhow::Result<()> {
+    match (tool_name.contract().follow_up_handle_requirement, handle) {
+        (HostToolFollowUpHandleRequirementV1::None, _) => bail!(
+            "invalid_follow_up_handle: this tool does not accept task_run_id or participant_id"
+        ),
+        (
+            HostToolFollowUpHandleRequirementV1::ExactRetainedWorker,
+            HostToolFollowUpHandleV1::ActiveTask(_),
+        ) => bail!(
+            "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id"
+        ),
+        (
+            HostToolFollowUpHandleRequirementV1::ExactRetainedWorker,
+            HostToolFollowUpHandleV1::RetainedWorker(_),
+        )
+        | (
+            HostToolFollowUpHandleRequirementV1::EitherExactActiveTaskOrRetainedWorker,
+            _,
+        ) => Ok(()),
+    }
+}
+
+fn authoritative_world_binding(
+    session: &crate::execution::agent_runtime::OrchestrationSessionRecord,
+) -> anyhow::Result<HostToolRuntimeWorldBindingV1> {
+    let world_id = session.world_id.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing_world_binding: orchestration session {} has no authoritative world binding",
+            session.orchestration_session_id
+        )
+    })?;
+    let world_generation = session.world_generation.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing_world_binding: orchestration session {} has no authoritative world binding",
+            session.orchestration_session_id
+        )
+    })?;
+    Ok(HostToolRuntimeWorldBindingV1 {
+        world_id,
+        world_generation,
+    })
+}
+
+fn require_runtime_owned_field(field: &'static str, value: &str) -> anyhow::Result<()> {
+    if value.trim().is_empty() {
+        bail!("missing_runtime_owned_field: host tool adapter requires {field}");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::path::PathBuf;
+
+    use tempfile::TempDir;
 
     use super::{
-        host_tool_contract, host_tool_contracts_v1, HostToolFollowUpHandleRequirementV1,
-        HostToolFollowUpHandleV1, HostToolModelArgumentFamilyV1, HostToolNameV1,
+        host_tool_contract, host_tool_contracts_v1, resolve_follow_up_dispatch_authority_v1,
+        translate_follow_up_tool_to_internal_dispatch_request_v1,
+        translate_run_world_task_to_internal_dispatch_request_v1,
+        translate_spawn_world_worker_to_internal_dispatch_request_v1,
+        HostToolFollowUpHandleRequirementV1, HostToolFollowUpHandleV1,
+        HostToolModelArgumentFamilyV1, HostToolNameV1, HostToolRuntimeDispatchMetadataV1,
+        HostToolRuntimeWorldBindingV1, RunWorldTaskToolCallV1, SpawnWorldWorkerToolCallV1,
     };
-    use crate::execution::agent_runtime::{WorldDispatchActionV1, WorldDispatchModeV1};
+    use crate::execution::agent_runtime::dispatch_contract::{
+        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
+    };
+    use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+    use crate::execution::agent_runtime::orchestration_session::{
+        HostAttachContract, OrchestrationSessionState,
+    };
+    use crate::execution::agent_runtime::session::AgentRuntimeParticipantRecord;
+    use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
+    use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
+    use crate::execution::agent_runtime::{
+        AgentRuntimeStateStore, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+    };
+    use crate::execution::config_model::AgentExecutionScope;
 
     #[test]
     fn dispatch_contract_adapter_freezes_exactly_seven_host_tool_names() {
@@ -514,5 +881,362 @@ mod tests {
             err.to_string(),
             "invalid_follow_up_handle: task_run_id must be non-empty when provided"
         );
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_translates_run_world_task_with_runtime_owned_injection() {
+        let metadata = sample_runtime_metadata();
+        let world_binding = sample_world_binding();
+
+        let request = translate_run_world_task_to_internal_dispatch_request_v1(
+            &metadata,
+            &world_binding,
+            RunWorldTaskToolCallV1 {
+                target_backend_id: "cli:codex_world".to_string(),
+                payload: crate::execution::agent_runtime::TaskPayloadV1 {
+                    prompt: "Scan the workspace and summarize the failing test.".to_string(),
+                },
+            },
+        )
+        .expect("translate run_world_task");
+
+        let validated = request
+            .clone()
+            .validate()
+            .expect("validated dispatch request");
+        assert_eq!(request.action, WorldDispatchActionV1::RunWorldTask);
+        assert_eq!(request.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(request.request_id.as_deref(), Some("req-packet2-run"));
+        assert_eq!(request.idempotency_key.as_deref(), Some("idem-packet2-run"));
+        assert_eq!(
+            request.orchestration_session_id.as_deref(),
+            Some("sess_packet2")
+        );
+        assert_eq!(
+            request.caller_participant_id.as_deref(),
+            Some("orch_packet2")
+        );
+        assert_eq!(
+            request.target_backend_id.as_deref(),
+            Some("cli:codex_world")
+        );
+        assert_eq!(request.world_id.as_deref(), Some("world-17"));
+        assert_eq!(request.world_generation, Some(2));
+        assert!(request.task_run_id.is_none());
+        assert!(request.target_participant_id.is_none());
+        assert_eq!(validated.idempotency_key, "idem-packet2-run");
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_translates_spawn_world_worker_with_runtime_owned_injection() {
+        let metadata = sample_runtime_metadata();
+        let world_binding = sample_world_binding();
+
+        let request = translate_spawn_world_worker_to_internal_dispatch_request_v1(
+            &metadata,
+            &world_binding,
+            SpawnWorldWorkerToolCallV1 {
+                target_backend_id: "cli:claude_code_world".to_string(),
+                payload: crate::execution::agent_runtime::WorkerSpawnPayloadV1 {
+                    prompt: "Bootstrap a retained worker for the integration test triage."
+                        .to_string(),
+                },
+            },
+        )
+        .expect("translate spawn_world_worker");
+
+        let validated = request
+            .clone()
+            .validate()
+            .expect("validated dispatch request");
+        assert_eq!(request.action, WorldDispatchActionV1::SpawnWorldWorker);
+        assert_eq!(request.mode, WorldDispatchModeV1::Retained);
+        assert_eq!(request.request_id.as_deref(), Some("req-packet2-run"));
+        assert_eq!(request.idempotency_key.as_deref(), Some("idem-packet2-run"));
+        assert_eq!(
+            request.target_backend_id.as_deref(),
+            Some("cli:claude_code_world")
+        );
+        assert_eq!(request.world_id.as_deref(), Some("world-17"));
+        assert_eq!(request.world_generation, Some(2));
+        assert!(request.task_run_id.is_none());
+        assert!(request.target_participant_id.is_none());
+        assert_eq!(validated.target_backend_id, "cli:claude_code_world");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_uses_authoritative_retained_runtime_state() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
+            let member = live_member(
+                "codex_world",
+                "sess_packet2",
+                "worker_packet2",
+                "orch_packet2",
+            );
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let metadata = sample_runtime_metadata();
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::ContinueWorldWorker,
+                &HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2".to_string(),
+                }),
+            )
+            .expect("resolve retained follow-up authority");
+
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(
+                resolved.target_participant_id.as_deref(),
+                Some("worker_packet2")
+            );
+            assert_eq!(resolved.world_binding.world_id, "world-17");
+            assert_eq!(resolved.world_binding.world_generation, 2);
+
+            let request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+                store,
+                &metadata,
+                HostToolNameV1::ContinueWorldWorker,
+                HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2".to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                    prompt: "Continue from the latest retained worker checkpoint.".to_string(),
+                    thread_id: Some("thread-packet2-retained".to_string()),
+                }),
+            )
+            .expect("translate retained follow-up request");
+
+            let validated = request.validate().expect("validate retained follow-up");
+            assert_eq!(validated.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(validated.target_backend_id, "cli:codex_world");
+            assert_eq!(
+                validated.target_participant_id.as_deref(),
+                Some("worker_packet2")
+            );
+            assert_eq!(validated.world_id, "world-17");
+            assert_eq!(validated.world_generation, 2);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_uses_authoritative_active_task_state() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+
+            let guard = store
+                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
+                    orchestration_session_id: "sess_packet2".to_string(),
+                    task_run_id: "task-run-packet2".to_string(),
+                    caller_participant_id: "orch_packet2".to_string(),
+                    target_backend_id: "cli:codex_world".to_string(),
+                    world_id: "world-17".to_string(),
+                    world_generation: 2,
+                })
+                .expect("register active task");
+
+            let metadata = sample_runtime_metadata();
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::CancelWorldWork,
+                &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                    task_run_id: "task-run-packet2".to_string(),
+                }),
+            )
+            .expect("resolve active-task follow-up authority");
+
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Ephemeral);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(resolved.task_run_id.as_deref(), Some("task-run-packet2"));
+            assert!(resolved.target_participant_id.is_none());
+            assert_eq!(resolved.world_binding.world_id, "world-17");
+            assert_eq!(resolved.world_binding.world_generation, 2);
+
+            let inspect_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+                store,
+                &metadata,
+                HostToolNameV1::InspectWorldWorker,
+                HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                    task_run_id: "task-run-packet2".to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+            )
+            .expect("translate active inspect request");
+            let cancel_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+                store,
+                &metadata,
+                HostToolNameV1::CancelWorldWork,
+                HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                    task_run_id: "task-run-packet2".to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
+                    reason: Some("host_requested_stop".to_string()),
+                    graceful: Some(true),
+                }),
+            )
+            .expect("translate active cancel request");
+
+            let inspect_validated = inspect_request
+                .validate()
+                .expect("validate inspect request");
+            assert_eq!(inspect_validated.mode, WorldDispatchModeV1::Ephemeral);
+            assert_eq!(
+                inspect_validated.task_run_id.as_deref(),
+                Some("task-run-packet2")
+            );
+            assert!(inspect_validated.target_participant_id.is_none());
+
+            let cancel_validated = cancel_request.validate().expect("validate cancel request");
+            assert_eq!(cancel_validated.mode, WorldDispatchModeV1::Ephemeral);
+            assert_eq!(
+                cancel_validated.task_run_id.as_deref(),
+                Some("task-run-packet2")
+            );
+            assert_eq!(cancel_validated.world_id, "world-17");
+
+            drop(guard);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_rejects_active_handle_for_retained_only_tool()
+    {
+        with_store(|store| {
+            let metadata = sample_runtime_metadata();
+            let err = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::StopWorldWorker,
+                &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                    task_run_id: "task-run-packet2".to_string(),
+                }),
+            )
+            .expect_err("retained-only tool must reject task handle");
+            assert_eq!(
+                err.to_string(),
+                "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id"
+            );
+        });
+    }
+
+    fn sample_runtime_metadata() -> HostToolRuntimeDispatchMetadataV1 {
+        HostToolRuntimeDispatchMetadataV1 {
+            request_id: "req-packet2-run".to_string(),
+            idempotency_key: "idem-packet2-run".to_string(),
+            orchestration_session_id: "sess_packet2".to_string(),
+            caller_participant_id: "orch_packet2".to_string(),
+        }
+    }
+
+    fn sample_world_binding() -> HostToolRuntimeWorldBindingV1 {
+        HostToolRuntimeWorldBindingV1 {
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+        }
+    }
+
+    fn descriptor(agent_id: &str, scope: AgentExecutionScope) -> RuntimeSelectionDescriptor {
+        RuntimeSelectionDescriptor {
+            agent_id: agent_id.to_string(),
+            backend_id: format!("cli:{agent_id}"),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: "substrate.agent.session".to_string(),
+            execution_scope: scope,
+            binary_path: PathBuf::from("/usr/bin/codex"),
+        }
+    }
+
+    fn set_live(participant: &mut AgentRuntimeParticipantRecord) {
+        participant
+            .transition_state(crate::execution::agent_runtime::AgentRuntimeSessionState::Ready);
+        participant.mark_runtime_ownership_retained();
+        participant.set_uaa_session_id("uaa_session");
+    }
+
+    fn live_orchestrator(
+        agent_id: &str,
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> AgentRuntimeParticipantRecord {
+        let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+            &descriptor(agent_id, AgentExecutionScope::Host),
+            orchestration_session_id.to_string(),
+            participant_id.to_string(),
+            format!("lease_{participant_id}"),
+        )
+        .expect("orchestrator participant");
+        set_live(&mut participant);
+        participant
+    }
+
+    fn live_member(
+        agent_id: &str,
+        orchestration_session_id: &str,
+        participant_id: &str,
+        orchestrator_participant_id: &str,
+    ) -> AgentRuntimeParticipantRecord {
+        let mut participant = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor(agent_id, AgentExecutionScope::World),
+            orchestration_session_id.to_string(),
+            participant_id.to_string(),
+            orchestrator_participant_id.to_string(),
+            None,
+            Some(
+                crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding {
+                    world_id: "world-17".to_string(),
+                    world_generation: 2,
+                },
+            ),
+            format!("lease_{participant_id}"),
+        )
+        .expect("member participant");
+        set_live(&mut participant);
+        participant
+    }
+
+    fn active_parent(
+        participant: &AgentRuntimeParticipantRecord,
+    ) -> crate::execution::agent_runtime::OrchestrationSessionRecord {
+        let mut parent = crate::execution::agent_runtime::OrchestrationSessionRecord::new(
+            participant.handle.orchestration_session_id.clone(),
+            "trace_session".to_string(),
+            "/workspace".to_string(),
+            participant,
+            HostAttachContract::from_manifest_for_test(participant),
+        );
+        parent.transition_state(OrchestrationSessionState::Active);
+        parent.world_id = Some("world-17".to_string());
+        parent.world_generation = Some(2);
+        parent.bind_active_session_handle(participant.handle.participant_id.clone());
+        parent
+    }
+
+    fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let temp = TempDir::new().expect("tempdir");
+        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        test(&store);
+        std::env::remove_var("SUBSTRATE_HOME");
     }
 }
