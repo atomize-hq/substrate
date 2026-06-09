@@ -24,6 +24,7 @@ use crate::execution::agent_runtime::control::{
     run_hidden_owner_helper_startup_prompt_stream_with_public_identity,
     HiddenOwnerHelperStartupPromptPlan,
 };
+use crate::execution::agent_runtime::dispatch_contract::LiveToolSupportPosture;
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -32,8 +33,8 @@ use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipant
 #[cfg(unix)]
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
-    materialize_runtime_descriptor, member_selection_error_exit_code, validate_member_selection,
-    RuntimeSelectionDescriptor,
+    materialize_runtime_descriptor, member_selection_error_exit_code,
+    resolve_live_tool_support_posture, validate_member_selection, RuntimeSelectionDescriptor,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::StartupPromptReplayState;
@@ -2712,6 +2713,8 @@ struct ToolboxOrchestratorJson<'a> {
     backend_id: String,
     role: &'a str,
     execution: ExecutionScopeJson<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    live_tool_support: Option<LiveToolSupportPostureJson>,
 }
 
 #[derive(Clone, Serialize)]
@@ -2781,6 +2784,7 @@ fn build_toolbox_status_report<'a>(
         backend_id: orchestrator.derived_backend_id(),
         role: ORCHESTRATOR_ROLE,
         execution: ExecutionScopeJson { scope: "host" },
+        live_tool_support: live_tool_support_posture_json_for_entry(orchestrator),
     };
 
     if !context.effective_config.agents.toolbox.enabled {
@@ -2927,6 +2931,15 @@ fn render_toolbox_status_report(
             orchestrator.role,
             orchestrator.execution.scope
         );
+        if let Some(live_tool_support) = &orchestrator.live_tool_support {
+            println!(
+                "  live_tool_support: runtime_family={} | validation_state={} | support_state={} | reason={}",
+                live_tool_support.runtime_family,
+                live_tool_support.validation_state,
+                live_tool_support.support_state,
+                live_tool_support.reason
+            );
+        }
     }
 
     Ok(())
@@ -3371,11 +3384,38 @@ fn backend_allowed(policy: &Policy, backend_id: &str) -> bool {
         .any(|allowed| allowed == backend_id)
 }
 
+#[derive(Clone, Serialize)]
+struct LiveToolSupportPostureJson {
+    runtime_family: String,
+    validation_state: String,
+    support_state: String,
+    reason: String,
+}
+
+fn live_tool_support_posture_json(posture: LiveToolSupportPosture) -> LiveToolSupportPostureJson {
+    LiveToolSupportPostureJson {
+        runtime_family: posture.runtime_family.as_agent_kind_str().to_string(),
+        validation_state: posture.validation_state.as_str().to_string(),
+        support_state: posture.support_state.as_str().to_string(),
+        reason: posture.reason.to_string(),
+    }
+}
+
+fn live_tool_support_posture_json_for_entry(
+    entry: &AgentInventoryEntryV1,
+) -> Option<LiveToolSupportPostureJson> {
+    resolve_live_tool_support_posture(entry)
+        .ok()
+        .map(live_tool_support_posture_json)
+}
+
 #[derive(Serialize)]
 struct DoctorOrchestratorJson<'a> {
     agent_id: String,
     backend_id: String,
     execution: ExecutionScopeJson<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    live_tool_support: Option<LiveToolSupportPostureJson>,
 }
 
 #[derive(Clone, Serialize)]
@@ -3458,7 +3498,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
         reason: None,
     }];
 
-    let orchestrator = match validate_orchestrator_selection(&effective_config, &inventory) {
+    let mut orchestrator = match validate_orchestrator_selection(&effective_config, &inventory) {
         Ok(entry) => {
             checks.push(DoctorCheckJson {
                 check: "orchestrator_selection".to_string(),
@@ -3469,6 +3509,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 agent_id: entry.file.id.clone(),
                 backend_id: entry.derived_backend_id(),
                 execution: ExecutionScopeJson { scope: "host" },
+                live_tool_support: None,
             }
         }
         Err(reason) => {
@@ -3501,6 +3542,9 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 status: "pass".to_string(),
                 reason: None,
             });
+            orchestrator.live_tool_support = Some(live_tool_support_posture_json(
+                descriptor.live_tool_support_posture(),
+            ));
             descriptor
         }
         Err(err) => {
@@ -3906,6 +3950,15 @@ fn render_doctor_report(report: &DoctorReportJson<'_>, json_mode: bool) -> Resul
         println!("  agent_id: {}", orchestrator.agent_id);
         println!("  backend_id: {}", orchestrator.backend_id);
         println!("  execution.scope: {}", orchestrator.execution.scope);
+        if let Some(live_tool_support) = &orchestrator.live_tool_support {
+            println!(
+                "  live_tool_support: runtime_family={} | validation_state={} | support_state={} | reason={}",
+                live_tool_support.runtime_family,
+                live_tool_support.validation_state,
+                live_tool_support.support_state,
+                live_tool_support.reason
+            );
+        }
     }
     println!("checks");
     for check in &report.checks {
@@ -3974,12 +4027,20 @@ impl AgentExecutionScope {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::agent_inventory::{
+        AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
+        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
+    };
+    use crate::execution::agent_runtime::dispatch_contract::{
+        LiveToolSupportState, LiveToolValidationState,
+    };
+    use crate::execution::agent_runtime::mapping::PURE_AGENT_PROTOCOL;
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind, AgentRuntimeParticipantRecord, AgentRuntimeSessionState,
         OrchestrationObligationAttachState, OrchestrationObligationKind,
         OrchestrationObligationRecord, OrchestrationSessionRecord, OrchestrationSessionState,
     };
-    use crate::execution::config_model::AgentExecutionScope;
+    use crate::execution::config_model::{AgentCliMode, AgentExecutionScope};
     use serial_test::serial;
     use std::fs;
     use std::path::PathBuf;
@@ -4226,6 +4287,121 @@ mod tests {
             prompt_source: crate::execution::cli::PublicPromptArgs::default(),
             json: false,
         }
+    }
+
+    fn inventory_entry_for_test(
+        agent_id: &str,
+        runtime_family: &str,
+        scope: AgentExecutionScope,
+    ) -> AgentInventoryEntryV1 {
+        let binary = std::env::current_exe()
+            .expect("current test binary")
+            .display()
+            .to_string();
+        AgentInventoryEntryV1 {
+            path: PathBuf::from(format!("{agent_id}.yaml")),
+            file: AgentFileV1 {
+                version: 1,
+                id: agent_id.to_string(),
+                config: AgentConfigV1 {
+                    enabled: true,
+                    kind: AgentConfigKind::Cli,
+                    protocol: Some(PURE_AGENT_PROTOCOL.to_string()),
+                    execution: AgentExecutionConfigV1 { scope: Some(scope) },
+                    cli: Some(AgentCliConfigV1 {
+                        binary,
+                        mode: Some(AgentCliMode::Persistent),
+                        runtime_family: Some(match runtime_family {
+                            "codex" => AgentCliRuntimeFamily::Codex,
+                            "claude_code" => AgentCliRuntimeFamily::ClaudeCode,
+                            other => panic!("unexpected runtime_family `{other}`"),
+                        }),
+                    }),
+                    api: None,
+                    capabilities: AgentCapabilitiesV1 {
+                        session_start: true,
+                        session_resume: true,
+                        session_fork: true,
+                        session_stop: true,
+                        status_snapshot: true,
+                        event_stream: true,
+                        llm: true,
+                        mcp_client: false,
+                    },
+                },
+                policy_overlay: None,
+            },
+        }
+    }
+
+    #[test]
+    fn live_tool_support_posture_json_tracks_runtime_family_not_agent_id() {
+        let entry = inventory_entry_for_test(
+            "workspace_orchestrator_alias",
+            "codex",
+            AgentExecutionScope::Host,
+        );
+
+        let posture = live_tool_support_posture_json_for_entry(&entry)
+            .expect("posture should resolve from runtime_family");
+        assert_eq!(posture.runtime_family, "codex");
+        assert_eq!(posture.validation_state, "smoke_validated");
+        assert_eq!(posture.support_state, "first_supported_floor");
+    }
+
+    #[test]
+    fn toolbox_status_keeps_non_codex_runtime_readable_while_marking_posture_unvalidated() {
+        with_state_store(|_| {
+            let agent_id = "host_orchestrator_alias";
+            let effective_config = SubstrateConfig {
+                agents: crate::execution::config_model::AgentsConfig {
+                    enabled: true,
+                    hub: crate::execution::config_model::AgentHubConfig {
+                        orchestrator_agent_id: agent_id.to_string(),
+                        ..Default::default()
+                    },
+                    toolbox: crate::execution::config_model::AgentToolboxConfig {
+                        enabled: true,
+                        bind: crate::execution::config_model::AgentToolboxBindConfig {
+                            transport: AgentToolboxBindTransport::Uds,
+                        },
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let base_policy = Policy {
+                agents_allowed_backends: vec![format!("cli:{agent_id}")],
+                ..Policy::default()
+            };
+            let mut inventory = BTreeMap::new();
+            inventory.insert(
+                agent_id.to_string(),
+                inventory_entry_for_test(agent_id, "claude_code", AgentExecutionScope::Host),
+            );
+            let context = AgentCommandContext {
+                effective_config,
+                base_policy,
+                inventory,
+            };
+
+            let report =
+                build_toolbox_status_report(&context).expect("toolbox status should stay readable");
+            assert_eq!(report.eligibility.state, "dependency_unavailable");
+            let posture = report
+                .orchestrator
+                .and_then(|orchestrator| orchestrator.live_tool_support)
+                .expect("selected host orchestrator should publish support posture");
+            assert_eq!(posture.runtime_family, "claude_code");
+            assert_eq!(
+                posture.validation_state,
+                LiveToolValidationState::NotYetSmokeValidated.as_str()
+            );
+            assert_eq!(
+                posture.support_state,
+                LiveToolSupportState::NotYetGuaranteed.as_str()
+            );
+        });
     }
 
     #[test]

@@ -1291,6 +1291,65 @@ pub(crate) struct ResolvedLaunchContract {
     pub field_provenance: BTreeMap<String, FieldProvenance>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LiveToolValidationState {
+    SmokeValidated,
+    NotYetSmokeValidated,
+}
+
+impl LiveToolValidationState {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::SmokeValidated => "smoke_validated",
+            Self::NotYetSmokeValidated => "not_yet_smoke_validated",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LiveToolSupportState {
+    FirstSupportedFloor,
+    NotYetGuaranteed,
+}
+
+impl LiveToolSupportState {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::FirstSupportedFloor => "first_supported_floor",
+            Self::NotYetGuaranteed => "not_yet_guaranteed",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct LiveToolSupportPosture {
+    pub runtime_family: AgentRuntimeBackendKind,
+    pub validation_state: LiveToolValidationState,
+    pub support_state: LiveToolSupportState,
+    pub reason: &'static str,
+}
+
+impl LiveToolSupportPosture {
+    pub(crate) fn for_backend_kind(backend_kind: AgentRuntimeBackendKind) -> Self {
+        match backend_kind {
+            AgentRuntimeBackendKind::Codex => Self {
+                runtime_family: AgentRuntimeBackendKind::Codex,
+                validation_state: LiveToolValidationState::SmokeValidated,
+                support_state: LiveToolSupportState::FirstSupportedFloor,
+                reason:
+                    "codex is the first smoke-validated host-tool floor in Slice 53",
+            },
+            AgentRuntimeBackendKind::ClaudeCode => Self {
+                runtime_family: AgentRuntimeBackendKind::ClaudeCode,
+                validation_state: LiveToolValidationState::NotYetSmokeValidated,
+                support_state: LiveToolSupportState::NotYetGuaranteed,
+                reason:
+                    "claude_code host-tool parity is not yet smoke-validated in Slice 53; ordinary host-session behavior remains unchanged unless implementation truth proves an incompatibility",
+            },
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DispatchResolutionErrorKind {
@@ -2106,15 +2165,16 @@ mod tests {
         DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
         DispatchRejectingLayer, DispatchRequestEnvelope, DispatchResolutionErrorKind,
         FieldBaselineOrigin, FieldValueOrigin, ForkWorldWorkerOutcomeV1, HostExecutionClientStart,
-        InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
-        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerCancelPayloadV1,
-        WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
-        WorkerContinueControlDirectivePayloadV1, WorkerContinueForkCommandPayloadV1,
-        WorkerContinuePayloadV1, WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1,
-        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
-        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
+        InspectWorldWorkerOutcomeV1, LiveToolSupportPosture, LiveToolSupportState,
+        LiveToolValidationState, RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, StopWorldWorkerOutcomeV1,
+        TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
+        WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
+        WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
+        WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
+        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2280,6 +2340,48 @@ mod tests {
         );
         assert_eq!(resolved.backend_id, "cli:codex");
         assert_eq!(resolved.execution_scope, AgentExecutionScope::Host);
+    }
+
+    #[test]
+    fn live_tool_support_posture_marks_codex_as_first_validated_floor() {
+        let posture = LiveToolSupportPosture::for_backend_kind(AgentRuntimeBackendKind::Codex);
+
+        assert_eq!(posture.runtime_family, AgentRuntimeBackendKind::Codex);
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::SmokeValidated
+        );
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::FirstSupportedFloor
+        );
+        assert!(
+            posture.reason.contains("first smoke-validated"),
+            "unexpected reason: {}",
+            posture.reason
+        );
+    }
+
+    #[test]
+    fn live_tool_support_posture_keeps_non_codex_runtime_truthful_without_blocking() {
+        let posture = LiveToolSupportPosture::for_backend_kind(AgentRuntimeBackendKind::ClaudeCode);
+
+        assert_eq!(posture.runtime_family, AgentRuntimeBackendKind::ClaudeCode);
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::NotYetSmokeValidated
+        );
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::NotYetGuaranteed
+        );
+        assert!(
+            posture
+                .reason
+                .contains("ordinary host-session behavior remains unchanged"),
+            "unexpected reason: {}",
+            posture.reason
+        );
     }
 
     #[test]

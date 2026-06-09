@@ -11,7 +11,7 @@ use crate::execution::agent_runtime::dispatch_contract::{
     resolve_inventory_contract_for_exact_backend, resolve_inventory_contract_for_unique_scope,
     AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind, DispatchCallerKind,
     DispatchCapabilityOverrideSet, DispatchRequestEnvelope, HostExecutionClientStart,
-    ResolvedLaunchContract,
+    LiveToolSupportPosture, ResolvedLaunchContract,
 };
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 
@@ -28,6 +28,12 @@ pub(crate) struct RuntimeSelectionDescriptor {
     pub protocol: String,
     pub execution_scope: AgentExecutionScope,
     pub binary_path: PathBuf,
+}
+
+impl RuntimeSelectionDescriptor {
+    pub(crate) fn live_tool_support_posture(&self) -> LiveToolSupportPosture {
+        LiveToolSupportPosture::for_backend_kind(self.backend_kind)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -191,6 +197,20 @@ pub(crate) fn validate_runtime_realizability(
         execution_scope: entry.effective_scope(effective_config),
         binary_path,
     })
+}
+
+pub(crate) fn resolve_live_tool_support_posture(
+    entry: &AgentInventoryEntryV1,
+) -> std::result::Result<LiveToolSupportPosture, RuntimeRealizabilityError> {
+    let backend_kind =
+        resolve_shell_owned_runtime_family(&entry.file.id, entry.cli_runtime_family()).map_err(
+            |err| RuntimeRealizabilityError {
+                exit_code: 2,
+                reason: err.to_string(),
+            },
+        )?;
+
+    Ok(LiveToolSupportPosture::for_backend_kind(backend_kind))
 }
 
 pub(crate) fn materialize_runtime_descriptor(
@@ -381,14 +401,17 @@ fn _assert_result_type(_: Result<RuntimeSelectionDescriptor>) {}
 #[cfg(test)]
 mod tests {
     use super::{
-        exact_backend_selection_error_exit_code, validate_exact_backend_selection,
-        validate_member_selection, validate_runtime_realizability, AgentRuntimeBackendKind,
-        ExactBackendSelectionError, MemberSelectionError, RuntimeSelectionDescriptor,
-        PURE_AGENT_PROTOCOL,
+        exact_backend_selection_error_exit_code, resolve_live_tool_support_posture,
+        validate_exact_backend_selection, validate_member_selection,
+        validate_runtime_realizability, AgentRuntimeBackendKind, ExactBackendSelectionError,
+        MemberSelectionError, RuntimeSelectionDescriptor, PURE_AGENT_PROTOCOL,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
+    };
+    use crate::execution::agent_runtime::dispatch_contract::{
+        LiveToolSupportState, LiveToolValidationState,
     };
     use crate::execution::agent_runtime::mapping::LEGACY_PURE_AGENT_PROTOCOL;
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
@@ -859,6 +882,59 @@ mod tests {
             !error.reason.contains("runtime_family"),
             "unexpected reason: {}",
             error.reason
+        );
+    }
+
+    #[test]
+    fn resolve_live_tool_support_posture_uses_runtime_family_not_agent_id() {
+        let entry = make_entry_with_runtime_family(
+            "workspace_orchestrator_alias",
+            AgentExecutionScope::Host,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::Codex),
+            required_capabilities(),
+        );
+
+        let posture = resolve_live_tool_support_posture(&entry).expect("posture should resolve");
+        assert_eq!(posture.runtime_family, AgentRuntimeBackendKind::Codex);
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::SmokeValidated
+        );
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::FirstSupportedFloor
+        );
+    }
+
+    #[test]
+    fn resolve_live_tool_support_posture_keeps_non_codex_host_sessions_supported_but_unvalidated() {
+        let entry = make_entry_with_runtime_family(
+            "host_orchestrator_alias",
+            AgentExecutionScope::Host,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::ClaudeCode),
+            required_capabilities(),
+        );
+
+        let posture = resolve_live_tool_support_posture(&entry).expect("posture should resolve");
+        assert_eq!(posture.runtime_family, AgentRuntimeBackendKind::ClaudeCode);
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::NotYetSmokeValidated
+        );
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::NotYetGuaranteed
+        );
+        assert!(
+            posture
+                .reason
+                .contains("ordinary host-session behavior remains unchanged"),
+            "unexpected reason: {}",
+            posture.reason
         );
     }
 }
