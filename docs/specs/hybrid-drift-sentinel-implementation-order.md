@@ -637,6 +637,12 @@ Packet 18 note:
   - `R4` is now the next semantic packet and should consume the landed delegation boundary rather
     than reopening it
   - `R5`, `R6`, `R7`, and `R8` remain explicitly out of scope for the `R4` packet family
+  - `2026-06-09`: `R4-5` replay/live archetype presentation is considered parity-clean at the
+    matching-checkpoint level, including fresh manual smoke on real rollout sessions. One separate
+    follow-up question remains intentionally deferred outside `R4-5`: whether replay console
+    output should preserve the same whole-stream arrival ordering as live mode instead of grouping
+    visible warnings before silent checkpoints. Current evidence says the ordering difference is
+    presentation-only and not a checkpoint-local archetype/parity bug.
 
 ## If You Want Fewer Packets
 
