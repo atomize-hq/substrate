@@ -42,7 +42,13 @@ Each fixture expectation must include:
 4. expected confidence floor or ceiling,
 5. decisive supporting evidence,
 6. required counter-evidence when ambiguous/negative/delegated,
-7. why nearby statuses lose.
+7. comparable attempts,
+8. window/reset expectation,
+9. why nearby statuses lose.
+
+Each required row below therefore makes the comparability contract explicit. Schema/compatibility
+rows still record `Comparable attempts` and `Window/reset expectation`, but those fields describe
+payload/surface comparability rather than runtime progress-window ids.
 
 Public labels use serialized snake_case values:
 
@@ -79,6 +85,13 @@ dimension:
   - `FailingScopeEdited`
 - Counter-evidence:
   - none required unless parser confidence is low
+- Comparable attempts:
+  - compare the same failing command or equivalent focused verifier on the same parser target
+    before/after an overlapping edit; unrelated commands or a different target file do not compare
+- Window/reset expectation:
+  - stays in one troubleshooting window while `parser::roundtrip` / `src/parser.rs` remains the
+    target frontier; reset if the verifier target changes materially or a later clean proof closes
+    this scope and subsequent work reopens a different target
 - Why competing statuses lose:
   - not `stalled`: failure class changed along a comparable target frontier
   - not `regressing`: later failure is deeper/later than compile failure
@@ -100,6 +113,14 @@ dimension:
   - `FailingScopeEdited`
 - Counter-evidence:
   - include parser-confidence counter if fail-count extraction is partial
+- Comparable attempts:
+  - compare the same package/filter test command, or an equivalent deterministic suite over the
+    same failing scope, before and after an overlapping edit; different suites or filters do not
+    compare
+- Window/reset expectation:
+  - stays in one troubleshooting window while the command/filter and failing scope stay materially
+    the same; reset if the session switches to a different suite/target or a new objective rebuilds
+    the failure set from another working set
 - Why competing statuses lose:
   - not `stalled`: quantitative failing frontier improved
   - not `regressing`: failure count did not grow
@@ -120,6 +141,12 @@ dimension:
   - `FailingScopeUnchanged`
 - Counter-evidence:
   - none required unless unrelated edits occurred
+- Comparable attempts:
+  - compare repeats of the same verifier normalized to the same target signature when no
+    overlapping edit intervenes; other commands or a different signature do not compare
+- Window/reset expectation:
+  - stays in one troubleshooting window while the same verifier/target repeats without overlapping
+    edits; reset if an overlapping fix edit lands or the verifier target changes materially
 - Why competing statuses lose:
   - not `advancing`: no frontier movement or edit overlap
   - not `regressing`: no prior cleaner state was broken
@@ -141,6 +168,13 @@ dimension:
   - `FailureCountIncreased` when available
 - Counter-evidence:
   - include any positive signal if another unrelated verifier passed
+- Comparable attempts:
+  - compare an earlier clean run and a later failing rerun of the same focused verifier on the same
+    path/test scope after an overlapping edit; unrelated verifiers are only counter-evidence
+- Window/reset expectation:
+  - stays in one troubleshooting or implementation window while the same previously clean scope is
+    being rechecked; reset if the verifier target changes materially or the session moves to a new
+    objective/worktree
 - Why competing statuses lose:
   - not `stalled`: state moved backward from clean to failed
   - not `advancing`: a previous best frontier was lost
@@ -162,6 +196,14 @@ dimension:
   - `WorkingSetConcentrated`
 - Counter-evidence:
   - none required unless broad searches continue after artifact creation
+- Comparable attempts:
+  - compare planning checkpoints that pursue the same stated objective and truth-artifact family
+    while the working set narrows from broad scan to specific `DESIGN-*`, spec, plan, or tasks
+    files; implementation/test loops do not compare
+- Window/reset expectation:
+  - stays in one planning window while the objective and narrowed artifact family remain stable;
+    reset if the truth artifact/worktree changes materially or the session pivots into a different
+    implementation objective
 - Why competing statuses lose:
   - not `stalled`: artifact and narrowed set show structural convergence
   - not `implementation_verification_wall`: no source/test implementation loop dominates
@@ -182,6 +224,13 @@ dimension:
   - `WorkingSetDiffused`
 - Counter-evidence:
   - any narrowed truth artifact or candidate should appear as counter-evidence
+- Comparable attempts:
+  - compare repeated broad planning scans for the same objective before any narrowing artifact is
+    produced; once a concrete artifact becomes the anchor, the session exits this meander case
+- Window/reset expectation:
+  - stays in one planning window while the working set remains diffuse around the same objective;
+    reset if a concrete spec/plan/tasks/design artifact becomes the target or the session switches
+    archetypes
 - Why competing statuses lose:
   - not `advancing`: no convergence artifact or narrowing
   - not `insufficient_evidence`: repeated broad scans are enough evidence of meander/stall
@@ -204,6 +253,14 @@ dimension:
   - `VerificationScopeBroadened` when broader proof follows focused proof
 - Counter-evidence:
   - none required unless unrelated churn appears
+- Comparable attempts:
+  - compare verification attempts against the same feature slice, symbol, or test scope after
+    overlapping source edits; broader proof is comparable only when it follows the same focused
+    target frontier
+- Window/reset expectation:
+  - stays in one implementation-verification window while the working set and target verifier remain
+    materially the same; reset if the session changes slices/objectives or a different working set
+    becomes dominant
 - Why competing statuses lose:
   - not `stalled`: verifier moved forward
   - not `verification_closeout_narrowing`: implementation edits still dominate the checkpoint
@@ -224,6 +281,12 @@ dimension:
   - `FailingScopeUnchanged`
 - Counter-evidence:
   - unrelated edit activity should be recorded as counter-evidence or mixed context
+- Comparable attempts:
+  - compare repeats of the same verifier on the same failing path/test/symbol across unrelated
+    edits; once an overlapping fix lands, later attempts no longer belong to this row
+- Window/reset expectation:
+  - stays in one implementation-verification window while unrelated edits continue and the verifier
+    target stays fixed; reset if an overlapping fix edit lands or the command target changes
 - Why competing statuses lose:
   - not `advancing`: edits did not overlap the failing scope and diagnostics did not improve
   - not `regressing`: no previous clean/later frontier was broken
@@ -246,9 +309,52 @@ dimension:
   - `PlanArtifactRefined` when summary/handoff artifact is written
 - Counter-evidence:
   - none required unless new source edit is present
+- Comparable attempts:
+  - compare proof attempts in the same closeout phase for the same residual checklist/target list
+    once source churn has stopped; summary or handoff artifacts compare only when they describe that
+    same residual scope
+- Window/reset expectation:
+  - stays in one closeout window while source files stay stable and verification continues to
+    retire the same residual scope; reset if source edits resume or the proof target changes
+    materially
 - Why competing statuses lose:
   - not `implementation_verification_wall`: no meaningful source churn
   - not `stalled`: clean proof and residual narrowing add new information
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+
+## Fixture: r5_closeout_scope_narrows_to_residual
+
+- Archetype: `verification_closeout`
+- Expected dimension: `verification_closeout_narrowing`
+- Expected status: `advancing`
+- Expected confidence: `medium` or `high`
+- Setup:
+  1. source churn has stopped,
+  2. a broader proof/checklist initially covers multiple verification surfaces or commands,
+  3. later closeout narrows to a smaller residual command/target list on the same work product,
+  4. the narrowed residual proof runs clean or the refined artifact records only that smaller
+     residual scope.
+- Decisive evidence:
+  - `VerificationScopeNarrowed`
+  - `ResidualScopeShrank`
+  - `VerificationClean` when the narrowed residual proof passes
+  - `PlanArtifactRefined` when handoff/checklist text records the focused residual
+- Counter-evidence:
+  - any new source edit, broadened unresolved failures, or reopened implementation work counts
+    against this closeout claim
+- Comparable attempts:
+  - compare a broader closeout proof/checklist and a later focused residual proof/checklist when
+    both address the same work product and the later step is a strict subset of the earlier proof
+    scope
+- Window/reset expectation:
+  - stays in one closeout window while source files remain stable and the proof sequence keeps
+    narrowing the same residual target list; reset if new source edits reopen implementation or the
+    closeout objective/worktree changes materially
+- Why competing statuses lose:
+  - not `stalled`: proof scope became strictly smaller and more specific
+  - not `implementation_verification_wall`: closeout proof, not source churn, dominates the
+    checkpoint
+  - not `insufficient_evidence`: the narrowed residual scope is explicit and comparable
 - Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_closeout_reopens_source_churn
@@ -267,6 +373,13 @@ dimension:
   - `WorkingSetDiffused` if scope expands
 - Counter-evidence:
   - clean unrelated proof should be counter-evidence, not decisive support
+- Comparable attempts:
+  - compare a prior clean closeout proof and a later failing/reopened proof on the same residual
+    target list after new source edits; unrelated proof commands are only counter-evidence
+- Window/reset expectation:
+  - stays in one closeout window only while the reopened work still concerns the same residual
+    target list; reset if a new objective/worktree replaces that scope or the reopened work becomes
+    a distinct implementation slice
 - Why competing statuses lose:
   - not `advancing`: closeout scope reopened
   - not `stalled`: the state changed materially
@@ -286,6 +399,12 @@ dimension:
   - otherwise no signal or weak limiting signal only
 - Counter-evidence:
   - evidence reason should name sparse evidence rather than forcing progress
+- Comparable attempts:
+  - comparable attempts are intentionally absent here; any single verifier/artifact that never
+    returns to the same scope stays non-comparable and belongs in this sparse row
+- Window/reset expectation:
+  - this sparse case persists only until a second same-scope attempt or artifact appears; once
+    comparable evidence exists, the fixture should move to a concrete archetype-specific row
 - Why competing statuses lose:
   - none of `advancing`, `stalled`, or `regressing` has enough comparable evidence
 - Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; delegated semantic guardrail case: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
@@ -305,6 +424,12 @@ dimension:
   - `DelegationVisibilityLimited`
 - Counter-evidence:
   - child-opaque evidence required
+- Comparable attempts:
+  - compare only parent-visible orchestration checkpoints for the same child objective while child
+    outputs remain opaque; once child diagnostics/results become visible, the case exits this row
+- Window/reset expectation:
+  - stays in one parent-visible orchestration window while the same delegated objective remains
+    opaque; reset if child visibility improves or the parent switches delegated objectives
 - Why competing statuses lose:
   - no child progress claim is allowed
   - parent waiting is not child implementation stall
@@ -319,6 +444,12 @@ dimension:
   - analyzer DTO legacy deserialization
   - sentinel replay load
   - sentinel live compatibility
+- Comparable attempts:
+  - compare analyzer, replay, and live loading/rendering of the same serialized v0.5 payload;
+    different schema versions or payload shapes are separate fixtures
+- Window/reset expectation:
+  - no runtime progress-window semantics apply; treat any `schema_version` or serialized payload
+    mutation as a new case boundary
 - Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
 ## Fixture: r5_v0_6_requires_progress
@@ -328,6 +459,12 @@ dimension:
   - analyzer serde requiredness
   - sentinel replay contract gap
   - sentinel live contract gap
+- Comparable attempts:
+  - compare analyzer, replay, and live handling of the same invalid v0.6 payload missing
+    `session_progress`; payloads with different omissions or versions are distinct cases
+- Window/reset expectation:
+  - no runtime progress-window semantics apply; reset the case whenever schema version or missing
+    field shape changes
 - Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
 ## Fixture: r5_replay_live_v0_6_parity
@@ -336,6 +473,12 @@ dimension:
 - Required tests:
   - operator surface replay block
   - live end-to-end block
+- Comparable attempts:
+  - compare replay and live rendering of the exact same v0.6 checkpoint payload and compact summary
+    expectation; other payloads or formatting modes are separate fixtures
+- Window/reset expectation:
+  - no runtime progress-window semantics apply; reset whenever the payload, rendering contract, or
+    expected compact line changes
 - Implementation fixture location: `Replay surface: crates/agent-drift-sentinel/tests/operator_surface.rs; live parity: crates/agent-drift-sentinel/tests/live_end_to_end.rs`
 
 ## Acceptance Wall Notes
@@ -352,7 +495,7 @@ Recommended first real/bundle-shaped cases:
 1. non-subagent recovered sticky session from the R1E/R2 family,
 2. non-subagent active failure with repeated non-zero verification,
 3. planning/spec-development session,
-4. closeout/proof session,
+4. closeout/proof session that narrows from broad verification to a focused residual proof,
 5. delegated parent opaque session used only for guardrail proof.
 
 ## Deferred Fixture Ideas
