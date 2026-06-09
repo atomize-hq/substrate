@@ -144,7 +144,7 @@ updated first.
 - Regression anchor:
   - `checkpoints_shift_to_verification_closeout_when_proof_dominates_new_source_edits`
 - Expected label: `verification_closeout`
-- Confidence: `medium`
+- Confidence: `medium` or `high`
 - Decisive evidence:
   - successful verification dominates
   - scope narrows
@@ -159,7 +159,7 @@ updated first.
 - Regression anchor:
   - `checkpoints_classify_repeated_failing_verification_as_troubleshooting`
 - Expected label: `troubleshooting`
-- Confidence: `medium`
+- Confidence: `medium` or `high`
 - Decisive evidence:
   - repeated failing verification
   - exploratory diagnosis around the failing scope
@@ -188,6 +188,8 @@ updated first.
 
 ### 11. Legacy schema compatibility
 
+- Regression anchor:
+  - `checkpoints_keep_legacy_session_archetype_loads_but_fail_closed_for_v0_5`
 - Expected label: not applicable
 - Confidence: not applicable
 - Decisive evidence:
@@ -199,6 +201,8 @@ updated first.
 
 ### 12. `v0.5` requiredness
 
+- Regression anchor:
+  - `checkpoints_keep_legacy_session_archetype_loads_but_fail_closed_for_v0_5`
 - Expected label: not applicable
 - Confidence: not applicable
 - Decisive evidence:
