@@ -1,6 +1,6 @@
 # Design: R5 Archetype Progress Rules
 
-Status: draft canonical design input for `R5`.
+Status: canonical design authority locked in Packet R5-0 on 2026-06-09.
 
 ## Why This Doc Exists
 
@@ -325,11 +325,11 @@ This design does not:
 4. treat parent waiting as child progress,
 5. eliminate R6 scorer work.
 
-## Open Questions
+## Locked Decisions After Packet R5-0
 
-1. Should `PlanningConvergence` support `High` confidence in the first landing, or cap planning at
-   `Medium` until a real-rollout annotation wall exists?
-2. Should closeout source churn immediately force `Regressing`, or first produce `Mixed` unless a
-   clean proof was previously observed?
-3. How much repeated no-verification implementation activity should be enough to call
-   implementation `Stalled` versus `InsufficientEvidence`?
+1. `PlanningConvergence` is capped at `Medium` confidence throughout R5.
+2. Closeout source churn yields `Regressing` only when it breaks a previously clean proof or
+   clearly reopens the residual scope; otherwise it should degrade to `Mixed`.
+3. Repeated implementation activity without comparable verification stays
+   `InsufficientEvidence` by default; call it `Stalled` only when repeated comparable verifier
+   history or strong working-set diffusion makes that claim honest.

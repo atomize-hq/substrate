@@ -1,6 +1,6 @@
 # Design: R5 Validation And Rollout Protocol
 
-Status: draft canonical design input for `R5`.
+Status: canonical design authority locked in Packet R5-0 on 2026-06-09.
 
 ## Why This Doc Exists
 
@@ -23,6 +23,13 @@ Optional but useful:
 
 4. **DoVer-inspired counterfactual replay study** for a small troubleshooting subset after the base
    R5 field is stable.
+
+Packet R5-0 locks the family verification story:
+
+- `R5-0` is manual doc review only,
+- `R5-1` through `R5-6` prove schema, rule, summary, and replay/live compatibility behavior,
+- `R5-7` is the first packet allowed to claim bounded semantic acceptance on a dedicated progress
+  corpus.
 
 ## What Counts As A Correct R5 Output
 
@@ -191,8 +198,9 @@ Before R5 is called review-clean, the packet should show:
 4. analyzer summary renders progress distribution and checkpoint-local progress,
 5. operator surface renders a compact `Progress:` line,
 6. synthetic fixtures cover all required matrix rows or explicitly defer a row with rationale,
-7. at least one bounded real-rollout acceptance pass was performed or the docs call out why it was
-   intentionally deferred to a follow-up packet,
+7. at least one bounded real-rollout acceptance pass was performed in `R5-7`, or—if the family has
+   not reached `R5-7` yet—the docs explicitly preserve that deferral and do not overclaim semantic
+   acceptance earlier,
 8. no scorer behavior was retuned.
 
 ## Non-Goals
@@ -205,10 +213,10 @@ This validation protocol does not require:
 4. full DoVer intervention execution,
 5. full R7 parent/child trace stitching.
 
-## Open Questions
+## Locked Decisions After Packet R5-0
 
-1. Should the real-rollout acceptance wall ship in R5-6 or be split into R5.5 if the code packet is
-   already large?
-2. Should `progress_debug.jsonl` be required for review-clean status or only recommended?
-3. Should the first corpus include real delegated sessions if R5 only caps delegation claims, or wait
-   until R7 for positive delegated semantics?
+1. The real-rollout acceptance wall ships in `R5-7`; there is no `R5.5`, and semantic acceptance
+   is not pulled forward into `R5-6`.
+2. `progress_debug.jsonl` is recommended only; it is not required for review-clean status.
+3. The first dedicated progress corpus includes a delegated parent opaque guardrail case, but does
+   not attempt positive child-progress semantics before R7.

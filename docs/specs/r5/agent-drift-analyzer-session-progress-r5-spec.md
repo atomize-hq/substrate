@@ -37,6 +37,25 @@
 
 If any of these assumptions drift, update this spec before implementation.
 
+## Packet R5-0 Locked Decisions
+
+Packet `R5-0` closes the remaining family-shaping questions for `R5`.
+
+1. The packet split is fixed at `R5-0` through `R5-7` exactly as described in the plan; there is
+   no `R5.5` and no silent widening of packet scope.
+2. The first public `ProgressSignalCode` set is the full initial enum from the DESIGN contract,
+   including `VerificationScopeBroadened` and `VerificationScopeNarrowed`.
+3. `PlanningConvergence` is capped at `medium` confidence throughout `R5`.
+4. `ParentVisibleOrchestration` is a delegation-only fallback in `R5`, not a generic
+   non-delegated workflow dimension.
+5. The family verification story is fixed: `R5-0` is manual doc review only; `R5-1` through
+   `R5-6` prove schema/behavior/presentation/compatibility; `R5-7` is the first packet allowed to
+   claim bounded semantic acceptance on a dedicated progress corpus.
+6. `progress_debug.jsonl` is optional, debug-only, and never required for packet or family
+   review-clean status in `R5`.
+7. The frozen `R2` acceptance wall stays stable by default; `R5` semantic acceptance uses a
+   dedicated `progress_acceptance.rs` harness plus `tests/fixtures/progress_acceptance/**`.
+
 ## Objective
 
 Add analyzer-owned per-checkpoint `session_progress` state that measures progress relative to the
@@ -335,13 +354,8 @@ R5 is done when:
 13. focused analyzer and sentinel tests pass,
 14. the fixture manifest documents expected labels and evidence for the implemented cases.
 
-## Open Questions
+## Locked After Packet R5-0
 
-1. Should `ProgressSignalCode` be exactly the proposed initial list, or should R5-1 start with a
-   narrower list and add more in R5-4?
-2. Should `progress_debug.jsonl` be part of R5 or a follow-up after the public field is stable?
-3. Should planning progress confidence be capped at `Medium` for all v0.6 outputs?
-4. Should R5 freeze a new real-rollout corpus, or initially extend the existing R2 acceptance
-   fixture wall?
-5. Should `ParentVisibleOrchestration` be emitted only under delegation, or also for non-delegated
-   workflow orchestration in future packets?
+The DESIGN docs, plan, tasks, and fixture manifest now treat the decisions above as authoritative
+inputs for `R5-1+`. No open design question remains in this spec that should block the first
+implementation packet.

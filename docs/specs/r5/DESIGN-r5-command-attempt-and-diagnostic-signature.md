@@ -1,6 +1,6 @@
 # Design: R5 Command Attempt And Diagnostic Signature
 
-Status: draft canonical design input for `R5`.
+Status: canonical design authority locked in Packet R5-0 on 2026-06-09.
 
 ## Why This Doc Exists
 
@@ -386,7 +386,7 @@ not:
 
 ## Debug Output
 
-Optional but strongly recommended for R5:
+Optional and explicitly non-blocking for R5:
 
 ```text
 progress_debug.jsonl
@@ -417,10 +417,10 @@ This design does not require:
 6. changes to upstream compactor rows,
 7. changing drift scorer failure semantics before R6.
 
-## Open Questions
+## Locked Decisions After Packet R5-0
 
-1. Should `progress_debug.jsonl` land in R5-3 with diagnostics or wait until R5-5 summary/export?
-2. Should exact signature hashes be included in public `ProgressSignal.before/after`, or only in
-   debug artifacts?
-3. Should `cargo fmt` without `--check` be treated as `FormatWrite` or generic `Edit` in the first
-   implementation?
+1. If `progress_debug.jsonl` is emitted at all, it lands no earlier than the export-facing stage
+   and remains optional; no R5 packet is gated on it.
+2. Exact signature hashes stay out of public `ProgressSignal.before/after`; those fields remain
+   human-readable summaries, while hashes stay internal or debug-only.
+3. `cargo fmt` without `--check` is treated as `FormatWrite` in the first implementation.

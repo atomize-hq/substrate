@@ -1,6 +1,6 @@
 # Fixture Manifest: Agent Drift Analyzer Session Progress R5
 
-Status: draft fixture authority for R5.
+Status: Packet R5-0 fixture-manifest direction locked on 2026-06-09; concrete tests land later.
 
 ## Purpose
 
@@ -9,6 +9,28 @@ progress boundary, not merely that `session_progress` exists.
 
 The implementation should update the `Implementation fixture location` fields as concrete tests or
 committed fixtures land.
+
+## Locked Implementation Direction
+
+Packet `R5-0` locks the fixture-manifest direction as follows:
+
+1. Synthetic analyzer semantic cases first land in
+   `crates/agent-drift-analyzer/tests/checkpoints.rs` across `R5-1` through `R5-4`.
+2. Analyzer summary/export rendering cases land in
+   `crates/agent-drift-analyzer/tests/export_bundle.rs` and
+   `crates/agent-drift-analyzer/tests/end_to_end.rs` during `R5-5`.
+3. Sentinel compatibility and replay/live operator-parity cases land in
+   `crates/agent-drift-sentinel/tests/replay_input.rs`,
+   `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`,
+   `crates/agent-drift-sentinel/tests/operator_surface.rs`, and
+   `crates/agent-drift-sentinel/tests/live_end_to_end.rs` during `R5-6`.
+4. Bounded semantic acceptance lands only in
+   `crates/agent-drift-analyzer/tests/progress_acceptance.rs` plus
+   `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**` during `R5-7`.
+5. The frozen R2 acceptance wall under
+   `crates/agent-drift-analyzer/tests/acceptance_fixtures.rs` and
+   `crates/agent-drift-analyzer/tests/fixtures/acceptance/**` stays stable unless `R5-7`
+   explicitly widens it.
 
 ## Labeling Rules
 
@@ -61,7 +83,7 @@ dimension:
   - not `stalled`: failure class changed along a comparable target frontier
   - not `regressing`: later failure is deeper/later than compile failure
   - not `insufficient_evidence`: target was exercised by the second attempt
-- Implementation fixture location: `TBD: crates/agent-drift-analyzer/tests/checkpoints.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_troubleshooting_failure_count_reduced
 
@@ -81,7 +103,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: quantitative failing frontier improved
   - not `regressing`: failure count did not grow
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_troubleshooting_same_signature_no_edit
 
@@ -101,7 +123,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: no frontier movement or edit overlap
   - not `regressing`: no prior cleaner state was broken
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_troubleshooting_previous_clean_broken
 
@@ -122,7 +144,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: state moved backward from clean to failed
   - not `advancing`: a previous best frontier was lost
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_planning_candidate_set_narrows_to_spec
 
@@ -143,7 +165,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: artifact and narrowed set show structural convergence
   - not `implementation_verification_wall`: no source/test implementation loop dominates
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_planning_broad_scan_meanders
 
@@ -163,7 +185,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: no convergence artifact or narrowing
   - not `insufficient_evidence`: repeated broad scans are enough evidence of meander/stall
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_implementation_wall_advances
 
@@ -185,7 +207,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: verifier moved forward
   - not `verification_closeout_narrowing`: implementation edits still dominate the checkpoint
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_implementation_same_failure_unrelated_edits
 
@@ -205,7 +227,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: edits did not overlap the failing scope and diagnostics did not improve
   - not `regressing`: no previous clean/later frontier was broken
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_closeout_clean_proof_no_source_churn
 
@@ -227,7 +249,7 @@ dimension:
 - Why competing statuses lose:
   - not `implementation_verification_wall`: no meaningful source churn
   - not `stalled`: clean proof and residual narrowing add new information
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_closeout_reopens_source_churn
 
@@ -248,7 +270,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: closeout scope reopened
   - not `stalled`: the state changed materially
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_sparse_no_comparable_attempt
 
@@ -266,7 +288,7 @@ dimension:
   - evidence reason should name sparse evidence rather than forcing progress
 - Why competing statuses lose:
   - none of `advancing`, `stalled`, or `regressing` has enough comparable evidence
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; delegated semantic guardrail case: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_delegated_parent_opaque
 
@@ -286,7 +308,7 @@ dimension:
 - Why competing statuses lose:
   - no child progress claim is allowed
   - parent waiting is not child implementation stall
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
 ## Schema / Compatibility Fixtures
 
@@ -297,7 +319,7 @@ dimension:
   - analyzer DTO legacy deserialization
   - sentinel replay load
   - sentinel live compatibility
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
 ## Fixture: r5_v0_6_requires_progress
 
@@ -306,7 +328,7 @@ dimension:
   - analyzer serde requiredness
   - sentinel replay contract gap
   - sentinel live contract gap
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
 ## Fixture: r5_replay_live_v0_6_parity
 
@@ -314,13 +336,16 @@ dimension:
 - Required tests:
   - operator surface replay block
   - live end-to-end block
-- Implementation fixture location: `TBD`
+- Implementation fixture location: `Replay surface: crates/agent-drift-sentinel/tests/operator_surface.rs; live parity: crates/agent-drift-sentinel/tests/live_end_to_end.rs`
 
 ## Acceptance Wall Notes
 
 The R5 implementation should not claim real semantic acceptance until at least a small committed
 corpus exists. Synthetic fixtures can prove deterministic rules, but a bounded real-rollout or
 bundle-shaped corpus should prove the labels remain honest on realistic traces.
+
+Packet `R5-0` locks that this bounded semantic corpus belongs to `R5-7`; earlier packets can prove
+deterministic behavior and compatibility, but must not overclaim semantic acceptance.
 
 Recommended first real/bundle-shaped cases:
 

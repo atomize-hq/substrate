@@ -1,6 +1,6 @@
 # Design: R5 Delegation Progress Guardrails
 
-Status: draft canonical design input for `R5`.
+Status: canonical design authority locked in Packet R5-0 on 2026-06-09.
 
 ## Why This Doc Exists
 
@@ -188,10 +188,11 @@ This design does not:
 4. infer unseen progress,
 5. change sentinel interpretation consolidation.
 
-## Open Questions
+## Locked Decisions After Packet R5-0
 
-1. Should `ParentVisibleOrchestration` be used only under delegation, or can single-agent orchestration
-   also use it later?
-2. Should partial visibility ever allow `High` confidence in R5, or should all delegated cases cap
-   at `Medium` until R7?
-3. Should the progress debug artifact include delegation markers, or only the final limiting signal?
+1. `ParentVisibleOrchestration` is an R5 delegation-only fallback dimension; non-delegated
+   orchestration does not use it in this family.
+2. Delegated cases never exceed `Medium` confidence in R5, and opaque visibility stays capped at
+   `Low`.
+3. If a debug artifact is emitted, it should include delegation markers internally, but the public
+   contract remains limited to the final progress signal and evidence.

@@ -1,6 +1,12 @@
 # Plan: Agent Drift Analyzer Session Progress R5
 
-Status: draft implementation plan.
+Status: Packet R5-0 doc lock finalized on 2026-06-09; R5-1 through R5-7 remain open.
+
+Current family state on 2026-06-09:
+
+- Packet `R5-0` is finalized as the doc-lock authority for the family.
+- Packets `R5-1` through `R5-7` remain future implementation packets.
+- Packet `R5-7` is the first packet allowed to claim bounded semantic acceptance for `R5`.
 
 ## Objective
 
@@ -54,7 +60,8 @@ Progress rules depend on attempts/signatures. Summary/operator rendering depends
 - Add canonical DESIGN docs.
 - Add R5 spec/plan/tasks.
 - Add fixture manifest.
-- Explicitly record non-goals and schema/versioning direction.
+- Explicitly record non-goals, schema/versioning direction, packet split, and fixture-manifest
+  direction.
 
 ### Files
 
@@ -68,7 +75,7 @@ docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md
 
 ### Verification
 
-Manual doc review only.
+Manual doc review only. No Rust code, test, or fixture-directory changes are part of `R5-0`.
 
 ## R5-1: Public Schema Skeleton And Compatibility
 
@@ -285,6 +292,8 @@ cargo test -p agent-drift-sentinel -- --nocapture
 - Include small real-rollout or realistic bundle-shaped cases across the core dimensions.
 - Update fixture manifest with actual fixture locations and deferrals.
 - Run focused and full test walls.
+- This is the only packet allowed to claim bounded semantic acceptance / real-rollout proof for
+  the `R5` family.
 
 ### Files
 

@@ -1,6 +1,6 @@
 # Design: R5 Progress Window And Frontier Model
 
-Status: draft canonical design input for `R5`.
+Status: canonical design authority locked in Packet R5-0 on 2026-06-09.
 
 ## Why This Doc Exists
 
@@ -260,10 +260,12 @@ This design does not:
 4. use reference patches or gold solutions at runtime,
 5. retune drift scores.
 
-## Open Questions
+## Locked Decisions After Packet R5-0
 
-1. Should R5 expose progress-window ids in public `SessionProgress`, or keep them debug-only?
-2. Should a task-frame transition always reset a planning window, or only when objective/truth
-   artifacts change materially?
-3. Should `clean broader verification` outrank `clean focused verification` in the first landing,
-   or avoid proof-scope ranking until R6?
+1. Progress-window ids stay debug-only in R5; they are not part of the public `SessionProgress`
+   contract.
+2. A task-frame transition resets a planning/progress window only when objective, truth-artifact,
+   or working-set comparability changes materially; small refinements inside the same narrowed plan
+   stay in-window.
+3. `Clean broader verification` outranks `clean focused verification` inside the same comparable
+   window in the first landing.

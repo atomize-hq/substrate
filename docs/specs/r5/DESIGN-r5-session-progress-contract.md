@@ -1,6 +1,6 @@
 # Design: R5 Session Progress Contract
 
-Status: draft canonical design input for `R5`.
+Status: canonical design authority locked in Packet R5-0 on 2026-06-09.
 
 ## Why This Doc Exists
 
@@ -327,12 +327,14 @@ R5 does not:
 7. publish diagnostic signatures in the public checkpoint schema unless a later packet explicitly
    decides to do so.
 
-## Open Questions
+## Locked Decisions After Packet R5-0
 
-1. Should `ProgressSignalCode` include `VerificationScopeBroadened` and `VerificationScopeNarrowed`
-   in the first code landing, or keep the first implementation tighter around failure-frontier and
-   working-set signals?
-2. Should the analyzer export a debug-only `progress_debug.jsonl` artifact in R5, or only summary
-   lines plus tests?
-3. How many real rollout checkpoints should be frozen for the first semantic acceptance wall before
-   R6 consumes the field?
+1. The first public `ProgressSignalCode` set is the full initial enum listed in this contract,
+   including `VerificationScopeBroadened` and `VerificationScopeNarrowed`; later packets may leave
+   individual codes temporarily unused, but should not narrow or rename the public enum mid-family.
+2. Any `progress_debug.jsonl` artifact remains optional and debug-only throughout R5. It is not
+   part of the public checkpoint contract and is never required for packet or family review-clean
+   status.
+3. The first semantic acceptance wall uses a dedicated R5 progress corpus
+   (`progress_acceptance.rs` plus `tests/fixtures/progress_acceptance/**`) rather than widening the
+   frozen R2 acceptance wall by default.

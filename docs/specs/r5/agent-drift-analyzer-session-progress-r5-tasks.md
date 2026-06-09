@@ -1,6 +1,12 @@
 # Tasks: Agent Drift Analyzer Session Progress R5
 
-Status: draft task list.
+Status: Packet R5-0 doc lock finalized on 2026-06-09; R5-1 through R5-7 remain open.
+
+Completion status on 2026-06-09:
+
+- Packet `R5-0` is complete as a doc-only packet.
+- Packets `R5-1` through `R5-7` remain open implementation packets.
+- This task list should not mark later packets complete from doc-only work.
 
 Each task should be completable in one focused implementation session. Keep each task as close as
 possible to five touched files or fewer. Do not advance from one packet to the next until the
@@ -8,7 +14,7 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-0: Docs Lock
 
-- [ ] Task R5-0.1: Add canonical R5 DESIGN docs.
+- [x] Task R5-0.1: Add canonical R5 DESIGN docs.
   - Acceptance: `DESIGN-r5-session-progress-contract.md`,
     `DESIGN-r5-command-attempt-and-diagnostic-signature.md`,
     `DESIGN-r5-progress-window-and-frontier-model.md`,
@@ -19,10 +25,10 @@ verification command for the current packet is green or the failure is documente
     R6/R7 boundaries.
   - Files: `docs/specs/r5/DESIGN-r5-*.md`
 
-- [ ] Task R5-0.2: Add R5 spec, plan, tasks, and fixture manifest.
+- [x] Task R5-0.2: Add R5 spec, plan, tasks, and fixture manifest.
   - Acceptance: R5 has `spec`, `plan`, `tasks`, and `fixtures` docs with commands, boundaries,
     success criteria, packet split, and required fixture matrix.
-  - Verify: Manual review against `$spec-driven-development` checklist.
+  - Verify: Manual review against the R5 spec / plan / DESIGN stack and `AGENTS.md`.
   - Files:
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md`
