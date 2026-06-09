@@ -892,14 +892,20 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
         return CommandRole::Implementation;
     }
 
-    if command.verification_like || is_verification_command_family(family) {
+    if let Some(role) = classify_known_tool_family_role(command) {
+        return role;
+    }
+
+    if (command.verification_like && !requires_shallow_subcommand_parse(family))
+        || is_verification_command_family(family)
+    {
         return CommandRole::Verification;
     }
 
-    if command.read_like
+    if (command.read_like && !requires_shallow_subcommand_parse(family))
         || matches!(
             family,
-            "git" | "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq"
+            "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq"
         )
     {
         return CommandRole::Exploration;
@@ -916,13 +922,52 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
     CommandRole::Neutral
 }
 
+fn classify_known_tool_family_role(command: &CommandObservation) -> Option<CommandRole> {
+    let family = command.family.as_str();
+    let tokens = normalized_command_tokens(&command.raw_command);
+    let args = tokens_after_family(&tokens, family)?;
+
+    match family {
+        "cargo" => role_from_subcommand(next_positional_token(
+            args,
+            &[
+                "-p",
+                "--package",
+                "--manifest-path",
+                "--config",
+                "-Z",
+                "--target",
+                "--target-dir",
+                "--message-format",
+                "--color",
+                "--jobs",
+            ],
+        )?),
+        "npm" | "pnpm" => npm_like_role(args),
+        "git" => role_from_git_subcommand(next_positional_token(
+            args,
+            &[
+                "-C",
+                "-c",
+                "--git-dir",
+                "--work-tree",
+                "--namespace",
+                "--exec-path",
+                "--config-env",
+            ],
+        )?),
+        _ => None,
+    }
+}
+
+fn requires_shallow_subcommand_parse(family: &str) -> bool {
+    matches!(family, "cargo" | "npm" | "pnpm" | "git")
+}
+
 fn is_verification_command_family(family: &str) -> bool {
     matches!(
         family,
-        "cargo"
-            | "pnpm"
-            | "npm"
-            | "pytest"
+        "pytest"
             | "vitest"
             | "jest"
             | "ruff"
@@ -935,6 +980,96 @@ fn is_verification_command_family(family: &str) -> bool {
             | "test"
             | "build"
     )
+}
+
+fn normalized_command_tokens(command: &str) -> Vec<String> {
+    command
+        .split(['\n', ';', '|', '&'])
+        .next()
+        .unwrap_or(command)
+        .split_whitespace()
+        .map(|token| {
+            token
+                .trim_matches(|ch: char| matches!(ch, '(' | ')' | '"' | '\''))
+                .to_ascii_lowercase()
+        })
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+fn tokens_after_family<'a>(tokens: &'a [String], family: &str) -> Option<&'a [String]> {
+    let family_index = tokens
+        .iter()
+        .position(|token| token == family && !token.contains('=') && !token.is_empty())?;
+    Some(&tokens[family_index + 1..])
+}
+
+fn next_positional_token<'a>(
+    tokens: &'a [String],
+    options_with_values: &[&str],
+) -> Option<&'a str> {
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = tokens[index].as_str();
+        if token == "--" {
+            return tokens.get(index + 1).map(String::as_str);
+        }
+        if token.starts_with('-') {
+            index += 1;
+            if !token.contains('=') && options_with_values.contains(&token) {
+                index += 1;
+            }
+            continue;
+        }
+        return Some(token);
+    }
+    None
+}
+
+fn npm_like_role(tokens: &[String]) -> Option<CommandRole> {
+    let subcommand = next_positional_token(
+        tokens,
+        &[
+            "-C",
+            "--prefix",
+            "--dir",
+            "-w",
+            "--workspace",
+            "--filter",
+            "-F",
+        ],
+    )?;
+    if subcommand == "run" {
+        let run_index = tokens.iter().position(|token| token == "run")?;
+        return role_from_subcommand(next_positional_token(&tokens[run_index + 1..], &[])?);
+    }
+    role_from_subcommand(subcommand)
+}
+
+fn role_from_subcommand(subcommand: &str) -> Option<CommandRole> {
+    if matches!(
+        subcommand,
+        "test" | "check" | "clippy" | "fmt" | "format" | "build"
+    ) {
+        return Some(CommandRole::Verification);
+    }
+
+    if matches!(
+        subcommand,
+        "add" | "remove" | "rm" | "update" | "install" | "i" | "ci" | "up"
+    ) {
+        return Some(CommandRole::Implementation);
+    }
+
+    None
+}
+
+fn role_from_git_subcommand(subcommand: &str) -> Option<CommandRole> {
+    if matches!(subcommand, "status" | "diff" | "show" | "log") {
+        return Some(CommandRole::Exploration);
+    }
+
+    None
 }
 
 fn command_file_roles(command: &CommandObservation) -> BTreeSet<FileRole> {
@@ -1956,6 +2091,70 @@ mod tests {
         ] {
             assert_eq!(classify_command_role(&command), CommandRole::Exploration);
         }
+    }
+
+    #[test]
+    fn classify_command_role_uses_cargo_subcommands_instead_of_family() {
+        assert_eq!(
+            classify_command_role(&command_observation(
+                "cargo",
+                "cargo add serde --features derive"
+            )),
+            CommandRole::Implementation
+        );
+        assert_eq!(
+            classify_command_role(&command_observation(
+                "cargo",
+                "cargo --locked test -p agent-drift-analyzer checkpoints -- --nocapture"
+            )),
+            CommandRole::Verification
+        );
+        assert_eq!(
+            classify_command_role(&command_observation("cargo", "cargo fmt --all -- --check")),
+            CommandRole::Verification
+        );
+    }
+
+    #[test]
+    fn classify_command_role_uses_npm_and_pnpm_subcommands_instead_of_family() {
+        assert_eq!(
+            classify_command_role(&command_observation("npm", "npm install typescript")),
+            CommandRole::Implementation
+        );
+        assert_eq!(
+            classify_command_role(&command_observation("npm", "npm --prefix web run build")),
+            CommandRole::Verification
+        );
+        assert_eq!(
+            classify_command_role(&command_observation("pnpm", "pnpm add zod")),
+            CommandRole::Implementation
+        );
+        assert_eq!(
+            classify_command_role(&command_observation("pnpm", "pnpm run fmt")),
+            CommandRole::Verification
+        );
+    }
+
+    #[test]
+    fn classify_command_role_limits_git_family_to_inspect_verbs() {
+        assert_eq!(
+            classify_command_role(&command_observation(
+                "git",
+                "git -C crates/shell diff --stat"
+            )),
+            CommandRole::Exploration
+        );
+        assert_eq!(
+            classify_command_role(&command_observation("git", "git status --short")),
+            CommandRole::Exploration
+        );
+        assert_eq!(
+            classify_command_role(&command_observation(
+                "git",
+                "git add crates/shell/src/lib.rs"
+            )),
+            CommandRole::Neutral
+        );
     }
 
     fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
