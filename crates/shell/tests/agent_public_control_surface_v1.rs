@@ -6,6 +6,7 @@ mod support;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::{json, Value};
 use serial_test::serial;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, Write};
 #[cfg(unix)]
@@ -30,6 +31,7 @@ use tempfile::TempDir;
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 #[cfg(unix)]
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
+const TOOLBOX_UNIX_PATH_FALLBACK_THRESHOLD: usize = 100;
 
 #[cfg(unix)]
 fn set_fd_nonblocking(fd: i32) {
@@ -334,6 +336,13 @@ impl AgentControlFixture {
             .join(format!("fake-codex-{invocation}.stdin"))
     }
 
+    fn fake_codex_env_path(&self, invocation: u32) -> PathBuf {
+        self.fake_codex
+            .parent()
+            .expect("fake codex parent")
+            .join(format!("fake-codex-{invocation}.env"))
+    }
+
     fn read_fake_codex_args(&self, invocation: u32) -> Vec<String> {
         fs::read_to_string(self.fake_codex_args_path(invocation))
             .unwrap_or_else(|err| panic!("read fake codex args {invocation}: {err}"))
@@ -345,6 +354,15 @@ impl AgentControlFixture {
     fn read_fake_codex_stdin(&self, invocation: u32) -> String {
         fs::read_to_string(self.fake_codex_stdin_path(invocation))
             .unwrap_or_else(|err| panic!("read fake codex stdin {invocation}: {err}"))
+    }
+
+    fn read_fake_codex_env(&self, invocation: u32) -> BTreeMap<String, String> {
+        fs::read_to_string(self.fake_codex_env_path(invocation))
+            .unwrap_or_else(|err| panic!("read fake codex env {invocation}: {err}"))
+            .lines()
+            .filter_map(|line| line.split_once('='))
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect()
     }
 }
 
@@ -371,7 +389,7 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex.sh");
     let count_path = dir.join("fake-codex.count");
     let body = format!(
-        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\",\"item_id\":\"msg-1\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"startup prompt success\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nexit 0\n",
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\n{{\n  printf 'SUBSTRATE_AGENT_TOOLBOX_ENDPOINT=%s\\n' \"${{SUBSTRATE_AGENT_TOOLBOX_ENDPOINT-}}\"\n  printf 'SUBSTRATE_AGENT_TOOLBOX_VERSION=%s\\n' \"${{SUBSTRATE_AGENT_TOOLBOX_VERSION-}}\"\n}} > \"$SCRIPT_DIR/fake-codex-$count.env\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\",\"item_id\":\"msg-1\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"startup prompt success\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nexit 0\n",
         count_path.display()
         ,
         dir.display()
@@ -589,6 +607,23 @@ fn read_json_file(path: &Path) -> Value {
             .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display())),
     )
     .unwrap_or_else(|err| panic!("failed to parse {}: {err}", path.display()))
+}
+
+fn expected_toolbox_endpoint(substrate_home: &Path, orchestration_session_id: &str) -> String {
+    let socket_name = format!("{orchestration_session_id}.sock");
+    let preferred = substrate_home
+        .join("run")
+        .join("agent-toolbox")
+        .join(&socket_name);
+    let path = if preferred.as_os_str().len() > TOOLBOX_UNIX_PATH_FALLBACK_THRESHOLD {
+        PathBuf::from("/tmp")
+            .join("substrate-agent-toolbox")
+            .join(socket_name)
+    } else {
+        preferred
+    };
+
+    format!("unix://{}", path.display())
 }
 
 fn compact_stop_transport_fragment(id: &str) -> String {
@@ -1784,9 +1819,20 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         "start prompt must not use resume on the initial retained exec: {start_args:?}"
     );
     let start_stdin = fixture.read_fake_codex_stdin(1);
+    let start_env = fixture.read_fake_codex_env(1);
     assert!(
         start_stdin.contains("hello from start"),
         "the first visible start prompt must ride the startup exec stdin payload: {start_stdin:?}"
+    );
+    assert!(
+        start_stdin.contains("Substrate host toolbox contract:"),
+        "start prompt must disclose the host toolbox contract on the first validated Codex-backed path: {start_stdin:?}"
+    );
+    assert!(
+        start_stdin.contains("run_world_task")
+            && start_stdin.contains("spawn_world_worker")
+            && start_stdin.contains("inspect_world_worker"),
+        "start prompt must enumerate the frozen host-tool vocabulary: {start_stdin:?}"
     );
     assert!(
         !start_stdin.contains("Enter persistent Substrate host orchestrator mode."),
@@ -1795,6 +1841,19 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     assert!(
         !start_stdin.contains("First visible operator request:"),
         "start prompt must not be rewritten into a bootstrap+visible composed payload: {start_stdin:?}"
+    );
+    assert_eq!(
+        start_env.get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT").map(String::as_str),
+        Some(expected_toolbox_endpoint(
+            &fixture.substrate_home,
+            &orchestration_session_id,
+        ).as_str()),
+        "startup exec must receive the authoritative runtime-owned toolbox endpoint env: {start_env:?}"
+    );
+    assert_eq!(
+        start_env.get("SUBSTRATE_AGENT_TOOLBOX_VERSION").map(String::as_str),
+        Some("1"),
+        "startup exec must receive the authoritative runtime-owned toolbox version env: {start_env:?}"
     );
     assert!(
         !fixture.fake_codex_args_path(2).exists(),
@@ -1864,9 +1923,30 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         "the first follow-up turn must be the first resume-backed invocation: {turn_args:?}"
     );
     let turn_stdin = fixture.read_fake_codex_stdin(2);
+    let turn_env = fixture.read_fake_codex_env(2);
     assert!(
         turn_stdin.contains("hello from turn"),
         "resume-backed follow-up turns must continue to send the prompt on stdin: {turn_stdin:?}"
+    );
+    assert!(
+        turn_stdin.contains("Substrate host toolbox contract:"),
+        "follow-up turns must keep the host toolbox contract disclosed at the prompt boundary: {turn_stdin:?}"
+    );
+    assert_eq!(
+        turn_env
+            .get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
+            .map(String::as_str),
+        Some(
+            expected_toolbox_endpoint(&fixture.substrate_home, &orchestration_session_id,).as_str()
+        ),
+        "follow-up turns must keep using the same runtime-owned toolbox endpoint env: {turn_env:?}"
+    );
+    assert_eq!(
+        turn_env
+            .get("SUBSTRATE_AGENT_TOOLBOX_VERSION")
+            .map(String::as_str),
+        Some("1"),
+        "follow-up turns must keep using the same runtime-owned toolbox version env: {turn_env:?}"
     );
     let reparked_session = wait_for_session_posture(
         &fixture,

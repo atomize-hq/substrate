@@ -40,7 +40,10 @@ use crate::execution::agent_runtime::orchestration_session::{
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
-use crate::execution::prompt_fulfillment::PromptFulfillmentCancelHandle;
+use crate::execution::prompt_fulfillment::{
+    build_runtime_owned_toolbox_env, compose_prompt_with_host_toolbox_contract,
+    PromptFulfillmentCancelHandle,
+};
 
 use super::{
     mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
@@ -863,6 +866,13 @@ pub(crate) fn toolbox_transport_path(orchestration_session_id: &str) -> Result<P
     Ok(toolbox_transport_path_for_home(
         &substrate_paths::substrate_home()?,
         orchestration_session_id,
+    ))
+}
+
+pub(crate) fn toolbox_endpoint(orchestration_session_id: &str) -> Result<String> {
+    Ok(format!(
+        "unix://{}",
+        toolbox_transport_path(orchestration_session_id)?.display()
     ))
 }
 
@@ -1993,12 +2003,21 @@ where
 {
     let prompt_fulfillment = super::build_gateway_for_descriptor(&runtime.descriptor)
         .context("build host targeted-turn gateway")?;
+    let orchestration_session_id = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .handle
+        .orchestration_session_id
+        .clone();
+    let request_prompt = compose_prompt_with_host_toolbox_contract(prompt);
+    let toolbox_endpoint = toolbox_endpoint(&orchestration_session_id)?;
 
     let request = agent_api::AgentWrapperRunRequest {
-        prompt: prompt.to_string(),
+        prompt: request_prompt,
         working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
-        env: std::collections::BTreeMap::new(),
+        env: build_runtime_owned_toolbox_env(toolbox_endpoint),
         extensions: std::collections::BTreeMap::from([(
             AGENT_API_SESSION_RESUME_V1.to_string(),
             build_session_resume_extension(&runtime.uaa_session_handle_id),

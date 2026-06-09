@@ -59,6 +59,9 @@ use crate::execution::config_model::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::policy_snapshot;
+use crate::execution::prompt_fulfillment::{
+    compose_prompt_with_host_toolbox_contract, HOST_TOOLBOX_CONTRACT_VERSION_V1,
+};
 #[cfg(target_os = "linux")]
 use crate::execution::{ReplPersistentSessionClient, ReplSessionStartParams};
 use anyhow::{Context, Result};
@@ -82,7 +85,7 @@ use tokio::runtime::Builder as TokioRuntimeBuilder;
 #[cfg(target_os = "linux")]
 use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 use uuid::Uuid;
-const TOOLBOX_VERSION: u32 = 1;
+const TOOLBOX_VERSION: u32 = HOST_TOOLBOX_CONTRACT_VERSION_V1;
 #[cfg(unix)]
 const START_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(unix)]
@@ -359,6 +362,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     {
         let public_backend_id = public_identity.backend_id.clone();
         let public_scope = public_identity.scope;
+        let startup_prompt_text = compose_prompt_with_host_toolbox_contract(&prompt.prompt_text);
         let stream_start_result = |listener| {
             run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
                 listener,
@@ -376,7 +380,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
         )
         .map_err(runtime_start_error)?;
         plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
-            prompt_text: prompt.prompt_text.clone(),
+            prompt_text: startup_prompt_text.clone(),
             stream_path: startup_listener.path().to_path_buf(),
         });
 
@@ -412,7 +416,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                 )
                 .map_err(runtime_start_error)?;
                 plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
-                    prompt_text: prompt.prompt_text,
+                    prompt_text: startup_prompt_text.clone(),
                     stream_path: retry_listener.path().to_path_buf(),
                 });
                 let retry_receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
@@ -639,7 +643,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         )
         .map_err(runtime_start_error)?;
         plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
-            prompt_text: prompt.prompt_text.clone(),
+            prompt_text: compose_prompt_with_host_toolbox_contract(&prompt.prompt_text),
             stream_path: startup_listener.path().to_path_buf(),
         });
         let receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)

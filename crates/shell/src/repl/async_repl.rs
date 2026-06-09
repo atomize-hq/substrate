@@ -42,8 +42,8 @@ use crate::execution::agent_runtime::control::{
     register_private_cancel_transport, register_private_prompt_transport,
     register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
     runtime_stop_transport_ids, spawn_local_private_cancel_owner, spawn_local_private_prompt_owner,
-    spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_transport_path,
-    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
+    spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_endpoint,
+    toolbox_transport_path, HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
     PrivateCancelRequestReceiver, PrivateCancelTransport, PrivatePromptTransport,
     PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
     PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
@@ -90,7 +90,7 @@ use crate::execution::orchestrator_world_dispatch::{
     prepare_spawn_world_worker_bootstrap,
 };
 use crate::execution::prompt_fulfillment::{
-    PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
+    build_runtime_owned_toolbox_env, PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
 };
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
@@ -3456,6 +3456,14 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             .run_attach_control(&continuity_session_id)
             .await
     } else {
+        let orchestration_session_id = {
+            manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned")
+                .handle
+                .orchestration_session_id
+                .clone()
+        };
         let request = agent_api::AgentWrapperRunRequest {
             prompt: match initial_prompt.as_ref() {
                 Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
@@ -3472,7 +3480,14 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             },
             working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
             timeout: None,
-            env: BTreeMap::new(),
+            env: build_runtime_owned_toolbox_env(
+                toolbox_endpoint(&orchestration_session_id).map_err(|err| {
+                    RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!("failed to resolve startup toolbox endpoint: {err:#}"),
+                    }
+                })?,
+            ),
             extensions: startup_extensions,
         };
         prompt_fulfillment.run_control(request).await

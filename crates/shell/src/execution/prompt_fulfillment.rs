@@ -16,10 +16,15 @@ use futures::StreamExt;
 use substrate_gateway::adapter_runtime::{GatewayAdapterBackendKind, GatewayAdapterRuntime};
 
 use crate::execution::agent_runtime::{
-    mapping::AgentRuntimeBackendKind, validator::RuntimeSelectionDescriptor,
+    mapping::AgentRuntimeBackendKind, tool_invocation_contract::host_tool_contracts_v1,
+    validator::RuntimeSelectionDescriptor,
 };
 
 const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
+pub(crate) const SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_ENV: &str = "SUBSTRATE_AGENT_TOOLBOX_ENDPOINT";
+pub(crate) const SUBSTRATE_AGENT_TOOLBOX_VERSION_ENV: &str = "SUBSTRATE_AGENT_TOOLBOX_VERSION";
+pub(crate) const HOST_TOOLBOX_CONTRACT_VERSION_V1: u32 = 1;
+const HOST_TOOLBOX_PROMPT_PREAMBLE: &str = "Substrate host toolbox contract:";
 
 #[derive(Clone)]
 pub(crate) enum PromptFulfillmentCancelHandle {
@@ -63,6 +68,50 @@ impl PromptFulfillmentCancelHandle {
             }
         }
     }
+}
+
+pub(crate) fn build_runtime_owned_toolbox_env(
+    endpoint: impl Into<String>,
+) -> BTreeMap<String, String> {
+    BTreeMap::from([
+        (
+            SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_ENV.to_string(),
+            endpoint.into(),
+        ),
+        (
+            SUBSTRATE_AGENT_TOOLBOX_VERSION_ENV.to_string(),
+            HOST_TOOLBOX_CONTRACT_VERSION_V1.to_string(),
+        ),
+    ])
+}
+
+pub(crate) fn compose_prompt_with_host_toolbox_contract(prompt: &str) -> String {
+    if prompt
+        .trim_start()
+        .starts_with(HOST_TOOLBOX_PROMPT_PREAMBLE)
+    {
+        return prompt.to_string();
+    }
+
+    let tool_names = host_tool_contracts_v1()
+        .iter()
+        .map(|contract| contract.tool_name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        "{HOST_TOOLBOX_PROMPT_PREAMBLE}
+- The runtime exports {SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_ENV} plus {SUBSTRATE_AGENT_TOOLBOX_VERSION_ENV}={HOST_TOOLBOX_CONTRACT_VERSION_V1}.
+- Available tools: {tool_names}.
+- Fresh requests: run_world_task uses target_backend_id plus task payload and returns task_run_id; spawn_world_worker uses target_backend_id plus worker payload and returns participant_id.
+- Retained follow-ups: fork_world_worker, continue_world_worker, and stop_world_worker require the exact retained-worker participant_id.
+- Mixed follow-ups: inspect_world_worker and cancel_world_work require exactly one exact handle: task_run_id for an active task or participant_id for a retained worker.
+- Do not provide runtime-owned fields. Substrate injects request_id, idempotency_key, orchestration_session_id, caller_participant_id, world_id, and world_generation.
+- Never provide both task_run_id and participant_id in the same follow-up call; reuse the exact receipt handle returned by Substrate.
+
+User request:
+{prompt}"
+    )
 }
 
 pub(crate) struct PromptFulfillmentRunControl {
