@@ -2,6 +2,16 @@
 
 Status: draft design input. This document freezes the current landed internal toolbox transport boundary for host-orchestrator world dispatch after Slices `32` through `51`. It is not a public CLI contract, not an MCP wire-contract commitment, and not a final agent-visible tool UX. It defines the session-scoped transport, framing, identity ownership, and fail-closed binding rules that future agent-facing adapters must reuse.
 
+Execution-note maintenance:
+
+1. keep this document focused on stable transport/binding authority,
+2. when execution work above this transport surfaces live-truth drift, explicit deferrals, or circle-back items for the host-orchestrator tool-invocation seam, record them in [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md),
+3. add those notes specifically under:
+   - `## Newly Surfaced During Execution`
+   - `## Deferred / Circle-Back Items`
+   - `## Resolved Since Last Update`
+4. update this design doc itself only when the stable transport/binding authority changes, not just because a later slice surfaced an execution detail or deferred cleanup.
+
 ## Why This Doc Exists
 
 The earlier design stack froze:

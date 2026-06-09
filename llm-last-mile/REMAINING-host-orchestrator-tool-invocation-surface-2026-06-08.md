@@ -35,6 +35,52 @@ For this note:
 3. "runtime-family adapter" means the shell-owned bridge that makes those tools visible and executable for a specific orchestrator runtime family such as `codex` or `claude_code`.
 4. "MCP" means an optional later adapter/export shape, not the current landed internal wire truth.
 
+## Ongoing Ledger Maintenance
+
+Use this note as the canonical running ledger for this seam.
+
+When new work on the host-orchestrator tool invocation surface surfaces:
+
+1. execution drift between design docs and live code,
+2. bounded follow-on items that should be deferred,
+3. validation discoveries that need to be circled back around to later,
+4. sequencing changes that affect which slice should come next,
+
+record them here rather than burying them only in a spec, plan, tasks doc, or chat transcript.
+
+### Where to add new notes
+
+Add new items only in the three running-ledger sections near the end of this file:
+
+1. `## Newly Surfaced During Execution`
+2. `## Deferred / Circle-Back Items`
+3. `## Resolved Since Last Update`
+
+### How to write each note
+
+For each new item:
+
+1. start with the date and the slice or packet that surfaced it,
+2. identify whether it is:
+   - live-truth drift,
+   - explicit deferral,
+   - validation finding,
+   - or sequencing change,
+3. name the affected docs and code files directly,
+4. say whether the item changes:
+   - the current slice scope,
+   - a later slice,
+   - or only doc truth,
+5. if follow-up work is required, say which later slice family it belongs to.
+
+### Movement rules
+
+1. Add new discoveries to `Newly Surfaced During Execution` first.
+2. If the item is intentionally not fixed in the current slice, copy or move it into `Deferred / Circle-Back Items`.
+3. Once the repo truth or the planning truth is reconciled, move the item into `Resolved Since Last Update`.
+4. If any item changes the recommended slice order, update `## Recommended Slice Order` and `## Bottom Line` in this same file during the same edit.
+5. Keep this note concise and execution-facing; do not turn it into a replacement design doc.
+
 ## Current Repo Truth
 
 The tree is no longer missing dispatch runtime fundamentals.
@@ -259,6 +305,39 @@ The next spec should still choose explicitly:
 2. whether the first agent-visible landing exposes all seven verbs immediately or only the minimum live subset,
 3. whether the first slice includes any smoke/debug helper surface or keeps that fully out of scope,
 4. whether the second runtime-family parity slice is mandatory before the family is considered complete.
+
+## Newly Surfaced During Execution
+
+### 2026-06-08 — Slice 52 contract-freeze planning pass
+
+1. **Live-truth drift: internal request-envelope breadth**
+   - The conceptual request envelope in [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md) is broader than the live `WorldDispatchRequestV1` shape in [`dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs).
+   - Current Slice `52` resolution: freeze the adapter contract against the live request envelope and do not widen the internal transport in the contract-freeze slice.
+2. **Live-truth drift: universal `idempotency_key` validation**
+   - Live `WorldDispatchRequestV1::validate()` currently requires non-empty `idempotency_key` for every action.
+   - Current Slice `52` resolution: treat `idempotency_key` as a universal runtime-injected field in the adapter contract.
+3. **Live-truth drift: active-ephemeral outcome identity asymmetry**
+   - Active-ephemeral inspect/cancel input uses exact `task_run_id`, but current typed internal outcomes still reuse `target_participant_id` for that identity in [`dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs) and [`orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs).
+   - Current Slice `52` resolution: normalize the adapter-visible contract to canonical `task_run_id` without rewriting the internal outcome plane in the contract-freeze slice.
+
+## Deferred / Circle-Back Items
+
+### 2026-06-08 — follow-ons explicitly deferred by Slice 52 planning
+
+1. **Possible transport-envelope widening**
+   - If later runtime-family landing or trace requirements truly need fields beyond the live `WorldDispatchRequestV1` shape, land that as a separate transport-focused slice rather than sneaking it into adapter work.
+2. **Possible validator narrowing for `idempotency_key`**
+   - If the repo later wants `idempotency_key` to be required only for selected create-style actions, that should be a separate validator/wire cleanup slice.
+3. **Possible internal typed-outcome harmonization**
+   - If the repo wants active-ephemeral inspect/cancel outcomes to expose `task_run_id` directly instead of reusing `target_participant_id`, do that in a later receipt/resume hardening or typed-outcome cleanup slice.
+4. **First runtime-family landing**
+   - The next execution-bearing follow-on after Slice `52` remains the first real runtime-family adapter landing, with `codex` still the narrower default first target unless live repo truth changes.
+
+## Resolved Since Last Update
+
+### 2026-06-08
+
+1. The next honest seam after the new toolbox design docs is now explicitly frozen as **runtime-owned adapter contract work above the landed internal transport**, not more transport invention and not Family-2 inbox/router reopening.
 
 ## Do Not Reopen
 
