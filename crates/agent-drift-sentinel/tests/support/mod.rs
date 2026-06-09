@@ -113,6 +113,7 @@ pub(crate) fn checkpoint(
             }],
             counter_evidence: Vec::new(),
         },
+        session_archetype: None,
         drift_scores: vec![DriftScore {
             class: DriftClass::WrongPlanBranch,
             state: if flagged {

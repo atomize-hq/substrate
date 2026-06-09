@@ -10,8 +10,8 @@ use crate::input::CheckpointCursor;
 use crate::operator_surface::warning_fingerprint;
 use crate::scheduler::TriggerClass;
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, or v0.4";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4", "v0.5"];
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, v0.4, or v0.5";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCheckpointEvent {
@@ -399,11 +399,24 @@ pub fn verify_live_checkpoint_compatibility(
             "empty expected next step prevents operator guidance".to_string(),
         ));
     }
-    if checkpoint.schema_version == "v0.4" && checkpoint.turn_context.is_none() {
+    if schema_requires_turn_context(&checkpoint.schema_version) && checkpoint.turn_context.is_none()
+    {
         return Err(compatibility_gap(
             checkpoint,
             "turn_context",
-            "v0.4 checkpoints must carry explicit turn context".to_string(),
+            format!(
+                "{} checkpoints must carry explicit turn context",
+                checkpoint.schema_version
+            ),
+        ));
+    }
+    if schema_requires_session_archetype(&checkpoint.schema_version)
+        && checkpoint.session_archetype.is_none()
+    {
+        return Err(compatibility_gap(
+            checkpoint,
+            "session_archetype",
+            "v0.5 checkpoints must carry explicit session archetype".to_string(),
         ));
     }
 
@@ -437,21 +450,72 @@ fn validate_live_fixture_contract(
             validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.3")
         }
         Some("v0.4") => {
-            if checkpoint.get("turn_context").is_none()
-                || checkpoint.get("turn_context").is_some_and(Value::is_null)
-            {
-                return Err(LiveInputError::FixtureContractGap {
-                    path: path.to_owned(),
-                    line_number,
-                    schema_version: "v0.4".to_string(),
-                    field: "checkpoint.turn_context".to_string(),
-                    reason: "v0.4 checkpoints must serialize explicit turn context".to_string(),
-                });
-            }
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.4",
+                "checkpoint.turn_context",
+                "turn_context",
+                "v0.4 checkpoints must serialize explicit turn context",
+            )?;
             validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.4")
+        }
+        Some("v0.5") => {
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.5",
+                "checkpoint.turn_context",
+                "turn_context",
+                "v0.5 checkpoints must serialize explicit turn context",
+            )?;
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.5",
+                "checkpoint.session_archetype",
+                "session_archetype",
+                "v0.5 checkpoints must serialize explicit session archetype",
+            )?;
+            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.5")
         }
         _ => Ok(()),
     }
+}
+
+fn require_non_null_fixture_field(
+    path: &Utf8Path,
+    line_number: usize,
+    checkpoint: &Value,
+    schema_version: &str,
+    error_field: &str,
+    lookup_field: &str,
+    reason: &str,
+) -> Result<(), LiveInputError> {
+    if checkpoint.get(lookup_field).is_none()
+        || checkpoint.get(lookup_field).is_some_and(Value::is_null)
+    {
+        return Err(LiveInputError::FixtureContractGap {
+            path: path.to_owned(),
+            line_number,
+            schema_version: schema_version.to_string(),
+            field: error_field.to_string(),
+            reason: reason.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn schema_requires_turn_context(schema_version: &str) -> bool {
+    matches!(schema_version, "v0.4" | "v0.5")
+}
+
+fn schema_requires_session_archetype(schema_version: &str) -> bool {
+    schema_version == "v0.5"
 }
 
 fn validate_fixture_drift_score_state_contract(

@@ -4,7 +4,8 @@ use std::fs;
 
 use agent_drift_analyzer::{
     checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftClass,
-    DriftState, EvidenceRef, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+    DriftState, EvidenceRef, SessionArchetype, SessionArchetypeLabel, TaskFrame, TurnActivityMix,
+    TurnContext, TurnExecutionMode,
 };
 use agent_drift_sentinel::{
     load_live_fixture,
@@ -78,6 +79,7 @@ fn checkpoint(
             }],
             counter_evidence: Vec::new(),
         },
+        session_archetype: None,
         drift_scores: vec![agent_drift_analyzer::DriftScore {
             class: DriftClass::WrongPlanBranch,
             state: if flagged {
@@ -120,6 +122,18 @@ fn sample_turn_context(turn_ordinal: usize) -> TurnContext {
             verification_like_command_count: 1,
             tool_output_count: 1,
         },
+    }
+}
+
+fn sample_session_archetype(checkpoint: &Checkpoint) -> SessionArchetype {
+    SessionArchetype {
+        label: SessionArchetypeLabel::Planning,
+        confidence: Confidence::Medium,
+        supporting_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "session archetype evidence".to_string(),
+        }],
+        counter_evidence: Vec::new(),
     }
 }
 
@@ -174,6 +188,27 @@ fn live_checkpoint_compatibility_accepts_v0_4_checkpoint() {
         "re-read the implementation plan",
     );
     checkpoint.turn_context = Some(sample_turn_context(1));
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");
+
+    assert_eq!(compatibility.cursor.ordinal, 1);
+    assert_eq!(compatibility.max_flagged_score, Some(88));
+    assert!(compatibility.flagged);
+}
+
+#[test]
+fn live_checkpoint_compatibility_accepts_v0_5_checkpoint() {
+    let mut checkpoint = schema_checkpoint(
+        "v0.5",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
 
     let compatibility =
         verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");
@@ -289,6 +324,51 @@ fn live_checkpoint_compatibility_loads_v0_4_fixture_with_turn_context() {
 }
 
 #[test]
+fn live_checkpoint_compatibility_loads_v0_5_fixture_with_session_archetype() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let mut checkpoint = schema_checkpoint(
+        "v0.5",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let events = load_live_fixture(&fixture_path).expect("load v0.5 live fixture");
+
+    assert_eq!(events.len(), 1);
+    let loaded_checkpoint = events[0]
+        .checkpoint
+        .as_ref()
+        .expect("checkpoint-ready payload");
+    assert_eq!(loaded_checkpoint.schema_version, "v0.5");
+    assert_eq!(
+        loaded_checkpoint
+            .session_archetype
+            .as_ref()
+            .expect("v0.5 session archetype")
+            .label,
+        SessionArchetypeLabel::Planning
+    );
+}
+
+#[test]
 fn live_checkpoint_compatibility_rejects_v0_3_fixture_missing_state() {
     let temp_dir = TempDir::new().expect("temp dir");
     let fixture_path = Utf8Path::from_path(temp_dir.path())
@@ -384,6 +464,104 @@ fn live_checkpoint_compatibility_rejects_v0_4_fixture_missing_turn_context() {
 }
 
 #[test]
+fn live_checkpoint_compatibility_rejects_v0_5_fixture_missing_turn_context() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let mut checkpoint = schema_checkpoint(
+        "v0.5",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    let mut checkpoint_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    checkpoint_json
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("turn_context");
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint_json,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let error =
+        load_live_fixture(&fixture_path).expect_err("v0.5 fixtures missing turn context must fail");
+
+    assert!(matches!(
+        error,
+        LiveInputError::FixtureContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.5" && field == "checkpoint.turn_context"
+    ));
+    assert!(error
+        .to_string()
+        .contains("missing checkpoint.turn_context"));
+}
+
+#[test]
+fn live_checkpoint_compatibility_rejects_v0_5_fixture_missing_session_archetype() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let mut checkpoint = schema_checkpoint(
+        "v0.5",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    let mut checkpoint_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    checkpoint_json
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("session_archetype");
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint_json,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let error = load_live_fixture(&fixture_path)
+        .expect_err("v0.5 fixtures missing session archetype must fail");
+
+    assert!(matches!(
+        error,
+        LiveInputError::FixtureContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.5" && field == "checkpoint.session_archetype"
+    ));
+    assert!(error
+        .to_string()
+        .contains("missing checkpoint.session_archetype"));
+}
+
+#[test]
 fn live_checkpoint_compatibility_surfaces_analyzer_contract_gaps_explicitly() {
     let mut checkpoint = schema_checkpoint(
         "v0.3",
@@ -431,6 +609,54 @@ fn live_checkpoint_compatibility_rejects_v0_4_checkpoint_without_turn_context() 
 }
 
 #[test]
+fn live_checkpoint_compatibility_rejects_v0_5_checkpoint_without_turn_context() {
+    let mut checkpoint = schema_checkpoint(
+        "v0.5",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+
+    let error = verify_live_checkpoint_compatibility(&checkpoint)
+        .expect_err("v0.5 checkpoints missing turn context must fail closed");
+
+    assert!(matches!(
+        error,
+        LiveInputError::CompatibilityGap {
+            field: "turn_context",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn live_checkpoint_compatibility_rejects_v0_5_checkpoint_without_session_archetype() {
+    let mut checkpoint = schema_checkpoint(
+        "v0.5",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.turn_context = Some(sample_turn_context(1));
+
+    let error = verify_live_checkpoint_compatibility(&checkpoint)
+        .expect_err("v0.5 checkpoints missing session archetype must fail closed");
+
+    assert!(matches!(
+        error,
+        LiveInputError::CompatibilityGap {
+            field: "session_archetype",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn live_checkpoint_compatibility_prefers_explicit_v0_3_state_without_previous_checkpoint() {
     let checkpoint = checkpoint_with_state(
         "session-v03",
@@ -442,6 +668,46 @@ fn live_checkpoint_compatibility_prefers_explicit_v0_3_state_without_previous_ch
         "continue on the current task frame",
         &["explicit analyzer recovery evidence"],
     );
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        compatibility.cursor.clone(),
+        TriggerClass::CheckpointReady,
+        compatibility.flagged,
+        Some(&compatibility.warning_fingerprint),
+    );
+    let presentation = present_checkpoint(
+        &checkpoint,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+
+    assert!(!compatibility.flagged);
+    assert_eq!(presentation.posture, Some(CheckpointPosture::Recovered));
+    assert!(presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("explicit analyzer recovery evidence")));
+}
+
+#[test]
+fn live_checkpoint_compatibility_prefers_explicit_v0_5_state_without_previous_checkpoint() {
+    let mut checkpoint = checkpoint_with_state(
+        "session-v05",
+        2,
+        DriftClass::TruthGroundingGap,
+        DriftState::Recovered,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer recovery evidence"],
+    );
+    checkpoint.schema_version = "v0.5".to_string();
+    checkpoint.turn_context = Some(sample_turn_context(2));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
 
     let compatibility =
         verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");

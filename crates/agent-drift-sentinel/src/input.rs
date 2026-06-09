@@ -6,8 +6,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, or v0.4";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4", "v0.5"];
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, v0.4, or v0.5";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CheckpointCursor {
@@ -227,21 +227,58 @@ fn validate_checkpoint_contract(
     match checkpoint.get("schema_version").and_then(Value::as_str) {
         Some("v0.3") => validate_drift_score_state_contract(path, line_number, checkpoint, "v0.3"),
         Some("v0.4") => {
-            if checkpoint.get("turn_context").is_none()
-                || checkpoint.get("turn_context").is_some_and(Value::is_null)
-            {
-                return Err(InputError::ContractGap {
-                    path: path.to_owned(),
-                    line_number,
-                    schema_version: "v0.4".to_string(),
-                    field: "turn_context".to_string(),
-                    reason: "v0.4 checkpoints must serialize explicit turn context".to_string(),
-                });
-            }
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.4",
+                "turn_context",
+                "v0.4 checkpoints must serialize explicit turn context",
+            )?;
             validate_drift_score_state_contract(path, line_number, checkpoint, "v0.4")
+        }
+        Some("v0.5") => {
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.5",
+                "turn_context",
+                "v0.5 checkpoints must serialize explicit turn context",
+            )?;
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.5",
+                "session_archetype",
+                "v0.5 checkpoints must serialize explicit session archetype",
+            )?;
+            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.5")
         }
         _ => Ok(()),
     }
+}
+
+fn require_non_null_field(
+    path: &Utf8Path,
+    line_number: usize,
+    checkpoint: &Value,
+    schema_version: &str,
+    field: &str,
+    reason: &str,
+) -> Result<(), InputError> {
+    if checkpoint.get(field).is_none() || checkpoint.get(field).is_some_and(Value::is_null) {
+        return Err(InputError::ContractGap {
+            path: path.to_owned(),
+            line_number,
+            schema_version: schema_version.to_string(),
+            field: field.to_string(),
+            reason: reason.to_string(),
+        });
+    }
+
+    Ok(())
 }
 
 fn validate_drift_score_state_contract(
