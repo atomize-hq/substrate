@@ -8,6 +8,7 @@ pub(crate) mod orchestration_session;
 pub(crate) mod registry;
 pub(crate) mod session;
 pub(crate) mod state_store;
+pub(crate) mod tool_invocation_contract;
 pub(crate) mod validator;
 
 pub(crate) use auto_attach::MANUAL_REATTACH_ATTACH_RESTORED_REASON;
