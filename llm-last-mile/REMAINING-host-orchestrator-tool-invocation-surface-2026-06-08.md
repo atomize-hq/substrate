@@ -223,20 +223,22 @@ Why first:
 
 ### Slice B: First runtime-family adapter landing
 
-Recommended first target:
+Recommended first landed runtime-family exposure:
 
 1. `codex`
 
 Objective:
 
-1. expose the frozen tool set inside one live host orchestrator family,
-2. route tool calls through the landed internal toolbox transport,
-3. prove runtime-owned injection of session/caller/world identity.
+1. keep host orchestrator selection dynamic from effective config + effective inventory + exact backend policy,
+2. expose the frozen tool set when the selected orchestrator resolves to the first landed runtime family,
+3. route tool calls through the landed internal toolbox transport,
+4. prove runtime-owned injection of session/caller/world identity without hard-coding the orchestrator id.
 
 Why second:
 
 1. it creates the first end-to-end live host-agent delegation path,
-2. it proves whether the adapter model is honest before parity work begins.
+2. it proves whether the adapter model is honest before parity work begins,
+3. it keeps `codex` as the first landed exposure mechanism without corrupting the repo's dynamic selection truth.
 
 ### Slice C: Receipt/resume/inspection hardening
 
@@ -286,16 +288,17 @@ Why last:
 The safer default is:
 
 1. shared semantic contract first,
-2. `codex` first live landing,
+2. dynamic inventory-selected landing with `codex` as the first supported live tool-exposure family,
 3. `claude_code` parity second.
 
 Why:
 
 1. the repo already treats `codex` and `claude_code` as runtime-family truth, but not as identical exposure mechanisms,
 2. one-family-first lowers blast radius,
-3. parity can then be measured against a real working contract instead of a speculative dual landing.
+3. parity can then be measured against a real working contract instead of a speculative dual landing,
+4. this preserves the current config/inventory/policy-driven orchestrator selection model instead of turning `codex` into a hard-coded orchestrator identity.
 
-This note does not claim `codex` is philosophically preferred; only that it is the narrower first implementation seam.
+This note does not claim `codex` is philosophically preferred; only that it is the narrower first implementation seam and should be interpreted as the first landed exposure mechanism, not the only selectable orchestrator.
 
 ## Key Open Questions For The First Spec
 
@@ -319,6 +322,18 @@ The next spec should still choose explicitly:
 3. **Live-truth drift: active-ephemeral outcome identity asymmetry**
    - Active-ephemeral inspect/cancel input uses exact `task_run_id`, but current typed internal outcomes still reuse `target_participant_id` for that identity in [`dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs) and [`orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs).
    - Current Slice `52` resolution: normalize the adapter-visible contract to canonical `task_run_id` without rewriting the internal outcome plane in the contract-freeze slice.
+
+### 2026-06-09 — pre-Slice 53 spec pass
+
+1. **Sequencing clarification: codex-first must not mean hard-coded orchestrator identity**
+   - Live repo truth in [`validate_orchestrator_selection`](../crates/shell/src/execution/agent_runtime/validator.rs) and [`load_effective_agent_inventory`](../crates/shell/src/execution/agent_inventory.rs) shows the selected host orchestrator remains dictated by `agents.hub.orchestrator_agent_id` against the effective inventory loaded from `$SUBSTRATE_HOME/agents/` plus workspace `.substrate/agents/`.
+   - Current Slice `53` resolution: treat `codex` as the first landed runtime-family exposure mechanism only. Do not hard-code `codex` as the selected orchestrator id or bypass exact backend/policy selection to get the first live tool surface.
+2. **Dependency-surface drift: current generic host run request does not yet carry a first-class tool catalog, and the design inputs point to runtime-owned endpoint injection instead**
+   - Repo/delivery review surfaced that current host prompt submission flows through the pinned `unified-agent-api` `AgentWrapperRunRequest`, which carries `prompt`, `working_dir`, `timeout`, `env`, and `extensions`, but no first-class generic tool-definition payload. The relevant design docs also freeze that the toolbox already exists as a session-scoped internal endpoint projected through `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` plus `SUBSTRATE_AGENT_TOOLBOX_VERSION`, so the missing work is a runtime-family adapter/injection seam above that transport rather than inventing a second tool-definition source.
+   - Current Slice `53` resolution: prefer runtime-owned toolbox env injection through UAA for the first Codex landing, and use bounded Codex-specific config/home shaping only as needed to consume that injected endpoint honestly.
+3. **Adapter-shape clarification: non-MCP first landing also needs prompt-side tool disclosure**
+   - Reading [DESIGN-host-orchestrator-tool-invocation-surface.md](./DESIGN-host-orchestrator-tool-invocation-surface.md) and [DESIGN-internal-toolbox-transport-and-session-binding.md](./DESIGN-internal-toolbox-transport-and-session-binding.md) clarified that env projection alone is not the full integration layer: because the first landing is not MCP-server-based tool registration, the selected host runtime still needs startup/system-prompt disclosure of the seven-tool contract above the injected endpoint.
+   - Current Slice `53` resolution: treat the first-family adapter as a two-part path — runtime-owned endpoint/version env injection plus startup/system-prompt injection of tool names, argument ownership, and receipt/follow-up semantics — while still routing actual calls through the frozen Slice `52` contract.
 
 ## Deferred / Circle-Back Items
 

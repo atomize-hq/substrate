@@ -1,6 +1,7 @@
 # Remaining Family-1 And Family-2 Scope After Slice 51
 
 Date: `2026-06-08`  
+Reconciled again on: `2026-06-09`  
 Validated against:
 - [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)
 - [REMAINING-family-2-scope-2026-06-07.md](./REMAINING-family-2-scope-2026-06-07.md)
@@ -8,6 +9,9 @@ Validated against:
 - [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)
 - [PLAN-47.md](./PLAN-47.md)
 - [PLAN-51.md](./PLAN-51.md)
+- [SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md](./SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md)
+- [SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
+- [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)
 - [SPEC-46-internal-retained-host-progress-ack-bootstrap.md](./SPEC-46-internal-retained-host-progress-ack-bootstrap.md)
 - live runtime code in:
   - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
@@ -166,9 +170,26 @@ Repo-truth consequence:
 
 ### 2. Family 1 remaining scope
 
-Relative to the cited older Family-1 remaining-scope notes, Family 1 no longer has an obvious required implementation-bearing slice on the critical path before Family 2 can continue.
+Relative to the cited older Family-1 remaining-scope notes, Family 1 no longer has an obvious missing **dispatch-foundation** slice. But after the newer toolbox-design and adapter-contract work, it now does have one concrete next execution-bearing seam above the already-landed transport/runtime.
 
-### A. Optional richer message-envelope or autonomy widening may remain only if the repo still needs it
+### A. The concrete next Family-1 seam is now the host-orchestrator tool surface above the landed internal toolbox transport
+
+The newer tool-surface stack narrows the next honest Family-1 follow-on to:
+
+1. the already-landed session-scoped internal toolbox transport and exact session/world binding,
+2. the Slice `52` runtime-owned seven-tool adapter contract freeze,
+3. the Slice `53` first runtime-family landing above that contract.
+
+Repo-truth consequence:
+
+1. the next Family-1 work is no longer “invent more dispatch verbs” or “reopen MCP-first transport design,”
+2. the concrete next seam is to expose the frozen seven-tool contract to the selected host runtime family without changing dynamic orchestrator selection,
+3. the current narrowed first landing uses the Codex-backed path as the first real smoke/validation floor via runtime-owned `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` / `SUBSTRATE_AGENT_TOOLBOX_VERSION` injection plus startup/system-prompt tool disclosure,
+4. that “codex first” sequencing should be read as validation scope, not as a requirement to force `codex` selection or to block other selected runtimes unless implementation truth proves a real incompatibility,
+5. non-Codex runtimes such as `claude_code` should keep ordinary host-session behavior; their tool-surface status should be reported truthfully as validation/support coverage rather than silently gated by doc intent,
+6. any later MCP/internal-toolbox export remains a deferred wrapper question rather than the current critical path.
+
+### B. Optional richer message-envelope or autonomy widening may remain only if the repo still needs it
 
 `PLAN-47.md` leaves only narrow optional follow-ons such as:
 
@@ -181,7 +202,7 @@ Repo-truth consequence:
 1. there is no remaining Family-1 foundation gap comparable to the old `2026-05-30` note,
 2. any further Family-1 work should now be justified by a concrete missing runtime story rather than by older sequencing assumptions.
 
-### B. Family-1 planning-doc truth still has a small alignment gap
+### C. Family-1 planning-doc truth still has a small alignment gap
 
 The runtime and later artifacts are ahead of some Family-1 planning status text:
 
@@ -197,11 +218,12 @@ Repo-truth consequence:
 
 ## Recommended Next Slice Order
 
-If the team wants the next honest implementation-bearing follow-on after Slice `51`, the order should now be:
+If the team wants the next honest implementation-bearing follow-on after Slice `51` and the later Slice `52` contract freeze, the order should now be:
 
-1. likely next, any still-needed Family-2 host-global ingress lifecycle coordination such as receive-cursor or sync-state coordination,
-2. clearly still deferred, broader cross-host delivery, lease/lock coordination, remote ingress materialization, or federation routing/productization,
-3. treat any further Family-1 work as optional or demand-driven unless a concrete missing runtime story appears.
+1. likely next, the Family-1 host-orchestrator tool-surface landing from Slice `53` above the already-landed internal toolbox transport,
+2. then, any still-needed Family-2 host-global ingress lifecycle coordination such as receive-cursor or sync-state coordination,
+3. clearly still deferred, broader cross-host delivery, lease/lock coordination, remote ingress materialization, or federation routing/productization,
+4. treat any further Family-1 message/autonomy widening as optional or demand-driven unless a concrete missing runtime story appears.
 
 ## Bottom Line
 
@@ -211,5 +233,5 @@ Current repo truth is:
 
 1. Family 2 local semantics are landed through `host_inbox -> local obligation -> router`,
 2. the only clearly proven remaining Family-2 class from the cited authority trail is broader multi-host delivery and federation work, with host-global lifecycle coordination as a likely but not yet proven-required next seam,
-3. there is no remaining mandatory scope from the cited older Family-1 notes,
-4. Family-1 follow-on work is now optional or demand-driven, with a planning-doc truth-sync still needed around stale status text in Slices `44` through `46`.
+3. there is no remaining mandatory **old-dispatch-foundation** scope from the cited older Family-1 notes, but there is now one newly-specified Family-1 follow-on above the landed transport: the host-orchestrator tool surface frozen in Slice `52` and narrowed for first landing in Slice `53`,
+4. Family-1 follow-on work beyond that host-tool-surface landing is optional or demand-driven, with a planning-doc truth-sync still needed around stale status text in Slices `44` through `46`.

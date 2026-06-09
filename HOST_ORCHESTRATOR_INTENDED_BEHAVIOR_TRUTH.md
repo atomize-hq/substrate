@@ -19,6 +19,10 @@ Primary design references:
 - [llm-last-mile/DESIGN-router-daemon-attach-trigger-integration.md](./llm-last-mile/DESIGN-router-daemon-attach-trigger-integration.md)
 - [llm-last-mile/DESIGN-host-orchestrator-world-dispatch-contract.md](./llm-last-mile/DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [llm-last-mile/DESIGN-auto-attach-trigger-and-work-queue-contract.md](./llm-last-mile/DESIGN-auto-attach-trigger-and-work-queue-contract.md)
+- [llm-last-mile/DESIGN-host-orchestrator-tool-invocation-surface.md](./llm-last-mile/DESIGN-host-orchestrator-tool-invocation-surface.md)
+- [llm-last-mile/DESIGN-internal-toolbox-transport-and-session-binding.md](./llm-last-mile/DESIGN-internal-toolbox-transport-and-session-binding.md)
+- [llm-last-mile/SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md](./llm-last-mile/SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md)
+- [llm-last-mile/SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./llm-last-mile/SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
 
 Public durable-session references that remain authoritative:
 
@@ -46,19 +50,23 @@ This document does not claim that every forward design detail is already shipped
 5. internal host-to-world dispatch exists for:
    - `run_world_task`
    - `spawn_world_worker`
+   - `fork_world_worker`
    - `continue_world_worker`
    - `inspect_world_worker`
    - `cancel_world_work`
    - `stop_world_worker`
-6. host-to-world steering is deny-by-default through an explicit policy layer before routing proceeds.
+6. the internal toolbox transport is already live and session-scoped, with read-side operator truth exported through `substrate agent toolbox status|env`,
+7. host-to-world steering is deny-by-default through an explicit policy layer before routing proceeds.
 
 ### Not yet landed and must not be described as shipped
 
-1. `fork_world_worker` is still proposed work, not live runtime truth,
+1. the first runtime-family host tool surface above the landed toolbox transport is still a follow-on slice, not a shipped runtime truth,
 2. worker-requested fork autonomy, fork recommendations, approval autonomy, and auto-fork remain deferred,
 3. the broader router/daemon production watch loop described by the router integration design is still remaining implementation scope,
 4. the broader host-global or cross-host obligation envelope is still design-only,
-5. active-ephemeral exact identity for inspect/cancel remains narrower than the forward design stack.
+5. active-ephemeral exact identity for inspect/cancel remains narrower than the forward design stack,
+6. Codex is the first intended real smoke/validation floor for the host-tool landing, but that should not be misread as “force codex” or “block all other selected runtimes” unless implementation truth actually requires that,
+7. non-Codex host-tool validation/support posture is still less proven and should be described honestly as such.
 
 ## Core Model
 
@@ -248,17 +256,41 @@ The current live internal action surface is:
 
 1. `run_world_task`
 2. `spawn_world_worker`
-3. `continue_world_worker`
-4. `inspect_world_worker`
-5. `cancel_world_work`
-6. `stop_world_worker`
+3. `fork_world_worker`
+4. `continue_world_worker`
+5. `inspect_world_worker`
+6. `cancel_world_work`
+7. `stop_world_worker`
 
 ### Not yet landed
 
-1. `fork_world_worker`
-2. worker-requested fork autonomy
-3. approval autonomy
-4. broader router-owned continuation behavior
+1. worker-requested fork autonomy
+2. approval autonomy
+3. broader router-owned continuation behavior
+
+## Host Tool-Surface Truth
+
+The internal dispatch verbs and the internal toolbox transport are already live repo truth.
+
+What is **not** fully landed yet is the runtime-family adapter that makes those verbs callable as agent-visible tools inside the selected host orchestrator session.
+
+The current intended direction from the newer design/spec stack is:
+
+1. dynamic orchestrator selection stays config/inventory/policy-driven rather than hard-coding `codex`,
+2. the already-landed toolbox endpoint remains the runtime-owned discovery/binding seam,
+3. selected host runtimes later receive `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION`,
+4. because the first landing is not MCP-server registration, the selected runtime also needs startup/system-prompt disclosure of the seven-tool contract,
+5. live calls still bridge through the frozen Slice `52` tool contract into the same internal toolbox transport,
+6. the Codex-backed path is the first real smoke/validation floor for that landing,
+7. that validation-first sequencing must not silently become a hard runtime gate or hard-coded orchestrator identity,
+8. other selected runtimes should remain allowed unless the implementation proves a real incompatibility, and their posture should be reported as “not yet validated / not yet guaranteed” rather than being blocked by documentation alone.
+
+Hard truth:
+
+1. the missing seam is no longer “does the toolbox exist?”,
+2. the missing seam is not “invent a generic tool catalog on the run request,”
+3. the missing seam is the runtime-owned adapter above the landed transport,
+4. Codex-first means “first proven smoke floor,” not “only legal runtime.”
 
 ### Exact identity rules
 
@@ -417,7 +449,7 @@ It is not intended to:
 Important distinction:
 
 1. public `agent fork` is host-session successor allocation,
-2. internal `fork_world_worker` is a separate world-worker lineage action and is not yet live repo truth.
+2. internal `fork_world_worker` is a separate already-landed world-worker lineage action and must not be conflated with public host-session successor allocation.
 
 ## Meaning Of `agent stop`
 
