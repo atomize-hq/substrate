@@ -1,10 +1,10 @@
 # Plan: Agent Drift Analyzer Session Progress R5
 
-Status: Packet R5-0 doc lock finalized on 2026-06-09; R5-1 through R5-7 remain open.
+Status: Packet R5-0 landed as the doc-lock packet on 2026-06-09; R5-1 through R5-7 remain open implementation packets.
 
 Current family state on 2026-06-09:
 
-- Packet `R5-0` is finalized as the doc-lock authority for the family.
+- Packet `R5-0` is the landed doc-lock packet for the family.
 - Packets `R5-1` through `R5-7` remain future implementation packets.
 - Packet `R5-7` is the first packet allowed to claim bounded semantic acceptance for `R5`.
 
@@ -287,8 +287,8 @@ cargo test -p agent-drift-sentinel -- --nocapture
 ### Scope
 
 - Add or extend committed analyzer acceptance fixtures for progress semantics.
-- Prefer a dedicated progress-acceptance harness/corpus over silently repurposing the frozen R2
-  `tests/fixtures/acceptance` wall.
+- Use a dedicated progress-acceptance harness/corpus as the R5 semantic wall; keep the frozen R2
+  `tests/fixtures/acceptance` wall legacy-stability-only unless intentionally widened.
 - Include small real-rollout or realistic bundle-shaped cases across the core dimensions.
 - Update fixture manifest with actual fixture locations and deferrals.
 - Run focused and full test walls.
@@ -308,6 +308,8 @@ docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md
 
 ```bash
 cargo fmt --all -- --check
+cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture # dedicated R5 semantic wall
+cargo test -p agent-drift-analyzer acceptance_fixtures -- --nocapture # legacy-stability-only frozen R2 wall
 cargo test -p agent-drift-analyzer -- --nocapture
 cargo test -p agent-drift-sentinel -- --nocapture
 ```

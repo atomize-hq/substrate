@@ -1,10 +1,10 @@
 # Tasks: Agent Drift Analyzer Session Progress R5
 
-Status: Packet R5-0 doc lock finalized on 2026-06-09; R5-1 through R5-7 remain open.
+Status: Packet R5-0 landed as the doc-lock packet on 2026-06-09; R5-1 through R5-7 remain open implementation packets.
 
 Completion status on 2026-06-09:
 
-- Packet `R5-0` is complete as a doc-only packet.
+- Packet `R5-0` is landed for its doc-only scope and serves as the family doc-lock packet.
 - Packets `R5-1` through `R5-7` remain open implementation packets.
 - This task list should not mark later packets complete from doc-only work.
 
@@ -174,9 +174,11 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
 - [ ] Task R5-4.5: Implement verification closeout narrowing.
-  - Acceptance: clean proof with low source churn advances; source churn or proof break in closeout
-    yields mixed/regressing; closeout prose without proof yields insufficient evidence.
-  - Verify: focused closeout progress tests.
+  - Acceptance: closeout proof that narrows the residual scope emits
+    `VerificationScopeNarrowed` plus `ResidualScopeShrank` and advances under
+    `verification_closeout_narrowing`; source churn or proof break in closeout yields
+    mixed/regressing; closeout prose without proof yields insufficient evidence.
+  - Verify: focused closeout progress tests, including the narrowed-residual closeout case.
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`

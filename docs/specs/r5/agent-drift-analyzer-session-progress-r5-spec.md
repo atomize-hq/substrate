@@ -117,7 +117,8 @@ Analyzer-focused validation:
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 cargo test -p agent-drift-analyzer export_bundle -- --nocapture
 cargo test -p agent-drift-analyzer end_to_end -- --nocapture
-cargo test -p agent-drift-analyzer acceptance_fixtures -- --nocapture
+cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture # dedicated R5 semantic wall
+cargo test -p agent-drift-analyzer acceptance_fixtures -- --nocapture # legacy-stability-only frozen R2 wall
 cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
@@ -186,8 +187,8 @@ crates/agent-drift-analyzer/tests/end_to_end.rs
   v0.6 artifact stability.
 
 crates/agent-drift-analyzer/tests/progress_acceptance.rs
-  Recommended dedicated R5 progress acceptance wall so the legacy R2
-  `tests/acceptance_fixtures.rs` corpus can remain stable unless intentionally widened.
+  Dedicated R5 semantic wall so the legacy R2 `tests/acceptance_fixtures.rs` corpus remains
+  legacy-stability-only unless intentionally widened on purpose.
 
 crates/agent-drift-sentinel/src/input.rs
   Replay support for v0.6 and required session_progress contract checks.
