@@ -754,6 +754,7 @@ fn aggregate_session_archetype(
             ]),
             vec![
                 intent.exploration_like.evidence.clone(),
+                intent.verification_like.evidence.clone(),
                 intent.verification_like.counter_evidence.clone(),
             ],
             vec![intent.implementation_like.counter_evidence.clone()],
@@ -895,20 +896,7 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
         return CommandRole::Implementation;
     }
 
-    if matches!(family, "cargo" | "pnpm" | "npm")
-        || raw_command.contains("pytest")
-        || raw_command.contains("vitest")
-        || raw_command.contains("jest")
-        || raw_command.contains("ruff")
-        || raw_command.contains("clippy")
-        || raw_command.contains("lint")
-        || raw_command.contains("fmt")
-        || raw_command.contains("check")
-        || raw_command.contains("doctor")
-        || raw_command.contains("replay")
-        || raw_command.contains("test")
-        || raw_command.contains("build")
-    {
+    if command.verification_like || is_verification_command_family(family) {
         return CommandRole::Verification;
     }
 
@@ -930,6 +918,27 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
     }
 
     CommandRole::Neutral
+}
+
+fn is_verification_command_family(family: &str) -> bool {
+    matches!(
+        family,
+        "cargo"
+            | "pnpm"
+            | "npm"
+            | "pytest"
+            | "vitest"
+            | "jest"
+            | "ruff"
+            | "clippy"
+            | "lint"
+            | "fmt"
+            | "check"
+            | "doctor"
+            | "replay"
+            | "test"
+            | "build"
+    )
 }
 
 fn command_file_roles(command: &CommandObservation) -> BTreeSet<FileRole> {
@@ -1796,12 +1805,16 @@ fn is_failure_row(row: &CompactionRow) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::context::CommandObservation;
     use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind};
     use camino::Utf8PathBuf;
 
     use crate::input::BundleSession;
 
-    use super::{checkpoint_analyses, tool_output_is_unambiguous_failure};
+    use super::{
+        checkpoint_analyses, classify_command_role, tool_output_is_unambiguous_failure,
+        CommandRole, EvidenceRef,
+    };
 
     #[test]
     fn tool_output_unambiguous_failure_subset_stays_tiny_and_deterministic() {
@@ -1933,6 +1946,22 @@ mod tests {
                 .contains("delegation directive surface references separate child rollout")));
     }
 
+    #[test]
+    fn classify_command_role_keeps_reads_of_test_and_checkpoint_paths_as_exploration() {
+        for command in [
+            command_observation(
+                "sed",
+                "sed -n '1,120p' crates/agent-drift-analyzer/tests/checkpoints.rs",
+            ),
+            command_observation(
+                "rg",
+                "rg -n 'session_archetype' crates/agent-drift-analyzer/src/checkpoint/mod.rs",
+            ),
+        ] {
+            assert_eq!(classify_command_role(&command), CommandRole::Exploration);
+        }
+    }
+
     fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
         CompactionRow {
             source_file: Utf8PathBuf::from("/tmp/rollout.jsonl"),
@@ -1958,5 +1987,25 @@ mod tests {
             "{{\"call_id\":\"call-{event_index}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
         ));
         row
+    }
+
+    fn command_observation(family: &str, raw_command: &str) -> CommandObservation {
+        CommandObservation {
+            family: family.to_string(),
+            raw_command: raw_command.to_string(),
+            tool_name: "functions.shell_command".to_string(),
+            paths: Vec::new(),
+            read_like: matches!(family, "sed" | "rg"),
+            write_like: false,
+            verification_like: false,
+            evidence: vec![EvidenceRef {
+                row: agent_session_compactor::RowRef {
+                    source_file: Utf8PathBuf::from("/tmp/rollout.jsonl"),
+                    event_index: 1,
+                    row_ordinal: 0,
+                },
+                reason: format!("command family: {family}"),
+            }],
+        }
     }
 }

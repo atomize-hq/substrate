@@ -624,6 +624,55 @@ fn checkpoints_classify_source_edit_plus_local_verification_as_autonomous_implem
         Confidence::Medium | Confidence::High
     ));
     assert!(!archetype.supporting_evidence.is_empty());
+    assert!(archetype.counter_evidence.iter().any(|evidence| {
+        evidence.row.event_index == 4
+            && evidence
+                .reason
+                .contains("verification command strengthened verification-like evidence")
+    }));
+}
+
+#[test]
+fn checkpoints_keep_read_only_test_and_checkpoint_path_commands_out_of_verification() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Inspect the analyzer state before choosing a packet-scoped fix.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,120p' crates/agent-drift-analyzer/tests/checkpoints.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'session_archetype' crates/agent-drift-analyzer/src/checkpoint/mod.rs\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = &result.sessions[0].checkpoints[0];
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Planning);
+    assert_eq!(
+        checkpoint
+            .turn_context
+            .as_ref()
+            .expect("turn context")
+            .activity_mix
+            .verification_like_command_count,
+        0
+    );
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Low | Confidence::Medium
+    ));
 }
 
 #[test]
