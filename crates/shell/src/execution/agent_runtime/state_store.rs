@@ -572,7 +572,7 @@ struct ResolvedAuthoritativeSessionControl {
     session_posture: PublicSessionPosture,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ActiveEphemeralWorldTaskRecord {
     pub orchestration_session_id: String,
@@ -583,7 +583,6 @@ pub(crate) struct ActiveEphemeralWorldTaskRecord {
     pub world_generation: u64,
 }
 
-#[cfg(any(target_os = "linux", test))]
 impl ActiveEphemeralWorldTaskRecord {
     fn validate(&self) -> Result<()> {
         if self.orchestration_session_id.trim().is_empty() {
@@ -605,7 +604,7 @@ impl ActiveEphemeralWorldTaskRecord {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 #[derive(Clone, Debug)]
 pub(crate) struct ActiveEphemeralWorldTaskGuard {
     store: AgentRuntimeStateStore,
@@ -613,7 +612,6 @@ pub(crate) struct ActiveEphemeralWorldTaskGuard {
     task_run_id: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
 impl Drop for ActiveEphemeralWorldTaskGuard {
     fn drop(&mut self) {
         let _ = self
@@ -705,7 +703,6 @@ impl AgentRuntimeStateStore {
             .join("obligations")
     }
 
-    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn canonical_active_ephemeral_tasks_dir(
         &self,
         orchestration_session_id: &str,
@@ -760,7 +757,6 @@ impl AgentRuntimeStateStore {
         Ok(record_id.to_string())
     }
 
-    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn canonical_active_ephemeral_task_path(
         &self,
         orchestration_session_id: &str,
@@ -939,7 +935,7 @@ impl AgentRuntimeStateStore {
             .collect())
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
     pub(crate) fn register_active_ephemeral_world_task(
         &self,
         record: ActiveEphemeralWorldTaskRecord,
@@ -968,7 +964,6 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn load_active_ephemeral_world_task(
         &self,
         orchestration_session_id: &str,
@@ -999,7 +994,6 @@ impl AgentRuntimeStateStore {
         Ok(Some(record))
     }
 
-    #[cfg(any(target_os = "linux", test))]
     #[allow(dead_code)]
     pub(crate) fn list_active_ephemeral_world_tasks(
         &self,
@@ -1039,7 +1033,7 @@ impl AgentRuntimeStateStore {
         Ok(records)
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
     fn remove_active_ephemeral_world_task(
         &self,
         orchestration_session_id: &str,

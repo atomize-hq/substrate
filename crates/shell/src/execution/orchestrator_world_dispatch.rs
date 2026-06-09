@@ -4274,10 +4274,13 @@ mod tests {
     use crate::execution::agent_runtime::orchestration_session::{
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
+    #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::tool_invocation_contract::{
         normalize_cancel_world_work_outcome_v1, normalize_inspect_world_worker_outcome_v1,
-        normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
         normalize_stop_world_worker_outcome_v1,
+    };
+    use crate::execution::agent_runtime::tool_invocation_contract::{
+        normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
@@ -4288,7 +4291,8 @@ mod tests {
         OrchestrationObligationReviewState, OrchestrationObligationState,
     };
     use crate::execution::agent_runtime::{
-        TaskPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+        RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1, WorldDispatchModeV1,
+        WorldDispatchPayloadV1,
     };
     #[cfg(target_os = "linux")]
     use crate::execution::config_model::AgentCliMode;
