@@ -702,10 +702,15 @@ fn aggregate_session_archetype(
         ))
         - failure_pressure
         - i32::from(docs_heavy);
+    let no_source_write_closeout_bonus = i32::from(
+        intent.source_write_command_count == 0
+            && (intent.verification_like.raw_score > 0
+                || analysis.recovery.clean_verification_interval),
+    ) * 2;
 
     let verification_closeout_score = intent.verification_like.raw_score
         + clean_verification_bonus
-        + i32::from(intent.source_write_command_count == 0) * 2
+        + no_source_write_closeout_bonus
         + test_only_writes
         + i32::from(matches!(
             analysis.turn_context.execution_mode,
@@ -896,13 +901,15 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
         return role;
     }
 
-    if (command.verification_like && !requires_shallow_subcommand_parse(family))
-        || is_verification_command_family(family)
-    {
+    if requires_shallow_subcommand_parse(family) {
+        return CommandRole::Neutral;
+    }
+
+    if command.verification_like || is_verification_command_family(family) {
         return CommandRole::Verification;
     }
 
-    if (command.read_like && !requires_shallow_subcommand_parse(family))
+    if command.read_like
         || matches!(
             family,
             "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq"
@@ -913,10 +920,6 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
 
     if command.write_like {
         return CommandRole::Implementation;
-    }
-
-    if command.verification_like {
-        return CommandRole::Verification;
     }
 
     CommandRole::Neutral
@@ -1049,7 +1052,7 @@ fn npm_like_role(tokens: &[String]) -> Option<CommandRole> {
 fn role_from_subcommand(subcommand: &str) -> Option<CommandRole> {
     if matches!(
         subcommand,
-        "test" | "check" | "clippy" | "fmt" | "format" | "build"
+        "test" | "check" | "clippy" | "fmt" | "format" | "build" | "lint"
     ) {
         return Some(CommandRole::Verification);
     }
@@ -1393,6 +1396,10 @@ fn turn_context(
 
 fn turn_activity_mix(rows: &[CompactionRow]) -> TurnActivityMix {
     let command_observations = collect_command_observations(rows);
+    let command_roles = command_observations
+        .iter()
+        .map(classify_command_role)
+        .collect::<Vec<_>>();
     TurnActivityMix {
         directive_row_count: focusable_directive_rows(rows).count(),
         assistant_message_count: rows
@@ -1403,17 +1410,17 @@ fn turn_activity_mix(rows: &[CompactionRow]) -> TurnActivityMix {
             .iter()
             .filter(|row| row.kind == CompactionKind::ToolCall)
             .count(),
-        read_like_command_count: command_observations
+        read_like_command_count: command_roles
             .iter()
-            .filter(|command| command.read_like)
+            .filter(|role| matches!(role, CommandRole::Exploration))
             .count(),
-        write_like_command_count: command_observations
+        write_like_command_count: command_roles
             .iter()
-            .filter(|command| command.write_like)
+            .filter(|role| matches!(role, CommandRole::Implementation))
             .count(),
-        verification_like_command_count: command_observations
+        verification_like_command_count: command_roles
             .iter()
-            .filter(|command| command.verification_like)
+            .filter(|role| matches!(role, CommandRole::Verification))
             .count(),
         tool_output_count: rows
             .iter()
@@ -2157,6 +2164,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn classify_command_role_keeps_unknown_shallow_parse_families_neutral() {
+        for command in [
+            command_observation_with_flags(
+                "cargo",
+                "cargo metadata --format-version 1",
+                false,
+                true,
+                true,
+            ),
+            command_observation_with_flags(
+                "npm",
+                "npm exec playwright --version",
+                false,
+                false,
+                true,
+            ),
+            command_observation_with_flags(
+                "pnpm",
+                "pnpm dlx tsx scripts/report.ts",
+                false,
+                false,
+                true,
+            ),
+            command_observation_with_flags(
+                "git",
+                "git checkout feature/r4-2-review-fix",
+                true,
+                false,
+                false,
+            ),
+        ] {
+            assert_eq!(classify_command_role(&command), CommandRole::Neutral);
+        }
+    }
+
     fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
         CompactionRow {
             source_file: Utf8PathBuf::from("/tmp/rollout.jsonl"),
@@ -2185,14 +2228,30 @@ mod tests {
     }
 
     fn command_observation(family: &str, raw_command: &str) -> CommandObservation {
+        command_observation_with_flags(
+            family,
+            raw_command,
+            matches!(family, "sed" | "rg"),
+            false,
+            false,
+        )
+    }
+
+    fn command_observation_with_flags(
+        family: &str,
+        raw_command: &str,
+        read_like: bool,
+        write_like: bool,
+        verification_like: bool,
+    ) -> CommandObservation {
         CommandObservation {
             family: family.to_string(),
             raw_command: raw_command.to_string(),
             tool_name: "functions.shell_command".to_string(),
             paths: Vec::new(),
-            read_like: matches!(family, "sed" | "rg"),
-            write_like: false,
-            verification_like: false,
+            read_like,
+            write_like,
+            verification_like,
             evidence: vec![EvidenceRef {
                 row: agent_session_compactor::RowRef {
                     source_file: Utf8PathBuf::from("/tmp/rollout.jsonl"),

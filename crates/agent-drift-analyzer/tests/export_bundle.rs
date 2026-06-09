@@ -108,13 +108,13 @@ fn export_bundle_writes_checkpoints_and_summary() {
     )));
     assert!(summary.contains("- Prompt user messages: `1`"));
     assert!(summary.contains(
-        "- Turn-context overview: `turn-001 (#1); checkpoints in turn 1-2; modes mixed -> autonomous`"
+        "- Turn-context overview: `turn-001 (#1); checkpoints in turn 1-2; modes verification_heavy -> autonomous`"
     ));
     assert!(summary.contains(
-        "  turn: `turn-001 (#1) rows=9 checkpoints=1 session-prompts=1 mode=mixed activity[dir=2 asst=0 tool=5 read=2 write=3 verify=3 out=2]`"
+        "  turn: `turn-001 (#1) rows=9 checkpoints=1 session-prompts=1 mode=verification_heavy activity[dir=2 asst=0 tool=5 read=2 write=0 verify=3 out=2]`"
     ));
     assert!(summary.contains(
-        "  turn: `turn-001 (#1) rows=13 checkpoints=2 session-prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=6 verify=4 out=2]`"
+        "  turn: `turn-001 (#1) rows=13 checkpoints=2 session-prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=2 verify=4 out=2]`"
     ));
     assert!(summary.contains(
         "  delegation: `topology=single_agent visibility=none confidence=high markers=none support[none] counter[none]`"

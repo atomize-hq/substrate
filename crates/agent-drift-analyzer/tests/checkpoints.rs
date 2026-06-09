@@ -182,19 +182,19 @@ fn checkpoints_compute_turn_activity_mix_and_execution_modes() {
     assert_eq!(first_turn.activity_mix.assistant_message_count, 0);
     assert_eq!(first_turn.activity_mix.tool_call_count, 5);
     assert_eq!(first_turn.activity_mix.read_like_command_count, 2);
-    assert_eq!(first_turn.activity_mix.write_like_command_count, 3);
+    assert_eq!(first_turn.activity_mix.write_like_command_count, 0);
     assert_eq!(first_turn.activity_mix.verification_like_command_count, 3);
     assert_eq!(first_turn.activity_mix.tool_output_count, 2);
     assert_eq!(
         first_turn.execution_mode,
-        agent_drift_analyzer::TurnExecutionMode::Mixed
+        agent_drift_analyzer::TurnExecutionMode::VerificationHeavy
     );
 
     assert_eq!(second_turn.activity_mix.directive_row_count, 2);
     assert_eq!(second_turn.activity_mix.assistant_message_count, 1);
     assert_eq!(second_turn.activity_mix.tool_call_count, 8);
     assert_eq!(second_turn.activity_mix.read_like_command_count, 2);
-    assert_eq!(second_turn.activity_mix.write_like_command_count, 6);
+    assert_eq!(second_turn.activity_mix.write_like_command_count, 2);
     assert_eq!(second_turn.activity_mix.verification_like_command_count, 4);
     assert_eq!(second_turn.activity_mix.tool_output_count, 2);
     assert_eq!(
@@ -248,11 +248,11 @@ fn checkpoints_mark_cargo_heavy_write_turns_as_mixed() {
         .expect("first turn context");
 
     assert_eq!(first_turn.activity_mix.tool_call_count, 5);
-    assert_eq!(first_turn.activity_mix.write_like_command_count, 3);
+    assert_eq!(first_turn.activity_mix.write_like_command_count, 0);
     assert_eq!(first_turn.activity_mix.verification_like_command_count, 3);
     assert_eq!(
         first_turn.execution_mode,
-        agent_drift_analyzer::TurnExecutionMode::Mixed
+        agent_drift_analyzer::TurnExecutionMode::VerificationHeavy
     );
 }
 
@@ -686,6 +686,46 @@ fn checkpoints_keep_read_only_test_and_checkpoint_path_commands_out_of_verificat
 }
 
 #[test]
+fn checkpoints_bias_sparse_neutral_prefixes_to_low_confidence_planning() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Inspect the landed Packet R4-2 scope before choosing a narrow follow-up.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"echo packet-r4-2-status\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"printf packet-r4-2-next-step\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = &result.sessions[0].checkpoints[0];
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Planning);
+    assert_eq!(archetype.confidence, Confidence::Low);
+    assert_eq!(
+        checkpoint
+            .turn_context
+            .as_ref()
+            .expect("turn context")
+            .activity_mix
+            .verification_like_command_count,
+        0
+    );
+}
+
+#[test]
 fn checkpoints_shift_to_verification_closeout_when_proof_dominates_new_source_edits() {
     let result = analyze_custom_rows(vec![
         prompt_row(0, "turn-001", "/goal Implement the patch and then verify it."),
@@ -842,6 +882,60 @@ fn checkpoints_cap_confidence_when_parent_visible_behavior_is_child_opaque() {
     ));
     assert_ne!(archetype.confidence, Confidence::High);
     assert!(!archetype.counter_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_keep_unknown_shallow_parse_command_families_neutral() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Inspect the repo state before deciding whether a packet-scoped fix is needed.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo metadata --format-version 1\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"npm exec playwright --version\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"pnpm dlx tsx scripts/report.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"git checkout feature/r4-2-review-fix\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = &result.sessions[0].checkpoints[0];
+    let turn_context = checkpoint.turn_context.as_ref().expect("turn context");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(turn_context.activity_mix.read_like_command_count, 0);
+    assert_eq!(turn_context.activity_mix.write_like_command_count, 0);
+    assert_eq!(turn_context.activity_mix.verification_like_command_count, 0);
+    assert_eq!(
+        turn_context.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Mixed
+    );
+    assert_eq!(archetype.label, SessionArchetypeLabel::Planning);
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Low | Confidence::Medium
+    ));
 }
 
 #[test]
