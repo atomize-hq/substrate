@@ -38,10 +38,10 @@ fn end_to_end_analysis_is_stable_across_reruns() {
     assert!(checkpoints[0].turn_context.is_some());
     assert!(!checkpoints[0].expected_next_step.is_empty());
     assert!(first_summary.contains(
-        "- Turn-context overview: `turn-001 (#1); checkpoints in turn 1-2; modes mixed -> autonomous`"
+        "- Turn-context overview: `turn-001 (#1); checkpoints in turn 1-2; modes verification_heavy -> autonomous`"
     ));
     assert!(first_summary.contains(
-        "  turn: `turn-001 (#1) rows=13 checkpoints=2 session-prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=6 verify=4 out=2]`"
+        "  turn: `turn-001 (#1) rows=13 checkpoints=2 session-prompts=1 mode=autonomous activity[dir=2 asst=1 tool=8 read=2 write=2 verify=4 out=2]`"
     ));
     assert!(first_summary.contains(
         "  delegation: `topology=single_agent visibility=none confidence=high markers=none support[none] counter[none]`"
@@ -104,11 +104,37 @@ fn end_to_end_analysis_is_stable_for_many_short_conversational_turns() {
 
     assert!(first_summary.contains("Turns observed: `2`"));
     assert!(first_summary.contains(
-        "- Turn-context overview: `turn-001 (#1) -> turn-002 (#2); checkpoints in turn 1; modes mixed -> conversational`"
+        "- Turn-context overview: `turn-001 (#1) -> turn-002 (#2); checkpoints in turn 1; modes verification_heavy -> conversational`"
     ));
     assert!(first_summary.contains(
         "  turn: `turn-002 (#2) rows=4 checkpoints=1 session-prompts=1 mode=conversational activity[dir=1 asst=3 tool=0 read=0 write=0 verify=0 out=0]`"
     ));
+}
+
+#[test]
+fn end_to_end_summary_surfaces_compact_session_archetype_inspection() {
+    let fixture = BundleFixture::sample();
+    let request = AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    };
+
+    let result = agent_drift_analyzer::analyze_bundle(&request).expect("analyze sample bundle");
+    let summary = fs::read_to_string(&result.summary_path).expect("summary");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert!(summary.contains("  archetype: `label="));
+    for checkpoint in checkpoints {
+        let archetype = checkpoint
+            .session_archetype
+            .as_ref()
+            .expect("session archetype");
+        assert!(summary.contains(&format!(
+            "  archetype: `label={} confidence={}",
+            format_label(archetype.label),
+            format_confidence(archetype.confidence)
+        )));
+    }
 }
 
 #[test]
@@ -242,4 +268,25 @@ fn session_ordinals(
             .push(checkpoint.ordinal);
     }
     ordinals
+}
+
+fn format_label(label: agent_drift_analyzer::SessionArchetypeLabel) -> &'static str {
+    match label {
+        agent_drift_analyzer::SessionArchetypeLabel::Troubleshooting => "troubleshooting",
+        agent_drift_analyzer::SessionArchetypeLabel::Planning => "planning",
+        agent_drift_analyzer::SessionArchetypeLabel::AutonomousImplementation => {
+            "autonomous_implementation"
+        }
+        agent_drift_analyzer::SessionArchetypeLabel::VerificationCloseout => {
+            "verification_closeout"
+        }
+    }
+}
+
+fn format_confidence(confidence: agent_drift_analyzer::Confidence) -> &'static str {
+    match confidence {
+        agent_drift_analyzer::Confidence::Low => "low",
+        agent_drift_analyzer::Confidence::Medium => "medium",
+        agent_drift_analyzer::Confidence::High => "high",
+    }
 }

@@ -11,7 +11,7 @@ use agent_drift_analyzer::checkpoint::{
 };
 use agent_drift_analyzer::{
     BundleSession, Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, DriftState,
-    EvidenceRef, TaskFrame,
+    EvidenceRef, SessionArchetype, SessionArchetypeLabel, TaskFrame,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -243,6 +243,74 @@ fn export_bundle_renders_compact_delegation_inspection_for_ambiguous_opaque_sess
 }
 
 #[test]
+fn export_bundle_renders_compact_session_archetype_inspection() {
+    let session = fixture_session(
+        "session-archetype-summary",
+        vec![
+            fixture_row(
+                "session-archetype-summary",
+                0,
+                CompactionKind::UserMessage,
+                "/goal Lock the Packet R4-3 summary surface.",
+                Some(UserMessageRole::Prompt),
+            ),
+            fixture_tool_row(
+                "session-archetype-summary",
+                1,
+                "functions.apply_patch",
+                "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/export.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+            ),
+        ],
+    );
+    let checkpoint = fixture_checkpoint_with_archetype(
+        &session,
+        1,
+        1,
+        Confidence::Medium,
+        SessionArchetype {
+            label: SessionArchetypeLabel::AutonomousImplementation,
+            confidence: Confidence::Medium,
+            supporting_evidence: vec![
+                EvidenceRef {
+                    row: RowRef::from_row(&session.compact_rows[1]),
+                    reason: "stable working set plus source edits supported concentrated implementation"
+                        .to_string(),
+                },
+                EvidenceRef {
+                    row: RowRef::from_row(&session.compact_rows[1]),
+                    reason: "source edit command strengthened implementation-like evidence"
+                        .to_string(),
+                },
+                EvidenceRef {
+                    row: RowRef::from_row(&session.compact_rows[1]),
+                    reason: "local verification against source scope also supported implementation follow-through"
+                        .to_string(),
+                },
+            ],
+            counter_evidence: vec![EvidenceRef {
+                row: RowRef::from_row(&session.compact_rows[0]),
+                reason: "inspection-style command widened the visible search space".to_string(),
+            }],
+        },
+    );
+    let summary = export_summary(vec![session], vec![checkpoint]);
+
+    assert!(summary.contains(
+        "  archetype: `label=autonomous_implementation confidence=medium"
+    ));
+    assert!(summary.contains(
+        "support[stable working set plus source edits supported concentrated i..."
+    ));
+    assert!(summary.contains(
+        "source edit command strengthened implementation-like evidence"
+    ));
+    assert!(summary.contains("+1 more]"));
+    assert!(summary.contains(
+        "counter[inspection-style command widened the visible search space]`"
+    ));
+}
+
+#[test]
 fn export_bundle_distinguishes_many_short_conversational_turns_in_summary() {
     let mut bundle = load_sample_bundle();
     for row in bundle
@@ -287,10 +355,10 @@ fn export_bundle_distinguishes_many_short_conversational_turns_in_summary() {
     assert!(summary.contains("Turns observed: `2`"));
     assert!(summary.contains("- Checkpoints per turn: `1.00`"));
     assert!(summary.contains(
-        "- Turn-context overview: `turn-001 (#1) -> turn-002 (#2); checkpoints in turn 1; modes mixed -> conversational`"
+        "- Turn-context overview: `turn-001 (#1) -> turn-002 (#2); checkpoints in turn 1; modes verification_heavy -> conversational`"
     ));
     assert!(summary.contains(
-        "  turn: `turn-001 (#1) rows=9 checkpoints=1 session-prompts=1 mode=mixed activity[dir=2 asst=0 tool=5 read=2 write=3 verify=3 out=2]`"
+        "  turn: `turn-001 (#1) rows=9 checkpoints=1 session-prompts=1 mode=verification_heavy activity[dir=2 asst=0 tool=5 read=2 write=0 verify=3 out=2]`"
     ));
     assert!(summary.contains(
         "  turn: `turn-002 (#2) rows=4 checkpoints=1 session-prompts=1 mode=conversational activity[dir=1 asst=3 tool=0 read=0 write=0 verify=0 out=0]`"
@@ -1051,6 +1119,26 @@ fn fixture_checkpoint(
         expected_next_step: "continue on the current task frame".to_string(),
         flagged: !flagged_classes.is_empty(),
     }
+}
+
+fn fixture_checkpoint_with_archetype(
+    session: &BundleSession,
+    ordinal: usize,
+    boundary_row_index: usize,
+    confidence: Confidence,
+    session_archetype: SessionArchetype,
+) -> Checkpoint {
+    let mut checkpoint = fixture_checkpoint(
+        session,
+        ordinal,
+        boundary_row_index,
+        confidence,
+        CheckpointDiagnostics::default(),
+        &[],
+    );
+    checkpoint.schema_version = "v0.5".to_string();
+    checkpoint.session_archetype = Some(session_archetype);
+    checkpoint
 }
 
 fn format_optional_metric(metric: Option<f64>) -> String {

@@ -982,6 +982,253 @@ fn checkpoints_degrade_mixed_cases_instead_of_overclaiming_high_confidence() {
     ));
 }
 
+#[test]
+fn checkpoints_lock_ambiguous_mixed_fixture_as_medium_autonomous_implementation() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Investigate, patch, and verify the analyzer while updating the docs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'session_archetype' crates/agent-drift-analyzer/src/checkpoint/mod.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: docs/specs/agent-drift-analyzer-session-archetype-r4-spec.md\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/mod.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let archetype = result.sessions[0].checkpoints[0]
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(
+        archetype.label,
+        SessionArchetypeLabel::AutonomousImplementation
+    );
+    assert_eq!(archetype.confidence, Confidence::Medium);
+    assert_evidence_contains(
+        &archetype.supporting_evidence,
+        "stable working set plus source edits supported concentrated implementation",
+    );
+    assert_evidence_contains(
+        &archetype.supporting_evidence,
+        "source edit command strengthened implementation-like evidence",
+    );
+    assert_evidence_contains(
+        &archetype.counter_evidence,
+        "inspection-style command widened the visible search space",
+    );
+    assert_evidence_contains(
+        &archetype.counter_evidence,
+        "verification command strengthened verification-like evidence",
+    );
+}
+
+#[test]
+fn checkpoints_lock_transition_from_planning_to_implementation_without_flapping() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Plan the narrow Packet R4-3 landing first.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,200p' docs/specs/agent-drift-analyzer-session-archetype-r4-plan.md\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'Packet R4-3' docs/specs/agent-drift-analyzer-session-archetype-r4-tasks.md\",\"workdir\":\"/repo\"}",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Land the agreed Packet R4-3 code changes.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/export.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer export_bundle -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints.len(), 2);
+    let first = checkpoints[0]
+        .session_archetype
+        .as_ref()
+        .expect("first session archetype");
+    let second = checkpoints[1]
+        .session_archetype
+        .as_ref()
+        .expect("second session archetype");
+
+    assert_eq!(first.label, SessionArchetypeLabel::Planning);
+    assert_eq!(first.confidence, Confidence::Medium);
+    assert_eq!(
+        second.label,
+        SessionArchetypeLabel::AutonomousImplementation
+    );
+    assert_eq!(second.confidence, Confidence::Medium);
+    assert_ne!(first.label, second.label);
+    assert_evidence_contains(
+        &second.supporting_evidence,
+        "source edit command strengthened implementation-like evidence",
+    );
+    assert_evidence_contains(
+        &second.counter_evidence,
+        "task-frame transition signaled active scope exploration",
+    );
+    assert_evidence_contains(
+        &second.counter_evidence,
+        "verification command strengthened verification-like evidence",
+    );
+}
+
+#[test]
+fn checkpoints_lock_delegated_parent_opaque_fixture_as_low_confidence_planning() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Coordinate a delegated implementation while keeping parent-visible work conservative.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "multi_agent_v1",
+            "{\"mode\":\"delegated\"}",
+        ),
+        developer_row(
+            2,
+            "turn-001",
+            "Child session id 019ea222-2222-7222-8222-222222222222 remains in separate rollout /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-30-00-019ea222-2222-7222-8222-222222222222.jsonl",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'session_archetype' docs/specs/agent-drift-analyzer-session-archetype-r4-spec.md\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let archetype = result.sessions[0]
+        .checkpoints
+        .last()
+        .expect("checkpoint")
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Planning);
+    assert_eq!(archetype.confidence, Confidence::Low);
+    assert_evidence_contains(
+        &archetype.supporting_evidence,
+        "delegation topology kept orchestration evidence in the visible parent prefix",
+    );
+    assert_evidence_contains(
+        &archetype.supporting_evidence,
+        "visible delegation topology informed the checkpoint-local archetype decision",
+    );
+    assert_evidence_contains(
+        &archetype.counter_evidence,
+        "child-opaque delegation limited direct confidence in parent-visible archetype semantics",
+    );
+    assert_evidence_contains(
+        &archetype.counter_evidence,
+        "delegating-parent plus child-opaque visibility capped checkpoint-local archetype certainty",
+    );
+}
+
+#[test]
+fn checkpoints_lock_pr_response_loop_as_medium_autonomous_implementation() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Address PR feedback for Packet R4-3 with a narrow patch and local proof.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/export.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/export.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/tests/export_bundle.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer export_bundle -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let archetype = result.sessions[0].checkpoints[0]
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(
+        archetype.label,
+        SessionArchetypeLabel::AutonomousImplementation
+    );
+    assert_eq!(archetype.confidence, Confidence::Medium);
+    assert_evidence_contains(
+        &archetype.supporting_evidence,
+        "stable working set plus source edits supported concentrated implementation",
+    );
+    assert_evidence_contains(
+        &archetype.supporting_evidence,
+        "source edit command strengthened implementation-like evidence",
+    );
+    assert_evidence_contains(
+        &archetype.counter_evidence,
+        "inspection-style command widened the visible search space",
+    );
+    assert_evidence_contains(
+        &archetype.counter_evidence,
+        "verification command strengthened verification-like evidence",
+    );
+}
+
 fn analyze_custom_rows(rows: Vec<CompactionRow>) -> AnalyzeResult {
     let tool_rows = rows
         .iter()
@@ -1076,4 +1323,15 @@ fn row(
         canonical_text: text.to_string(),
         text_hash_hex: format!("hash-{}", text.split_whitespace().collect::<String>()),
     }
+}
+
+fn assert_evidence_contains(evidence: &[agent_drift_analyzer::EvidenceRef], fragment: &str) {
+    assert!(
+        evidence.iter().any(|item| item.reason.contains(fragment)),
+        "expected evidence containing `{fragment}`, got {:?}",
+        evidence
+            .iter()
+            .map(|item| item.reason.as_str())
+            .collect::<Vec<_>>()
+    );
 }

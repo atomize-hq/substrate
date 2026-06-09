@@ -8,7 +8,8 @@ use time::OffsetDateTime;
 
 use super::checkpoint_analyses;
 use crate::checkpoint::{
-    Checkpoint, Confidence, DriftClass, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+    Checkpoint, Confidence, DriftClass, SessionArchetype, SessionArchetypeLabel, TaskFrame,
+    TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
 use crate::input::BundleSession;
@@ -456,6 +457,10 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
                         .get(&checkpoint.ordinal)
                 )
             ));
+            lines.push(format!(
+                "  archetype: `{}`",
+                format_checkpoint_archetype(checkpoint.session_archetype.as_ref())
+            ));
         }
         lines.push(String::new());
     }
@@ -888,6 +893,20 @@ fn format_checkpoint_delegation(delegation: Option<&DelegationContext>) -> Strin
     )
 }
 
+fn format_checkpoint_archetype(archetype: Option<&SessionArchetype>) -> String {
+    let Some(archetype) = archetype else {
+        return "unavailable".to_string();
+    };
+
+    format!(
+        "label={} confidence={} support[{}] counter[{}]",
+        format_session_archetype_label(archetype.label),
+        format_confidence(archetype.confidence),
+        format_archetype_evidence(&archetype.supporting_evidence),
+        format_archetype_evidence(&archetype.counter_evidence)
+    )
+}
+
 fn format_delegation_topology(topology: DelegationTopology) -> &'static str {
     match topology {
         DelegationTopology::SingleAgent => "single_agent",
@@ -902,6 +921,15 @@ fn format_child_work_visibility(visibility: ChildWorkVisibility) -> &'static str
         ChildWorkVisibility::None => "none",
         ChildWorkVisibility::Partial => "partial",
         ChildWorkVisibility::Opaque => "opaque",
+    }
+}
+
+fn format_session_archetype_label(label: SessionArchetypeLabel) -> &'static str {
+    match label {
+        SessionArchetypeLabel::Troubleshooting => "troubleshooting",
+        SessionArchetypeLabel::Planning => "planning",
+        SessionArchetypeLabel::AutonomousImplementation => "autonomous_implementation",
+        SessionArchetypeLabel::VerificationCloseout => "verification_closeout",
     }
 }
 
@@ -933,6 +961,43 @@ fn format_delegation_evidence(evidence: &[crate::checkpoint::EvidenceRef]) -> St
         })
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+fn format_archetype_evidence(evidence: &[crate::checkpoint::EvidenceRef]) -> String {
+    const DISPLAY_LIMIT: usize = 2;
+    const REASON_LIMIT: usize = 64;
+
+    if evidence.is_empty() {
+        return "none".to_string();
+    }
+
+    let mut unique_reasons = Vec::<String>::new();
+    for item in evidence {
+        if unique_reasons.iter().any(|reason| reason == &item.reason) {
+            continue;
+        }
+        unique_reasons.push(truncate_for_summary(&item.reason, REASON_LIMIT));
+    }
+
+    let remaining = unique_reasons.len().saturating_sub(DISPLAY_LIMIT);
+    let mut displayed = unique_reasons
+        .into_iter()
+        .take(DISPLAY_LIMIT)
+        .collect::<Vec<_>>();
+    if remaining > 0 {
+        displayed.push(format!("+{remaining} more"));
+    }
+
+    displayed.join("; ")
+}
+
+fn truncate_for_summary(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        return text.to_string();
+    }
+
+    let truncated = text.chars().take(limit.saturating_sub(3)).collect::<String>();
+    format!("{truncated}...")
 }
 
 fn format_turn_label(turn_context: &TurnContext) -> String {

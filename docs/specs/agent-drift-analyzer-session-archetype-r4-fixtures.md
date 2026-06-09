@@ -11,10 +11,18 @@ Each fixture should record:
 - counter-evidence
 - why nearby competing labels lose
 
+## Packet `R4-3` Locked Authority Matrix
+
+This section is the reviewable authority for the first `R4` label matrix. The regression anchors named
+here are the analyzer tests that must stay aligned with these expectations unless this document is
+updated first.
+
 ## Canonical Cases
 
 ### 1. Clear planning checkpoint
 
+- Regression anchor:
+  - `checkpoints_classify_docs_heavy_scope_shaping_as_planning`
 - Expected label: `planning`
 - Confidence: `medium` or `high`
 - Decisive evidence:
@@ -29,6 +37,8 @@ Each fixture should record:
 
 ### 2. Clear autonomous implementation checkpoint
 
+- Regression anchor:
+  - `checkpoints_classify_source_edit_plus_local_verification_as_autonomous_implementation`
 - Expected label: `autonomous_implementation`
 - Confidence: `medium` or `high`
 - Decisive evidence:
@@ -43,6 +53,8 @@ Each fixture should record:
 
 ### 3. Clear troubleshooting checkpoint
 
+- Regression anchor:
+  - `checkpoints_classify_repeated_failing_verification_as_troubleshooting`
 - Expected label: `troubleshooting`
 - Confidence: `medium` or `high`
 - Decisive evidence:
@@ -57,6 +69,8 @@ Each fixture should record:
 
 ### 4. Clear verification-closeout checkpoint
 
+- Regression anchor:
+  - `checkpoints_shift_to_verification_closeout_when_proof_dominates_new_source_edits`
 - Expected label: `verification_closeout`
 - Confidence: `medium` or `high`
 - Decisive evidence:
@@ -71,41 +85,64 @@ Each fixture should record:
 
 ### 5. Ambiguous mixed checkpoint
 
-- Expected label: implementation-defined winner with capped confidence
-- Confidence: must stay `low` or `medium`
-- Decisive evidence:
-  - materially mixed implementation, verification, and exploration signals
-- Counter-evidence:
-  - strong competing evidence for at least one nearby label
-- Why other labels lose:
-  - no single mode dominates coherently enough for high confidence
-
-### 6. Legitimate mode shift with hysteresis
-
-- Expected label: transition across adjacent checkpoints without one-checkpoint flapping
-- Confidence: degraded during the shift
-- Decisive evidence:
-  - sustained recent change in dominant behavior
-- Counter-evidence:
-  - earlier prefix still supports the prior mode
-- Why other labels lose:
-  - contradictory evidence is strong enough to shift, but not enough to erase transition ambiguity
-
-### 7. PR-response loop
-
+- Regression anchor:
+  - `checkpoints_degrade_mixed_cases_instead_of_overclaiming_high_confidence`
+  - `checkpoints_lock_ambiguous_mixed_fixture_as_medium_autonomous_implementation`
 - Expected label: `autonomous_implementation`
 - Confidence: `medium`
 - Decisive evidence:
-  - targeted code edits
-  - local verification
-  - concentrated working set
+  - stable working set plus source edits still beat the competing modes
+  - implementation-like evidence remains real even though it is contested
 - Counter-evidence:
-  - review / proof language in the objective
+  - inspection widened the visible search space
+  - verification remained active enough to prevent high confidence
+  - docs/spec edits still counted against direct source-implementation certainty
+- Why other labels lose:
+  - `planning` loses because the source-edit cadence is still stronger than pure scope shaping
+  - `verification_closeout` loses because verification is still mixed with active edits
+  - no mode wins cleanly enough for `high` confidence
+
+### 6. Legitimate mode shift with hysteresis
+
+- Regression anchor:
+  - `checkpoints_lock_transition_from_planning_to_implementation_without_flapping`
+- Expected label:
+  - checkpoint 1: `planning`
+  - checkpoint 2: `autonomous_implementation`
+- Confidence:
+  - checkpoint 1: `medium`
+  - checkpoint 2: `medium`
+- Decisive evidence:
+  - the first checkpoint is still dominated by planning-style inspection
+  - the second checkpoint adds source editing plus local verification on the agreed scope
+- Counter-evidence:
+  - the earlier planning prefix still counts against an immediate high-confidence implementation claim
+  - local verification keeps the shifted checkpoint from looking like a pure implementation loop
+- Why other labels lose:
+  - the label should shift once the behavior changes, but the transition must not jump straight to
+    `high`
+  - this case proves one honest mode change, not oscillation across adjacent checkpoints
+
+### 7. PR-response loop
+
+- Regression anchor:
+  - `checkpoints_lock_pr_response_loop_as_medium_autonomous_implementation`
+- Expected label: `autonomous_implementation`
+- Confidence: `medium`
+- Decisive evidence:
+  - targeted code edits on the active review scope
+  - local verification still supports implementation follow-through
+  - concentrated working set keeps the patch loop narrow
+- Counter-evidence:
+  - residual inspection before editing
+  - verification still prevents `high` confidence
 - Why other labels lose:
   - proof gathering has not yet overtaken active implementation
 
 ### 8. Proof-oriented closeout loop
 
+- Regression anchor:
+  - `checkpoints_shift_to_verification_closeout_when_proof_dominates_new_source_edits`
 - Expected label: `verification_closeout`
 - Confidence: `medium`
 - Decisive evidence:
@@ -119,6 +156,8 @@ Each fixture should record:
 
 ### 9. Failing verification loop
 
+- Regression anchor:
+  - `checkpoints_classify_repeated_failing_verification_as_troubleshooting`
 - Expected label: `troubleshooting`
 - Confidence: `medium`
 - Decisive evidence:
@@ -131,15 +170,21 @@ Each fixture should record:
 
 ### 10. Delegating parent with opaque child work
 
-- Expected label: visible-parent best fit, but confidence capped conservatively
-- Confidence: `low` or `medium`
+- Regression anchor:
+  - `checkpoints_cap_confidence_when_parent_visible_behavior_is_child_opaque`
+  - `checkpoints_lock_delegated_parent_opaque_fixture_as_low_confidence_planning`
+- Expected label: `planning`
+- Confidence: `low`
 - Decisive evidence:
   - landed `DelegationContext` shows `delegating_parent`
+  - visible parent behavior stays orchestration-heavy
   - `child_work_visibility = opaque`
 - Counter-evidence:
-  - any visible parent-side implementation or planning behavior
+  - opaque child work blocks high-confidence claims about the real execution mode underneath
 - Why other labels lose:
-  - no archetype should claim high-confidence direct child-visible semantics from the parent prefix
+  - no archetype should claim high-confidence child-visible semantics from the parent prefix
+  - the visible parent evidence is still closer to planning/orchestration than to direct
+    implementation
 
 ### 11. Legacy schema compatibility
 
