@@ -574,6 +574,10 @@ fn checkpoints_classify_docs_heavy_scope_shaping_as_planning() {
         Confidence::Medium | Confidence::High
     ));
     assert!(!archetype.supporting_evidence.is_empty());
+    assert!(archetype
+        .supporting_evidence
+        .iter()
+        .any(|evidence| evidence.reason.contains("planning-orchestration")));
     assert!(!archetype.counter_evidence.is_empty());
 }
 
@@ -624,6 +628,12 @@ fn checkpoints_classify_source_edit_plus_local_verification_as_autonomous_implem
         Confidence::Medium | Confidence::High
     ));
     assert!(!archetype.supporting_evidence.is_empty());
+    assert!(!archetype.supporting_evidence.iter().any(|evidence| {
+        evidence.row.event_index == 4
+            && evidence
+                .reason
+                .contains("verification command strengthened verification-like evidence")
+    }));
     assert!(archetype.counter_evidence.iter().any(|evidence| {
         evidence.row.event_index == 4
             && evidence

@@ -731,7 +731,10 @@ fn aggregate_session_archetype(
         archetype_candidate(
             SessionArchetypeLabel::Planning,
             planning_score,
-            intent.exploration_like.evidence.clone(),
+            combine_evidence(vec![
+                intent.exploration_like.evidence.clone(),
+                intent.orchestration_like.evidence.clone(),
+            ]),
             vec![
                 intent.implementation_like.evidence.clone(),
                 intent.verification_like.evidence.clone(),
@@ -744,14 +747,7 @@ fn aggregate_session_archetype(
         archetype_candidate(
             SessionArchetypeLabel::AutonomousImplementation,
             implementation_score,
-            combine_evidence(vec![
-                intent.implementation_like.evidence.clone(),
-                if intent.verification_like.raw_score > 0 {
-                    intent.verification_like.evidence.clone()
-                } else {
-                    Vec::new()
-                },
-            ]),
+            intent.implementation_like.evidence.clone(),
             vec![
                 intent.exploration_like.evidence.clone(),
                 intent.verification_like.evidence.clone(),
