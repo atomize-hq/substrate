@@ -53,24 +53,25 @@ top-level architecture asks. Those foundations are already landed.
 
 ### What Is Still Open
 
-The stack still lacks explicit checkpoint-local session meaning.
+The stack no longer lacks explicit checkpoint-local session meaning.
 
-The current analyzer now has explicit outcome evidence, turn context, and delegation guardrails,
-but it still does not export one deterministic, evidence-backed `session_archetype`. Operators and
-later scorer packets therefore still have to infer whether a checkpoint is part of planning,
-troubleshooting, autonomous implementation, or verification closeout.
+The current analyzer now exports deterministic, evidence-backed `session_archetype` state, and
+replay/live sentinel surfaces render the same compact archetype view for matching checkpoints.
+The next open gap is no longer archetype identification; it is progress and scorer semantics on top
+of that landed archetype layer.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
-The remaining gap is no longer “sentinel posture logic is missing” or “generic `ToolOutput`
-pollutes failure evidence.” The current honest next step is:
+The remaining gap is no longer “sentinel posture logic is missing,” “generic `ToolOutput`
+pollutes failure evidence,” or “checkpoint-local session archetype is absent.” The current honest
+next step is:
 
-1. add checkpoint-local `session_archetype` (`R4`)
-2. add progress relative to archetype (`R5`)
-3. retune scorers to consume that deeper context (`R6`)
+1. add progress relative to archetype (`R5`)
+2. retune scorers to consume that deeper context (`R6`)
+3. extend delegated-session semantics beyond the current downgrade boundary (`R7`)
 
-Without `R4`, later packets would still be trying to score troubleshooting, planning,
-implementation, and closeout as if they meant the same thing.
+Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
+from turn shape, objective wording, and command mix alone.
 
 ## Signals The Analyzer Already Has
 
@@ -110,12 +111,12 @@ metrics instead of being promoted into one analyzer-owned per-checkpoint context
 
 ## Remaining Gaps
 
-## Gap 1: The Stack Does Not Identify Session Archetype
+## Gap 1: Session Archetype Was Missing, And Is Now Landed
 
 ### Problem
 
-The current stack largely treats every session as if repeated failure means the same thing. It does
-not explicitly distinguish:
+The pre-`R4` stack largely treated every session as if repeated failure meant the same thing. That
+gap is now closed on this worktree: checkpoints explicitly distinguish:
 
 - troubleshooting
 - planning / brainstorming
@@ -131,7 +132,7 @@ Each archetype has different honest progress signals.
 - autonomous implementation expects steady write/test loops against the kickoff scope
 - review / closeout expects narrowing scope and proof-oriented verification
 
-### What Needs To Exist
+### What Needed To Exist
 
 One analyzer-owned `session_archetype` module that classifies checkpoints using observable
 evidence:
@@ -144,8 +145,8 @@ evidence:
 - working-set concentration
 - verification density
 
-The classification should be additive and confidence-bearing. It does not need to be perfect on
-day one, but it must be explicit.
+The classification needed to be additive and confidence-bearing. That contract is now landed under
+checkpoint schema `v0.5`, with replay/live compatibility preserved for legacy schemas.
 
 ## Gap 2: The Stack Does Not Model Progress Relative To Archetype
 
@@ -543,6 +544,8 @@ delegation-aware seam before `R4` through `R6` start making deeper semantic clai
 
 ## Packet R4: Session Archetype Classification
 
+Status: landed on the current worktree.
+
 ### Objective
 
 Add one analyzer-owned `session_archetype` module.
@@ -563,6 +566,8 @@ delegated runs. Archetype turns that bounded structure into explicit session mea
 
 - each checkpoint has an archetype classification with confidence
 - classifications are derived from observable evidence, not commentary alone
+- replay/live consumers accept `v0.5` while preserving legacy schema compatibility
+- replay/live operator surfaces expose the same compact archetype view for matching checkpoints
 
 ## Packet R5: Archetype-Aware Progress Model
 
@@ -682,20 +687,20 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5` and `R3.75` are now landed on this worktree, so the next open packet is `R4`.
+`R3.5`, `R3.75`, and `R4` are now landed on this worktree, so the next open packet is `R5`.
 
 The next honest implementation target is:
 
 - keep `R3` closed as the completed turn-context packet family
 - keep `R3.5` closed as the completed replay/live trigger-headline canonicalization packet
 - keep `R3.75` closed as the completed delegation-aware analyzer boundary
-- make `R4` session archetype the next implementation target, with the landed delegation boundary as
-  an input to confidence capping rather than a blocker
-- keep `R5` progress semantics and `R6` scorer cutover queued behind `R4`
+- keep `R4` closed as the completed session-archetype packet family
+- make `R5` archetype-aware progress semantics the next implementation target
+- keep `R6` scorer cutover queued behind `R5`
 - keep full delegated-session support as `R7` behind `R6`
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
-That is the current top-of-stack action after the landed `R3.5` and `R3.75` packets.
+That is the current top-of-stack action after the landed `R3.5`, `R3.75`, and `R4` packets.
 
 ## Research-Informed Design Directions
 

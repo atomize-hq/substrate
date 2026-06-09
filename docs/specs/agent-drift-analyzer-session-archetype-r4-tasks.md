@@ -7,26 +7,25 @@ This task list implements:
 
 ## Task List
 
-Completion status on `2026-06-08`:
+Completion status on `2026-06-09`:
 
 - The analyzer outcome-evidence `R1` family is landed on this worktree.
 - `R2`, `R3`, and `R3.5` are landed on this worktree.
 - `R3.75` delegation-aware analyzer boundary is landed on this worktree.
-- `R4` is now the next session-archetype packet family and should consume the landed delegation
-  boundary rather than blocking on it.
-- the `SPECIFY`, `PLAN`, and `TASKS` artifacts now exist for `R4`, but implementation packets have
-  not started yet
-- `R5`, `R6`, `R7`, and `R8` remain outside the `R4` boundary.
+- `R4-1` through `R4-5` are now landed on this worktree.
+- the focused analyzer and sentinel `R4` verification wall is green on this worktree.
+- `R5`, `R6`, `R7`, and `R8` remain outside the landed `R4` boundary, and `R5` is now the next
+  open semantic packet family.
 
 Validation gate for this phase:
 
-- this task list is the `TASKS` phase artifact for review
-- do not begin `R4-1+` implementation until the spec and plan are reviewed and accepted
-- `SPECIFY` / `PLAN` / `TASKS` are pre-implementation gates and are not counted as implementation
-  packets
-- if scope or packet boundaries change, update the spec first, then the plan, then this task list
+- this task list is now the historical `TASKS` artifact for the landed `R4` family
+- the pre-implementation gate language below is preserved as execution history, not a current
+  blocker
+- if `R5+` scope or packet boundaries change, update the active spec first, then the dependent
+  plan, then the relevant task list
 
-## Pre-Implementation Gates
+## Closed Pre-Implementation Gates
 
 - [x] Task: Lock the `R4` packet boundary and `v0.5` session-archetype contract in repo docs
   - Acceptance:
@@ -63,12 +62,12 @@ Validation gate for this phase:
 
 Pre-implementation gate status:
 
-- the spec/plan/tasks stack exists and is reviewable
-- packet numbering below starts at the first code-bearing implementation slice
+- the spec/plan/tasks stack was reviewed and used as the pre-implementation authority for `R4`
+- packet numbering below now records the landed code-bearing implementation slices
 
 ## Packet R4-1: Analyzer Session-Archetype Contract And Export
 
-- [ ] Task: Add analyzer-owned session-archetype schema types and exports
+- [x] Task: Add analyzer-owned session-archetype schema types and exports
   - Acceptance:
     - analyzer checkpoint schema gains `SessionArchetype` and `SessionArchetypeLabel`
     - `agent_drift_analyzer::Checkpoint` exports `session_archetype` with legacy-safe serde
@@ -86,7 +85,7 @@ Pre-implementation gate status:
 
 ## Packet R4-2: Analyzer Derivation
 
-- [ ] Task: Derive deterministic checkpoint archetype during checkpoint analysis
+- [x] Task: Derive deterministic checkpoint archetype during checkpoint analysis
   - Acceptance:
     - analyzer computes session type at checkpoint scope from existing task-frame, turn-context,
       diagnostics, and command-observation evidence
@@ -109,7 +108,7 @@ Pre-implementation gate status:
 
 ## Packet R4-3: Analyzer Summary And Regression Walls
 
-- [ ] Task: Extend analyzer summary output with compact archetype inspection
+- [x] Task: Extend analyzer summary output with compact archetype inspection
   - Acceptance:
     - `summary.md` renders compact archetype and confidence information for each checkpoint or
       session summary block
@@ -123,7 +122,7 @@ Pre-implementation gate status:
     - `crates/agent-drift-analyzer/tests/export_bundle.rs`
     - `crates/agent-drift-analyzer/tests/end_to_end.rs`
 
-- [ ] Task: Add analyzer regression coverage for the four initial archetype shapes
+- [x] Task: Add analyzer regression coverage for the four initial archetype shapes
   - Acceptance:
     - one deterministic case proves troubleshooting classification with expected verification churn
     - one deterministic case proves planning classification with directive-heavy synthesis
@@ -151,7 +150,7 @@ Pre-implementation gate status:
 
 ## Packet R4-4: Sentinel Compatibility
 
-- [ ] Task: Extend sentinel replay input and live compatibility to `v0.5`
+- [x] Task: Extend sentinel replay input and live compatibility to `v0.5`
   - Acceptance:
     - replay input accepts and sorts `v0.5` checkpoints
     - live compatibility accepts `v0.5` checkpoints
@@ -170,7 +169,7 @@ Pre-implementation gate status:
 
 ## Packet R4-5: Replay/Live Presentation
 
-- [ ] Task: Surface compact archetype inspection in replay/live operator presentation
+- [x] Task: Surface compact archetype inspection in replay/live operator presentation
   - Acceptance:
     - replay and live surfaces expose the same compact archetype inspection view for matching
       checkpoints

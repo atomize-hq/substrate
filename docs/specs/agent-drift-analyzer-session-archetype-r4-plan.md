@@ -2,7 +2,7 @@
 
 ## Scope
 
-Implementation status on `2026-06-08`:
+Implementation status on `2026-06-09`:
 
 - The analyzer outcome-evidence `R1` family is landed end-to-end.
 - `R2` acceptance-fixture hardening is landed.
@@ -11,9 +11,10 @@ Implementation status on `2026-06-08`:
   sentinel-local checkpoint headline mismatch from the `R3` family.
 - `R3.75` delegation-aware analyzer boundary is landed on this worktree and is now an input to
   `R4`, not a blocker in front of it.
-- the `SPECIFY`, `PLAN`, and `TASKS` artifacts now exist for `R4`, but no `R4` implementation
-  packet has started yet
-- `R5`, `R6`, `R7`, and `R8` remain outside the next-packet boundary.
+- `R4-1` through `R4-5` are landed on this worktree.
+- the focused analyzer and sentinel `R4` verification walls are green on this worktree.
+- `R5`, `R6`, `R7`, and `R8` remain outside the landed `R4` boundary, and `R5` is now the next
+  open semantic packet family.
 
 This plan implements:
 
@@ -21,12 +22,11 @@ This plan implements:
 
 Validation gate for this phase:
 
-- this plan is the `PLAN` phase artifact for review, not implementation approval by itself
-- do not start `R4-1+` code work until the `SPECIFY` and `TASKS` artifacts are reviewed and
-  accepted
-- `SPECIFY` / `PLAN` / `TASKS` are pre-implementation gates and should not be counted as packeted
-  implementation work
-- if the spec changes materially, update the spec first and then re-align this plan
+- this plan is now the historical `PLAN` artifact for the landed `R4` family
+- the pre-implementation gate language below is preserved as execution history, not current
+  blocking status
+- if `R5+` scope changes materially, update the active spec first and then re-align any dependent
+  planning docs
 
 `R4` is the first session-meaning packet after the landed `R3` structure family, the landed
 `R3.5` presentation cleanup, and the landed `R3.75` delegation-aware analyzer boundary.

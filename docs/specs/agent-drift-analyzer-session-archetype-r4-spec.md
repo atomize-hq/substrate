@@ -2,10 +2,11 @@
 
 ## Assumptions I'm Making
 
-1. Live repo truth on `2026-06-08` is the authority: the analyzer outcome-evidence `R1` family,
-   acceptance-fixture `R2`, turn-context `R3`, sentinel trigger-headline `R3.5`, and the bounded
-   delegation-aware analyzer boundary `R3.75` are landed on this worktree, so `R4`
-   session-archetype classification is now the next packet family rather than a blocked follow-on.
+1. Live repo truth on `2026-06-09` is the authority: the analyzer outcome-evidence `R1` family,
+   acceptance-fixture `R2`, turn-context `R3`, sentinel trigger-headline `R3.5`, the bounded
+   delegation-aware analyzer boundary `R3.75`, and the full `R4` session-archetype family are
+   landed on this worktree, so this spec is now a closeout record for the completed `R4` packet
+   family rather than a pre-implementation gate.
 2. `R4` is intentionally narrower than `R5+`. Its job is to add explicit checkpoint-local
    archetype state, not archetype-aware progress semantics, drift-scorer retuning, or sentinel
    scheduler changes.
@@ -33,7 +34,8 @@
 8. External research can shape the module boundary and taxonomy, but `R4` should not adopt a broad
    learned failure taxonomy or multi-trajectory evaluation contract as the canonical artifact.
 
-If any of these assumptions are wrong, correct them before `R4-1+` implementation starts.
+If any of these assumptions drift, update this closeout record before using it as authority for
+`R5+` follow-on work.
 
 ## Objective
 
@@ -70,9 +72,10 @@ Success means:
 Implementation-status note:
 
 - the `SPECIFY`, `PLAN`, and `TASKS` artifacts now exist for `R4`
-- `R4` implementation has not started yet
-- packet numbering in the companion `PLAN` and `TASKS` docs should therefore begin at the first
-  code-bearing unit of work, not at the spec-review gate
+- `R4-1` through `R4-5` are now landed on this worktree
+- the focused analyzer and sentinel `R4` verification walls are green on this worktree
+- packet numbering in the companion `PLAN` and `TASKS` docs now serves as the historical record of
+  the landed code-bearing units of work
 
 ## Tech Stack
 
