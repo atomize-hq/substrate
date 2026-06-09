@@ -34,16 +34,18 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
-    apply_runtime_cancel_closeout, apply_runtime_stop_closeout, build_session_resume_extension,
+    apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
+    authoritative_host_toolbox_surface_enabled, build_session_resume_extension,
     invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
-    mark_runtime_startup_failed, note_runtime_stop_requested, persist_runtime_snapshots,
-    persist_world_binding_authority, private_cancel_request_channel,
+    mark_runtime_startup_failed, maybe_build_runtime_owned_toolbox_env,
+    note_runtime_stop_requested, persist_runtime_snapshots, persist_world_binding_authority,
+    private_cancel_request_channel,
     private_prompt_request_channel, private_stop_request_channel, prompt_runtime_from_parts,
     register_private_cancel_transport, register_private_prompt_transport,
     register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
     runtime_stop_transport_ids, spawn_local_private_cancel_owner, spawn_local_private_prompt_owner,
-    spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_endpoint,
-    toolbox_transport_path, HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
+    spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_transport_path,
+    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
     PrivateCancelRequestReceiver, PrivateCancelTransport, PrivatePromptTransport,
     PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
     PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
@@ -90,7 +92,7 @@ use crate::execution::orchestrator_world_dispatch::{
     prepare_spawn_world_worker_bootstrap,
 };
 use crate::execution::prompt_fulfillment::{
-    build_runtime_owned_toolbox_env, PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
+    PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
 };
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
@@ -1947,6 +1949,7 @@ struct AsyncReplAgentRuntime {
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     store: AgentRuntimeStateStore,
     uaa_session_handle_id: String,
+    host_toolbox_surface_authoritative: Arc<AtomicBool>,
     retained_control: RetainedRunControl,
     shutdown_requested: Arc<AtomicBool>,
     cancel_requested: Arc<AtomicBool>,
@@ -2745,6 +2748,7 @@ async fn wait_for_hidden_owner_helper_completion(
         manifest,
         store,
         uaa_session_handle_id,
+        host_toolbox_surface_authoritative,
         mut retained_control,
         shutdown_requested,
         cancel_requested,
@@ -2772,6 +2776,7 @@ async fn wait_for_hidden_owner_helper_completion(
                     orchestration_session: &orchestration_session,
                     manifest: &manifest,
                     uaa_session_handle_id: uaa_session_handle_id.as_str(),
+                    host_toolbox_surface_authoritative: &host_toolbox_surface_authoritative,
                     shutdown_requested: &shutdown_requested,
                     cancel_requested: &cancel_requested,
                     auto_park_rx: &mut auto_park_rx,
@@ -2820,6 +2825,9 @@ async fn wait_for_hidden_owner_helper_completion(
                                         manifest: Arc::clone(&manifest),
                                         store: store.clone(),
                                         uaa_session_handle_id: uaa_session_handle_id.clone(),
+                                        host_toolbox_surface_authoritative: Arc::clone(
+                                            &host_toolbox_surface_authoritative,
+                                        ),
                                         retained_control: RetainedRunControl::Remote(RemoteRetainedRunControl {
                                             client: Arc::clone(&retained_control.client),
                                             span_id: retained_control.span_id.clone(),
@@ -2916,6 +2924,7 @@ struct HiddenOwnerHelperLocalRuntimeContext<'a> {
     orchestration_session: &'a Arc<Mutex<OrchestrationSessionRecord>>,
     manifest: &'a Arc<Mutex<AgentRuntimeSessionManifest>>,
     uaa_session_handle_id: &'a str,
+    host_toolbox_surface_authoritative: &'a Arc<AtomicBool>,
     shutdown_requested: &'a Arc<AtomicBool>,
     cancel_requested: &'a Arc<AtomicBool>,
     auto_park_rx: &'a mut Option<UnboundedReceiver<()>>,
@@ -2943,6 +2952,7 @@ async fn wait_for_hidden_owner_helper_local_runtime(
         orchestration_session,
         manifest,
         uaa_session_handle_id,
+        host_toolbox_surface_authoritative,
         shutdown_requested,
         cancel_requested,
         auto_park_rx,
@@ -2976,6 +2986,9 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                         manifest: Arc::clone(manifest),
                         store: store.clone(),
                         uaa_session_handle_id: uaa_session_handle_id.to_string(),
+                        host_toolbox_surface_authoritative: Arc::clone(
+                            host_toolbox_surface_authoritative,
+                        ),
                         retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
                             cancel: retained_control.cancel.clone(),
                             event_task: retained_control.event_task.take(),
@@ -3047,6 +3060,7 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                 owned_prompt_transport.close().await;
             }
             if let Some(mut owned_toolbox_transport) = toolbox_transport.take() {
+                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
                 owned_toolbox_transport.close().await;
             }
             if let Some(task) = prompt_owner_task.take() {
@@ -3109,6 +3123,9 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                         manifest: Arc::clone(manifest),
                         store: store.clone(),
                         uaa_session_handle_id: uaa_session_handle_id.to_string(),
+                        host_toolbox_surface_authoritative: Arc::clone(
+                            host_toolbox_surface_authoritative,
+                        ),
                         retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
                             cancel: retained_control.cancel.clone(),
                             event_task: retained_control.event_task.take(),
@@ -3310,6 +3327,15 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             .role
             .clone()
     };
+    let host_toolbox_surface_authoritative = Arc::new(AtomicBool::new(
+        authoritative_host_toolbox_surface_enabled(
+            &descriptor.backend_id,
+            descriptor.execution_scope,
+            runtime_role.as_str(),
+            &startup_context.effective_config,
+            &startup_context.base_policy,
+        ),
+    ));
     let controls_parent_session = runtime_controls_parent_session(&runtime_role);
     if controls_parent_session || initial_world_binding.is_some() {
         if let Err(err) = persist_world_binding_authority(
@@ -3480,14 +3506,14 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             },
             working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
             timeout: None,
-            env: build_runtime_owned_toolbox_env(
-                toolbox_endpoint(&orchestration_session_id).map_err(|err| {
-                    RuntimeBootstrapFailure {
-                        exit_code: 1,
-                        message: format!("failed to resolve startup toolbox endpoint: {err:#}"),
-                    }
-                })?,
-            ),
+            env: maybe_build_runtime_owned_toolbox_env(
+                &orchestration_session_id,
+                host_toolbox_surface_authoritative.load(Ordering::SeqCst),
+            )
+            .map_err(|err| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!("failed to resolve startup toolbox endpoint: {err:#}"),
+            })?,
             extensions: startup_extensions,
         };
         prompt_fulfillment.run_control(request).await
@@ -4417,6 +4443,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             startup_context.store.clone(),
             uaa_session_handle_id.clone(),
             auto_park_tx.clone(),
+            Arc::clone(&host_toolbox_surface_authoritative),
         ),
         prompt_rx,
     );
@@ -4427,6 +4454,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         manifest,
         store: startup_context.store,
         uaa_session_handle_id,
+        host_toolbox_surface_authoritative,
         retained_control: RetainedRunControl::Local(retained_control),
         shutdown_requested,
         cancel_requested,
@@ -4472,6 +4500,7 @@ fn runtime_prompt_submit_runtime(
         runtime.store.clone(),
         runtime.uaa_session_handle_id.clone(),
         None,
+        Arc::clone(&runtime.host_toolbox_surface_authoritative),
     )
 }
 
@@ -4776,29 +4805,21 @@ fn internal_toolbox_surface_enabled(
     let Some(startup_context) = startup_context else {
         return false;
     };
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let policy_allowed =
-        backend_allowed(&startup_context.base_policy, &runtime.descriptor.backend_id);
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    let policy_allowed = false;
-
-    runtime
+    let runtime_role = runtime
         .manifest
         .lock()
         .expect("runtime manifest mutex poisoned")
-        .is_host_orchestrator()
-        && startup_context.effective_config.agents.enabled
-        && startup_context.effective_config.agents.toolbox.enabled
-        && matches!(
-            startup_context
-                .effective_config
-                .agents
-                .toolbox
-                .bind
-                .transport,
-            crate::execution::config_model::AgentToolboxBindTransport::Uds
-        )
-        && policy_allowed
+        .handle
+        .role
+        .clone();
+
+    authoritative_host_toolbox_surface_enabled(
+        &runtime.descriptor.backend_id,
+        runtime.descriptor.execution_scope,
+        runtime_role.as_str(),
+        &startup_context.effective_config,
+        &startup_context.base_policy,
+    )
 }
 
 #[cfg(unix)]
@@ -4966,6 +4987,9 @@ async fn ensure_internal_toolbox_transport_registered(
             .await
             .context("failed to register internal toolbox transport")?,
     );
+    runtime
+        .host_toolbox_surface_authoritative
+        .store(true, Ordering::SeqCst);
     Ok(())
 }
 
@@ -5817,6 +5841,15 @@ async fn start_remote_member_runtime_with_prepared(
             .role
             .clone()
     };
+    let host_toolbox_surface_authoritative = Arc::new(AtomicBool::new(
+        authoritative_host_toolbox_surface_enabled(
+            &descriptor.backend_id,
+            descriptor.execution_scope,
+            runtime_role.as_str(),
+            &startup_context.effective_config,
+            &startup_context.base_policy,
+        ),
+    ));
     let persist_participant_result = {
         let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
         startup_context.store.persist_participant(&manifest_guard)
@@ -6374,6 +6407,7 @@ async fn start_remote_member_runtime_with_prepared(
             startup_context.store.clone(),
             uaa_session_handle_id.clone(),
             None,
+            Arc::clone(&host_toolbox_surface_authoritative),
         ),
         prompt_rx,
     );
@@ -6384,6 +6418,7 @@ async fn start_remote_member_runtime_with_prepared(
         manifest,
         store: startup_context.store,
         uaa_session_handle_id,
+        host_toolbox_surface_authoritative,
         retained_control: RetainedRunControl::Remote(RemoteRetainedRunControl {
             client,
             span_id: resolved_span_id,
@@ -6971,6 +7006,9 @@ async fn shutdown_host_orchestrator_runtime_with_mode(
         prompt_transport.close().await;
     }
     if let Some(mut toolbox_transport) = runtime.toolbox_transport.take() {
+        runtime
+            .host_toolbox_surface_authoritative
+            .store(false, Ordering::SeqCst);
         toolbox_transport.close().await;
     }
     if let Some(task) = runtime.prompt_owner_task.take() {
@@ -7122,6 +7160,9 @@ async fn park_host_orchestrator_runtime(
         prompt_transport.close().await;
     }
     if let Some(mut toolbox_transport) = runtime.toolbox_transport.take() {
+        runtime
+            .host_toolbox_surface_authoritative
+            .store(false, Ordering::SeqCst);
         toolbox_transport.close().await;
     }
     if let Some(task) = runtime.prompt_owner_task.take() {

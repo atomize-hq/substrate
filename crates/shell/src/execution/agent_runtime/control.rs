@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -29,6 +30,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
 #[cfg(target_os = "linux")]
 use transport_api_types::{ExecuteStreamFrame, MemberTurnSubmitRequestV1};
+use substrate_broker::Policy;
 use uuid::Uuid;
 
 #[cfg(unix)]
@@ -39,14 +41,14 @@ use crate::execution::agent_runtime::orchestration_session::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
-use crate::execution::config_model::AgentExecutionScope;
+use crate::execution::config_model::{AgentExecutionScope, AgentToolboxBindTransport, SubstrateConfig};
 use crate::execution::prompt_fulfillment::{
     build_runtime_owned_toolbox_env, compose_prompt_with_host_toolbox_contract,
     PromptFulfillmentCancelHandle,
 };
 
 use super::{
-    mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
+    backend_allowed, mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
     validator::RuntimeSelectionDescriptor, AgentRuntimeSessionState, AgentRuntimeStateStore,
     OrchestrationSessionRecord, OrchestrationSessionState, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
 };
@@ -164,6 +166,7 @@ pub(crate) struct PromptSubmitRuntime {
     pub store: AgentRuntimeStateStore,
     pub uaa_session_handle_id: String,
     pub park_after_turn_tx: Option<mpsc::UnboundedSender<()>>,
+    pub host_toolbox_surface_authoritative: Arc<AtomicBool>,
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -1981,6 +1984,7 @@ pub(crate) fn prompt_runtime_from_parts(
     store: AgentRuntimeStateStore,
     uaa_session_handle_id: String,
     park_after_turn_tx: Option<mpsc::UnboundedSender<()>>,
+    host_toolbox_surface_authoritative: Arc<AtomicBool>,
 ) -> PromptSubmitRuntime {
     PromptSubmitRuntime {
         descriptor,
@@ -1989,6 +1993,49 @@ pub(crate) fn prompt_runtime_from_parts(
         store,
         uaa_session_handle_id,
         park_after_turn_tx,
+        host_toolbox_surface_authoritative,
+    }
+}
+
+pub(crate) fn authoritative_host_toolbox_surface_enabled(
+    backend_id: &str,
+    execution_scope: AgentExecutionScope,
+    role: &str,
+    effective_config: &SubstrateConfig,
+    base_policy: &Policy,
+) -> bool {
+    execution_scope == AgentExecutionScope::Host
+        && role == ORCHESTRATOR_ROLE
+        && effective_config.agents.enabled
+        && effective_config.agents.toolbox.enabled
+        && matches!(
+            effective_config.agents.toolbox.bind.transport,
+            AgentToolboxBindTransport::Uds
+        )
+        && backend_allowed(base_policy, backend_id)
+}
+
+pub(crate) fn maybe_compose_prompt_with_authoritative_host_toolbox_contract(
+    prompt: &str,
+    host_toolbox_surface_authoritative: bool,
+) -> String {
+    if host_toolbox_surface_authoritative {
+        compose_prompt_with_host_toolbox_contract(prompt)
+    } else {
+        prompt.to_string()
+    }
+}
+
+pub(crate) fn maybe_build_runtime_owned_toolbox_env(
+    orchestration_session_id: &str,
+    host_toolbox_surface_authoritative: bool,
+) -> Result<BTreeMap<String, String>> {
+    if host_toolbox_surface_authoritative {
+        Ok(build_runtime_owned_toolbox_env(toolbox_endpoint(
+            orchestration_session_id,
+        )?))
+    } else {
+        Ok(BTreeMap::new())
     }
 }
 
@@ -2010,14 +2057,22 @@ where
         .handle
         .orchestration_session_id
         .clone();
-    let request_prompt = compose_prompt_with_host_toolbox_contract(prompt);
-    let toolbox_endpoint = toolbox_endpoint(&orchestration_session_id)?;
+    let host_toolbox_surface_authoritative = runtime
+        .host_toolbox_surface_authoritative
+        .load(Ordering::SeqCst);
+    let request_prompt = maybe_compose_prompt_with_authoritative_host_toolbox_contract(
+        prompt,
+        host_toolbox_surface_authoritative,
+    );
 
     let request = agent_api::AgentWrapperRunRequest {
         prompt: request_prompt,
         working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
-        env: build_runtime_owned_toolbox_env(toolbox_endpoint),
+        env: maybe_build_runtime_owned_toolbox_env(
+            &orchestration_session_id,
+            host_toolbox_surface_authoritative,
+        )?,
         extensions: std::collections::BTreeMap::from([(
             AGENT_API_SESSION_RESUME_V1.to_string(),
             build_session_resume_extension(&runtime.uaa_session_handle_id),
@@ -3548,6 +3603,7 @@ mod tests {
             store: store.clone(),
             uaa_session_handle_id: "uaa_session".to_string(),
             park_after_turn_tx: None,
+            host_toolbox_surface_authoritative: Arc::new(AtomicBool::new(false)),
         }
     }
 

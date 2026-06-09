@@ -366,6 +366,20 @@ impl AgentControlFixture {
     }
 }
 
+fn write_toolbox_config_for_fixture(
+    fixture: &AgentControlFixture,
+    toolbox_enabled: bool,
+    transport: &str,
+) {
+    fs::write(
+        fixture.substrate_home.join("config.yaml"),
+        format!(
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: {toolbox_enabled}\n    bind:\n      transport: {transport}\n",
+        ),
+    )
+    .expect("write config.yaml");
+}
+
 fn cli_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String {
     let execution_scope = scope
         .map(|scope| format!("  execution:\n    scope: {scope}\n"))
@@ -2065,6 +2079,105 @@ fn public_start_scope_host_and_disable_capability_flags_persist_narrowed_capabil
             .and_then(Value::as_str),
         Some("host")
     );
+}
+
+#[test]
+#[serial]
+fn public_start_and_turn_omit_toolbox_contract_when_surface_is_not_authoritative() {
+    for (scenario, toolbox_enabled, transport) in
+        [("disabled", false, "uds"), ("tcp", true, "tcp")]
+    {
+        let fixture = AgentControlFixture::new();
+        fixture.init_workspace();
+        fixture.write_runtime_inventory(false);
+        write_toolbox_config_for_fixture(&fixture, toolbox_enabled, transport);
+
+        let start_output = fixture.run(&[
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex",
+            "--scope",
+            "host",
+            "--prompt",
+            "hello from start",
+            "--json",
+        ]);
+        assert!(
+            start_output.status.success(),
+            "{scenario}: public start should still succeed when the toolbox surface is unavailable: {start_output:?}"
+        );
+        let start_records = parse_ndjson_output(&start_output);
+        let start_json = find_ndjson_record(&start_records, "completed");
+        let orchestration_session_id = start_json["orchestration_session_id"]
+            .as_str()
+            .expect("start session id")
+            .to_string();
+        let start_stdin = fixture.read_fake_codex_stdin(1);
+        let start_env = fixture.read_fake_codex_env(1);
+        assert!(
+            !start_stdin.contains("Substrate host toolbox contract:"),
+            "{scenario}: startup prompt must not disclose the seven-tool contract when the live toolbox surface is unavailable: {start_stdin:?}"
+        );
+        assert_eq!(
+            start_env.get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT").map(String::as_str),
+            Some(""),
+            "{scenario}: startup exec must not receive a toolbox endpoint when the live toolbox surface is unavailable: {start_env:?}"
+        );
+        assert_eq!(
+            start_env.get("SUBSTRATE_AGENT_TOOLBOX_VERSION").map(String::as_str),
+            Some(""),
+            "{scenario}: startup exec must not receive a toolbox version when the live toolbox surface is unavailable: {start_env:?}"
+        );
+
+        let turn_output = fixture.run(&[
+            "agent",
+            "turn",
+            "--session",
+            &orchestration_session_id,
+            "--backend",
+            "cli:codex",
+            "--prompt",
+            "hello from turn",
+            "--json",
+        ]);
+        assert!(
+            turn_output.status.success(),
+            "{scenario}: public turn should still succeed when the toolbox surface is unavailable: {turn_output:?}"
+        );
+        let turn_stdin = fixture.read_fake_codex_stdin(2);
+        let turn_env = fixture.read_fake_codex_env(2);
+        assert!(
+            !turn_stdin.contains("Substrate host toolbox contract:"),
+            "{scenario}: follow-up turns must not disclose the seven-tool contract when the live toolbox surface is unavailable: {turn_stdin:?}"
+        );
+        assert_eq!(
+            turn_env
+                .get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
+                .map(String::as_str),
+            Some(""),
+            "{scenario}: follow-up turns must not receive a toolbox endpoint when the live toolbox surface is unavailable: {turn_env:?}"
+        );
+        assert_eq!(
+            turn_env
+                .get("SUBSTRATE_AGENT_TOOLBOX_VERSION")
+                .map(String::as_str),
+            Some(""),
+            "{scenario}: follow-up turns must not receive a toolbox version when the live toolbox surface is unavailable: {turn_env:?}"
+        );
+
+        let stop_output = fixture.run(&[
+            "agent",
+            "stop",
+            "--session",
+            &orchestration_session_id,
+            "--json",
+        ]);
+        assert!(
+            stop_output.status.success(),
+            "{scenario}: cleanup stop should succeed: {stop_output:?}"
+        );
+    }
 }
 
 #[test]

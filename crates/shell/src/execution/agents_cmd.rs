@@ -8,6 +8,7 @@ use crate::execution::agent_runtime::control::request_private_stop;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::PersistedWorldBinding;
 use crate::execution::agent_runtime::control::{
+    authoritative_host_toolbox_surface_enabled, maybe_compose_prompt_with_authoritative_host_toolbox_contract,
     launch_hidden_owner_helper, load_hidden_owner_helper_launch_plan, load_public_prompt_source,
     persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
     remove_hidden_owner_helper_launch_plan, run_public_prompt_command, toolbox_transport_path,
@@ -60,7 +61,7 @@ use crate::execution::config_model::{
 #[cfg(target_os = "linux")]
 use crate::execution::policy_snapshot;
 use crate::execution::prompt_fulfillment::{
-    compose_prompt_with_host_toolbox_contract, HOST_TOOLBOX_CONTRACT_VERSION_V1,
+    HOST_TOOLBOX_CONTRACT_VERSION_V1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::{ReplPersistentSessionClient, ReplSessionStartParams};
@@ -362,7 +363,17 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     {
         let public_backend_id = public_identity.backend_id.clone();
         let public_scope = public_identity.scope;
-        let startup_prompt_text = compose_prompt_with_host_toolbox_contract(&prompt.prompt_text);
+        let host_toolbox_surface_authoritative = authoritative_host_toolbox_surface_enabled(
+            &resolved_contract.backend_id,
+            resolved_contract.execution_scope,
+            ORCHESTRATOR_ROLE,
+            &context.effective_config,
+            &context.base_policy,
+        );
+        let startup_prompt_text = maybe_compose_prompt_with_authoritative_host_toolbox_contract(
+            &prompt.prompt_text,
+            host_toolbox_surface_authoritative,
+        );
         let stream_start_result = |listener| {
             run_hidden_owner_helper_startup_prompt_stream_with_public_identity(
                 listener,
@@ -616,6 +627,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         prompt_file: args.prompt_source.prompt_file.clone(),
     })
     .map_err(normalize_public_prompt_error)?;
+    let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
     let target = store
         .resolve_public_turn_target(&args.session, &args.backend)
@@ -642,8 +654,18 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             plan.participant_id(),
         )
         .map_err(runtime_start_error)?;
+        let host_toolbox_surface_authoritative = authoritative_host_toolbox_surface_enabled(
+            &plan.descriptor.backend_id,
+            plan.descriptor.execution_scope,
+            ORCHESTRATOR_ROLE,
+            &context.effective_config,
+            &context.base_policy,
+        );
         plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
-            prompt_text: compose_prompt_with_host_toolbox_contract(&prompt.prompt_text),
+            prompt_text: maybe_compose_prompt_with_authoritative_host_toolbox_contract(
+                &prompt.prompt_text,
+                host_toolbox_surface_authoritative,
+            ),
             stream_path: startup_listener.path().to_path_buf(),
         });
         let receipt = launch_hidden_owner_helper(&plan, cli.world, cli.no_world)
