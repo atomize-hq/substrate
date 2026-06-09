@@ -20,7 +20,8 @@ pub use export::{
 };
 pub use schema::{
     Checkpoint, CheckpointBoundary, CheckpointDiagnostics, Confidence, DriftClass, DriftScore,
-    DriftState, EvidenceRef, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+    DriftState, EvidenceRef, SessionArchetype, SessionArchetypeLabel, TaskFrame, TurnActivityMix,
+    TurnContext, TurnExecutionMode,
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
@@ -251,7 +252,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
     Checkpoint {
-        schema_version: "v0.4".to_string(),
+        schema_version: "v0.5".to_string(),
         session_id: analysis.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
         ordinal,
@@ -259,9 +260,21 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         turn_context: Some(analysis.turn_context.clone()),
         diagnostics,
         task_frame: task_frame.clone(),
+        session_archetype: Some(contract_session_archetype_placeholder()),
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
+    }
+}
+
+fn contract_session_archetype_placeholder() -> SessionArchetype {
+    // Packet R4-1 lands the v0.5 contract only; R4-2 replaces this placeholder with
+    // deterministic checkpoint-local archetype derivation.
+    SessionArchetype {
+        label: SessionArchetypeLabel::Planning,
+        confidence: Confidence::Low,
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
     }
 }
 

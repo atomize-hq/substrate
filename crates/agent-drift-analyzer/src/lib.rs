@@ -20,7 +20,8 @@ pub mod scoring;
 
 pub use checkpoint::{
     Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
-    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+    SessionArchetype, SessionArchetypeLabel, TaskFrame, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
 };
 pub use input::{AnalyzerSurface, BundleSession, InputBundle, InputError};
 

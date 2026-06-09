@@ -386,7 +386,7 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(checkpoints.len(), 2);
     assert!(checkpoints
         .iter()
-        .all(|checkpoint| checkpoint.schema_version == "v0.4"));
+        .all(|checkpoint| checkpoint.schema_version == "v0.5"));
 
     let first = &checkpoints[0];
     let second = &checkpoints[1];
@@ -1024,6 +1024,7 @@ fn fixture_checkpoint(
             }],
             counter_evidence: Vec::new(),
         },
+        session_archetype: None,
         drift_scores: [
             DriftClass::WrongPlanBranch,
             DriftClass::TruthGroundingGap,

@@ -5,6 +5,7 @@ mod support;
 use std::fs;
 
 use agent_drift_analyzer::AnalyzeRequest;
+use serde_json::Value;
 use support::{analyze_sample_bundle, load_sample_bundle, BundleFixture};
 use time::macros::datetime;
 
@@ -20,7 +21,8 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
     assert_eq!(checkpoints[0].session_id, "session-alpha");
-    assert_eq!(checkpoints[0].schema_version, "v0.4");
+    assert_eq!(checkpoints[0].schema_version, "v0.5");
+    assert!(checkpoints[0].session_archetype.is_some());
     assert_eq!(checkpoints[0].ordinal, 1);
     let first_turn = checkpoints[0]
         .turn_context
@@ -33,7 +35,8 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     assert_eq!(first_turn.checkpoints_in_turn, 1);
     assert_eq!(first_turn.prompts_observed_in_session, 1);
     assert_eq!(checkpoints[1].ordinal, 2);
-    assert_eq!(checkpoints[1].schema_version, "v0.4");
+    assert_eq!(checkpoints[1].schema_version, "v0.5");
+    assert!(checkpoints[1].session_archetype.is_some());
     let second_turn = checkpoints[1]
         .turn_context
         .as_ref()
@@ -47,6 +50,36 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     assert_eq!(checkpoints[0].boundary.end.event_index, 8);
     assert_eq!(checkpoints[1].boundary.end.event_index, 12);
     assert!(checkpoints[0].boundary.end.event_index < checkpoints[1].boundary.end.event_index);
+}
+
+#[test]
+fn checkpoints_keep_legacy_session_archetype_loads_but_fail_closed_for_v0_5() {
+    let checkpoint = analyze_sample_bundle().sessions[0].checkpoints[0].clone();
+
+    for schema_version in ["v0.2", "v0.3", "v0.4"] {
+        let mut legacy_json = serde_json::to_value(&checkpoint).expect("serialize checkpoint");
+        legacy_json["schema_version"] = Value::String(schema_version.to_string());
+        legacy_json
+            .as_object_mut()
+            .expect("checkpoint object")
+            .remove("session_archetype");
+
+        let parsed: agent_drift_analyzer::Checkpoint =
+            serde_json::from_value(legacy_json).expect("legacy checkpoint stays loadable");
+        assert_eq!(parsed.schema_version, schema_version);
+        assert!(parsed.session_archetype.is_none());
+    }
+
+    let mut missing_v0_5 = serde_json::to_value(&checkpoint).expect("serialize checkpoint");
+    missing_v0_5
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("session_archetype");
+    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_5)
+        .expect_err("v0.5 checkpoint without session_archetype must fail");
+    let message = err.to_string();
+    assert!(message.contains("v0.5"));
+    assert!(message.contains("session_archetype"));
 }
 
 #[test]
