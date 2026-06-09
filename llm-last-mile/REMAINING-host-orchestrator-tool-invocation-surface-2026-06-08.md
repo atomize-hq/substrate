@@ -339,6 +339,13 @@ The next spec should still choose explicitly:
 
 1. The next honest seam after the new toolbox design docs is now explicitly frozen as **runtime-owned adapter contract work above the landed internal transport**, not more transport invention and not Family-2 inbox/router reopening.
 
+### 2026-06-09 — Slice 52 Packet 2 review/fix pass
+
+1. **Resolved live-truth drift: retained follow-up admissibility must stay tool-specific**
+   - Review surfaced that the first Packet `2` adapter translation pass overconstrained retained follow-up handles by requiring every retained target to remain authoritative-live before translation in [`tool_invocation_contract.rs`](../crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs).
+   - That drift contradicted existing runtime truth in [`state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs), where exact retained `inspect_world_worker` can target non-live retained workers and exact retained `stop_world_worker` can target non-authoritative-live workers.
+   - Packet `2` resolution: retain adapter translation in the bounded contract module, but make retained follow-up admissibility tool-specific so `inspect_world_worker` stays linkage-only, `stop_world_worker` stays non-terminal, and `continue` / `fork` / retained `cancel` stay authoritative-live.
+
 ## Do Not Reopen
 
 The following should stay frozen unless live evidence forces otherwise:

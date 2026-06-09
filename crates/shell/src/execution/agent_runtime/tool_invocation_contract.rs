@@ -17,8 +17,9 @@ use super::{
 /// already-landed internal `WorldDispatchRequestV1` transport.
 ///
 /// This module is intentionally bounded to vocabulary and exact-handle
-/// semantics only. It does not register tools in any runtime family, translate
-/// runtime-owned fields into internal dispatch requests, or widen the transport.
+/// semantics. It freezes the tool vocabulary, exact follow-up handles, and the
+/// bounded translation of runtime-owned fields into internal dispatch requests
+/// without registering tools in any runtime family or widening the transport.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum HostToolNameV1 {
     RunWorldTask,
@@ -80,6 +81,25 @@ impl HostToolNameV1 {
             WorldDispatchActionV1::StopWorldWorker => Self::StopWorldWorker,
         }
     }
+
+    fn retained_follow_up_target_requirement(self) -> RetainedFollowUpTargetRequirementV1 {
+        match self {
+            Self::ForkWorldWorker | Self::ContinueWorldWorker | Self::CancelWorldWork => {
+                RetainedFollowUpTargetRequirementV1::AuthoritativeLive
+            }
+            Self::StopWorldWorker => RetainedFollowUpTargetRequirementV1::NonTerminal,
+            Self::InspectWorldWorker | Self::RunWorldTask | Self::SpawnWorldWorker => {
+                RetainedFollowUpTargetRequirementV1::LinkedOnly
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RetainedFollowUpTargetRequirementV1 {
+    LinkedOnly,
+    NonTerminal,
+    AuthoritativeLive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -498,14 +518,32 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
                     retained_worker.participant_id
                 );
             }
-            if record.live_participants().into_iter().all(|participant| {
-                participant.participant_id() != target_participant.participant_id()
-            }) {
-                bail!(
-                    "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
-                    metadata.orchestration_session_id,
-                    retained_worker.participant_id
-                );
+
+            match tool_name.retained_follow_up_target_requirement() {
+                RetainedFollowUpTargetRequirementV1::LinkedOnly => {}
+                RetainedFollowUpTargetRequirementV1::NonTerminal => {
+                    if !target_participant.handle.state.is_live()
+                        || target_participant.internal.terminal_observed_at.is_some()
+                    {
+                        bail!(
+                            "target_already_terminal: orchestration session {} retained worker {} is already terminal ({})",
+                            metadata.orchestration_session_id,
+                            retained_worker.participant_id,
+                            target_participant.reviewable_terminal_state_label()
+                        );
+                    }
+                }
+                RetainedFollowUpTargetRequirementV1::AuthoritativeLive => {
+                    if record.live_participants().into_iter().all(|participant| {
+                        participant.participant_id() != target_participant.participant_id()
+                    }) {
+                        bail!(
+                            "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
+                            metadata.orchestration_session_id,
+                            retained_worker.participant_id
+                        );
+                    }
+                }
             }
 
             Ok(ResolvedFollowUpDispatchAuthorityV1 {
@@ -648,7 +686,7 @@ mod tests {
         HostToolRuntimeWorldBindingV1, RunWorldTaskToolCallV1, SpawnWorldWorkerToolCallV1,
     };
     use crate::execution::agent_runtime::dispatch_contract::{
-        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
+        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerStopPayloadV1,
     };
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::orchestration_session::{
@@ -1115,6 +1153,135 @@ mod tests {
             assert_eq!(cancel_validated.world_id, "world-17");
 
             drop(guard);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_allows_retained_inspect_for_non_live_worker()
+    {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
+            let mut member = live_member(
+                "codex_world",
+                "sess_packet2",
+                "worker_packet2_terminal",
+                "orch_packet2",
+            );
+            member.mark_terminal_state("worker_finished");
+            member.transition_state(
+                crate::execution::agent_runtime::AgentRuntimeSessionState::Stopped,
+            );
+
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let metadata = sample_runtime_metadata();
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::InspectWorldWorker,
+                &HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_terminal".to_string(),
+                }),
+            )
+            .expect("resolve retained inspect authority for non-live worker");
+
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(
+                resolved.target_participant_id.as_deref(),
+                Some("worker_packet2_terminal")
+            );
+
+            let request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+                store,
+                &metadata,
+                HostToolNameV1::InspectWorldWorker,
+                HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_terminal".to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+            )
+            .expect("translate retained inspect request for non-live worker");
+
+            let validated = request
+                .validate()
+                .expect("validate retained inspect request");
+            assert_eq!(validated.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(
+                validated.target_participant_id.as_deref(),
+                Some("worker_packet2_terminal")
+            );
+            assert_eq!(validated.target_backend_id, "cli:codex_world");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_allows_stop_for_non_authoritative_live_worker(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
+            let mut member = live_member(
+                "codex_world",
+                "sess_packet2",
+                "worker_packet2_detached",
+                "orch_packet2",
+            );
+            member.release_runtime_ownership();
+
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let metadata = sample_runtime_metadata();
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::StopWorldWorker,
+                &HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_detached".to_string(),
+                }),
+            )
+            .expect("resolve retained stop authority for non-authoritative-live worker");
+
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(
+                resolved.target_participant_id.as_deref(),
+                Some("worker_packet2_detached")
+            );
+
+            let request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+                store,
+                &metadata,
+                HostToolNameV1::StopWorldWorker,
+                HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_detached".to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
+            )
+            .expect("translate retained stop request for non-authoritative-live worker");
+
+            let validated = request.validate().expect("validate retained stop request");
+            assert_eq!(validated.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(
+                validated.target_participant_id.as_deref(),
+                Some("worker_packet2_detached")
+            );
+            assert_eq!(validated.target_backend_id, "cli:codex_world");
         });
     }
 
