@@ -8,8 +8,8 @@ Companion design inputs:
 Related remaining-scope note: [REMAINING-family-1-and-2-scope-2026-06-08.md](./REMAINING-family-1-and-2-scope-2026-06-08.md)  
 Prior numbered slice: [SPEC-51-internal-family-2-host-global-inbox-layering-and-local-obligation-materialization-boundary.md](./SPEC-51-internal-family-2-host-global-inbox-layering-and-local-obligation-materialization-boundary.md)  
 Phase: `SPECIFY`  
-Status: proposed on `2026-06-08`  
-Session boundary: docs-only planning session; do not modify product code in this session.
+Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-09`  
+Validation note: Packet 4's validation wall is green. Closeout required one bounded validation-driven refactor in [`tool_invocation_contract.rs`](../crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs) so the contract module still passes clippy without changing Slice `52` semantics, and the slice remains a Substrate-native adapter-contract freeze only: runtime-family tool registration, MCP landing, and public toolbox CLI expansion are still deferred.
 
 ## Assumptions
 

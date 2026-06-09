@@ -4274,6 +4274,11 @@ mod tests {
     use crate::execution::agent_runtime::orchestration_session::{
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
+    use crate::execution::agent_runtime::tool_invocation_contract::{
+        normalize_cancel_world_work_outcome_v1, normalize_inspect_world_worker_outcome_v1,
+        normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
+        normalize_stop_world_worker_outcome_v1,
+    };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::WorkerSpawnPayloadV1;
     #[cfg(target_os = "linux")]
@@ -4323,11 +4328,6 @@ mod tests {
     use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
     #[cfg(target_os = "linux")]
     use world_service::WorldService;
-    use crate::execution::agent_runtime::tool_invocation_contract::{
-        normalize_cancel_world_work_outcome_v1, normalize_inspect_world_worker_outcome_v1,
-        normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
-        normalize_stop_world_worker_outcome_v1,
-    };
 
     #[cfg(target_os = "linux")]
     struct EnvVarGuard {
@@ -11240,10 +11240,13 @@ agents:
             "summary should stay explicit about inspect's snapshot-only seam: {}",
             outcome.summary
         );
-        let adapter_outcome =
-            normalize_inspect_world_worker_outcome_v1(&outcome).expect("normalize retained inspect");
+        let adapter_outcome = normalize_inspect_world_worker_outcome_v1(&outcome)
+            .expect("normalize retained inspect");
         assert_eq!(adapter_outcome.task_run_id, None);
-        assert_eq!(adapter_outcome.participant_id.as_deref(), Some("ash_member"));
+        assert_eq!(
+            adapter_outcome.participant_id.as_deref(),
+            Some("ash_member")
+        );
         assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
 
         let session_after = store
@@ -11341,8 +11344,8 @@ agents:
             "ephemeral inspect should stay explicit about non-mutation: {}",
             outcome.summary
         );
-        let adapter_outcome =
-            normalize_inspect_world_worker_outcome_v1(&outcome).expect("normalize ephemeral inspect");
+        let adapter_outcome = normalize_inspect_world_worker_outcome_v1(&outcome)
+            .expect("normalize ephemeral inspect");
         assert_eq!(adapter_outcome.task_run_id.as_deref(), Some("task-run-47"));
         assert_eq!(adapter_outcome.participant_id, None);
         assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");

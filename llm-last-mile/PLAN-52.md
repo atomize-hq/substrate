@@ -7,7 +7,8 @@ Companion design inputs:
 - [DESIGN-host-orchestrator-tool-invocation-surface.md](./DESIGN-host-orchestrator-tool-invocation-surface.md)
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md)
 Plan type: first post-toolbox-design adapter-contract freeze slice  
-Status: proposed on `2026-06-08`
+Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-09`
+Validation note: Packet 4's validation wall is green. Final closeout required one bounded validation-driven refactor in [`tool_invocation_contract.rs`](../crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs), but Slice `52` still remains bounded to the Substrate-native adapter-contract freeze and still does not imply live `codex`/`claude_code` tool registration, MCP exposure, or public human toolbox execution.
 
 ## Objective
 

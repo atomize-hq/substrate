@@ -9,10 +9,10 @@ use super::{
     dispatch_contract::{
         CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventV1,
         ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1,
-        RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, StopWorldWorkerOutcomeV1,
-        TaskPayloadV1, WorkerSpawnPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
-        WorldDispatchPayloadV1, WorldDispatchRequestV1, WorldTaskTerminalStateV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
+        SpawnWorldWorkerOutcomeV1, StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1,
+        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldTaskTerminalStateV1,
     },
     mapping::MEMBER_ROLE,
     state_store::AgentRuntimeStateStore,
@@ -527,6 +527,16 @@ pub(crate) struct ResolvedFollowUpDispatchAuthorityV1 {
     pub world_binding: HostToolRuntimeWorldBindingV1,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BuildDispatchRequestArgsV1 {
+    tool_name: HostToolNameV1,
+    mode: WorldDispatchModeV1,
+    target_backend_id: String,
+    task_run_id: Option<String>,
+    target_participant_id: Option<String>,
+    payload: WorldDispatchPayloadV1,
+}
+
 pub(crate) fn translate_run_world_task_to_internal_dispatch_request_v1(
     metadata: &HostToolRuntimeDispatchMetadataV1,
     world_binding: &HostToolRuntimeWorldBindingV1,
@@ -535,12 +545,14 @@ pub(crate) fn translate_run_world_task_to_internal_dispatch_request_v1(
     build_dispatch_request_v1(
         metadata,
         world_binding,
-        HostToolNameV1::RunWorldTask,
-        WorldDispatchModeV1::Ephemeral,
-        call.target_backend_id,
-        None,
-        None,
-        WorldDispatchPayloadV1::Task(call.payload),
+        BuildDispatchRequestArgsV1 {
+            tool_name: HostToolNameV1::RunWorldTask,
+            mode: WorldDispatchModeV1::Ephemeral,
+            target_backend_id: call.target_backend_id,
+            task_run_id: None,
+            target_participant_id: None,
+            payload: WorldDispatchPayloadV1::Task(call.payload),
+        },
     )
 }
 
@@ -552,12 +564,14 @@ pub(crate) fn translate_spawn_world_worker_to_internal_dispatch_request_v1(
     build_dispatch_request_v1(
         metadata,
         world_binding,
-        HostToolNameV1::SpawnWorldWorker,
-        WorldDispatchModeV1::Retained,
-        call.target_backend_id,
-        None,
-        None,
-        WorldDispatchPayloadV1::WorkerSpawn(call.payload),
+        BuildDispatchRequestArgsV1 {
+            tool_name: HostToolNameV1::SpawnWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: call.target_backend_id,
+            task_run_id: None,
+            target_participant_id: None,
+            payload: WorldDispatchPayloadV1::WorkerSpawn(call.payload),
+        },
     )
 }
 
@@ -887,25 +901,31 @@ pub(crate) fn translate_follow_up_tool_to_internal_dispatch_request_v1(
     build_dispatch_request_v1(
         metadata,
         &authority.world_binding,
-        tool_name,
-        authority.mode,
-        authority.target_backend_id,
-        authority.task_run_id,
-        authority.target_participant_id,
-        payload,
+        BuildDispatchRequestArgsV1 {
+            tool_name,
+            mode: authority.mode,
+            target_backend_id: authority.target_backend_id,
+            task_run_id: authority.task_run_id,
+            target_participant_id: authority.target_participant_id,
+            payload,
+        },
     )
 }
 
 fn build_dispatch_request_v1(
     metadata: &HostToolRuntimeDispatchMetadataV1,
     world_binding: &HostToolRuntimeWorldBindingV1,
-    tool_name: HostToolNameV1,
-    mode: WorldDispatchModeV1,
-    target_backend_id: String,
-    task_run_id: Option<String>,
-    target_participant_id: Option<String>,
-    payload: WorldDispatchPayloadV1,
+    args: BuildDispatchRequestArgsV1,
 ) -> anyhow::Result<WorldDispatchRequestV1> {
+    let BuildDispatchRequestArgsV1 {
+        tool_name,
+        mode,
+        target_backend_id,
+        task_run_id,
+        target_participant_id,
+        payload,
+    } = args;
+
     metadata.validate()?;
     world_binding.validate()?;
     let contract = tool_name.contract();
@@ -996,10 +1016,10 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        host_tool_contract, host_tool_contracts_v1, resolve_follow_up_dispatch_authority_v1,
-        normalize_cancel_world_work_outcome_v1, normalize_continue_world_worker_outcome_v1,
-        normalize_inspect_world_worker_outcome_v1, normalize_run_world_task_receipt_v1,
-        normalize_spawn_world_worker_receipt_v1, normalize_stop_world_worker_outcome_v1,
+        host_tool_contract, host_tool_contracts_v1, normalize_cancel_world_work_outcome_v1,
+        normalize_continue_world_worker_outcome_v1, normalize_inspect_world_worker_outcome_v1,
+        normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
+        normalize_stop_world_worker_outcome_v1, resolve_follow_up_dispatch_authority_v1,
         translate_follow_up_tool_to_internal_dispatch_request_v1,
         translate_run_world_task_to_internal_dispatch_request_v1,
         translate_spawn_world_worker_to_internal_dispatch_request_v1,
@@ -1009,12 +1029,11 @@ mod tests {
     };
     use crate::execution::agent_runtime::dispatch_contract::{
         CancelWorldWorkOutcomeV1, ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1,
-        ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
-        RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
-        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1,
-        StopWorldWorkerOutcomeV1,
-        WorkerCancelPayloadV1, WorkerContinuePayloadV1, WorkerInspectPayloadV1,
-        WorkerStopPayloadV1, WorldTaskTerminalStateV1,
+        ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
+        SpawnWorldWorkerOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
+        WorkerContinuePayloadV1, WorkerInspectPayloadV1, WorkerStopPayloadV1,
+        WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::orchestration_session::{
@@ -1345,7 +1364,10 @@ mod tests {
 
         assert_eq!(receipt.task_run_id, "task-run-packet3");
         assert_eq!(receipt.mode, WorldDispatchModeV1::Ephemeral);
-        assert_eq!(receipt.state, WorldTaskTerminalStateV1::NeedsRetainedFollowup);
+        assert_eq!(
+            receipt.state,
+            WorldTaskTerminalStateV1::NeedsRetainedFollowup
+        );
     }
 
     #[test]
@@ -1408,8 +1430,8 @@ mod tests {
             session_state: None,
         };
 
-        let inspect_ephemeral = normalize_inspect_world_worker_outcome_v1(
-            &InspectWorldWorkerOutcomeV1 {
+        let inspect_ephemeral =
+            normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
                 request_id: "req-packet3-inspect-e".to_string(),
                 orchestration_session_id: "sess_packet3".to_string(),
                 action: WorldDispatchActionV1::InspectWorldWorker,
@@ -1421,14 +1443,16 @@ mod tests {
                 world_generation: 2,
                 snapshot: snapshot.clone(),
                 summary: "inspect exposes canonical active-task identity".to_string(),
-            },
-        )
-        .expect("normalize ephemeral inspect");
-        assert_eq!(inspect_ephemeral.task_run_id.as_deref(), Some("task-run-packet3"));
+            })
+            .expect("normalize ephemeral inspect");
+        assert_eq!(
+            inspect_ephemeral.task_run_id.as_deref(),
+            Some("task-run-packet3")
+        );
         assert_eq!(inspect_ephemeral.participant_id, None);
 
-        let inspect_retained = normalize_inspect_world_worker_outcome_v1(
-            &InspectWorldWorkerOutcomeV1 {
+        let inspect_retained =
+            normalize_inspect_world_worker_outcome_v1(&InspectWorldWorkerOutcomeV1 {
                 request_id: "req-packet3-inspect-r".to_string(),
                 orchestration_session_id: "sess_packet3".to_string(),
                 action: WorldDispatchActionV1::InspectWorldWorker,
@@ -1440,11 +1464,13 @@ mod tests {
                 world_generation: 2,
                 snapshot: snapshot.clone(),
                 summary: "inspect exposes canonical retained identity".to_string(),
-            },
-        )
-        .expect("normalize retained inspect");
+            })
+            .expect("normalize retained inspect");
         assert_eq!(inspect_retained.task_run_id, None);
-        assert_eq!(inspect_retained.participant_id.as_deref(), Some("ash_packet3"));
+        assert_eq!(
+            inspect_retained.participant_id.as_deref(),
+            Some("ash_packet3")
+        );
 
         let cancel_ephemeral = normalize_cancel_world_work_outcome_v1(&CancelWorldWorkOutcomeV1 {
             request_id: "req-packet3-cancel-e".to_string(),
@@ -1483,13 +1509,16 @@ mod tests {
         })
         .expect("normalize retained cancel");
         assert_eq!(cancel_retained.task_run_id, None);
-        assert_eq!(cancel_retained.participant_id.as_deref(), Some("ash_packet3"));
+        assert_eq!(
+            cancel_retained.participant_id.as_deref(),
+            Some("ash_packet3")
+        );
     }
 
     #[test]
     fn dispatch_contract_adapter_normalizes_retained_only_follow_up_outcomes() {
-        let continue_outcome = normalize_continue_world_worker_outcome_v1(
-            &ContinueWorldWorkerOutcomeV1 {
+        let continue_outcome =
+            normalize_continue_world_worker_outcome_v1(&ContinueWorldWorkerOutcomeV1 {
                 request_id: "req-packet3-continue".to_string(),
                 orchestration_session_id: "sess_packet3".to_string(),
                 action: WorldDispatchActionV1::ContinueWorldWorker,
@@ -1516,9 +1545,8 @@ mod tests {
                     }),
                 }),
                 summary: "continue stays retained-only".to_string(),
-            },
-        )
-        .expect("normalize continue");
+            })
+            .expect("normalize continue");
         assert_eq!(continue_outcome.participant_id, "ash_packet3");
         assert_eq!(
             continue_outcome.thread_id.as_deref(),

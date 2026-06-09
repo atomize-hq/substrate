@@ -4,11 +4,18 @@ Source spec: [SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-cont
 Source plan: [PLAN-52.md](./PLAN-52.md)  
 Execution model: four sequential implementation packets  
 Phase: `TASKS`  
-Status: proposed on `2026-06-08`
+Status: Packet 4 closeout verified on `2026-06-09`
 
 ## Phase Gate
 
 These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `52` have been reviewed and accepted before implementation begins.
+
+Current tree note:
+
+1. Packets `1` through `3` are already landed and verified on the live repo before this session.
+2. This Packet `4` pass owns repo-local doc alignment plus the validation wall only.
+3. The checklist below remains the slice ledger; this session marks only Packet `4` tasks directly after the validation wall reran green.
+4. Packet `4` absorbed one bounded validation-driven refactor in [`crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`](../crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs) so clippy stayed green without widening Slice `52`.
 
 This slice is a contract-freeze slice.
 
@@ -198,7 +205,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Align repo-local docs and bounded code comments with Slice `52`
+- [x] Task 4.1: Align repo-local docs and bounded code comments with Slice `52`
   - Acceptance: repo-local planning docs and any needed bounded code comments describe Slice `52` as a Substrate-native adapter-contract freeze only, and do not imply that `codex`, `claude_code`, MCP, or a public human toolbox CLI have already landed.
   - Verify:
     - manual diff review
@@ -208,7 +215,7 @@ Session goal:
     - [`llm-last-mile/TASKS-52.md`](./TASKS-52.md)
     - bounded code comments only if needed
 
-- [ ] Task 4.2: Run the final validation wall
+- [x] Task 4.2: Run the final validation wall
   - Acceptance: formatting, clippy, targeted shell suites, and full workspace tests are green against the bounded Slice `52` file set; if validation exposes a need for runtime-family registration or public toolbox execution work, stop and split that into the next slice instead of silently widening this one.
   - Verify:
     - `cargo fmt --all -- --check`

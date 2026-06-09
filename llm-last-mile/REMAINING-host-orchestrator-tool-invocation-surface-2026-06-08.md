@@ -345,6 +345,12 @@ The next spec should still choose explicitly:
    - Review surfaced that the first Packet `2` adapter translation pass overconstrained retained follow-up handles by requiring every retained target to remain authoritative-live before translation in [`tool_invocation_contract.rs`](../crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs).
    - That drift contradicted existing runtime truth in [`state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs), where exact retained `inspect_world_worker` can target non-live retained workers and exact retained `stop_world_worker` can target non-authoritative-live workers.
    - Packet `2` resolution: retain adapter translation in the bounded contract module, but make retained follow-up admissibility tool-specific so `inspect_world_worker` stays linkage-only, `stop_world_worker` stays non-terminal, and `continue` / `fork` / retained `cancel` stay authoritative-live.
+2. **Resolved doc-truth alignment gap: Slice 52 closeout artifacts must stop reading as planning-only**
+   - Packet `4` review surfaced that [`SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md`](./SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md), [`PLAN-52.md`](./PLAN-52.md), and [`TASKS-52.md`](./TASKS-52.md) still carried planning-era status text after the Packet `1`-`3` contract work had already landed.
+   - Packet `4` resolution: update those repo-local slice artifacts to record the green validation wall and keep the Slice `52` closeout language explicit that runtime-family registration, MCP exposure, and public CLI landing remain follow-on work rather than implied runtime truth.
+3. **Resolved validation follow-up: Packet 4 needed one bounded clippy-driven contract-module refactor**
+   - Packet `4` validation surfaced that [`tool_invocation_contract.rs`](../crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs) still needed a bounded internal refactor so the Slice `52` adapter-contract module would satisfy `cargo clippy --workspace --all-targets -- -D warnings`.
+   - Packet `4` resolution: keep the refactor local to the contract module, preserve the frozen request/receipt semantics, and record the closeout docs truthfully so the green validation wall is not described as docs-only when one bounded code follow-up was actually required.
 
 ## Do Not Reopen
 
