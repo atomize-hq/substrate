@@ -4,7 +4,11 @@ mod support;
 
 use std::fs;
 
-use agent_drift_analyzer::AnalyzeRequest;
+use agent_drift_analyzer::{AnalyzeRequest, AnalyzeResult, Confidence, SessionArchetypeLabel};
+use agent_session_compactor::{
+    CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
+};
+use camino::Utf8PathBuf;
 use serde_json::Value;
 use support::{analyze_sample_bundle, load_sample_bundle, BundleFixture};
 use time::macros::datetime;
@@ -530,4 +534,393 @@ fn checkpoints_render_single_agent_delegation_summary_as_none() {
     assert!(summary.contains(
         "  delegation: `topology=single_agent visibility=none confidence=high markers=none support[none] counter[none]`"
     ));
+}
+
+#[test]
+fn checkpoints_classify_docs_heavy_scope_shaping_as_planning() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Plan Packet R4-2 and keep the landing strictly scoped.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'Packet R4-2' docs/specs/agent-drift-analyzer-session-archetype-r4-tasks.md\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,200p' docs/specs/agent-drift-analyzer-session-archetype-r4-plan.md\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: docs/specs/agent-drift-analyzer-session-archetype-r4-tasks.md\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let archetype = result.sessions[0].checkpoints[0]
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Planning);
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Medium | Confidence::High
+    ));
+    assert!(!archetype.supporting_evidence.is_empty());
+    assert!(!archetype.counter_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_classify_source_edit_plus_local_verification_as_autonomous_implementation() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Implement the checkpoint archetype classifier in crates/agent-drift-analyzer/src/checkpoint/mod.rs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,260p' crates/agent-drift-analyzer/src/checkpoint/mod.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/mod.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/tests/checkpoints.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let archetype = result.sessions[0].checkpoints[0]
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(
+        archetype.label,
+        SessionArchetypeLabel::AutonomousImplementation
+    );
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Medium | Confidence::High
+    ));
+    assert!(!archetype.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_shift_to_verification_closeout_when_proof_dominates_new_source_edits() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", "/goal Implement the patch and then verify it."),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/mod.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        assistant_row(
+            3,
+            "turn-001",
+            "The implementation is in place. Next I am gathering proof only.",
+        ),
+        prompt_row(
+            4,
+            "turn-002",
+            "/goal Verify the existing patch and gather proof only.",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo fmt --all -- --check\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            7,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,120p' crates/agent-drift-analyzer/tests/checkpoints.rs\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert!(checkpoints.len() >= 2);
+    let archetype = checkpoints
+        .last()
+        .expect("final checkpoint")
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::VerificationCloseout);
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Medium | Confidence::High
+    ));
+    assert!(!archetype.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_classify_repeated_failing_verification_as_troubleshooting() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Debug the failing analyzer checkpoint tests.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'session_archetype' crates/agent-drift-analyzer/src/checkpoint/mod.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 1"),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/mod.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(6, "turn-001", "Exit code: 1"),
+        tool_call_row(
+            7,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(8, "turn-001", "Exit code: 1"),
+    ]);
+    let archetype = result.sessions[0].checkpoints[0]
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Troubleshooting);
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Medium | Confidence::High
+    ));
+    assert!(!archetype.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_cap_confidence_when_parent_visible_behavior_is_child_opaque() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Coordinate a delegated implementation while keeping parent-visible work conservative.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "multi_agent_v1",
+            "{\"mode\":\"delegated\"}",
+        ),
+        developer_row(
+            2,
+            "turn-001",
+            "Child session id 019ea222-2222-7222-8222-222222222222 remains in separate rollout /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-30-00-019ea222-2222-7222-8222-222222222222.jsonl",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'session_archetype' docs/specs/agent-drift-analyzer-session-archetype-r4-spec.md\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let archetype = result.sessions[0]
+        .checkpoints
+        .last()
+        .expect("checkpoint")
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Low | Confidence::Medium
+    ));
+    assert_ne!(archetype.confidence, Confidence::High);
+    assert!(!archetype.counter_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_degrade_mixed_cases_instead_of_overclaiming_high_confidence() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Investigate, patch, and verify the analyzer while updating the docs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'session_archetype' crates/agent-drift-analyzer/src/checkpoint/mod.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: docs/specs/agent-drift-analyzer-session-archetype-r4-spec.md\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/mod.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let archetype = result.sessions[0].checkpoints[0]
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert!(matches!(
+        archetype.confidence,
+        Confidence::Low | Confidence::Medium
+    ));
+}
+
+fn analyze_custom_rows(rows: Vec<CompactionRow>) -> AnalyzeResult {
+    let tool_rows = rows
+        .iter()
+        .filter(|row| row.kind == CompactionKind::ToolCall)
+        .take(2)
+        .collect::<Vec<_>>();
+    let dedupe_groups = if tool_rows.len() == 2 {
+        vec![DedupeGroup {
+            kind: CompactionKind::ToolCall,
+            canonical_text_hash_hex: "test-dedupe".to_string(),
+            representative: RowRef::from_row(tool_rows[0]),
+            duplicates: vec![RowRef::from_row(tool_rows[1])],
+        }]
+    } else {
+        Vec::new()
+    };
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, dedupe_groups);
+    agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze custom rows")
+}
+
+fn prompt_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+    row(
+        event_index,
+        turn_id,
+        CompactionKind::UserMessage,
+        text,
+        None,
+    )
+}
+
+fn assistant_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+    row(
+        event_index,
+        turn_id,
+        CompactionKind::AssistantMessage,
+        text,
+        None,
+    )
+}
+
+fn developer_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+    row(
+        event_index,
+        turn_id,
+        CompactionKind::DeveloperMessage,
+        text,
+        None,
+    )
+}
+
+fn tool_output_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+    row(event_index, turn_id, CompactionKind::ToolOutput, text, None)
+}
+
+fn tool_call_row(event_index: usize, turn_id: &str, tool_name: &str, text: &str) -> CompactionRow {
+    row(
+        event_index,
+        turn_id,
+        CompactionKind::ToolCall,
+        text,
+        Some(format!(
+            "{{\"call_id\":\"call-{event_index}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
+        )),
+    )
+}
+
+fn row(
+    event_index: usize,
+    turn_id: &str,
+    kind: CompactionKind,
+    text: &str,
+    dedupe_identity: Option<String>,
+) -> CompactionRow {
+    CompactionRow {
+        source_file: Utf8PathBuf::from("/tmp/session-r4-2/rollout.jsonl"),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some("session-r4-2".to_string()),
+        turn_id: Some(turn_id.to_string()),
+        event_index,
+        line_number: event_index + 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind,
+        user_message_role: matches!(kind, CompactionKind::UserMessage)
+            .then_some(UserMessageRole::Prompt),
+        dedupe_identity,
+        text: text.to_string(),
+        canonical_text: text.to_string(),
+        text_hash_hex: format!("hash-{}", text.split_whitespace().collect::<String>()),
+    }
 }

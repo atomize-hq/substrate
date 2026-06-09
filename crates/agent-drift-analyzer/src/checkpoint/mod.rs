@@ -94,6 +94,94 @@ pub(crate) struct RecoveryState {
     pub active_repeated_failure: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct IntentEvidenceProfile {
+    exploration_like: EvidenceBucket,
+    implementation_like: EvidenceBucket,
+    verification_like: EvidenceBucket,
+    orchestration_like: EvidenceBucket,
+    exploration_command_count: usize,
+    source_write_command_count: usize,
+    test_or_golden_write_command_count: usize,
+    docs_or_spec_write_command_count: usize,
+    verification_command_count: usize,
+    orchestration_command_count: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct EvidenceBucket {
+    raw_score: i32,
+    evidence: Vec<EvidenceRef>,
+    counter_evidence: Vec<EvidenceRef>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+enum EvidenceStrength {
+    #[default]
+    None,
+    Weak,
+    Moderate,
+    Strong,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommandRole {
+    Exploration,
+    Implementation,
+    Verification,
+    Orchestration,
+    Neutral,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum FileRole {
+    Source,
+    TestOrGolden,
+    DocsOrSpec,
+    ConfigOrBuild,
+    GeneratedArtifact,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ArchetypeCandidate {
+    label: SessionArchetypeLabel,
+    score: i32,
+    supporting_evidence: Vec<EvidenceRef>,
+    counter_evidence: Vec<EvidenceRef>,
+}
+
+const ENABLE_KICKOFF_PRIORS: bool = false;
+const MAX_ARCHETYPE_EVIDENCE_ITEMS: usize = 8;
+
+impl EvidenceBucket {
+    fn add(&mut self, score: i32, evidence: Vec<EvidenceRef>) {
+        if score <= 0 || evidence.is_empty() {
+            return;
+        }
+
+        self.raw_score += score;
+        self.evidence.extend(evidence);
+    }
+
+    fn add_counter(&mut self, evidence: Vec<EvidenceRef>) {
+        if evidence.is_empty() {
+            return;
+        }
+
+        self.counter_evidence.extend(evidence);
+    }
+
+    fn strength(&self) -> EvidenceStrength {
+        match self.raw_score {
+            i32::MIN..=0 => EvidenceStrength::None,
+            1..=2 => EvidenceStrength::Weak,
+            3..=5 => EvidenceStrength::Moderate,
+            _ => EvidenceStrength::Strong,
+        }
+    }
+}
+
 pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnalysis> {
     let mut analyses = Vec::new();
     let mut previous = None;
@@ -251,6 +339,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let boundary = checkpoint_boundary(&analysis.current.window);
     let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
+    let session_archetype = build_session_archetype(analysis);
     Checkpoint {
         schema_version: "v0.5".to_string(),
         session_id: analysis.session_id.clone(),
@@ -260,22 +349,801 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         turn_context: Some(analysis.turn_context.clone()),
         diagnostics,
         task_frame: task_frame.clone(),
-        session_archetype: Some(contract_session_archetype_placeholder()),
+        session_archetype: Some(session_archetype),
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
     }
 }
 
-fn contract_session_archetype_placeholder() -> SessionArchetype {
-    // Packet R4-1 lands the v0.5 contract only; R4-2 replaces this placeholder with
-    // deterministic checkpoint-local archetype derivation.
+fn build_session_archetype(analysis: &CheckpointAnalysis) -> SessionArchetype {
+    let intent = build_intent_evidence_profile(analysis);
+    let mut candidates = aggregate_session_archetype(analysis, &intent);
+    candidates.sort_by(|left, right| {
+        right.score.cmp(&left.score).then_with(|| {
+            archetype_label_sort_key(left.label).cmp(&archetype_label_sort_key(right.label))
+        })
+    });
+
+    let winner = candidates
+        .first()
+        .cloned()
+        .unwrap_or_else(|| ArchetypeCandidate {
+            label: SessionArchetypeLabel::Planning,
+            score: 0,
+            supporting_evidence: Vec::new(),
+            counter_evidence: Vec::new(),
+        });
+    let runner_up_score = candidates.get(1).map_or(0, |candidate| candidate.score);
+    let confidence = archetype_confidence(analysis, &intent, &winner, runner_up_score);
+    let supporting_evidence = dedupe_and_limit_evidence(combine_evidence(vec![
+        winner.supporting_evidence,
+        delegation_supporting_archetype_evidence(analysis),
+    ]));
+    let counter_evidence = dedupe_and_limit_evidence(combine_evidence(vec![
+        winner.counter_evidence,
+        delegation_counter_archetype_evidence(analysis),
+    ]));
+
     SessionArchetype {
-        label: SessionArchetypeLabel::Planning,
-        confidence: Confidence::Low,
-        supporting_evidence: Vec::new(),
-        counter_evidence: Vec::new(),
+        label: winner.label,
+        confidence,
+        supporting_evidence,
+        counter_evidence,
     }
+}
+
+fn build_intent_evidence_profile(analysis: &CheckpointAnalysis) -> IntentEvidenceProfile {
+    let mut profile = IntentEvidenceProfile::default();
+
+    for command in &analysis.interval.command_observations {
+        let role = classify_command_role(command);
+        let file_roles = command_file_roles(command);
+        let source_scope = file_roles.contains(&FileRole::Source);
+        let test_scope = file_roles.contains(&FileRole::TestOrGolden);
+        let docs_scope = file_roles.contains(&FileRole::DocsOrSpec);
+        let config_scope = file_roles.contains(&FileRole::ConfigOrBuild);
+        let docs_only = docs_scope && !source_scope && !test_scope && !config_scope;
+        let test_only = test_scope && !source_scope;
+
+        match role {
+            CommandRole::Exploration => {
+                profile.exploration_command_count += 1;
+                profile.exploration_like.add(
+                    2,
+                    command_evidence(
+                        command,
+                        "inspection-style command widened the visible search space",
+                    ),
+                );
+            }
+            CommandRole::Implementation => {
+                if source_scope {
+                    profile.source_write_command_count += 1;
+                    profile.implementation_like.add(
+                        3,
+                        command_evidence(
+                            command,
+                            "source edit command strengthened implementation-like evidence",
+                        ),
+                    );
+                } else if test_only {
+                    profile.test_or_golden_write_command_count += 1;
+                    profile.verification_like.add(
+                        2,
+                        command_evidence(
+                            command,
+                            "test-or-golden-only edit behaved more like verification support than direct source implementation",
+                        ),
+                    );
+                    profile.implementation_like.add_counter(command_evidence(
+                        command,
+                        "test-or-golden-only edit did not directly prove source implementation",
+                    ));
+                } else if docs_only {
+                    profile.docs_or_spec_write_command_count += 1;
+                    profile.exploration_like.add(
+                        1,
+                        command_evidence(
+                            command,
+                            "docs/spec-only edit behaved like scope-shaping rather than direct source implementation",
+                        ),
+                    );
+                    profile.orchestration_like.add(
+                        1,
+                        command_evidence(
+                            command,
+                            "docs/spec-only edit behaved like planning-orchestration context",
+                        ),
+                    );
+                    profile.implementation_like.add_counter(command_evidence(
+                        command,
+                        "docs/spec-only edit did not directly prove source implementation",
+                    ));
+                } else if config_scope {
+                    profile.implementation_like.add(
+                        2,
+                        command_evidence(
+                            command,
+                            "config/build edit supported implementation-like work on the active scope",
+                        ),
+                    );
+                    profile.verification_like.add(
+                        1,
+                        command_evidence(
+                            command,
+                            "config/build edit also supported build-and-verify preparation",
+                        ),
+                    );
+                } else {
+                    profile.implementation_like.add(
+                        1,
+                        command_evidence(
+                            command,
+                            "write-like command weakly supported implementation-like work",
+                        ),
+                    );
+                }
+            }
+            CommandRole::Verification => {
+                profile.verification_command_count += 1;
+                if docs_only {
+                    profile.exploration_like.add(
+                        1,
+                        command_evidence(
+                            command,
+                            "docs/spec-scoped verification command supported planning-style inspection more than closeout proof",
+                        ),
+                    );
+                    profile.verification_like.add_counter(command_evidence(
+                        command,
+                        "docs/spec-scoped verification command was too broad to act as closeout proof by itself",
+                    ));
+                } else {
+                    profile.verification_like.add(
+                        2,
+                        command_evidence(
+                            command,
+                            "verification command strengthened verification-like evidence",
+                        ),
+                    );
+                    if test_only {
+                        profile.verification_like.add(
+                            1,
+                            command_evidence(
+                                command,
+                                "test-scoped verification command concentrated on proof-oriented scope",
+                            ),
+                        );
+                    }
+                    if source_scope {
+                        profile.implementation_like.add(
+                            1,
+                            command_evidence(
+                                command,
+                                "local verification against source scope also supported implementation follow-through",
+                            ),
+                        );
+                    }
+                }
+            }
+            CommandRole::Orchestration => {
+                profile.orchestration_command_count += 1;
+                profile.orchestration_like.add(
+                    2,
+                    command_evidence(
+                        command,
+                        "delegation-orchestration command strengthened orchestration-like evidence",
+                    ),
+                );
+            }
+            CommandRole::Neutral => {}
+        }
+    }
+
+    if matches!(
+        analysis.turn_context.execution_mode,
+        TurnExecutionMode::Autonomous
+    ) {
+        profile.implementation_like.add(
+            1,
+            task_frame_evidence(
+                &analysis.current.task_frame,
+                "autonomous turn execution mode aligned with implementation-like work",
+            ),
+        );
+    }
+
+    if matches!(
+        analysis.turn_context.execution_mode,
+        TurnExecutionMode::VerificationHeavy
+    ) {
+        profile.verification_like.add(
+            1,
+            interval_verification_evidence(
+                analysis,
+                "verification-heavy turn execution mode aligned with proof-oriented work",
+            ),
+        );
+    }
+
+    if analysis.turn_context.activity_mix.directive_row_count
+        > analysis.turn_context.activity_mix.tool_call_count
+    {
+        profile.orchestration_like.add(
+            1,
+            task_frame_evidence(
+                &analysis.current.task_frame,
+                "directive-heavy turn shape aligned with planning-orchestration work",
+            ),
+        );
+    }
+
+    if analysis.task_frame_delta.task_frame_transitioned {
+        profile.exploration_like.add(
+            1,
+            task_frame_evidence(
+                &analysis.current.task_frame,
+                "task-frame transition signaled active scope exploration",
+            ),
+        );
+        profile.implementation_like.add_counter(task_frame_evidence(
+            &analysis.current.task_frame,
+            "task-frame transition weakened claims of a settled implementation cadence",
+        ));
+    }
+
+    if analysis.current.task_frame.working_set_paths.len() > 4 {
+        profile.exploration_like.add(
+            1,
+            task_frame_evidence(
+                &analysis.current.task_frame,
+                "broad working set supported exploration-like behavior",
+            ),
+        );
+    }
+
+    if profile.source_write_command_count > 0 && !analysis.task_frame_delta.working_set_changed {
+        profile.implementation_like.add(
+            1,
+            task_frame_evidence(
+                &analysis.current.task_frame,
+                "stable working set plus source edits supported concentrated implementation",
+            ),
+        );
+    }
+
+    if analysis.recovery.clean_verification_interval {
+        profile.verification_like.add(
+            2,
+            interval_verification_evidence(
+                analysis,
+                "clean recent verification interval strengthened proof-oriented evidence",
+            ),
+        );
+    }
+
+    if analysis.recovery.recovered_from_thrash {
+        profile.verification_like.add(
+            1,
+            interval_verification_evidence(
+                analysis,
+                "recent recovery after repeated verification loops supported proof-oriented work",
+            ),
+        );
+    }
+
+    if analysis.recovery.active_repeated_verification || analysis.recovery.active_repeated_failure {
+        profile.verification_like.add(
+            1,
+            repeated_failure_evidence(
+                analysis,
+                "repeated failing verification kept the checkpoint in verification-driven diagnosis",
+            ),
+        );
+        profile.exploration_like.add(
+            1,
+            repeated_failure_evidence(
+                analysis,
+                "repeated failing verification forced renewed inspection and diagnosis",
+            ),
+        );
+    }
+
+    if !matches!(
+        analysis.delegation.topology,
+        Some(DelegationTopology::SingleAgent) | None
+    ) {
+        profile.orchestration_like.add(
+            1,
+            delegation_evidence(
+                &analysis.delegation,
+                "delegation topology kept orchestration evidence in the visible parent prefix",
+            ),
+        );
+    }
+
+    if ENABLE_KICKOFF_PRIORS {
+        // Packet R4-2 keeps kickoff priors disabled by default so behavior remains the primary
+        // source of evidence until behavior-only regressions stabilize.
+    }
+
+    profile
+}
+
+fn aggregate_session_archetype(
+    analysis: &CheckpointAnalysis,
+    intent: &IntentEvidenceProfile,
+) -> Vec<ArchetypeCandidate> {
+    let failure_pressure = i32::from(analysis.recovery.active_repeated_verification)
+        + i32::from(analysis.recovery.active_repeated_failure)
+        + i32::from(!analysis.repetition.repeated_failure_loops.is_empty());
+    let clean_verification_bonus = i32::from(analysis.recovery.clean_verification_interval) * 2;
+    let docs_heavy =
+        intent.docs_or_spec_write_command_count > 0 && intent.source_write_command_count == 0;
+    let source_writes = intent.source_write_command_count as i32;
+    let test_only_writes = i32::from(
+        intent.test_or_golden_write_command_count > 0 && intent.source_write_command_count == 0,
+    );
+
+    let planning_score = (intent.exploration_like.raw_score + intent.orchestration_like.raw_score)
+        + i32::from(docs_heavy) * 2
+        + i32::from(analysis.task_frame_delta.task_frame_transitioned)
+        + i32::from(intent.verification_command_count == 0)
+        - source_writes.saturating_mul(2)
+        - clean_verification_bonus / 2;
+
+    let implementation_score = intent.implementation_like.raw_score
+        + source_writes
+        + i32::from(intent.verification_command_count > 0)
+        + i32::from(matches!(
+            analysis.turn_context.execution_mode,
+            TurnExecutionMode::Autonomous
+        ))
+        - failure_pressure
+        - i32::from(docs_heavy);
+
+    let verification_closeout_score = intent.verification_like.raw_score
+        + clean_verification_bonus
+        + i32::from(intent.source_write_command_count == 0) * 2
+        + test_only_writes
+        + i32::from(matches!(
+            analysis.turn_context.execution_mode,
+            TurnExecutionMode::VerificationHeavy
+        ))
+        - failure_pressure.saturating_mul(2)
+        - source_writes;
+
+    let troubleshooting_score = intent.verification_like.raw_score
+        + intent.exploration_like.raw_score
+        + failure_pressure.saturating_mul(2)
+        + i32::from(!analysis.repetition.repeated_verification_loops.is_empty())
+        - clean_verification_bonus
+        - i32::from(intent.implementation_like.raw_score >= intent.verification_like.raw_score + 2);
+    let troubleshooting_score =
+        if failure_pressure == 0 && analysis.repetition.repeated_verification_loops.is_empty() {
+            troubleshooting_score - 2
+        } else {
+            troubleshooting_score
+        };
+
+    vec![
+        archetype_candidate(
+            SessionArchetypeLabel::Planning,
+            planning_score,
+            intent.exploration_like.evidence.clone(),
+            vec![
+                intent.implementation_like.evidence.clone(),
+                intent.verification_like.evidence.clone(),
+            ],
+            vec![
+                intent.implementation_like.counter_evidence.clone(),
+                intent.verification_like.counter_evidence.clone(),
+            ],
+        ),
+        archetype_candidate(
+            SessionArchetypeLabel::AutonomousImplementation,
+            implementation_score,
+            combine_evidence(vec![
+                intent.implementation_like.evidence.clone(),
+                if intent.verification_like.raw_score > 0 {
+                    intent.verification_like.evidence.clone()
+                } else {
+                    Vec::new()
+                },
+            ]),
+            vec![
+                intent.exploration_like.evidence.clone(),
+                intent.verification_like.counter_evidence.clone(),
+            ],
+            vec![intent.implementation_like.counter_evidence.clone()],
+        ),
+        archetype_candidate(
+            SessionArchetypeLabel::VerificationCloseout,
+            verification_closeout_score,
+            intent.verification_like.evidence.clone(),
+            vec![
+                intent.implementation_like.evidence.clone(),
+                intent.exploration_like.evidence.clone(),
+            ],
+            vec![intent.verification_like.counter_evidence.clone()],
+        ),
+        archetype_candidate(
+            SessionArchetypeLabel::Troubleshooting,
+            troubleshooting_score,
+            combine_evidence(vec![
+                intent.verification_like.evidence.clone(),
+                intent.exploration_like.evidence.clone(),
+                repeated_failure_evidence(
+                    analysis,
+                    "failing verification and diagnosis remained active in the recent prefix",
+                ),
+            ]),
+            vec![
+                intent.implementation_like.evidence.clone(),
+                if analysis.recovery.clean_verification_interval {
+                    intent.verification_like.evidence.clone()
+                } else {
+                    Vec::new()
+                },
+            ],
+            vec![
+                intent.verification_like.counter_evidence.clone(),
+                intent.exploration_like.counter_evidence.clone(),
+            ],
+        ),
+    ]
+}
+
+fn archetype_candidate(
+    label: SessionArchetypeLabel,
+    score: i32,
+    supporting_evidence: Vec<EvidenceRef>,
+    competing_evidence: Vec<Vec<EvidenceRef>>,
+    bucket_counter_evidence: Vec<Vec<EvidenceRef>>,
+) -> ArchetypeCandidate {
+    ArchetypeCandidate {
+        label,
+        score: score.max(0),
+        supporting_evidence: dedupe_and_limit_evidence(supporting_evidence),
+        counter_evidence: dedupe_and_limit_evidence(combine_evidence(
+            competing_evidence
+                .into_iter()
+                .chain(bucket_counter_evidence)
+                .collect(),
+        )),
+    }
+}
+
+fn archetype_confidence(
+    analysis: &CheckpointAnalysis,
+    intent: &IntentEvidenceProfile,
+    winner: &ArchetypeCandidate,
+    runner_up_score: i32,
+) -> Confidence {
+    let margin = winner.score - runner_up_score;
+    let mixed_implementation_and_verification = intent.implementation_like.strength()
+        >= EvidenceStrength::Moderate
+        && intent.verification_like.strength() >= EvidenceStrength::Moderate
+        && intent.source_write_command_count == 0
+        && margin <= 2;
+    let mixed_exploration_and_verification = intent.exploration_like.strength()
+        >= EvidenceStrength::Moderate
+        && intent.verification_like.strength() >= EvidenceStrength::Moderate
+        && !analysis.recovery.clean_verification_interval
+        && margin <= 2;
+    let ambiguous =
+        margin <= 1 || mixed_implementation_and_verification || mixed_exploration_and_verification;
+
+    let delegated_opaque = matches!(
+        (
+            analysis.delegation.topology,
+            analysis.delegation.child_work_visibility
+        ),
+        (
+            Some(DelegationTopology::DelegatingParent),
+            Some(ChildWorkVisibility::Opaque)
+        ) | (
+            Some(DelegationTopology::MixedOrAmbiguous),
+            Some(ChildWorkVisibility::Opaque)
+        )
+    );
+
+    if delegated_opaque {
+        return Confidence::Low;
+    }
+
+    if winner.score >= 8 && margin >= 3 && !ambiguous {
+        return Confidence::High;
+    }
+
+    if winner.score >= 4 && margin >= 1 && !ambiguous {
+        return Confidence::Medium;
+    }
+
+    Confidence::Low
+}
+
+fn archetype_label_sort_key(label: SessionArchetypeLabel) -> u8 {
+    match label {
+        SessionArchetypeLabel::Troubleshooting => 0,
+        SessionArchetypeLabel::Planning => 1,
+        SessionArchetypeLabel::AutonomousImplementation => 2,
+        SessionArchetypeLabel::VerificationCloseout => 3,
+    }
+}
+
+fn classify_command_role(command: &CommandObservation) -> CommandRole {
+    let family = command.family.as_str();
+    let raw_command = command.raw_command.to_ascii_lowercase();
+    let tool_name = command.tool_name.as_str();
+
+    if matches!(
+        tool_name,
+        "spawn_agent" | "wait_agent" | "close_agent" | "multi_agent_v1"
+    ) || raw_command.contains("spawn_agent")
+        || raw_command.contains("wait_agent")
+        || raw_command.contains("close_agent")
+        || raw_command.contains("multi_agent_v1")
+    {
+        return CommandRole::Orchestration;
+    }
+
+    if matches!(family, "apply_patch" | "mkdir" | "mv" | "cp")
+        || raw_command.contains("*** begin patch")
+    {
+        return CommandRole::Implementation;
+    }
+
+    if matches!(family, "cargo" | "pnpm" | "npm")
+        || raw_command.contains("pytest")
+        || raw_command.contains("vitest")
+        || raw_command.contains("jest")
+        || raw_command.contains("ruff")
+        || raw_command.contains("clippy")
+        || raw_command.contains("lint")
+        || raw_command.contains("fmt")
+        || raw_command.contains("check")
+        || raw_command.contains("doctor")
+        || raw_command.contains("replay")
+        || raw_command.contains("test")
+        || raw_command.contains("build")
+    {
+        return CommandRole::Verification;
+    }
+
+    if command.read_like
+        || matches!(
+            family,
+            "git" | "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq"
+        )
+    {
+        return CommandRole::Exploration;
+    }
+
+    if command.write_like {
+        return CommandRole::Implementation;
+    }
+
+    if command.verification_like {
+        return CommandRole::Verification;
+    }
+
+    CommandRole::Neutral
+}
+
+fn command_file_roles(command: &CommandObservation) -> BTreeSet<FileRole> {
+    command
+        .paths
+        .iter()
+        .map(|path| file_role(path))
+        .collect::<BTreeSet<_>>()
+}
+
+fn file_role(path: &str) -> FileRole {
+    let lower = path.to_ascii_lowercase();
+    if lower.contains("/tests/")
+        || lower.contains("/fixtures/")
+        || lower.contains("golden")
+        || lower.ends_with(".snap")
+        || lower.ends_with(".golden")
+    {
+        return FileRole::TestOrGolden;
+    }
+
+    if lower.starts_with("docs/")
+        || lower.contains("/docs/")
+        || lower.contains("/specs/")
+        || lower.ends_with(".md")
+    {
+        return FileRole::DocsOrSpec;
+    }
+
+    if lower.ends_with("cargo.toml")
+        || lower.ends_with("cargo.lock")
+        || lower.ends_with("package.json")
+        || lower.ends_with("pnpm-lock.yaml")
+        || lower.ends_with("package-lock.json")
+        || lower.ends_with(".toml")
+        || lower.ends_with(".yaml")
+        || lower.ends_with(".yml")
+        || lower.contains(".github/")
+        || lower.contains("/scripts/")
+    {
+        return FileRole::ConfigOrBuild;
+    }
+
+    if lower.starts_with("target/")
+        || lower.contains("/target/")
+        || lower.starts_with("dist/")
+        || lower.contains("/generated/")
+        || lower.contains("/artifacts/")
+    {
+        return FileRole::GeneratedArtifact;
+    }
+
+    if lower.ends_with(".rs")
+        || lower.ends_with(".ts")
+        || lower.ends_with(".tsx")
+        || lower.ends_with(".js")
+        || lower.ends_with(".jsx")
+        || lower.ends_with(".py")
+        || lower.contains("/src/")
+        || lower.contains("/crates/")
+    {
+        return FileRole::Source;
+    }
+
+    FileRole::Unknown
+}
+
+fn command_evidence(command: &CommandObservation, reason: &str) -> Vec<EvidenceRef> {
+    command
+        .evidence
+        .iter()
+        .map(|evidence| with_reason(evidence, reason))
+        .collect()
+}
+
+fn task_frame_evidence(task_frame: &TaskFrame, reason: &str) -> Vec<EvidenceRef> {
+    task_frame
+        .supporting_evidence
+        .iter()
+        .take(2)
+        .map(|evidence| with_reason(evidence, reason))
+        .collect()
+}
+
+fn interval_verification_evidence(analysis: &CheckpointAnalysis, reason: &str) -> Vec<EvidenceRef> {
+    analysis
+        .interval
+        .command_observations
+        .iter()
+        .filter(|command| classify_command_role(command) == CommandRole::Verification)
+        .flat_map(|command| command.evidence.iter())
+        .take(2)
+        .map(|evidence| with_reason(evidence, reason))
+        .collect()
+}
+
+fn repeated_failure_evidence(analysis: &CheckpointAnalysis, reason: &str) -> Vec<EvidenceRef> {
+    analysis
+        .repetition
+        .repeated_failure_loops
+        .iter()
+        .flat_map(|failure_loop| failure_loop.evidence.iter())
+        .chain(
+            analysis
+                .repetition
+                .repeated_verification_loops
+                .iter()
+                .flat_map(|loop_evidence| loop_evidence.evidence.iter()),
+        )
+        .take(2)
+        .map(|evidence| with_reason(evidence, reason))
+        .collect()
+}
+
+fn delegation_evidence(delegation: &DelegationContext, reason: &str) -> Vec<EvidenceRef> {
+    delegation
+        .supporting_evidence
+        .iter()
+        .take(2)
+        .map(|evidence| with_reason(evidence, reason))
+        .collect()
+}
+
+fn with_reason(evidence: &EvidenceRef, reason: &str) -> EvidenceRef {
+    EvidenceRef {
+        row: evidence.row.clone(),
+        reason: reason.to_string(),
+    }
+}
+
+fn combine_evidence(groups: Vec<Vec<EvidenceRef>>) -> Vec<EvidenceRef> {
+    groups.into_iter().flatten().collect()
+}
+
+fn dedupe_and_limit_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
+    let mut deduped = items
+        .into_iter()
+        .fold(BTreeMap::new(), |mut acc, evidence| {
+            acc.entry((
+                evidence.row.source_file.clone(),
+                evidence.row.event_index,
+                evidence.row.row_ordinal,
+                evidence.reason.clone(),
+            ))
+            .or_insert(evidence);
+            acc
+        })
+        .into_values()
+        .collect::<Vec<_>>();
+    deduped.sort_by(|left, right| {
+        (
+            left.row.source_file.as_str(),
+            left.row.event_index,
+            left.row.row_ordinal,
+            left.reason.as_str(),
+        )
+            .cmp(&(
+                right.row.source_file.as_str(),
+                right.row.event_index,
+                right.row.row_ordinal,
+                right.reason.as_str(),
+            ))
+    });
+    deduped.truncate(MAX_ARCHETYPE_EVIDENCE_ITEMS);
+    deduped
+}
+
+fn delegation_supporting_archetype_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
+    if matches!(
+        analysis.delegation.topology,
+        Some(DelegationTopology::SingleAgent) | None
+    ) {
+        return Vec::new();
+    }
+
+    delegation_evidence(
+        &analysis.delegation,
+        "visible delegation topology informed the checkpoint-local archetype decision",
+    )
+}
+
+fn delegation_counter_archetype_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
+    let mut counter = analysis
+        .delegation
+        .counter_evidence
+        .iter()
+        .map(|evidence| {
+            with_reason(
+                evidence,
+                "child-opaque delegation limited direct confidence in parent-visible archetype semantics",
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if matches!(
+        (
+            analysis.delegation.topology,
+            analysis.delegation.child_work_visibility
+        ),
+        (
+            Some(DelegationTopology::DelegatingParent),
+            Some(ChildWorkVisibility::Opaque)
+        ) | (
+            Some(DelegationTopology::MixedOrAmbiguous),
+            Some(ChildWorkVisibility::Opaque)
+        )
+    ) {
+        counter.extend(delegation_evidence(
+            &analysis.delegation,
+            "delegating-parent plus child-opaque visibility capped checkpoint-local archetype certainty",
+        ));
+    }
+
+    counter
 }
 
 fn drift_state_for_score(
