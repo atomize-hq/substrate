@@ -3,8 +3,8 @@
 mod support;
 
 use agent_drift_analyzer::{
-    Checkpoint, DriftClass, DriftState, EvidenceRef, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, SessionArchetype,
+    SessionArchetypeLabel, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use camino::Utf8PathBuf;
 
@@ -361,6 +361,78 @@ fn live_end_to_end_replay_and_live_surfaces_share_turn_context_rendering_for_v0_
 }
 
 #[test]
+fn live_end_to_end_replay_and_live_surfaces_share_archetype_rendering_for_v0_5_checkpoints() {
+    let mut checkpoints = support::sample_checkpoints();
+    for (index, checkpoint) in checkpoints.iter_mut().take(2).enumerate() {
+        checkpoint.schema_version = "v0.5".to_string();
+        checkpoint.turn_context = Some(sample_turn_context(index + 1));
+        checkpoint.session_archetype = Some(sample_session_archetype(
+            checkpoint,
+            if index == 0 {
+                SessionArchetypeLabel::AutonomousImplementation
+            } else {
+                SessionArchetypeLabel::VerificationCloseout
+            },
+        ));
+    }
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        checkpoints[..2].to_vec(),
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live_visible = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live visible checkpoint");
+    let live_silent = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live silent checkpoint");
+
+    let replay_visible = &replay.report.visible_warnings[0];
+    let replay_silent = &replay.report.silent_checkpoints[0];
+    let replay_visible_render = replay_visible.render_console_block(None);
+    let live_visible_render = live_visible.presentation.render_console_block(None);
+    let replay_silent_render = replay_silent.render_console_block(None);
+    let live_silent_render = live_silent.presentation.render_console_block(None);
+
+    assert_eq!(
+        extract_archetype_line(&replay_visible_render),
+        extract_archetype_line(&live_visible_render)
+    );
+    assert_eq!(
+        extract_archetype_line(&replay_silent_render),
+        extract_archetype_line(&live_silent_render)
+    );
+    assert!(replay_visible_render
+        .contains("- Archetype: label=autonomous_implementation confidence=medium"));
+    assert!(
+        replay_silent_render.contains("- Archetype: label=verification_closeout confidence=medium")
+    );
+    assert!(replay_visible_render
+        .contains("source edit command strengthened implementation-like evidence"));
+    assert!(replay_silent_render.contains("+1 more"));
+    assert!(replay_visible_render
+        .contains("counter[inspection-style command widened the visible search space]"));
+}
+
+#[test]
 fn live_end_to_end_replay_and_live_surfaces_share_posture_for_transition_sequences() {
     let checkpoints = vec![
         checkpoint_with_state(
@@ -691,6 +763,12 @@ fn extract_turn_context_line(rendered: &str) -> Option<&str> {
         .find(|line| line.starts_with("- Turn context: "))
 }
 
+fn extract_archetype_line(rendered: &str) -> Option<&str> {
+    rendered
+        .lines()
+        .find(|line| line.starts_with("- Archetype: "))
+}
+
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
@@ -765,5 +843,37 @@ fn sample_turn_context(turn_ordinal: usize) -> TurnContext {
             verification_like_command_count: 1,
             tool_output_count: 1,
         },
+    }
+}
+
+fn sample_session_archetype(
+    checkpoint: &Checkpoint,
+    label: SessionArchetypeLabel,
+) -> SessionArchetype {
+    SessionArchetype {
+        label,
+        confidence: Confidence::Medium,
+        supporting_evidence: vec![
+            EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason:
+                    "stable working set plus source edits supported concentrated implementation"
+                        .to_string(),
+            },
+            EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason: "source edit command strengthened implementation-like evidence"
+                    .to_string(),
+            },
+            EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason: "local verification against source scope also supported implementation follow-through"
+                    .to_string(),
+            },
+        ],
+        counter_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "inspection-style command widened the visible search space".to_string(),
+        }],
     }
 }

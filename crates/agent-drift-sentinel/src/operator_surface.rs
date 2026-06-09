@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use agent_drift_analyzer::{
-    Checkpoint, DriftClass, DriftState, EvidenceRef, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    Checkpoint, DriftClass, DriftState, EvidenceRef, SessionArchetype, SessionArchetypeLabel,
+    TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use camino::Utf8Path;
 
@@ -125,6 +125,12 @@ impl CheckpointPresentation {
                 format_turn_context(turn_context)
             ));
         }
+        if let Some(session_archetype) = self.checkpoint.session_archetype.as_ref() {
+            lines.push(format!(
+                "- Archetype: {}",
+                format_session_archetype_summary(session_archetype)
+            ));
+        }
         lines.push(format!(
             "- Diagnostics: {}",
             self.diagnostics_summary.render_console_summary()
@@ -197,6 +203,54 @@ fn format_turn_execution_mode(mode: TurnExecutionMode) -> &'static str {
         TurnExecutionMode::VerificationHeavy => "verification_heavy",
         TurnExecutionMode::Mixed => "mixed",
     }
+}
+
+fn format_session_archetype_summary(archetype: &SessionArchetype) -> String {
+    format!(
+        "label={} confidence={} support[{}] counter[{}]",
+        format_session_archetype_label(archetype.label),
+        confidence_name(archetype.confidence),
+        format_archetype_evidence(&archetype.supporting_evidence),
+        format_archetype_evidence(&archetype.counter_evidence)
+    )
+}
+
+fn format_session_archetype_label(label: SessionArchetypeLabel) -> &'static str {
+    match label {
+        SessionArchetypeLabel::Troubleshooting => "troubleshooting",
+        SessionArchetypeLabel::Planning => "planning",
+        SessionArchetypeLabel::AutonomousImplementation => "autonomous_implementation",
+        SessionArchetypeLabel::VerificationCloseout => "verification_closeout",
+    }
+}
+
+fn format_archetype_evidence(evidence: &[EvidenceRef]) -> String {
+    const DISPLAY_LIMIT: usize = 2;
+    const REASON_LIMIT: usize = 64;
+
+    if evidence.is_empty() {
+        return "none".to_string();
+    }
+
+    let mut unique_reasons = Vec::<String>::new();
+    for item in evidence {
+        let reason = truncate(&item.reason, REASON_LIMIT);
+        if unique_reasons.iter().any(|existing| existing == &reason) {
+            continue;
+        }
+        unique_reasons.push(reason);
+    }
+
+    let remaining = unique_reasons.len().saturating_sub(DISPLAY_LIMIT);
+    let mut displayed = unique_reasons
+        .into_iter()
+        .take(DISPLAY_LIMIT)
+        .collect::<Vec<_>>();
+    if remaining > 0 {
+        displayed.push(format!("+{remaining} more"));
+    }
+
+    displayed.join("; ")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -3,8 +3,8 @@
 mod support;
 
 use agent_drift_analyzer::{
-    Checkpoint, DriftClass, DriftState, EvidenceRef, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, SessionArchetype,
+    SessionArchetypeLabel, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use agent_drift_sentinel::{
     execute,
@@ -153,6 +153,65 @@ fn operator_surface_renders_compact_turn_context_for_v0_4_checkpoints() {
     assert!(rendered.contains(
         "- Turn context: turn-1 (#1) rows=4 elapsed=12s checkpoints=2 session-prompts=1 mode=autonomous activity[dir=1 asst=1 tool=1 read=1 write=1 verify=0 out=1]"
     ));
+}
+
+#[test]
+fn operator_surface_renders_compact_archetype_inspection_for_v0_5_checkpoints() {
+    let mut visible = checkpoint_with_schema_state(
+        "v0.5",
+        "session-archetype",
+        1,
+        DriftClass::TruthGroundingGap,
+        DriftState::Active,
+        82,
+        true,
+        "align plan to repo truth",
+        &["flagged score for session-archetype:1"],
+    );
+    visible.turn_context = Some(sample_turn_context(1));
+    visible.session_archetype = Some(sample_session_archetype(
+        &visible,
+        SessionArchetypeLabel::AutonomousImplementation,
+    ));
+
+    let mut silent = checkpoint_with_schema_state(
+        "v0.5",
+        "session-archetype",
+        2,
+        DriftClass::TruthGroundingGap,
+        DriftState::Recovered,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer recovery evidence"],
+    );
+    silent.turn_context = Some(sample_turn_context(2));
+    silent.session_archetype = Some(sample_session_archetype(
+        &silent,
+        SessionArchetypeLabel::VerificationCloseout,
+    ));
+
+    let fixture =
+        support::ReplayFixture::from_checkpoints(vec![visible, silent], support::sample_summary());
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let rendered = result.report.to_console_text();
+
+    assert!(rendered.contains("- Turn context: turn-1 (#1)"));
+    assert!(rendered.contains("- Archetype: label=autonomous_implementation confidence=medium"));
+    assert!(rendered.contains("- Archetype: label=verification_closeout confidence=medium"));
+    assert!(rendered.contains("source edit command strengthened implementation-like evidence"));
+    assert!(rendered.contains("+1 more"));
+    assert!(rendered.contains("counter[inspection-style command widened the visible search space]"));
+    assert!(rendered.contains("- Diagnostics: task_frame_transitioned=true"));
 }
 
 #[test]
@@ -632,5 +691,37 @@ fn sample_turn_context(turn_ordinal: usize) -> TurnContext {
             verification_like_command_count: 0,
             tool_output_count: 1,
         },
+    }
+}
+
+fn sample_session_archetype(
+    checkpoint: &Checkpoint,
+    label: SessionArchetypeLabel,
+) -> SessionArchetype {
+    SessionArchetype {
+        label,
+        confidence: Confidence::Medium,
+        supporting_evidence: vec![
+            EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason:
+                    "stable working set plus source edits supported concentrated implementation"
+                        .to_string(),
+            },
+            EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason: "source edit command strengthened implementation-like evidence"
+                    .to_string(),
+            },
+            EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason: "local verification against source scope also supported implementation follow-through"
+                    .to_string(),
+            },
+        ],
+        counter_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "inspection-style command widened the visible search space".to_string(),
+        }],
     }
 }
