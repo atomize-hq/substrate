@@ -4323,6 +4323,11 @@ mod tests {
     use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
     #[cfg(target_os = "linux")]
     use world_service::WorldService;
+    use crate::execution::agent_runtime::tool_invocation_contract::{
+        normalize_cancel_world_work_outcome_v1, normalize_inspect_world_worker_outcome_v1,
+        normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
+        normalize_stop_world_worker_outcome_v1,
+    };
 
     #[cfg(target_os = "linux")]
     struct EnvVarGuard {
@@ -11235,6 +11240,11 @@ agents:
             "summary should stay explicit about inspect's snapshot-only seam: {}",
             outcome.summary
         );
+        let adapter_outcome =
+            normalize_inspect_world_worker_outcome_v1(&outcome).expect("normalize retained inspect");
+        assert_eq!(adapter_outcome.task_run_id, None);
+        assert_eq!(adapter_outcome.participant_id.as_deref(), Some("ash_member"));
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
 
         let session_after = store
             .load_session("sess_dispatch")
@@ -11331,6 +11341,11 @@ agents:
             "ephemeral inspect should stay explicit about non-mutation: {}",
             outcome.summary
         );
+        let adapter_outcome =
+            normalize_inspect_world_worker_outcome_v1(&outcome).expect("normalize ephemeral inspect");
+        assert_eq!(adapter_outcome.task_run_id.as_deref(), Some("task-run-47"));
+        assert_eq!(adapter_outcome.participant_id, None);
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
 
         let session_after = store
             .load_session("sess_dispatch")
@@ -11982,6 +11997,14 @@ agents:
             "ephemeral cancel summary should stay explicit about non-retained closeout: {}",
             outcome.summary
         );
+        let adapter_outcome =
+            normalize_cancel_world_work_outcome_v1(&outcome).expect("normalize ephemeral cancel");
+        assert_eq!(
+            adapter_outcome.task_run_id.as_deref(),
+            Some("task-run-cancel-live")
+        );
+        assert_eq!(adapter_outcome.participant_id, None);
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
 
         server.abort();
     }
@@ -12385,6 +12408,10 @@ agents:
             "summary should stay explicit about stop reusing the private owner seam: {}",
             outcome.summary
         );
+        let adapter_outcome =
+            normalize_stop_world_worker_outcome_v1(&outcome).expect("normalize retained stop");
+        assert_eq!(adapter_outcome.participant_id, "ash_member");
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
 
         let participant_after = store
             .load_participant("ash_member")
@@ -13212,6 +13239,43 @@ agents:
             summary.contains("without retained shell state"),
             "summary should stay explicit about non-retained behavior: {summary}"
         );
+    }
+
+    #[test]
+    fn adapter_contract_normalizes_fresh_allocation_outcome_shapes_without_transport_widening() {
+        let run_receipt = normalize_run_world_task_receipt_v1(&RunWorldTaskOutcomeV1 {
+            request_id: "req_run_packet3".to_string(),
+            orchestration_session_id: "sess_dispatch".to_string(),
+            action: WorldDispatchActionV1::RunWorldTask,
+            mode: WorldDispatchModeV1::Ephemeral,
+            task_run_id: Some("task-run-packet3".to_string()),
+            state: WorldTaskTerminalStateV1::NeedsRetainedFollowup,
+            summary: "run_world_task surfaced exact active-task identity".to_string(),
+        })
+        .expect("normalize run receipt");
+        let spawn_receipt = normalize_spawn_world_worker_receipt_v1(&SpawnWorldWorkerOutcomeV1 {
+            request_id: "req_spawn_packet3".to_string(),
+            orchestration_session_id: "sess_dispatch".to_string(),
+            action: WorldDispatchActionV1::SpawnWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            participant_id: "ash_packet3".to_string(),
+            orchestrator_participant_id: "orch_dispatch".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            target_backend_id: "cli:codex_world".to_string(),
+            world_id: "world-17".to_string(),
+            world_generation: 2,
+            launch_span_id: "launch-span-packet3".to_string(),
+            summary: "spawn_world_worker surfaced exact retained identity".to_string(),
+        })
+        .expect("normalize spawn receipt");
+
+        assert_eq!(run_receipt.task_run_id, "task-run-packet3");
+        assert_eq!(run_receipt.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(spawn_receipt.participant_id, "ash_packet3");
+        assert_eq!(spawn_receipt.target_backend_id, "cli:codex_world");
+        assert_eq!(spawn_receipt.world_id, "world-17");
+        assert_eq!(spawn_receipt.world_generation, 2);
     }
 
     #[cfg(target_os = "linux")]
