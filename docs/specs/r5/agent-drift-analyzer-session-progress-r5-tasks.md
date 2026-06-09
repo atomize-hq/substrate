@@ -139,8 +139,9 @@ verification command for the current packet is green or the failure is documente
 ## R5-4: Progress Engine
 
 - [ ] Task R5-4.1: Add `checkpoint/progress.rs` and dimension selection.
-  - Acceptance: dimension derives from `session_archetype.label`, with delegation override to
-    `ParentVisibleOrchestration` or `InsufficientEvidence` where required.
+  - Acceptance: dimension derives from `session_archetype.label`, with delegation allowed to
+    override only the dimension to `parent_visible_orchestration`; the resulting status stays
+    `insufficient_evidence`, `stalled`, or `mixed` according to the visible parent evidence.
   - Verify: focused dimension tests.
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`

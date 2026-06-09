@@ -125,22 +125,27 @@ Insufficient evidence:
 single_agent:
   normal confidence rules.
 
-partial visibility:
-  high is allowed only when the decisive evidence is directly visible in this checkpoint's rows;
-  otherwise cap at medium.
+delegating_parent + partial visibility:
+  cap at medium, even when the decisive parent-visible evidence is directly visible in this
+  checkpoint's rows.
 
-opaque visibility:
+any delegated case + opaque visibility:
   cap at low.
 
+delegated_child + partial visibility:
+  cap at medium when this rollout contains direct child work; otherwise keep it at low.
+
 mixed_or_ambiguous:
-  cap at low unless the checkpoint is clearly a single-agent child trace with direct work evidence.
+  cap at low unless the checkpoint resolves to clearly visible delegated-child work, and even then
+  never exceed medium.
 ```
 
 For R5 first landing, prefer the simpler rule:
 
 ```text
-Any delegating_parent + opaque => max low.
-Any partial visibility with archetype-native progress => max medium unless explicitly child-visible.
+Any delegated case => never exceed medium.
+Any opaque visibility inside a delegated case => max low.
+Any delegating_parent + partial visibility => max medium.
 ```
 
 ## Interaction With Archetypes

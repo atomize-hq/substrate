@@ -108,8 +108,10 @@ Dimension should generally derive from `session_archetype.label`:
 | `autonomous_implementation` | `ImplementationVerificationWall` |
 | `verification_closeout` | `VerificationCloseoutNarrowing` |
 
-Delegation may override dimension to `ParentVisibleOrchestration` when child work is opaque or only
-parent-visible orchestration evidence is available.
+Delegation may override only the dimension to `ParentVisibleOrchestration` when child work is
+opaque or only parent-visible orchestration evidence is available. Status still comes from the
+normal status decision rules: delegated parent-visible cases resolve to `insufficient_evidence`,
+`stalled`, or `mixed` based on the visible parent evidence.
 
 ## Best-So-Far Frontier
 
@@ -202,8 +204,8 @@ Guidelines:
    `insufficient_evidence` for implementation progress, not `advancing` by default.
 3. Repeated exact verifier failures can support `stalled` even without perfect parsing when command
    and output hashes are stable and no edits intervened.
-4. Planning convergence should rarely be `high` in v0.6 because it uses structural proxies rather
-   than direct machine diagnostics.
+4. Planning convergence is capped at `medium` confidence throughout R5 because it uses structural
+   proxies rather than direct machine diagnostics.
 
 ## Delegation Caps
 
@@ -220,12 +222,14 @@ delegating_parent + partial visibility:
   attach DelegationVisibilityLimited when visibility affects confidence.
 
 delegating_parent + opaque visibility:
-  emit ParentVisibleOrchestration or InsufficientEvidence;
-  never high confidence;
+  override dimension to ParentVisibleOrchestration;
+  emit insufficient_evidence, stalled, or mixed according to the visible parent evidence;
+  never exceed medium confidence, and cap opaque visibility at low;
   never claim child troubleshooting frontier movement or child implementation progress.
 
 mixed_or_ambiguous + opaque visibility:
-  prefer InsufficientEvidence unless direct parent-visible orchestration is clear.
+  prefer insufficient_evidence unless direct parent-visible orchestration is clear enough to
+  support stalled or mixed parent-visible orchestration.
 ```
 
 ## Relationship To R6
