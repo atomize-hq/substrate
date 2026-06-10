@@ -4341,6 +4341,12 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+
         fn set_path(key: &'static str, value: &Path) -> Self {
             let previous = std::env::var(key).ok();
             std::env::set_var(key, value);
@@ -4356,6 +4362,30 @@ mod tests {
             } else {
                 std::env::remove_var(self.key);
             }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    struct SocketActivationOverrideGuard {
+        env_guard: Option<EnvVarGuard>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl SocketActivationOverrideGuard {
+        fn set(mode: &'static str) -> Self {
+            let env_guard = EnvVarGuard::set("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", mode);
+            crate::execution::socket_activation::refresh_socket_activation_report();
+            Self {
+                env_guard: Some(env_guard),
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for SocketActivationOverrideGuard {
+        fn drop(&mut self) {
+            let _ = self.env_guard.take();
+            crate::execution::socket_activation::refresh_socket_activation_report();
         }
     }
 
@@ -10460,6 +10490,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_control_directive_returns_explanation_ready_error_when_delivery_fails(
     ) {
         let _env_guard = world_env_guard();
+        let _socket_activation_guard = SocketActivationOverrideGuard::set("socket_activation");
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_world_dispatch_policy_with_control_directives(
