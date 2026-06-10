@@ -627,7 +627,6 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         prompt_file: args.prompt_source.prompt_file.clone(),
     })
     .map_err(normalize_public_prompt_error)?;
-    let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
     let target = store
         .resolve_public_turn_target(&args.session, &args.backend)
@@ -654,6 +653,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             plan.participant_id(),
         )
         .map_err(runtime_start_error)?;
+        let context = resolve_command_context(cli)?;
         let host_toolbox_surface_authoritative = authoritative_host_toolbox_surface_enabled(
             &plan.descriptor.backend_id,
             plan.descriptor.execution_scope,
