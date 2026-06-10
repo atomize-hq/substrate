@@ -417,6 +417,11 @@ fn build_intent_evidence_profile(analysis: &CheckpointAnalysis) -> IntentEvidenc
         let config_scope = file_roles.contains(&FileRole::ConfigOrBuild);
         let docs_only = docs_scope && !source_scope && !test_scope && !config_scope;
         let test_only = test_scope && !source_scope;
+        let closeout_artifact_scope = docs_only
+            && command
+                .paths
+                .iter()
+                .any(|path| is_closeout_artifact_path(path));
 
         match role {
             CommandRole::Exploration => {
@@ -454,20 +459,40 @@ fn build_intent_evidence_profile(analysis: &CheckpointAnalysis) -> IntentEvidenc
                     ));
                 } else if docs_only {
                     profile.docs_or_spec_write_command_count += 1;
-                    profile.exploration_like.add(
-                        1,
-                        command_evidence(
+                    if closeout_artifact_scope
+                        && objective_mentions_closeout_phase(&analysis.current.context.objective.text)
+                    {
+                        profile.verification_like.add(
+                            4,
+                            command_evidence(
+                                command,
+                                "closeout artifact edit preserved proof-oriented closeout context even without a fresh proof command",
+                            ),
+                        );
+                        profile.exploration_like.add_counter(command_evidence(
                             command,
-                            "docs/spec-only edit behaved like scope-shaping rather than direct source implementation",
-                        ),
-                    );
-                    profile.orchestration_like.add(
-                        1,
-                        command_evidence(
+                            "closeout artifact edit followed an explicit closeout objective instead of open-ended planning",
+                        ));
+                        profile.orchestration_like.add_counter(command_evidence(
                             command,
-                            "docs/spec-only edit behaved like planning-orchestration context",
-                        ),
-                    );
+                            "closeout artifact edit followed an explicit closeout objective instead of planning-orchestration setup",
+                        ));
+                    } else {
+                        profile.exploration_like.add(
+                            1,
+                            command_evidence(
+                                command,
+                                "docs/spec-only edit behaved like scope-shaping rather than direct source implementation",
+                            ),
+                        );
+                        profile.orchestration_like.add(
+                            1,
+                            command_evidence(
+                                command,
+                                "docs/spec-only edit behaved like planning-orchestration context",
+                            ),
+                        );
+                    }
                     profile.implementation_like.add_counter(command_evidence(
                         command,
                         "docs/spec-only edit did not directly prove source implementation",
@@ -1161,6 +1186,23 @@ fn file_role(path: &str) -> FileRole {
     }
 
     FileRole::Unknown
+}
+
+fn is_closeout_artifact_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("handoff")
+        || lower.contains("summary")
+        || lower.contains("fixture")
+        || lower.starts_with("docs/")
+        || lower.ends_with(".md")
+}
+
+fn objective_mentions_closeout_phase(objective: &str) -> bool {
+    let lower = objective.to_ascii_lowercase();
+    lower.contains("closeout")
+        || lower.contains("handoff")
+        || lower.contains("residual proof")
+        || lower.contains("record it")
 }
 
 fn command_evidence(command: &CommandObservation, reason: &str) -> Vec<EvidenceRef> {

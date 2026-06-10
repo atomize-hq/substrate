@@ -1483,8 +1483,8 @@ fn checkpoints_mark_troubleshooting_frontier_advancement_from_compile_to_test_fa
         tool_call_row(
             4,
             "turn-001",
-            "functions.apply_patch",
-            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,120p' crates/agent-drift-analyzer/src/checkpoint/progress.rs\",\"workdir\":\"/repo\"}",
         ),
         tool_call_row(
             5,
@@ -1495,20 +1495,41 @@ fn checkpoints_mark_troubleshooting_frontier_advancement_from_compile_to_test_fa
         tool_output_row(
             6,
             "turn-001",
+            "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\n --> crates/agent-drift-analyzer/src/checkpoint/progress.rs:12:34\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+        ),
+        tool_call_row(
+            7,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            8,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            9,
+            "turn-001",
             "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
         ),
     ]);
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
     let progress = checkpoint
         .session_progress
         .as_ref()
         .expect("session progress");
 
-    assert!(matches!(
+    assert_eq!(archetype.label, SessionArchetypeLabel::Troubleshooting);
+    assert_eq!(
         progress.dimension,
         ProgressDimension::TroubleshootingFrontier
-            | ProgressDimension::ImplementationVerificationWall
-    ));
+    );
     assert_eq!(progress.status, ProgressStatus::Advancing);
     assert_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
     assert_progress_signal(progress, ProgressSignalCode::FailingScopeEdited);
@@ -2037,54 +2058,241 @@ fn checkpoints_mark_repeated_implementation_failure_after_unrelated_edits_as_sta
         tool_call_row(
             1,
             "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
             "functions.shell_command",
             "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
         ),
         tool_output_row(
-            2,
+            3,
             "turn-001",
             "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
         ),
-        prompt_row(
-            3,
-            "turn-002",
-            "/goal Keep coding, but the edits drift away from the failing verifier scope.",
-        ),
         tool_call_row(
             4,
-            "turn-002",
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/export.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
             "functions.apply_patch",
             "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-sentinel/src/operator_surface.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
         ),
         tool_call_row(
-            5,
-            "turn-002",
+            6,
+            "turn-001",
             "functions.shell_command",
             "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
         ),
         tool_output_row(
-            6,
-            "turn-002",
+            7,
+            "turn-001",
             "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
         ),
     ]);
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
     let progress = checkpoint
         .session_progress
         .as_ref()
         .expect("session progress");
 
-    assert!(matches!(
+    assert_eq!(
+        archetype.label,
+        SessionArchetypeLabel::AutonomousImplementation
+    );
+    assert_eq!(
         progress.dimension,
         ProgressDimension::ImplementationVerificationWall
-            | ProgressDimension::TroubleshootingFrontier
-    ));
+    );
     assert!(matches!(
         progress.status,
         ProgressStatus::Stalled | ProgressStatus::Mixed
     ));
     assert_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
     assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_mark_closeout_prior_clean_proof_that_later_fails_as_regressing() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Implement the patch and then verify it.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.apply_patch",
+            r#"{"command":"apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs
+*** End Patch
+PATCH","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            r#"Exit code: 0
+running 27 tests
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"#,
+        ),
+        assistant_row(
+            4,
+            "turn-001",
+            "The implementation is in place. Next I am gathering closeout proof only.",
+        ),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Verify the existing patch, narrow the residual proof, and record it.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            7,
+            "turn-002",
+            r#"Exit code: 0
+running 1 test
+test checkpoints::captures_progress ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out"#,
+        ),
+        prompt_row(
+            8,
+            "turn-003",
+            "/goal Re-check the same closeout proof after it broke again.",
+        ),
+        tool_call_row(
+            9,
+            "turn-003",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            10,
+            "turn-003",
+            r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::VerificationCloseout);
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::VerificationCloseoutNarrowing
+    );
+    assert_eq!(progress.status, ProgressStatus::Regressing);
+    assert_progress_signal(progress, ProgressSignalCode::PreviouslyCleanScopeBroken);
+}
+
+#[test]
+fn checkpoints_mark_closeout_prose_without_proof_as_insufficient_evidence() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Implement the patch and then verify it.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.apply_patch",
+            r#"{"command":"apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs
+*** End Patch
+PATCH","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            r#"Exit code: 0
+running 27 tests
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"#,
+        ),
+        assistant_row(
+            4,
+            "turn-001",
+            "The implementation is verified. I will finish with closeout prose only.",
+        ),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Definition of done: record the closeout handoff only without rerunning any proof command.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.apply_patch",
+            r#"{"command":"apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: .codex/handoffs/2026-06-10-r5-4-closeout.md
+*** End Patch
+PATCH","workdir":"/repo"}"#,
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::VerificationCloseout);
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::VerificationCloseoutNarrowing
+    );
+    assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+    assert!(progress.signals.is_empty());
 }
 
 #[test]
