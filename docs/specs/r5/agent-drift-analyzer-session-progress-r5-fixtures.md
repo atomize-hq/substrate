@@ -131,6 +131,13 @@ dimension:
   - not `stalled`: quantitative failing frontier improved
   - not `regressing`: failure count did not grow
 - Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- R5-4 packet-scoped deferral note: a dedicated synthetic checkpoint test for this count-only
+  troubleshooting shape is deferred in R5-4 because the current synthetic broad-suite row shapes
+  are still routed by R4 archetype selection as verification-closeout rather than honest
+  troubleshooting. This packet keeps the behavior implemented in
+  `crates/agent-drift-analyzer/src/checkpoint/progress.rs` and relies on diagnostics parser
+  coverage plus the new regression/sparse/reopened synthetic tests; the follow-up work is only to
+  add a troubleshooting-native synthetic harness, not to change R5-4 scoring semantics.
 
 ## Fixture: r5_troubleshooting_same_signature_no_edit
 

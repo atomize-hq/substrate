@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use agent_session_compactor::RowRef;
 
@@ -81,10 +84,9 @@ fn parent_visible_orchestration_progress(
         .iter()
         .filter(|attempt| attempt.role == CommandAttemptRole::Orchestration)
         .collect::<Vec<_>>();
-    let direct_non_orchestration_evidence = has_direct_non_orchestration_evidence(analysis);
-    let must_fallback = matches!(visibility, ChildWorkVisibility::Opaque)
-        || (!direct_non_orchestration_evidence && !orchestration_attempts.is_empty());
-    if !must_fallback {
+    if orchestration_attempts.is_empty()
+        || !has_only_parent_visible_orchestration_evidence(analysis)
+    {
         return None;
     }
 
@@ -117,11 +119,9 @@ fn parent_visible_orchestration_progress(
         limiting_evidence,
     );
 
-    let parent_synthesis = has_parent_visible_synthesis(analysis);
+    let parent_synthesis = has_parent_visible_synthesis(&orchestration_attempts);
     let prior_parent_visible = previous_checkpoint_was_parent_visible(analysis);
-    let status = if orchestration_attempts.is_empty() {
-        ProgressStatus::InsufficientEvidence
-    } else if parent_synthesis {
+    let status = if parent_synthesis {
         ProgressStatus::Mixed
     } else if prior_parent_visible {
         ProgressStatus::Stalled
@@ -158,28 +158,12 @@ fn assess_troubleshooting_progress(
         return insufficient_progress(dimension, None, None);
     };
     let prior_attempts = comparable_attempts(analysis, current_attempts, current);
-
-    if current.exercise_state == ExerciseState::BlockedBeforeTarget {
-        return insufficient_progress(
-            dimension,
-            Some(progress_signal(
-                ProgressSignalCode::TargetNotExercised,
-                SignalPolarity::Limiting,
-                SignalStrength::Moderate,
-                "verification stayed blocked before the requested target executed",
-                None,
-                Some(current.target_scope.raw.clone()),
-                attempt_evidence(current, "verifier did not exercise the requested target"),
-            )),
-            None,
-        );
-    }
+    let best_failed = best_failed_attempt(&prior_attempts);
+    let best_clean = best_clean_attempt(&prior_attempts);
+    let latest_failed = latest_failed_attempt(&prior_attempts);
 
     if current.outcome == AttemptOutcome::Clean {
-        if let Some(previous_failed) = prior_attempts
-            .iter()
-            .find(|candidate| candidate.outcome == AttemptOutcome::Failed)
-        {
+        if let Some(previous_failed) = best_failed {
             let mut signals = vec![progress_signal(
                 ProgressSignalCode::VerificationClean,
                 SignalPolarity::Positive,
@@ -217,10 +201,7 @@ fn assess_troubleshooting_progress(
         return insufficient_progress(dimension, None, None);
     }
 
-    if let Some(previous_clean) = prior_attempts
-        .iter()
-        .find(|candidate| candidate.outcome == AttemptOutcome::Clean)
-    {
+    if let Some(previous_clean) = best_clean {
         return progress_from_signals(
             ProgressStatus::Regressing,
             dimension,
@@ -241,10 +222,46 @@ fn assess_troubleshooting_progress(
         );
     }
 
-    let Some(previous_failed) = prior_attempts
-        .iter()
-        .find(|candidate| candidate.outcome == AttemptOutcome::Failed)
-    else {
+    if let Some(previous_failed) =
+        best_failed.filter(|candidate| failed_attempt_frontier_cmp(candidate, current).is_gt())
+    {
+        return progress_from_signals(
+            ProgressStatus::Regressing,
+            dimension,
+            Confidence::High,
+            vec![progress_signal(
+                ProgressSignalCode::PreviouslyCleanScopeBroken,
+                SignalPolarity::Negative,
+                SignalStrength::Strong,
+                "the troubleshooting frontier fell back behind a previously later comparable verifier result",
+                Some(verification_attempt_preview(previous_failed)),
+                Some(verification_attempt_preview(current)),
+                merge_evidence(vec![
+                    attempt_evidence(previous_failed, "earlier later-stage verification attempt"),
+                    attempt_evidence(current, "later regressing verification attempt"),
+                ]),
+            )],
+            Vec::new(),
+        );
+    }
+
+    if current.exercise_state == ExerciseState::BlockedBeforeTarget {
+        return insufficient_progress(
+            dimension,
+            Some(progress_signal(
+                ProgressSignalCode::TargetNotExercised,
+                SignalPolarity::Limiting,
+                SignalStrength::Moderate,
+                "verification stayed blocked before the requested target executed",
+                None,
+                Some(current.target_scope.raw.clone()),
+                attempt_evidence(current, "verifier did not exercise the requested target"),
+            )),
+            None,
+        );
+    }
+
+    let Some(previous_failed) = latest_failed else {
         return insufficient_progress(dimension, None, None);
     };
 
@@ -554,6 +571,9 @@ fn assess_implementation_progress(
         return insufficient_progress(dimension, None, None);
     };
     let prior_attempts = comparable_attempts(analysis, current_attempts, current);
+    let best_failed = best_failed_attempt(&prior_attempts);
+    let best_clean = best_clean_attempt(&prior_attempts);
+    let latest_failed = latest_failed_attempt(&prior_attempts);
     let concentrated = working_set_is_concentrated(analysis);
     let diffused = working_set_is_diffused(analysis);
 
@@ -605,10 +625,7 @@ fn assess_implementation_progress(
     }
 
     if current.outcome == AttemptOutcome::Clean {
-        if let Some(previous_failed) = prior_attempts
-            .iter()
-            .find(|candidate| candidate.outcome == AttemptOutcome::Failed)
-        {
+        if let Some(previous_failed) = best_failed {
             signals.push(progress_signal(
                 ProgressSignalCode::VerificationClean,
                 SignalPolarity::Positive,
@@ -653,10 +670,51 @@ fn assess_implementation_progress(
         return insufficient_progress(dimension, None, None);
     }
 
-    if let Some(previous_failed) = prior_attempts
-        .iter()
-        .find(|candidate| candidate.outcome == AttemptOutcome::Failed)
+    if let Some(previous_clean) = best_clean {
+        return progress_from_signals(
+            ProgressStatus::Regressing,
+            dimension,
+            Confidence::High,
+            vec![progress_signal(
+                ProgressSignalCode::PreviouslyCleanScopeBroken,
+                SignalPolarity::Negative,
+                SignalStrength::Strong,
+                "a previously clean implementation verifier is failing again",
+                Some(previous_clean.target_scope.raw.clone()),
+                Some(current.target_scope.raw.clone()),
+                merge_evidence(vec![
+                    attempt_evidence(previous_clean, "earlier clean implementation verifier"),
+                    attempt_evidence(current, "later failing implementation verifier"),
+                ]),
+            )],
+            Vec::new(),
+        );
+    }
+
+    if let Some(previous_failed) =
+        best_failed.filter(|candidate| failed_attempt_frontier_cmp(candidate, current).is_gt())
     {
+        return progress_from_signals(
+            ProgressStatus::Regressing,
+            dimension,
+            Confidence::High,
+            vec![progress_signal(
+                ProgressSignalCode::PreviouslyCleanScopeBroken,
+                SignalPolarity::Negative,
+                SignalStrength::Strong,
+                "the implementation verifier fell back behind a previously later comparable frontier",
+                Some(verification_attempt_preview(previous_failed)),
+                Some(verification_attempt_preview(current)),
+                merge_evidence(vec![
+                    attempt_evidence(previous_failed, "earlier later-stage implementation verifier"),
+                    attempt_evidence(current, "later regressing implementation verifier"),
+                ]),
+            )],
+            Vec::new(),
+        );
+    }
+
+    if let Some(previous_failed) = latest_failed {
         let current_signature = best_signature(current);
         let previous_signature = best_signature(previous_failed);
         let edit_overlap = classify_edit_overlap(
@@ -761,7 +819,7 @@ fn assess_implementation_progress(
         );
     }
 
-    let positive = has_positive_signal(&signals);
+    let positive = has_direct_verifier_progress_signal(&signals);
     let negative = has_negative_signal(&signals);
     if positive && negative {
         return progress_from_signals(
@@ -805,6 +863,7 @@ fn assess_closeout_progress(
         return insufficient_progress(dimension, None, None);
     };
     let prior_attempts = comparable_attempts(analysis, current_attempts, current);
+    let best_clean = best_clean_attempt(&prior_attempts);
 
     let mut signals = Vec::new();
 
@@ -825,10 +884,7 @@ fn assess_closeout_progress(
         ));
     }
 
-    if let Some(previous_clean) = prior_attempts
-        .iter()
-        .find(|candidate| candidate.outcome == AttemptOutcome::Clean)
-    {
+    if let Some(previous_clean) = best_clean {
         if current.outcome == AttemptOutcome::Failed {
             signals.push(progress_signal(
                 ProgressSignalCode::PreviouslyCleanScopeBroken,
@@ -922,6 +978,17 @@ fn assess_closeout_progress(
                 })
                 .collect(),
         ));
+    }
+
+    if !source_edits.is_empty() {
+        let counter = negative_signal_evidence(&signals);
+        return progress_from_signals(
+            ProgressStatus::Mixed,
+            dimension,
+            Confidence::Medium,
+            signals,
+            counter,
+        );
     }
 
     progress_from_signals(
@@ -1244,28 +1311,20 @@ fn test_edits(analysis: &CheckpointAnalysis) -> Vec<&CommandAttempt> {
         .collect()
 }
 
-fn has_direct_non_orchestration_evidence(analysis: &CheckpointAnalysis) -> bool {
-    !analysis.interval.verification_attempts.is_empty()
-        || analysis.interval.command_attempts.iter().any(|attempt| {
-            matches!(
-                attempt.role,
-                CommandAttemptRole::Edit
-                    | CommandAttemptRole::Compile
-                    | CommandAttemptRole::Test
-                    | CommandAttemptRole::Lint
-                    | CommandAttemptRole::Build
-                    | CommandAttemptRole::Replay
-            )
-        })
+fn has_only_parent_visible_orchestration_evidence(analysis: &CheckpointAnalysis) -> bool {
+    !analysis.interval.command_attempts.is_empty()
+        && analysis.interval.verification_attempts.is_empty()
+        && analysis
+            .interval
+            .command_attempts
+            .iter()
+            .all(|attempt| attempt.role == CommandAttemptRole::Orchestration)
 }
 
-fn has_parent_visible_synthesis(analysis: &CheckpointAnalysis) -> bool {
-    analysis.interval.command_attempts.iter().any(|attempt| {
-        matches!(
-            attempt.role,
-            CommandAttemptRole::Read | CommandAttemptRole::Edit
-        )
-    })
+fn has_parent_visible_synthesis(orchestration_attempts: &[&CommandAttempt]) -> bool {
+    orchestration_attempts
+        .iter()
+        .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1"))
 }
 
 fn previous_checkpoint_was_parent_visible(analysis: &CheckpointAnalysis) -> bool {
@@ -1274,9 +1333,13 @@ fn previous_checkpoint_was_parent_visible(analysis: &CheckpointAnalysis) -> bool
     };
     let command_observations = collect_command_observations(&previous.window.compact_rows);
     let attempts = build_command_attempts(&previous.window.compact_rows, &command_observations);
-    attempts
-        .iter()
-        .any(|attempt| attempt.role == CommandAttemptRole::Orchestration)
+    let verification_attempts =
+        build_verification_attempts(&attempts, &previous.window.compact_rows);
+    !attempts.is_empty()
+        && verification_attempts.is_empty()
+        && attempts
+            .iter()
+            .all(|attempt| attempt.role == CommandAttemptRole::Orchestration)
 }
 
 fn working_set(paths: &[String]) -> BTreeSet<String> {
@@ -1458,6 +1521,72 @@ fn insufficient_progress(
         supporting_evidence: Vec::new(),
         counter_evidence: counter_evidence.unwrap_or_default(),
     }
+}
+
+fn latest_failed_attempt(prior_attempts: &[VerificationAttempt]) -> Option<&VerificationAttempt> {
+    prior_attempts
+        .iter()
+        .rev()
+        .find(|candidate| candidate.outcome == AttemptOutcome::Failed)
+}
+
+fn best_clean_attempt(prior_attempts: &[VerificationAttempt]) -> Option<&VerificationAttempt> {
+    prior_attempts
+        .iter()
+        .filter(|candidate| candidate.outcome == AttemptOutcome::Clean)
+        .max_by(|left, right| {
+            scope_cardinality(&left.target_scope)
+                .cmp(&scope_cardinality(&right.target_scope))
+                .then_with(|| left.attempt_ordinal.cmp(&right.attempt_ordinal))
+        })
+}
+
+fn best_failed_attempt(prior_attempts: &[VerificationAttempt]) -> Option<&VerificationAttempt> {
+    prior_attempts
+        .iter()
+        .filter(|candidate| candidate.outcome == AttemptOutcome::Failed)
+        .max_by(|left, right| failed_attempt_frontier_cmp(left, right))
+}
+
+fn failed_attempt_frontier_cmp(
+    left: &VerificationAttempt,
+    right: &VerificationAttempt,
+) -> Ordering {
+    failed_attempt_frontier_key(left).cmp(&failed_attempt_frontier_key(right))
+}
+
+fn failed_attempt_frontier_key(attempt: &VerificationAttempt) -> (u8, u8, u32, usize, usize) {
+    let signature = best_signature(attempt);
+    (
+        matches!(attempt.exercise_state, ExerciseState::TargetExercised) as u8,
+        signature
+            .map(|signature| frontier_rank(signature.failure_class))
+            .unwrap_or_default(),
+        signature
+            .map(|signature| u32::MAX.saturating_sub(fail_count(signature)))
+            .unwrap_or_default(),
+        scope_cardinality(&attempt.target_scope),
+        attempt.attempt_ordinal,
+    )
+}
+
+fn verification_attempt_preview(attempt: &VerificationAttempt) -> String {
+    if attempt.outcome == AttemptOutcome::Clean {
+        format!("clean {}", attempt.target_scope.raw)
+    } else {
+        best_signature(attempt)
+            .map(|signature| signature.preview.clone())
+            .unwrap_or_else(|| attempt.target_scope.raw.clone())
+    }
+}
+
+fn has_direct_verifier_progress_signal(signals: &[ProgressSignal]) -> bool {
+    signals.iter().any(|signal| {
+        matches!(
+            signal.code,
+            ProgressSignalCode::FailureFrontierAdvanced | ProgressSignalCode::VerificationClean
+        )
+    })
 }
 
 fn has_positive_signal(signals: &[ProgressSignal]) -> bool {
