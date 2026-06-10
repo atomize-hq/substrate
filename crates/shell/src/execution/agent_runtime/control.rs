@@ -23,6 +23,7 @@ use chrono::Utc;
 use fs2::FileExt;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use substrate_broker::Policy;
 #[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[cfg(unix)]
@@ -30,7 +31,6 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
 #[cfg(target_os = "linux")]
 use transport_api_types::{ExecuteStreamFrame, MemberTurnSubmitRequestV1};
-use substrate_broker::Policy;
 use uuid::Uuid;
 
 #[cfg(unix)]
@@ -41,7 +41,9 @@ use crate::execution::agent_runtime::orchestration_session::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
-use crate::execution::config_model::{AgentExecutionScope, AgentToolboxBindTransport, SubstrateConfig};
+use crate::execution::config_model::{
+    AgentExecutionScope, AgentToolboxBindTransport, SubstrateConfig,
+};
 use crate::execution::prompt_fulfillment::{
     build_runtime_owned_toolbox_env, compose_prompt_with_host_toolbox_contract,
     PromptFulfillmentCancelHandle,
