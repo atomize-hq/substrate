@@ -364,7 +364,9 @@ fn verification_scope(attempt: &CommandAttempt) -> VerificationScope {
             paths.extend(more_paths);
             tests.extend(more_tests);
         }
-        "npm" | "pnpm" | "vitest" | "bun" | "deno" if attempt.role == CommandAttemptRole::Test => {
+        "npm" | "pnpm" | "vitest" | "jest" | "bun" | "deno"
+            if attempt.role == CommandAttemptRole::Test =>
+        {
             let (more_paths, more_tests) = js_test_targets(&tokens, &attempt.family);
             paths.extend(more_paths);
             tests.extend(more_tests);
@@ -451,15 +453,26 @@ fn output_contains_compile_blocker(output: &str) -> bool {
 
 fn output_shows_test_execution(output: &str, target_scope: &VerificationScope) -> bool {
     let requires_target_match = !(target_scope.paths.is_empty() && target_scope.tests.is_empty());
+    let mut previous_nonempty_line: Option<String> = None;
 
-    output
+    for line in output
         .lines()
         .map(|line| line.trim().to_ascii_lowercase())
         .filter(|line| !line.is_empty())
-        .any(|line| {
-            line_has_explicit_test_execution(&line)
-                && (!requires_target_match || line_matches_requested_target(&line, target_scope))
-        })
+    {
+        let target_matches = line_matches_requested_target(&line, target_scope)
+            || previous_nonempty_line
+                .as_deref()
+                .is_some_and(|prior| line_matches_requested_target(prior, target_scope));
+        if line_has_explicit_test_execution(&line)
+            && (!requires_target_match || target_matches)
+        {
+            return true;
+        }
+        previous_nonempty_line = Some(line);
+    }
+
+    false
 }
 
 fn line_has_explicit_test_execution(line: &str) -> bool {
@@ -468,6 +481,8 @@ fn line_has_explicit_test_execution(line: &str) -> bool {
         || line.contains(" ... ok")
         || line.contains(" ... failed")
         || line.contains(" ... ignored")
+        || line.starts_with("test ")
+        || line_starts_with_js_status(line)
         || (line.contains("::") && line_has_test_status(line))
         || (line.chars().next().is_some_and(|ch| ch.is_ascii_digit()) && line_has_test_status(line))
 }
@@ -487,6 +502,20 @@ fn line_has_test_status(line: &str) -> bool {
     [" passed", " failed", " skipped", " xfailed", " xpassed"]
         .iter()
         .any(|needle| line.contains(needle))
+}
+
+fn line_starts_with_js_status(line: &str) -> bool {
+    [
+        "fail ",
+        "pass ",
+        "(fail)",
+        "(pass)",
+        "✕ ",
+        "✓ ",
+        "× ",
+    ]
+    .iter()
+    .any(|prefix| line.starts_with(prefix))
 }
 
 fn cargo_role(tokens: &[String]) -> Option<CommandAttemptRole> {
@@ -635,6 +664,7 @@ fn generic_test_targets(tokens: &[String], family: &str) -> Vec<String> {
     let Some(args) = tokens_after_family(tokens, family) else {
         return Vec::new();
     };
+    let args = strip_generic_runner_verbs(args);
     positional_targets(args, &["-k", "-m", "-t", "--filter", "--grep", "--project"])
 }
 
@@ -740,6 +770,17 @@ fn strip_js_runner_verbs(mut tokens: &[String]) -> &[String] {
             }
             _ => return tokens,
         }
+    }
+}
+
+fn strip_generic_runner_verbs(tokens: &[String]) -> &[String] {
+    let Some(index) = first_target_token_index(tokens) else {
+        return tokens;
+    };
+
+    match tokens[index].as_str() {
+        "test" | "run" | "exec" | "dlx" => &tokens[index + 1..],
+        _ => tokens,
     }
 }
 
@@ -1085,13 +1126,18 @@ mod tests {
             tool_call(
                 3,
                 "functions.shell_command",
+                "jest tests/checkpoints.test.ts",
+            ),
+            tool_call(
+                4,
+                "functions.shell_command",
                 "bun test tests/checkpoints.test.ts",
             ),
         ];
 
         let attempts = build_command_attempts(&rows, &command_observations(&rows));
         let verification = build_verification_attempts(&attempts, &rows);
-        assert_eq!(verification.len(), 4);
+        assert_eq!(verification.len(), 5);
 
         assert_eq!(verification[0].target_scope.paths, Vec::<String>::new());
         assert_eq!(verification[0].target_scope.tests, Vec::<String>::new());
@@ -1114,6 +1160,38 @@ mod tests {
         );
         assert_eq!(verification[3].target_scope.tests, Vec::<String>::new());
         assert!(!verification[3].target_scope.broad);
+
+        assert_eq!(
+            verification[4].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[4].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[4].target_scope.broad);
+    }
+
+    #[test]
+    fn checkpoints_strip_generic_runner_verbs_before_extracting_test_targets() {
+        let rows = vec![
+            tool_call(0, "functions.shell_command", "go test ./..."),
+            tool_call(1, "functions.shell_command", "just test"),
+            tool_call(2, "functions.shell_command", "make test"),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        let verification = build_verification_attempts(&attempts, &rows);
+        assert_eq!(verification.len(), 3);
+
+        assert_eq!(verification[0].target_scope.paths, vec!["./...".to_string()]);
+        assert_eq!(verification[0].target_scope.tests, vec!["./...".to_string()]);
+        assert!(!verification[0].target_scope.broad);
+
+        assert_eq!(verification[1].target_scope.paths, Vec::<String>::new());
+        assert_eq!(verification[1].target_scope.tests, Vec::<String>::new());
+        assert!(verification[1].target_scope.broad);
+
+        assert_eq!(verification[2].target_scope.paths, Vec::<String>::new());
+        assert_eq!(verification[2].target_scope.tests, Vec::<String>::new());
+        assert!(verification[2].target_scope.broad);
     }
 
     #[test]
@@ -1214,6 +1292,45 @@ mod tests {
             verification[0].exercise_state,
             ExerciseState::TargetExercised
         );
+    }
+
+    #[test]
+    fn checkpoints_recognize_failed_js_runner_output_shapes_as_target_exercised() {
+        let cases = [
+            (
+                "vitest run tests/foo.test.ts",
+                "Exit code: 1\n FAIL  tests/foo.test.ts > math > subtracts\n AssertionError: expected 2",
+            ),
+            (
+                "jest tests/foo.test.ts",
+                "Exit code: 1\n FAIL tests/foo.test.ts\n  math\n    ✕ subtracts (2 ms)",
+            ),
+            (
+                "bun test tests/foo.test.ts",
+                "Exit code: 1\ntests/foo.test.ts:\n(fail) math > subtracts\n  Expected: 2",
+            ),
+            (
+                "deno test tests/foo.test.ts",
+                "Exit code: 1\nrunning 1 test from tests/foo.test.ts\nsubtracts ... FAILED (1ms)",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            let verification = build_verification_attempts(&attempts, &rows);
+
+            assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::TargetExercised,
+                "{command}"
+            );
+        }
     }
 
     fn command_observations(rows: &[CompactionRow]) -> Vec<CommandObservation> {
