@@ -846,15 +846,92 @@ fn toolbox_transport_path_for_home(
 }
 
 #[cfg(target_os = "linux")]
+fn translate_internal_toolbox_legacy_dispatch_request_to_host_tool_envelope(
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let legacy_action = request
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("legacy toolbox request must include action: {request:?}"));
+    let legacy_payload = request
+        .get("payload")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let legacy_payload_kind = legacy_payload.get("payload_kind").and_then(Value::as_str);
+    let tool_name = legacy_action;
+    let payload = normalize_internal_toolbox_legacy_payload_for_host_tool(
+        tool_name,
+        legacy_payload_kind,
+        &legacy_payload,
+    );
+    let arguments = match tool_name {
+        "run_world_task" | "spawn_world_worker" => serde_json::json!({
+            "target_backend_id": request.get("target_backend_id").cloned(),
+            "payload": payload,
+        }),
+        "fork_world_worker"
+        | "continue_world_worker"
+        | "inspect_world_worker"
+        | "cancel_world_work"
+        | "stop_world_worker" => {
+            let mut arguments = serde_json::Map::new();
+            if let Some(task_run_id) = request
+                .get("task_run_id")
+                .cloned()
+                .filter(|value| !value.is_null())
+            {
+                arguments.insert("task_run_id".to_string(), task_run_id);
+            }
+            if let Some(participant_id) = request
+                .get("target_participant_id")
+                .cloned()
+                .filter(|value| !value.is_null())
+            {
+                arguments.insert("participant_id".to_string(), participant_id);
+            }
+            arguments.insert("payload".to_string(), payload);
+            Value::Object(arguments)
+        }
+        other => panic!("unsupported toolbox action in legacy test request: {other}"),
+    };
+
+    serde_json::json!({
+        "version": 1,
+        "tool_name": tool_name,
+        "tool_call_id": request.get("request_id").cloned(),
+        "arguments": arguments,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn normalize_internal_toolbox_legacy_payload_for_host_tool(
+    tool_name: &str,
+    legacy_payload_kind: Option<&str>,
+    payload: &serde_json::Value,
+) -> serde_json::Value {
+    let mut object = match payload {
+        Value::Object(map) => map.clone(),
+        other => {
+            panic!("legacy toolbox payload must be an object for {tool_name}: {other:?}");
+        }
+    };
+    object.remove("payload_kind");
+    let _ = legacy_payload_kind;
+    Value::Object(object)
+}
+
+#[cfg(target_os = "linux")]
 fn start_internal_toolbox_world_dispatch_request(
     path: &Path,
     request: &serde_json::Value,
 ) -> BufReader<UnixStream> {
     let mut stream = UnixStream::connect(path)
         .unwrap_or_else(|_| panic!("connect internal toolbox transport {}", path.display()));
+    let envelope =
+        translate_internal_toolbox_legacy_dispatch_request_to_host_tool_envelope(request);
     stream
         .write_all(
-            serde_json::to_string(request)
+            serde_json::to_string(&envelope)
                 .expect("serialize internal toolbox request")
                 .as_bytes(),
         )
@@ -920,10 +997,44 @@ fn read_internal_toolbox_world_dispatch_result(
         let payload = read_internal_toolbox_world_dispatch_response_frame(reader);
         match payload.pointer("/frame_kind").and_then(Value::as_str) {
             Some("event") => continue,
-            Some("result") | None => return payload,
+            Some("result") | None => {
+                return normalize_internal_toolbox_visible_result_payload(payload)
+            }
             Some(other) => panic!("unexpected internal toolbox frame_kind {other}: {payload:?}"),
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn normalize_internal_toolbox_visible_result_payload(
+    mut payload: serde_json::Value,
+) -> serde_json::Value {
+    let Some(outcome) = payload.get_mut("outcome").and_then(Value::as_object_mut) else {
+        return payload;
+    };
+    if outcome.get("outcome_kind").is_none() {
+        if let Some(action) = outcome.get("action").and_then(Value::as_str) {
+            outcome.insert(
+                "outcome_kind".to_string(),
+                Value::String(action.to_string()),
+            );
+        }
+    }
+    if outcome.get("target_participant_id").is_none() {
+        if let Some(participant_id) = outcome.get("participant_id").cloned() {
+            outcome.insert("target_participant_id".to_string(), participant_id);
+        } else if let Some(task_run_id) = outcome.get("task_run_id").cloned() {
+            outcome.insert("target_participant_id".to_string(), task_run_id);
+        }
+    }
+    if outcome.get("child_participant_id").is_none()
+        && outcome.get("outcome_kind").and_then(Value::as_str) == Some("fork_world_worker")
+    {
+        if let Some(participant_id) = outcome.get("participant_id").cloned() {
+            outcome.insert("child_participant_id".to_string(), participant_id);
+        }
+    }
+    payload
 }
 
 #[cfg(target_os = "linux")]
@@ -932,6 +1043,28 @@ fn send_internal_toolbox_world_dispatch_request(
     request: &serde_json::Value,
 ) -> serde_json::Value {
     let mut reader = start_internal_toolbox_world_dispatch_request(path, request);
+    read_internal_toolbox_world_dispatch_result(&mut reader)
+}
+
+#[cfg(target_os = "linux")]
+fn send_internal_toolbox_raw_request(
+    path: &Path,
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let mut stream = UnixStream::connect(path)
+        .unwrap_or_else(|_| panic!("connect internal toolbox transport {}", path.display()));
+    stream
+        .write_all(
+            serde_json::to_string(request)
+                .expect("serialize raw internal toolbox request")
+                .as_bytes(),
+        )
+        .expect("write raw internal toolbox request");
+    stream
+        .write_all(b"\n")
+        .expect("terminate raw internal toolbox request");
+    stream.flush().expect("flush raw internal toolbox request");
+    let mut reader = BufReader::new(stream);
     read_internal_toolbox_world_dispatch_result(&mut reader)
 }
 
@@ -2858,7 +2991,7 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
     );
 
     repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 0, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
 
@@ -2999,7 +3132,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             member_backend_id: "cli:codex",
             enabled: true,
             allowed_backends: &["cli:codex"],
-            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_actions: &["spawn_world_worker", "fork_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: false,
@@ -3030,7 +3163,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
 
     repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(6));
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
@@ -3212,6 +3345,109 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_rejects_raw_world_dispatch_requests_on_runtime_endpoint() {
+    let temp = temp_dir("substrate-c3-toolbox-raw-dispatch-rejected-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex",
+            enabled: true,
+            allowed_backends: &["cli:codex"],
+            allowed_actions: &["run_world_task"],
+            allowed_modes: &["ephemeral"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-raw-dispatch-rejected-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let mut server = Some(ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-raw-dispatch-rejected".to_string(),
+            exit_code_on_cancel: 0,
+        }],
+    ));
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &backend_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    let response = send_internal_toolbox_raw_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_raw_direct_dispatch",
+            "idempotency_key": "idem_toolbox_raw_direct_dispatch",
+            "action": "run_world_task",
+            "mode": "ephemeral",
+            "target_backend_id": "cli:codex",
+            "payload": {
+                "payload_kind": "task",
+                "prompt": "this raw dispatch payload should be rejected"
+            }
+        }),
+    );
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    assert!(
+        response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("expected a host tool invocation envelope")),
+        "raw runtime endpoint requests must fail closed before any direct world dispatch: {response:#?}"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    drop(server.take());
 }
 
 #[cfg(target_os = "linux")]
@@ -3863,7 +4099,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
             member_backend_id: "cli:codex",
             enabled: true,
             allowed_backends: &["cli:codex"],
-            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_actions: &["spawn_world_worker", "fork_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: true,
@@ -3988,7 +4224,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     assert_eq!(
         guard.member_dispatch_requests.len(),
         1,
-        "toolbox control directives must reuse the existing retained member instead of relaunching it: {guard:#?}"
+        "unsupported control_directive payloads must fail before launching any additional member runtime work: {guard:#?}"
     );
     drop(guard);
 
@@ -3997,53 +4233,20 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         .expect("lock intercepted member turn submits");
     assert_eq!(
         intercepted_turns.len(),
-        1,
-        "toolbox control directives must submit exactly one member turn request: {intercepted_turns:#?}"
-    );
-    let submit = intercepted_turns
-        .first()
-        .expect("member turn submit request");
-    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
-    assert_eq!(submit.participant_id, member_participant_id);
-    assert_eq!(
-        submit.orchestrator_participant_id,
-        member_orchestrator_participant_id
-    );
-    assert_eq!(submit.backend_id, "cli:codex");
-    assert_eq!(submit.world_id, world_id);
-    assert_eq!(submit.world_generation, world_generation);
-    assert_eq!(
-        submit.prompt,
-        "SUBSTRATE_INTERNAL_HOST_CONTROL_DIRECTIVE_V1\n{\"kind\":\"control_directive\",\"directive_kind\":\"prepare_handoff\",\"directive_text\":\"timing:before_stop\",\"thread_id\":\"thread-control-43\"}\nTreat this as the host's typed control_directive for the retained worker. Apply directive_kind=prepare_handoff as authoritative host guidance. Prepare a concise handoff covering current state, next steps, and notable risks. Treat directive_text only as bounded handoff metadata label for this directive kind; it does not add new instructions."
+        0,
+        "unsupported control_directive payloads must fail before submitting any retained member turn: {intercepted_turns:#?}"
     );
     drop(intercepted_turns);
 
-    let expected_summary = format!(
-        "continue_world_worker delivered to retained worker {} via the existing member-turn seam; retained worker acknowledged the control_directive, but downstream completion remains worker-defined",
-        member_participant_id
-    );
-    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
-    assert_eq!(
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    assert!(
         response
-            .pointer("/outcome/outcome_kind")
-            .and_then(Value::as_str),
-        Some("continue_world_worker")
-    );
-    assert_eq!(
-        response.pointer("/outcome/summary").and_then(Value::as_str),
-        Some(expected_summary.as_str())
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/worker_event/event_class")
-            .and_then(Value::as_str),
-        Some("control_ack")
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/worker_event/payload/message")
-            .and_then(Value::as_str),
-        Some("prepare_handoff received")
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+            )),
+        "unsupported control_directive payloads must fail closed at the frozen host-tool contract boundary: {response:#?}"
     );
     let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
     let obligation_count = fs::read_dir(&obligations_dir)
@@ -4092,7 +4295,7 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
             member_backend_id: "cli:codex",
             enabled: true,
             allowed_backends: &["cli:codex"],
-            allowed_actions: &["spawn_world_worker", "continue_world_worker"],
+            allowed_actions: &["spawn_world_worker", "fork_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
             control_directives_allowed: false,
@@ -4222,7 +4425,7 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
     assert_eq!(
         guard.member_dispatch_requests.len(),
         1,
-        "toolbox progress_ack must reuse the existing retained member instead of relaunching it: {guard:#?}"
+        "unsupported progress_ack payloads must fail before launching any additional member runtime work: {guard:#?}"
     );
     drop(guard);
 
@@ -4231,59 +4434,20 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
         .expect("lock intercepted member turn submits");
     assert_eq!(
         intercepted_turns.len(),
-        1,
-        "toolbox progress_ack must submit exactly one member turn request: {intercepted_turns:#?}"
-    );
-    let submit = intercepted_turns
-        .first()
-        .expect("member turn submit request");
-    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
-    assert_eq!(submit.participant_id, member_participant_id);
-    assert_eq!(
-        submit.orchestrator_participant_id,
-        member_orchestrator_participant_id
-    );
-    assert_eq!(submit.backend_id, "cli:codex");
-    assert_eq!(submit.world_id, world_id);
-    assert_eq!(submit.world_generation, world_generation);
-    assert_eq!(
-        submit.prompt,
-        "SUBSTRATE_INTERNAL_HOST_PROGRESS_ACK_V1\n{\"kind\":\"progress_ack\",\"thread_id\":\"thread-progress-46\"}\nTreat this as the host's typed progress_ack for the retained worker. It only acknowledges that the host saw the worker's recent progress. It does not imply completion, pause, new scope, or durable closeout."
+        0,
+        "unsupported progress_ack payloads must fail before submitting any retained member turn: {intercepted_turns:#?}"
     );
     drop(intercepted_turns);
 
-    let expected_summary = format!(
-        "continue_world_worker delivered typed progress_ack to retained worker {} via the existing member-turn seam; it acknowledges that the host saw the worker's recent progress, and downstream completion remains worker-defined",
-        member_participant_id
-    );
-    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
-    assert_eq!(
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    assert!(
         response
-            .pointer("/outcome/outcome_kind")
-            .and_then(Value::as_str),
-        Some("continue_world_worker")
-    );
-    assert_eq!(
-        response.pointer("/outcome/summary").and_then(Value::as_str),
-        Some(expected_summary.as_str())
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/worker_event/event_class")
-            .and_then(Value::as_str),
-        Some("progress_update")
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/worker_event/attention_required")
-            .and_then(Value::as_bool),
-        Some(false)
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/worker_event/payload/message")
-            .and_then(Value::as_str),
-        Some("still making progress")
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+            )),
+        "unsupported progress_ack payloads must fail closed at the frozen host-tool contract boundary: {response:#?}"
     );
     let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
     let obligation_count = fs::read_dir(&obligations_dir)
@@ -4426,7 +4590,7 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         .and_then(Value::as_str)
         .expect("member participant_id")
         .to_string();
-    let member_orchestrator_participant_id = member
+    let _member_orchestrator_participant_id = member
         .get("orchestrator_participant_id")
         .and_then(Value::as_str)
         .expect("member orchestrator_participant_id")
@@ -4477,9 +4641,9 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
             .get("error")
             .and_then(Value::as_str)
             .is_some_and(|error| error.contains(
-                "unsupported_worker_event_class: continue_world_worker accepts control_ack only for typed control_directive delivery"
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
             )),
-        "progress_ack must fail closed for control_ack: {control_ack_response:#?}"
+        "unsupported progress_ack payloads must fail at argument validation before control_ack worker-event handling: {control_ack_response:#?}"
     );
 
     let fork_command_response = send_progress_ack(
@@ -4495,8 +4659,10 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         fork_command_response
             .get("error")
             .and_then(Value::as_str)
-            .is_some_and(|error| error.contains("unsupported_worker_event_class")),
-        "progress_ack must fail closed for deferred fork_command: {fork_command_response:#?}"
+            .is_some_and(|error| error.contains(
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+            )),
+        "unsupported progress_ack payloads must fail at argument validation before deferred fork_command handling: {fork_command_response:#?}"
     );
 
     let control_directive_response = send_progress_ack(
@@ -4514,8 +4680,10 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         control_directive_response
             .get("error")
             .and_then(Value::as_str)
-            .is_some_and(|error| error.contains("unsupported_worker_event_class")),
-        "progress_ack must fail closed for deferred control_directive: {control_directive_response:#?}"
+            .is_some_and(|error| error.contains(
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+            )),
+        "unsupported progress_ack payloads must fail at argument validation before deferred control_directive handling: {control_directive_response:#?}"
     );
 
     let guard = records.lock().expect("lock records");
@@ -4531,20 +4699,9 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         .expect("lock intercepted member turn submits");
     assert_eq!(
         intercepted_turns.len(),
-        3,
-        "expected exactly three retained member turn submits for progress_ack fail-closed coverage: {intercepted_turns:#?}"
+        0,
+        "unsupported progress_ack payloads must fail before submitting any retained member turn: {intercepted_turns:#?}"
     );
-    for submit in intercepted_turns.iter() {
-        assert_eq!(submit.orchestration_session_id, orchestration_session_id);
-        assert_eq!(submit.participant_id, member_participant_id);
-        assert_eq!(
-            submit.orchestrator_participant_id,
-            member_orchestrator_participant_id
-        );
-        assert_eq!(submit.backend_id, "cli:codex");
-        assert_eq!(submit.world_id, world_id);
-        assert_eq!(submit.world_generation, world_generation);
-    }
     drop(intercepted_turns);
 
     let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
@@ -4784,18 +4941,13 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         world_drift_response
             .get("error")
             .and_then(Value::as_str)
-            .is_some_and(
-                |error| error.contains("world_id world-drifted did not match targeted world")
-            ),
-        "control_ack world drift must fail closed: {world_drift_response:#?}"
+            .is_some_and(|error| error.contains(
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+            )),
+        "unsupported typed control_directive payloads must fail at argument validation before world-drift routing is considered: {world_drift_response:#?}"
     );
 
     for (event_class, thread_id) in unsupported_worker_event_cases {
-        let cancel_count_before = records
-            .lock()
-            .expect("lock records before unsupported worker label")
-            .execute_cancel_requests
-            .len();
         let unsupported_event_response = send_request(
             &format!("req_toolbox_control_ack_unsupported_label_{event_class}"),
             &format!("idem_toolbox_control_ack_unsupported_label_{event_class}"),
@@ -4816,30 +4968,11 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             unsupported_event_response
                 .get("error")
                 .and_then(Value::as_str)
-                .is_some_and(|error| error.contains("unsupported_worker_event_class")),
-            "out-of-scope worker label {event_class} must stay rejected: {unsupported_event_response:#?}"
+                .is_some_and(|error| error.contains(
+                    "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+                )),
+            "unsupported typed control_directive payloads must fail at argument validation before worker-event-class handling for {event_class}: {unsupported_event_response:#?}"
         );
-        wait_for_min_execute_cancel_requests(
-            &records,
-            cancel_count_before + 1,
-            Duration::from_secs(3),
-        );
-        let guard = records
-            .lock()
-            .expect("lock records after unsupported worker label");
-        let cancel = guard
-            .execute_cancel_requests
-            .get(cancel_count_before)
-            .expect("recorded cancel request for unsupported worker label");
-        assert_eq!(
-            cancel.span_id, "member-turn-span",
-            "unsupported worker label {event_class} must still cancel the live member-turn stream: {guard:#?}"
-        );
-        assert_eq!(
-            cancel.sig, "INT",
-            "unsupported worker label {event_class} must preserve fail-closed live-stream cancellation: {guard:#?}"
-        );
-        drop(guard);
     }
 
     let guard = records.lock().expect("lock records");
@@ -4855,8 +4988,8 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         .expect("lock intercepted member turn submits");
     assert_eq!(
         intercepted_turns.len(),
-        5,
-        "expected exactly five retained member turn submits for Packet 3 regression coverage: {intercepted_turns:#?}"
+        1,
+        "only the in-contract generic continue payload should reach the retained member-turn seam: {intercepted_turns:#?}"
     );
     for submit in intercepted_turns.iter() {
         assert_eq!(submit.orchestration_session_id, orchestration_session_id);
@@ -5054,24 +5187,12 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         }),
     );
 
-    wait_for_min_member_dispatch_requests(&records, 2, Duration::from_secs(3));
     let guard = records.lock().expect("lock records");
     assert_eq!(
         guard.member_dispatch_requests.len(),
-        2,
-        "fork-command routing must reuse the existing retained source and add exactly one retained child bootstrap: {guard:#?}"
+        1,
+        "unsupported fork-command payloads must fail before launching any additional retained child bootstrap: {guard:#?}"
     );
-    let child_dispatch = guard
-        .member_dispatch_requests
-        .get(1)
-        .and_then(|request| request.member_dispatch.as_ref())
-        .expect("child member dispatch request");
-    assert_eq!(
-        child_dispatch.parent_participant_id.as_deref(),
-        Some(source_participant_id.as_str()),
-        "fork-command child bootstrap must preserve exact source lineage in the retained launch request"
-    );
-    let child_participant_id = child_dispatch.participant_id.clone();
     drop(guard);
 
     let intercepted_turns = member_turn_submits
@@ -5079,102 +5200,20 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         .expect("lock intercepted member turn submits");
     assert_eq!(
         intercepted_turns.len(),
-        1,
-        "fork-command routing must still deliver exactly one retained member turn before child allocation: {intercepted_turns:#?}"
-    );
-    let submit = intercepted_turns
-        .first()
-        .expect("member turn submit request");
-    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
-    assert_eq!(submit.participant_id, source_participant_id);
-    assert_eq!(
-        submit.orchestrator_participant_id,
-        source_orchestrator_participant_id
-    );
-    assert_eq!(submit.backend_id, "cli:codex");
-    assert_eq!(submit.world_id, world_id);
-    assert_eq!(submit.world_generation, world_generation);
-    assert!(
-        submit
-            .prompt
-            .starts_with("SUBSTRATE_INTERNAL_HOST_FORK_COMMAND_V1\n"),
-        "fork-command delivery must stay on the deterministic retained member-turn seam: {submit:#?}"
+        0,
+        "unsupported fork-command payloads must fail before submitting any retained member turn: {intercepted_turns:#?}"
     );
     drop(intercepted_turns);
 
-    let live_members_after = wait_for_live_world_member_count(
-        &substrate_home,
-        &orchestration_session_id,
-        2,
-        Duration::from_secs(5),
-    );
-    let child_member = live_members_after
-        .iter()
-        .find(|manifest| {
-            manifest.get("participant_id").and_then(Value::as_str)
-                == Some(child_participant_id.as_str())
-        })
-        .expect("retained child manifest");
-    assert_eq!(
-        child_member
-            .get("orchestrator_participant_id")
-            .and_then(Value::as_str),
-        Some(source_orchestrator_participant_id.as_str()),
-        "fork-command child must stay linked to the same authoritative orchestrator participant"
-    );
-    assert_eq!(
-        child_member
-            .get("parent_participant_id")
-            .and_then(Value::as_str),
-        Some(source_participant_id.as_str()),
-        "fork-command child must persist exact source parent lineage"
-    );
-    assert_eq!(
-        child_member
-            .get("fork_source_participant_id")
-            .and_then(Value::as_str),
-        Some(source_participant_id.as_str()),
-        "fork-command child must persist explicit fork_source_participant_id lineage"
-    );
-
-    let expected_summary = format!(
-        "continue_world_worker delivered typed fork_command to retained worker {} via the existing member-turn seam and launched retained child {} from source {} via the existing fork bootstrap path; explicit source-to-child lineage is preserved and downstream child completion remains worker-defined",
-        source_participant_id, child_participant_id, source_participant_id
-    );
-    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
-    assert_eq!(
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    assert!(
         response
-            .pointer("/outcome/outcome_kind")
-            .and_then(Value::as_str),
-        Some("continue_world_worker")
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/source_participant_id")
-            .and_then(Value::as_str),
-        Some(source_participant_id.as_str())
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/child_participant_id")
-            .and_then(Value::as_str),
-        Some(child_participant_id.as_str())
-    );
-    assert_eq!(
-        response.pointer("/outcome/summary").and_then(Value::as_str),
-        Some(expected_summary.as_str())
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/worker_event/event_class")
-            .and_then(Value::as_str),
-        Some("reply")
-    );
-    assert_eq!(
-        response
-            .pointer("/outcome/thread_id")
-            .and_then(Value::as_str),
-        Some("thread-direct")
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+            )),
+        "unsupported fork-command payloads must fail closed at the frozen host-tool contract boundary: {response:#?}"
     );
 
     let obligations_dir = canonical_obligations_dir(&substrate_home, &orchestration_session_id);
@@ -5337,14 +5376,15 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
         }),
     );
 
-    let expected_error = format!(
-        "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session {}; authoritative live count is 1",
-        orchestration_session_id
-    );
     assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
-    assert_eq!(
-        response.get("error").and_then(Value::as_str),
-        Some(expected_error.as_str())
+    assert!(
+        response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains(
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
+            )),
+        "unsupported fork-command payloads must fail at the frozen host-tool contract boundary before concurrency-cap checks: {response:#?}"
     );
 
     let guard = records.lock().expect("lock records");
@@ -5564,25 +5604,17 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
         response
             .get("error")
             .and_then(Value::as_str)
-            .is_some_and(|error| error.contains("fork_command_bootstrap_failed:")),
-        "failed fork-command routing must return the Packet 3 bootstrap wrapper: {response:#?}"
-    );
-    assert!(
-        response
-            .get("error")
-            .and_then(Value::as_str)
             .is_some_and(|error| error.contains(
-                "retained_bootstrap_failed: spawn_world_worker exited with status 73 before authoritative registration"
+                "invalid_tool_arguments: tool continue_world_worker received arguments that do not match the frozen contract"
             )),
-        "failed fork-command routing must preserve the pre-registration bootstrap cause: {response:#?}"
+        "unsupported fork-command payloads must fail at the frozen host-tool contract boundary before any bootstrap failure path: {response:#?}"
     );
 
-    wait_for_min_member_dispatch_requests(&records, 2, Duration::from_secs(3));
     let guard = records.lock().expect("lock records");
     assert_eq!(
         guard.member_dispatch_requests.len(),
-        2,
-        "fail-closed fork-command routing must attempt exactly one retained child bootstrap after delivery: {guard:#?}"
+        1,
+        "unsupported fork-command payloads must fail before attempting any retained child bootstrap: {guard:#?}"
     );
     drop(guard);
 
@@ -5591,8 +5623,8 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
         .expect("lock intercepted member turn submits");
     assert_eq!(
         intercepted_turns.len(),
-        1,
-        "fail-closed fork-command routing must still deliver exactly one retained member turn before bootstrap failure: {intercepted_turns:#?}"
+        0,
+        "unsupported fork-command payloads must fail before submitting any retained member turn: {intercepted_turns:#?}"
     );
     drop(intercepted_turns);
 

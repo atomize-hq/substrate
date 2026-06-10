@@ -1894,7 +1894,6 @@ struct InternalToolboxDispatchRequest {
 
 #[derive(Debug)]
 enum InternalToolboxDispatchRequestKind {
-    DirectWorldDispatch(WorldDispatchRequestV1),
     HostToolInvocation {
         request: HostToolInvocationRequestEnvelopeV1,
         runtime_context: InternalToolboxRuntimeContext,
@@ -1930,16 +1929,6 @@ fn internal_toolbox_run_world_task_started_frame(
         "action": "run_world_task",
         "task_run_id": task_run_id.into(),
     })
-}
-
-fn internal_toolbox_success_result_frame(outcome: WorldDispatchOutcomeV1) -> serde_json::Value {
-    internal_toolbox_success_result_frame_value(serde_json::to_value(outcome).unwrap_or_else(
-        |_| {
-            serde_json::json!({
-                "error": "internal toolbox response serialization failed"
-            })
-        },
-    ))
 }
 
 fn internal_toolbox_success_result_frame_value(outcome: serde_json::Value) -> serde_json::Value {
@@ -5285,83 +5274,6 @@ async fn handle_internal_toolbox_dispatch_request(
         response_tx,
     } = request;
     match request {
-        InternalToolboxDispatchRequestKind::DirectWorldDispatch(request) => {
-            #[cfg(target_os = "linux")]
-            if request.action == WorldDispatchActionV1::RunWorldTask {
-                let response_tx = response_tx.clone();
-                let Some(startup_context) = startup_context else {
-                    let _ = response_tx.send(internal_toolbox_error_result_frame(
-                        "owner_unreachable: internal world dispatch bootstrap requires a live orchestrator runtime",
-                    ));
-                    return;
-                };
-                let store = startup_context.store.clone();
-                tokio::spawn(async move {
-                    let (started_task_run_id_tx, mut started_task_run_id_rx) =
-                        mpsc::unbounded_channel();
-                    let dispatch = dispatch_run_world_task_request_with_started_task_run_id_tx(
-                        &store,
-                        request,
-                        started_task_run_id_tx,
-                    );
-                    pin_mut!(dispatch);
-                    let mut started_task_run_id_forwarded = false;
-                    let mut started_task_run_id_rx_closed = false;
-                    loop {
-                        tokio::select! {
-                            maybe_task_run_id = started_task_run_id_rx.recv(),
-                            if !started_task_run_id_forwarded && !started_task_run_id_rx_closed => {
-                                match maybe_task_run_id {
-                                    Some(task_run_id) => {
-                                        let _ = response_tx.send(
-                                            internal_toolbox_run_world_task_started_frame(task_run_id),
-                                        );
-                                        started_task_run_id_forwarded = true;
-                                    }
-                                    None => {
-                                        started_task_run_id_rx_closed = true;
-                                    }
-                                }
-                            }
-                            response = &mut dispatch => {
-                                if !started_task_run_id_forwarded {
-                                    match started_task_run_id_rx.try_recv() {
-                                        Ok(task_run_id) => {
-                                            let _ = response_tx.send(
-                                                internal_toolbox_run_world_task_started_frame(task_run_id),
-                                            );
-                                        }
-                                        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
-                                        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {}
-                                    }
-                                }
-                                let payload = match response {
-                                    Ok(outcome) => internal_toolbox_success_result_frame(outcome),
-                                    Err(err) => internal_toolbox_error_result_frame(err.to_string()),
-                                };
-                                let _ = response_tx.send(payload);
-                                break;
-                            }
-                        }
-                    }
-                });
-                return;
-            }
-
-            let response = handle_internal_toolbox_world_dispatch_request(
-                request,
-                startup_context,
-                member_runtimes,
-                agent_printer,
-                telemetry,
-            )
-            .await;
-            let payload = match response {
-                Ok(outcome) => internal_toolbox_success_result_frame(outcome),
-                Err(err) => internal_toolbox_error_result_frame(err.to_string()),
-            };
-            let _ = response_tx.send(payload);
-        }
         InternalToolboxDispatchRequestKind::HostToolInvocation {
             request,
             runtime_context,
@@ -5495,14 +5407,8 @@ fn decode_internal_toolbox_dispatch_request(
     raw: &str,
     runtime_context: &InternalToolboxRuntimeContext,
 ) -> anyhow::Result<InternalToolboxDispatchRequestKind> {
-    if let Ok(request) = serde_json::from_str::<WorldDispatchRequestV1>(raw) {
-        return Ok(InternalToolboxDispatchRequestKind::DirectWorldDispatch(
-            request,
-        ));
-    }
-
     let request = serde_json::from_str::<HostToolInvocationRequestEnvelopeV1>(raw)
-        .context("expected a world dispatch request or a host tool invocation envelope")?;
+        .context("expected a host tool invocation envelope")?;
     Ok(InternalToolboxDispatchRequestKind::HostToolInvocation {
         request,
         runtime_context: runtime_context.clone(),
