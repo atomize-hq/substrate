@@ -283,6 +283,149 @@ pub(crate) fn classify_edit_overlap(
     }
 }
 
+pub(crate) fn classify_attempt_scope_edit_overlap(
+    previous: &VerificationAttempt,
+    current: &VerificationAttempt,
+    edits: &[CommandAttempt],
+) -> EditOverlap {
+    let scope_paths = previous
+        .signatures
+        .iter()
+        .flat_map(|signature| signature.failing_paths.iter().cloned())
+        .chain(
+            current
+                .signatures
+                .iter()
+                .flat_map(|signature| signature.failing_paths.iter().cloned()),
+        )
+        .chain(previous.target_scope.paths.iter().cloned())
+        .chain(current.target_scope.paths.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let scope_tests = previous
+        .signatures
+        .iter()
+        .flat_map(|signature| signature.failing_tests.iter().cloned())
+        .chain(
+            current
+                .signatures
+                .iter()
+                .flat_map(|signature| signature.failing_tests.iter().cloned()),
+        )
+        .chain(previous.target_scope.tests.iter().cloned())
+        .chain(current.target_scope.tests.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let scope_symbols = previous
+        .signatures
+        .iter()
+        .flat_map(|signature| signature.failing_symbols.iter().cloned())
+        .chain(
+            current
+                .signatures
+                .iter()
+                .flat_map(|signature| signature.failing_symbols.iter().cloned()),
+        )
+        .chain(
+            scope_tests
+                .iter()
+                .flat_map(|test| test_scope_tokens(test).into_iter()),
+        )
+        .collect::<BTreeSet<_>>();
+
+    let mut strongest = EditOverlapStrength::None;
+    let mut edit_evidence = Vec::new();
+
+    for edit in edits.iter().filter(|attempt| is_write_attempt(attempt)) {
+        let overlap =
+            implementation_scope_overlap_for_edit(edit, &scope_paths, &scope_tests, &scope_symbols);
+        if overlap > strongest {
+            strongest = overlap;
+            edit_evidence.clear();
+        }
+        if overlap == strongest && overlap != EditOverlapStrength::None {
+            edit_evidence.push(EvidenceRef {
+                row: edit.command_row.clone(),
+                reason: "intervening edit overlapped the active implementation scope before verification moved"
+                    .to_string(),
+            });
+        }
+    }
+
+    if strongest == EditOverlapStrength::None {
+        return EditOverlap {
+            strength: strongest,
+            evidence: Vec::new(),
+        };
+    }
+
+    let mut evidence = vec![
+        EvidenceRef {
+            row: previous.command_row.clone(),
+            reason: "comparable earlier implementation verifier".to_string(),
+        },
+        EvidenceRef {
+            row: current.command_row.clone(),
+            reason: "later implementation verifier".to_string(),
+        },
+    ];
+    evidence.extend(edit_evidence);
+    evidence.sort_by(|left, right| {
+        (
+            left.row.source_file.as_str(),
+            left.row.event_index,
+            left.reason.as_str(),
+        )
+            .cmp(&(
+                right.row.source_file.as_str(),
+                right.row.event_index,
+                right.reason.as_str(),
+            ))
+    });
+    evidence.dedup();
+
+    EditOverlap {
+        strength: strongest,
+        evidence,
+    }
+}
+
+fn implementation_scope_overlap_for_edit(
+    edit: &CommandAttempt,
+    scope_paths: &BTreeSet<String>,
+    scope_tests: &BTreeSet<String>,
+    scope_symbols: &BTreeSet<String>,
+) -> EditOverlapStrength {
+    if edit
+        .paths
+        .iter()
+        .any(|path| scope_paths.contains(path) || scope_tests.contains(path))
+    {
+        return EditOverlapStrength::Strong;
+    }
+
+    if edit.paths.iter().any(|path| {
+        scope_paths
+            .iter()
+            .any(|scope_path| same_test_source_counterpart(path, scope_path))
+            || scope_tests
+                .iter()
+                .filter_map(|test| normalize_path_token(test))
+                .any(|test_path| same_test_source_counterpart(path, &test_path))
+            || path_matches_symbol(path, scope_symbols)
+    }) {
+        return EditOverlapStrength::Moderate;
+    }
+
+    if edit.paths.iter().any(|path| {
+        scope_paths
+            .iter()
+            .any(|scope_path| crate_root(path) == crate_root(scope_path))
+    }) {
+        return EditOverlapStrength::Weak;
+    }
+
+    EditOverlapStrength::None
+}
+
 fn best_comparable_signature_pair<'a>(
     previous: &'a VerificationAttempt,
     current: &'a VerificationAttempt,

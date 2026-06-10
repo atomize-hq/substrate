@@ -12,8 +12,8 @@ use super::attempt::{
     VerificationScope, VerifierKind,
 };
 use super::diagnostics::{
-    classify_edit_overlap, match_diagnostic_signatures, DiagnosticMatchKind, DiagnosticSignature,
-    EditOverlapStrength, FailureClass,
+    classify_attempt_scope_edit_overlap, classify_edit_overlap, match_diagnostic_signatures,
+    DiagnosticMatchKind, DiagnosticSignature, EditOverlapStrength, FailureClass,
 };
 use super::{
     CheckpointAnalysis, Confidence, EvidenceRef, ProgressDimension, ProgressSignal,
@@ -134,7 +134,7 @@ fn parent_visible_orchestration_progress(
 
     let parent_synthesis =
         has_parent_visible_synthesis(&orchestration_attempts, &synthesis_attempts);
-    let prior_parent_visible = previous_checkpoint_was_parent_visible(analysis);
+    let prior_parent_visible = previous_checkpoint_was_comparable_parent_visible(analysis);
     let status = if parent_synthesis {
         ProgressStatus::Mixed
     } else if prior_parent_visible {
@@ -600,6 +600,7 @@ fn assess_implementation_progress(
 
     let mut signals = Vec::new();
     let mut counter_evidence = Vec::new();
+    let mut verifier_progress_with_overlap = false;
 
     if concentrated {
         signals.push(progress_signal(
@@ -646,7 +647,15 @@ fn assess_implementation_progress(
     }
 
     if current.outcome == AttemptOutcome::Clean {
-        if let Some(previous_failed) = best_failed {
+        if let Some(previous_failed) = latest_failed {
+            let edit_overlap = classify_attempt_scope_edit_overlap(
+                previous_failed,
+                current,
+                &analysis.interval.command_attempts,
+            );
+            let scope_aligned =
+                edit_overlap.strength >= EditOverlapStrength::Moderate
+                    || working_set_overlaps_verifier_scope(analysis, previous_failed, current);
             signals.push(progress_signal(
                 ProgressSignalCode::VerificationClean,
                 SignalPolarity::Positive,
@@ -657,6 +666,7 @@ fn assess_implementation_progress(
                 merge_evidence(vec![
                     attempt_evidence(previous_failed, "earlier failing implementation verifier"),
                     attempt_evidence(current, "later clean implementation verifier"),
+                    edit_overlap.evidence.clone(),
                 ]),
             ));
             if scope_is_broader(&current.target_scope, &previous_failed.target_scope) {
@@ -673,9 +683,24 @@ fn assess_implementation_progress(
                             "earlier focused implementation verifier",
                         ),
                         attempt_evidence(current, "later broader implementation verifier"),
+                        edit_overlap.evidence.clone(),
                     ]),
                 ));
             }
+            verifier_progress_with_overlap = scope_aligned;
+            if edit_overlap.strength >= EditOverlapStrength::Moderate {
+                signals.push(progress_signal(
+                    ProgressSignalCode::FailingScopeEdited,
+                    SignalPolarity::Positive,
+                    SignalStrength::Moderate,
+                    "an overlapping implementation edit touched the failing scope",
+                    None,
+                    None,
+                    edit_overlap.evidence.clone(),
+                ));
+            }
+        }
+        if verifier_progress_with_overlap {
             return progress_from_signals(
                 ProgressStatus::Advancing,
                 dimension,
@@ -738,11 +763,14 @@ fn assess_implementation_progress(
     if let Some(previous_failed) = latest_failed {
         let current_signature = best_signature(current);
         let previous_signature = best_signature(previous_failed);
-        let edit_overlap = classify_edit_overlap(
+        let edit_overlap = classify_attempt_scope_edit_overlap(
             previous_failed,
             current,
             &analysis.interval.command_attempts,
         );
+        let scope_aligned =
+            edit_overlap.strength >= EditOverlapStrength::Moderate
+                || working_set_overlaps_verifier_scope(analysis, previous_failed, current);
 
         if let (Some(previous_signature), Some(current_signature)) =
             (previous_signature, current_signature)
@@ -787,6 +815,7 @@ fn assess_implementation_progress(
                     Some(Ordering::Less)
                 )
             {
+                verifier_progress_with_overlap = scope_aligned;
                 signals.push(progress_signal(
                     ProgressSignalCode::FailureFrontierAdvanced,
                     SignalPolarity::Positive,
@@ -854,7 +883,7 @@ fn assess_implementation_progress(
             counter_evidence,
         );
     }
-    if positive {
+    if positive && verifier_progress_with_overlap {
         return progress_from_signals(
             ProgressStatus::Advancing,
             dimension,
@@ -1613,14 +1642,56 @@ fn has_parent_visible_synthesis(
             .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1"))
 }
 
-fn previous_checkpoint_was_parent_visible(analysis: &CheckpointAnalysis) -> bool {
+fn previous_checkpoint_was_comparable_parent_visible(analysis: &CheckpointAnalysis) -> bool {
     let analyses = super::checkpoint_analyses(&analysis.current.window);
     analyses.iter().rev().nth(1).is_some_and(|previous| {
         has_parent_visible_orchestration_evidence(
             previous,
             effective_child_work_visibility(previous),
-        )
+        ) && !parent_visible_comparability_reset(analysis, previous)
     })
+}
+
+fn parent_visible_comparability_reset(
+    newer: &CheckpointAnalysis,
+    older: &CheckpointAnalysis,
+) -> bool {
+    parent_visible_comparability_fingerprint(newer)
+        != parent_visible_comparability_fingerprint(older)
+}
+
+fn parent_visible_comparability_fingerprint(
+    analysis: &CheckpointAnalysis,
+) -> Option<(
+    DelegationTopology,
+    ChildWorkVisibility,
+    bool,
+    String,
+    Vec<String>,
+    BTreeSet<String>,
+)> {
+    Some((
+        analysis.delegation.topology?,
+        effective_child_work_visibility(analysis),
+        has_visible_child_surface(analysis),
+        normalize_task_text(&analysis.current.task_frame.objective),
+        parent_visible_delegated_objective_surface(analysis),
+        working_set(&analysis.current.task_frame.working_set_paths),
+    ))
+}
+
+fn parent_visible_delegated_objective_surface(analysis: &CheckpointAnalysis) -> Vec<String> {
+    parent_visible_orchestration_attempts(analysis)
+        .iter()
+        .filter(|attempt| matches!(attempt.tool_name.as_str(), "spawn_agent" | "multi_agent_v1"))
+        .map(|attempt| {
+            format!(
+                "{}:{}",
+                attempt.tool_name,
+                normalize_task_text(&attempt.raw_command)
+            )
+        })
+        .collect()
 }
 
 fn working_set(paths: &[String]) -> BTreeSet<String> {
@@ -1631,6 +1702,39 @@ fn working_set_narrowed(previous: &BTreeSet<String>, current: &BTreeSet<String>)
     !current.is_empty()
         && ((!previous.is_empty() && current.len() < previous.len() && current.is_subset(previous))
             || (previous.is_empty() && current.len() <= 3))
+}
+
+fn working_set_overlaps_verifier_scope(
+    analysis: &CheckpointAnalysis,
+    previous: &VerificationAttempt,
+    current: &VerificationAttempt,
+) -> bool {
+    let current_working_set = working_set(&analysis.current.task_frame.working_set_paths);
+    if current_working_set.is_empty() {
+        return false;
+    }
+
+    let scope_paths = previous
+        .signatures
+        .iter()
+        .flat_map(|signature| signature.failing_paths.iter().cloned())
+        .chain(
+            current
+                .signatures
+                .iter()
+                .flat_map(|signature| signature.failing_paths.iter().cloned()),
+        )
+        .chain(previous.target_scope.paths.iter().cloned())
+        .chain(current.target_scope.paths.iter().cloned())
+        .collect::<BTreeSet<_>>();
+
+    current_working_set.iter().any(|working_path| {
+        scope_paths.iter().any(|scope_path| {
+            working_path == scope_path
+                || working_path.starts_with(scope_path)
+                || scope_path.starts_with(working_path)
+        })
+    })
 }
 
 fn truth_artifacts_narrowed(analysis: &CheckpointAnalysis) -> bool {
