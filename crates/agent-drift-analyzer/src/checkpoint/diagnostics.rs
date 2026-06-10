@@ -789,14 +789,18 @@ fn extract_paths_from_lines(lines: &[String]) -> Vec<String> {
 
 fn extract_tests_from_lines(lines: &[String]) -> Vec<String> {
     let mut tests = BTreeSet::new();
+    let mut active_js_file = None::<String>;
+    let mut active_js_suite = None::<String>;
+
     for line in lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            active_js_suite = None;
+            continue;
+        }
+
         for token in line.split_whitespace() {
-            let cleaned = token.trim_matches(|ch: char| {
-                matches!(
-                    ch,
-                    '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';'
-                )
-            });
+            let cleaned = trim_test_token(token);
             if cleaned.contains("::") {
                 tests.insert(cleaned.to_string());
                 if let Some(name) = cleaned.rsplit("::").next() {
@@ -804,12 +808,145 @@ fn extract_tests_from_lines(lines: &[String]) -> Vec<String> {
                         tests.insert(name.to_string());
                     }
                 }
-            } else if cleaned.contains(".test.") || cleaned.ends_with("_test.py") {
+            } else if looks_like_test_path(cleaned) {
                 tests.insert(cleaned.to_string());
             }
         }
+
+        if let Some(js_file) = extract_js_test_path(trimmed) {
+            tests.insert(js_file.clone());
+            active_js_file = Some(js_file.clone());
+            active_js_suite = None;
+
+            if let Some(descriptor) = extract_inline_js_test_descriptor(trimmed, &js_file) {
+                insert_js_test_descriptor(&mut tests, Some(&js_file), &descriptor);
+                continue;
+            }
+        }
+
+        if let Some(descriptor) = extract_standalone_js_test_descriptor(trimmed) {
+            insert_js_test_descriptor(&mut tests, active_js_file.as_deref(), &descriptor);
+            continue;
+        }
+
+        if let Some(test_name) = extract_js_leaf_name(trimmed) {
+            let descriptor = active_js_suite
+                .as_ref()
+                .map(|suite| format!("{suite} > {test_name}"))
+                .unwrap_or(test_name);
+            insert_js_test_descriptor(&mut tests, active_js_file.as_deref(), &descriptor);
+            continue;
+        }
+
+        if active_js_file.is_some() && looks_like_js_suite_heading(trimmed) {
+            active_js_suite = Some(trimmed.to_string());
+        }
     }
     tests.into_iter().collect()
+}
+
+fn trim_test_token(token: &str) -> &str {
+    token.trim_matches(|ch: char| {
+        matches!(
+            ch,
+            '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';' | ':'
+        )
+    })
+}
+
+fn looks_like_test_path(token: &str) -> bool {
+    token.contains(".test.")
+        || token.contains(".spec.")
+        || token.ends_with("_test.py")
+        || token.ends_with("_spec.py")
+}
+
+fn is_testish_path(path: &str) -> bool {
+    path.starts_with("tests/") || path.contains("/tests/") || looks_like_test_path(path)
+}
+
+fn extract_js_test_path(line: &str) -> Option<String> {
+    line.split_whitespace().find_map(|token| {
+        let cleaned = trim_test_token(token);
+        let normalized = normalize_path_token(cleaned)?;
+        looks_like_test_path(&normalized).then_some(normalized)
+    })
+}
+
+fn extract_inline_js_test_descriptor(line: &str, file: &str) -> Option<String> {
+    let (_, remainder) = line.split_once(file)?;
+    let descriptor = remainder
+        .trim()
+        .trim_start_matches(':')
+        .trim()
+        .trim_start_matches('>')
+        .trim();
+    normalize_js_test_descriptor(descriptor)
+}
+
+fn extract_standalone_js_test_descriptor(line: &str) -> Option<String> {
+    let descriptor = line
+        .trim_start_matches("(fail)")
+        .trim()
+        .trim_start_matches("FAIL")
+        .trim()
+        .trim_start_matches("✕")
+        .trim()
+        .trim_start_matches("×")
+        .trim();
+    if descriptor == line || !descriptor.contains(" > ") {
+        return None;
+    }
+    normalize_js_test_descriptor(descriptor)
+}
+
+fn extract_js_leaf_name(line: &str) -> Option<String> {
+    for marker in ["✕", "×"] {
+        if let Some(leaf) = line.strip_prefix(marker) {
+            return normalize_js_test_descriptor(leaf.trim());
+        }
+    }
+    None
+}
+
+fn looks_like_js_suite_heading(line: &str) -> bool {
+    !line.is_empty()
+        && !line.contains('/')
+        && !line.contains(':')
+        && !line.contains(" > ")
+        && !matches!(
+            line,
+            line if line.starts_with("FAIL")
+                || line.starts_with("(fail)")
+                || line.starts_with("✕")
+                || line.starts_with("×")
+                || line.starts_with("Expected")
+                || line.starts_with("Assertion")
+        )
+}
+
+fn normalize_js_test_descriptor(descriptor: &str) -> Option<String> {
+    let normalized = descriptor
+        .split(" (")
+        .next()
+        .unwrap_or(descriptor)
+        .trim()
+        .trim_matches(|ch: char| matches!(ch, '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}'))
+        .trim()
+        .to_string();
+    (!normalized.is_empty()).then_some(normalized)
+}
+
+fn insert_js_test_descriptor(tests: &mut BTreeSet<String>, file: Option<&str>, descriptor: &str) {
+    if let Some(normalized) = normalize_js_test_descriptor(descriptor) {
+        if let Some(file) = file {
+            tests.insert(format!("{file} > {normalized}"));
+        }
+        tests.insert(normalized.clone());
+        if let Some(name) = normalized.rsplit(" > ").next() {
+            tests.insert(name.to_string());
+        }
+    }
 }
 
 fn extract_symbols_from_lines(lines: &[String]) -> Vec<String> {
@@ -923,11 +1060,11 @@ fn overlap_for_edit(
     if edit.paths.iter().any(|path| {
         failing_paths
             .iter()
-            .any(|failing_path| same_counterpart_scope(path, failing_path))
+            .any(|failing_path| same_module_or_counterpart_scope(path, failing_path))
             || failing_tests
                 .iter()
                 .filter_map(|test| normalize_path_token(test))
-                .any(|test_path| same_counterpart_scope(path, &test_path))
+                .any(|test_path| same_module_or_counterpart_scope(path, &test_path))
             || path_matches_symbol(path, failing_symbols)
     }) {
         return EditOverlapStrength::Moderate;
@@ -1093,6 +1230,17 @@ fn same_counterpart_scope(left: &str, right: &str) -> bool {
     parent_dir(left) == parent_dir(right)
         && normalize_counterpart_stem(&file_stem(left))
             == normalize_counterpart_stem(&file_stem(right))
+}
+
+fn same_module_or_counterpart_scope(left: &str, right: &str) -> bool {
+    parent_dir(left) == parent_dir(right) || same_test_source_counterpart(left, right)
+}
+
+fn same_test_source_counterpart(left: &str, right: &str) -> bool {
+    crate_root(left) == crate_root(right)
+        && normalize_counterpart_stem(&file_stem(left))
+            == normalize_counterpart_stem(&file_stem(right))
+        && is_testish_path(left) != is_testish_path(right)
 }
 
 fn path_matches_symbol(path: &str, symbols: &BTreeSet<String>) -> bool {
@@ -1497,6 +1645,100 @@ mod tests {
         let overlap = classify_edit_overlap(&previous, &current, &[format_write]);
         assert_eq!(overlap.strength, EditOverlapStrength::Moderate);
         assert_eq!(overlap.evidence.len(), 3);
+    }
+
+    #[test]
+    fn checkpoints_classify_edit_overlap_for_same_module_sibling_file_edits() {
+        let previous = verification_attempt(
+            1,
+            10,
+            diagnostic_signature(
+                VerifierKind::CargoCheck,
+                FailureClass::CompileType,
+                Some("pkg:agent-drift-analyzer|path:crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs".to_string()),
+                vec!["crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs".to_string()],
+                Vec::new(),
+                "compile",
+            ),
+        );
+        let current = verification_attempt(
+            2,
+            20,
+            diagnostic_signature(
+                VerifierKind::CargoCheck,
+                FailureClass::CompileType,
+                Some("pkg:agent-drift-analyzer|path:crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs".to_string()),
+                vec!["crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs".to_string()],
+                Vec::new(),
+                "compile-next",
+            ),
+        );
+
+        let sibling_module_edit = test_attempt(
+            3,
+            15,
+            "apply_patch <<'PATCH'\n*** Begin Patch",
+            CommandAttemptRole::Edit,
+            vec!["crates/agent-drift-analyzer/src/checkpoint/mod.rs".to_string()],
+        );
+
+        let overlap = classify_edit_overlap(&previous, &current, &[sibling_module_edit]);
+        assert_eq!(overlap.strength, EditOverlapStrength::Moderate);
+        assert_eq!(overlap.evidence.len(), 3);
+    }
+
+    #[test]
+    fn checkpoints_parse_js_test_like_failure_counts_and_names() {
+        let cases = [
+            (
+                test_attempt(1, 10, "vitest run", CommandAttemptRole::Test, vec![]),
+                VerificationScope {
+                    raw: "vitest run".to_string(),
+                    paths: Vec::new(),
+                    tests: Vec::new(),
+                    broad: true,
+                },
+                "FAIL tests/checkpoints.test.ts > progress window > rejects stale frontier\nTests 1 failed (1)\nAssertionError: expected frontier advance",
+                vec![
+                    "tests/checkpoints.test.ts".to_string(),
+                    "tests/checkpoints.test.ts > progress window > rejects stale frontier"
+                        .to_string(),
+                    "progress window > rejects stale frontier".to_string(),
+                    "rejects stale frontier".to_string(),
+                ],
+            ),
+            (
+                test_attempt(2, 20, "jest", CommandAttemptRole::Test, vec![]),
+                VerificationScope {
+                    raw: "jest".to_string(),
+                    paths: Vec::new(),
+                    tests: Vec::new(),
+                    broad: true,
+                },
+                "FAIL tests/checkpoints.test.ts\n  progress window\n    ✕ rejects stale frontier (2 ms)\nAssertionError: expected frontier advance\nTests:       1 failed, 1 total",
+                vec![
+                    "tests/checkpoints.test.ts".to_string(),
+                    "tests/checkpoints.test.ts > progress window > rejects stale frontier"
+                        .to_string(),
+                    "progress window > rejects stale frontier".to_string(),
+                    "rejects stale frontier".to_string(),
+                ],
+            ),
+        ];
+
+        for (attempt, scope, output, expected_tests) in cases {
+            let signatures = build_diagnostic_signatures(&attempt, &scope, output);
+
+            assert_eq!(signatures[0].failure_class, FailureClass::AssertionOrGolden);
+            assert_eq!(signatures[0].failing_count, Some(1));
+            assert_eq!(
+                signatures[0].parser_confidence,
+                crate::checkpoint::Confidence::High
+            );
+            for expected in expected_tests {
+                assert!(signatures[0].failing_tests.contains(&expected));
+            }
+        }
     }
 
     fn diagnostic_signature(
