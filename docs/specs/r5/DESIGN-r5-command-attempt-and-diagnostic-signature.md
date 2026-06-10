@@ -68,9 +68,11 @@ crates/agent-drift-analyzer/src/checkpoint/progress.rs
   to produce SessionProgress.
 ```
 
-If implementation pressure favors keeping helpers in `checkpoint/mod.rs` for the first commit, the
-logical seams still need to remain explicit and tested. Do not grow another monolithic classifier
-without these boundaries.
+Temporary staging inside `checkpoint/mod.rs` is acceptable only while an implementation packet is in
+flight. `R5-2` must end with `checkpoint/attempt.rs` in place, and `R5-3` must end with
+`checkpoint/diagnostics.rs` in place, with the logical seams explicit and tested. Do not close a
+packet with those responsibilities stranded in `checkpoint/mod.rs`, and do not grow another
+monolithic classifier without these boundaries.
 
 ## CommandAttempt
 

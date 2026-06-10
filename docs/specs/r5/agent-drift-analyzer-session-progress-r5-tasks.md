@@ -28,7 +28,8 @@ verification command for the current packet is green or the failure is documente
 - [x] Task R5-0.2: Add R5 spec, plan, tasks, and fixture manifest.
   - Acceptance: R5 has `spec`, `plan`, `tasks`, and `fixtures` docs with commands, boundaries,
     success criteria, packet split, and required fixture matrix.
-  - Verify: Manual review against the R5 spec / plan / DESIGN stack and `AGENTS.md`.
+  - Verify: Manual review against the R5 spec / plan / fixture manifest / DESIGN stack,
+    including `DESIGN-r5-validation-and-rollout-protocol.md`, and `AGENTS.md`.
   - Files:
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md`

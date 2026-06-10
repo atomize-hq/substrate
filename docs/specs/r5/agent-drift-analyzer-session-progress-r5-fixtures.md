@@ -439,7 +439,7 @@ dimension:
 - Why competing statuses lose:
   - no child progress claim is allowed
   - parent waiting is not child implementation stall
-- Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
+- Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset in R5-7: crates/agent-drift-analyzer/tests/progress_acceptance.rs plus crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
 ## Schema / Compatibility Fixtures
 
