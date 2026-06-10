@@ -20,8 +20,9 @@ pub use export::{
 };
 pub use schema::{
     Checkpoint, CheckpointBoundary, CheckpointDiagnostics, Confidence, DriftClass, DriftScore,
-    DriftState, EvidenceRef, SessionArchetype, SessionArchetypeLabel, TaskFrame, TurnActivityMix,
-    TurnContext, TurnExecutionMode,
+    DriftState, EvidenceRef, ProgressDimension, ProgressSignal, ProgressSignalCode, ProgressStatus,
+    SessionArchetype, SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength,
+    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
@@ -340,8 +341,9 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
     let session_archetype = build_session_archetype(analysis);
+    let session_progress = build_conservative_session_progress(&session_archetype);
     Checkpoint {
-        schema_version: "v0.5".to_string(),
+        schema_version: "v0.6".to_string(),
         session_id: analysis.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
         ordinal,
@@ -350,9 +352,34 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         diagnostics,
         task_frame: task_frame.clone(),
         session_archetype: Some(session_archetype),
+        session_progress: Some(session_progress),
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
+    }
+}
+
+fn build_conservative_session_progress(session_archetype: &SessionArchetype) -> SessionProgress {
+    SessionProgress {
+        status: ProgressStatus::InsufficientEvidence,
+        dimension: progress_dimension_for_archetype(session_archetype.label),
+        confidence: Confidence::Low,
+        signals: Vec::new(),
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    }
+}
+
+fn progress_dimension_for_archetype(label: SessionArchetypeLabel) -> ProgressDimension {
+    match label {
+        SessionArchetypeLabel::Troubleshooting => ProgressDimension::TroubleshootingFrontier,
+        SessionArchetypeLabel::Planning => ProgressDimension::PlanningConvergence,
+        SessionArchetypeLabel::AutonomousImplementation => {
+            ProgressDimension::ImplementationVerificationWall
+        }
+        SessionArchetypeLabel::VerificationCloseout => {
+            ProgressDimension::VerificationCloseoutNarrowing
+        }
     }
 }
 

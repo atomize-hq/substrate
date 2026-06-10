@@ -4,7 +4,10 @@ mod support;
 
 use std::fs;
 
-use agent_drift_analyzer::{AnalyzeRequest, AnalyzeResult, Confidence, SessionArchetypeLabel};
+use agent_drift_analyzer::{
+    AnalyzeRequest, AnalyzeResult, Confidence, ProgressDimension, ProgressStatus,
+    SessionArchetypeLabel,
+};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -25,8 +28,9 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
     assert_eq!(checkpoints[0].session_id, "session-alpha");
-    assert_eq!(checkpoints[0].schema_version, "v0.5");
+    assert_eq!(checkpoints[0].schema_version, "v0.6");
     assert!(checkpoints[0].session_archetype.is_some());
+    assert!(checkpoints[0].session_progress.is_some());
     assert_eq!(checkpoints[0].ordinal, 1);
     let first_turn = checkpoints[0]
         .turn_context
@@ -39,8 +43,9 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     assert_eq!(first_turn.checkpoints_in_turn, 1);
     assert_eq!(first_turn.prompts_observed_in_session, 1);
     assert_eq!(checkpoints[1].ordinal, 2);
-    assert_eq!(checkpoints[1].schema_version, "v0.5");
+    assert_eq!(checkpoints[1].schema_version, "v0.6");
     assert!(checkpoints[1].session_archetype.is_some());
+    assert!(checkpoints[1].session_progress.is_some());
     let second_turn = checkpoints[1]
         .turn_context
         .as_ref()
@@ -57,12 +62,16 @@ fn checkpoints_are_deterministic_and_session_scoped() {
 }
 
 #[test]
-fn checkpoints_keep_legacy_session_archetype_loads_but_fail_closed_for_v0_5() {
+fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_6() {
     let checkpoint = analyze_sample_bundle().sessions[0].checkpoints[0].clone();
 
     for schema_version in ["v0.2", "v0.3", "v0.4"] {
         let mut legacy_json = serde_json::to_value(&checkpoint).expect("serialize checkpoint");
         legacy_json["schema_version"] = Value::String(schema_version.to_string());
+        legacy_json
+            .as_object_mut()
+            .expect("checkpoint object")
+            .remove("session_progress");
         legacy_json
             .as_object_mut()
             .expect("checkpoint object")
@@ -72,18 +81,85 @@ fn checkpoints_keep_legacy_session_archetype_loads_but_fail_closed_for_v0_5() {
             serde_json::from_value(legacy_json).expect("legacy checkpoint stays loadable");
         assert_eq!(parsed.schema_version, schema_version);
         assert!(parsed.session_archetype.is_none());
+        assert!(parsed.session_progress.is_none());
     }
 
-    let mut missing_v0_5 = serde_json::to_value(&checkpoint).expect("serialize checkpoint");
-    missing_v0_5
+    let mut v0_5_without_progress =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint");
+    v0_5_without_progress["schema_version"] = Value::String("v0.5".to_string());
+    v0_5_without_progress
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("session_progress");
+    let parsed_v0_5: agent_drift_analyzer::Checkpoint =
+        serde_json::from_value(v0_5_without_progress)
+            .expect("v0.5 stays loadable without progress");
+    assert_eq!(parsed_v0_5.schema_version, "v0.5");
+    assert!(parsed_v0_5.session_archetype.is_some());
+    assert!(parsed_v0_5.session_progress.is_none());
+
+    let mut missing_v0_6_progress =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint");
+    missing_v0_6_progress
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("session_progress");
+    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_6_progress)
+        .expect_err("v0.6 checkpoint without session_progress must fail");
+    let message = err.to_string();
+    assert!(message.contains("v0.6"));
+    assert!(message.contains("session_progress"));
+
+    let mut missing_v0_6_archetype =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint");
+    missing_v0_6_archetype
         .as_object_mut()
         .expect("checkpoint object")
         .remove("session_archetype");
-    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_5)
-        .expect_err("v0.5 checkpoint without session_archetype must fail");
+    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_6_archetype)
+        .expect_err("v0.6 checkpoint without session_archetype must fail");
     let message = err.to_string();
-    assert!(message.contains("v0.5"));
+    assert!(message.contains("v0.6"));
     assert!(message.contains("session_archetype"));
+
+    let round_tripped: agent_drift_analyzer::Checkpoint =
+        serde_json::from_value(serde_json::to_value(&checkpoint).expect("serialize checkpoint"))
+            .expect("v0.6 checkpoint with progress should round-trip");
+    assert_eq!(round_tripped, checkpoint);
+}
+
+#[test]
+fn checkpoints_emit_conservative_session_progress_placeholders() {
+    let checkpoint = &analyze_sample_bundle().sessions[0].checkpoints[0];
+    let session_archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+    let session_progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    let expected_dimension = match session_archetype.label {
+        SessionArchetypeLabel::Troubleshooting => ProgressDimension::TroubleshootingFrontier,
+        SessionArchetypeLabel::Planning => ProgressDimension::PlanningConvergence,
+        SessionArchetypeLabel::AutonomousImplementation => {
+            ProgressDimension::ImplementationVerificationWall
+        }
+        SessionArchetypeLabel::VerificationCloseout => {
+            ProgressDimension::VerificationCloseoutNarrowing
+        }
+    };
+
+    assert_eq!(
+        session_progress.status,
+        ProgressStatus::InsufficientEvidence
+    );
+    assert_eq!(session_progress.dimension, expected_dimension);
+    assert_eq!(session_progress.confidence, Confidence::Low);
+    assert!(session_progress.signals.is_empty());
+    assert!(session_progress.supporting_evidence.is_empty());
+    assert!(session_progress.counter_evidence.is_empty());
 }
 
 #[test]

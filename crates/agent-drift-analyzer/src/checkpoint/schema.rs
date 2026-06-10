@@ -128,6 +128,95 @@ pub struct SessionArchetype {
     pub counter_evidence: Vec<EvidenceRef>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionProgress {
+    pub status: ProgressStatus,
+    pub dimension: ProgressDimension,
+    pub confidence: Confidence,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signals: Vec<ProgressSignal>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supporting_evidence: Vec<EvidenceRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub counter_evidence: Vec<EvidenceRef>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgressStatus {
+    Advancing,
+    Mixed,
+    Stalled,
+    Regressing,
+    InsufficientEvidence,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgressDimension {
+    TroubleshootingFrontier,
+    PlanningConvergence,
+    ImplementationVerificationWall,
+    VerificationCloseoutNarrowing,
+    ParentVisibleOrchestration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProgressSignal {
+    pub code: ProgressSignalCode,
+    pub polarity: SignalPolarity,
+    pub strength: SignalStrength,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<EvidenceRef>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgressSignalCode {
+    FailureFrontierAdvanced,
+    FailureSignatureRepeated,
+    FailureCountReduced,
+    FailureCountIncreased,
+    FailingScopeEdited,
+    FailingScopeUnchanged,
+    VerificationClean,
+    VerificationScopeBroadened,
+    VerificationScopeNarrowed,
+    PlanArtifactCreated,
+    PlanArtifactRefined,
+    CandidateSetNarrowed,
+    CandidateSetExpanded,
+    WorkingSetConcentrated,
+    WorkingSetDiffused,
+    ResidualScopeShrank,
+    ResidualScopeReopened,
+    PreviouslyCleanScopeBroken,
+    DelegationVisibilityLimited,
+    TargetNotExercised,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalPolarity {
+    Positive,
+    Negative,
+    Mixed,
+    Limiting,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalStrength {
+    Weak,
+    Moderate,
+    Strong,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Checkpoint {
     pub schema_version: String,
@@ -141,6 +230,8 @@ pub struct Checkpoint {
     pub task_frame: TaskFrame,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_archetype: Option<SessionArchetype>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_progress: Option<SessionProgress>,
     pub drift_scores: Vec<DriftScore>,
     pub expected_next_step: String,
     pub flagged: bool,
@@ -159,6 +250,8 @@ struct RawCheckpoint {
     pub task_frame: TaskFrame,
     #[serde(default)]
     pub session_archetype: Option<SessionArchetype>,
+    #[serde(default)]
+    pub session_progress: Option<SessionProgress>,
     pub drift_scores: Vec<DriftScore>,
     pub expected_next_step: String,
     pub flagged: bool,
@@ -175,6 +268,14 @@ impl RawCheckpoint {
             ));
         }
 
+        if schema_requires_session_progress(&self.schema_version) && self.session_progress.is_none()
+        {
+            return Err(format!(
+                "checkpoint schema {} requires session_progress",
+                self.schema_version
+            ));
+        }
+
         Ok(Checkpoint {
             schema_version: self.schema_version,
             session_id: self.session_id,
@@ -185,6 +286,7 @@ impl RawCheckpoint {
             diagnostics: self.diagnostics,
             task_frame: self.task_frame,
             session_archetype: self.session_archetype,
+            session_progress: self.session_progress,
             drift_scores: self.drift_scores,
             expected_next_step: self.expected_next_step,
             flagged: self.flagged,
@@ -204,5 +306,9 @@ impl<'de> Deserialize<'de> for Checkpoint {
 }
 
 fn schema_requires_session_archetype(schema_version: &str) -> bool {
-    schema_version == "v0.5"
+    matches!(schema_version, "v0.5" | "v0.6")
+}
+
+fn schema_requires_session_progress(schema_version: &str) -> bool {
+    schema_version == "v0.6"
 }

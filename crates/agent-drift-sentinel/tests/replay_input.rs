@@ -112,6 +112,7 @@ fn checkpoint(
             counter_evidence: Vec::new(),
         },
         session_archetype: None,
+        session_progress: None,
         drift_scores: vec![agent_drift_analyzer::DriftScore {
             class: agent_drift_analyzer::DriftClass::WrongPlanBranch,
             state: if flagged {

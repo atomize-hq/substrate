@@ -295,19 +295,12 @@ fn export_bundle_renders_compact_session_archetype_inspection() {
     );
     let summary = export_summary(vec![session], vec![checkpoint]);
 
-    assert!(summary.contains(
-        "  archetype: `label=autonomous_implementation confidence=medium"
-    ));
-    assert!(summary.contains(
-        "support[stable working set plus source edits supported concentrated i..."
-    ));
-    assert!(summary.contains(
-        "source edit command strengthened implementation-like evidence"
-    ));
+    assert!(summary.contains("  archetype: `label=autonomous_implementation confidence=medium"));
+    assert!(summary
+        .contains("support[stable working set plus source edits supported concentrated i..."));
+    assert!(summary.contains("source edit command strengthened implementation-like evidence"));
     assert!(summary.contains("+1 more]"));
-    assert!(summary.contains(
-        "counter[inspection-style command widened the visible search space]`"
-    ));
+    assert!(summary.contains("counter[inspection-style command widened the visible search space]`"));
 }
 
 #[test]
@@ -1093,6 +1086,7 @@ fn fixture_checkpoint(
             counter_evidence: Vec::new(),
         },
         session_archetype: None,
+        session_progress: None,
         drift_scores: [
             DriftClass::WrongPlanBranch,
             DriftClass::TruthGroundingGap,
