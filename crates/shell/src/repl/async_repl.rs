@@ -5009,7 +5009,7 @@ async fn register_internal_toolbox_transport_for_session(
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::net::UnixListener;
 
-    let path = internal_toolbox_transport_path(&orchestration_session_id);
+    let path = internal_toolbox_transport_path(orchestration_session_id);
     let parent = path.parent().ok_or_else(|| {
         anyhow::anyhow!(
             "internal toolbox transport path '{}' is missing a parent directory",
@@ -11841,7 +11841,7 @@ mod tests {
                 WorldDispatchOutcomeV1::StopWorldWorker(outcome) => outcome,
                 other => panic!("expected stop_world_worker outcome, got {other:?}"),
             };
-            assert_eq!(stop.request_id, "req_toolbox_stop");
+            assert_eq!(stop.request_id, "toolbox-req_toolbox_stop");
             assert_eq!(
                 stop.orchestration_session_id,
                 startup_context.orchestration_session_id()
@@ -12188,7 +12188,7 @@ mod tests {
 
             assert!(
                 err.to_string().contains(
-                    "missing_dispatch_field: world dispatch request requires target_participant_id"
+                    "missing_follow_up_handle: follow-up requires exact task_run_id or exact participant_id"
                 ),
                 "unexpected cancel validation error: {err}"
             );
@@ -12325,7 +12325,7 @@ mod tests {
                 .expect_err("denied cancel must fail at steering policy before stub");
 
             assert!(
-                err.to_string().contains("action_not_allowed:"),
+                err.to_string().contains("target_not_in_session:"),
                 "unexpected cancel steering denial: {err}"
             );
             assert!(
@@ -12655,7 +12655,7 @@ mod tests {
 
             assert!(
                 err.to_string().contains(
-                    "missing_dispatch_field: fork_world_worker requires target_participant_id"
+                    "missing_follow_up_handle: retained-worker follow-up requires exact participant_id"
                 ),
                 "unexpected fork validation error: {err}"
             );
@@ -12793,7 +12793,7 @@ mod tests {
                 .expect_err("denied fork must fail at steering policy before stub");
 
             assert!(
-                err.to_string().contains("action_not_allowed:"),
+                err.to_string().contains("target_not_in_session:"),
                 "unexpected fork steering denial: {err}"
             );
             assert!(
@@ -12926,7 +12926,7 @@ mod tests {
 
             assert!(
                 err.to_string().contains(
-                    "missing_dispatch_field: world dispatch request requires target_participant_id"
+                    "missing_follow_up_handle: retained-worker follow-up requires exact participant_id"
                 ),
                 "unexpected stop validation error: {err}"
             );
@@ -13062,7 +13062,7 @@ mod tests {
 
             assert!(
                 err.to_string().contains(
-                    "invalid_dispatch_payload: action inspect_world_worker requires matching typed payload"
+                    "invalid_tool_arguments: tool inspect_world_worker received arguments that do not match the frozen contract"
                 ),
                 "unexpected inspect validation error: {err}"
             );
@@ -13194,7 +13194,7 @@ mod tests {
 
             assert!(
                 err.to_string().contains(
-                    "missing_orchestration_session: internal world dispatch requires authoritative orchestration session sess_unknown_shape_valid"
+                    "target_not_in_session: orchestration session"
                 ),
                 "unexpected inspect routing error: {err}"
             );
@@ -13375,7 +13375,7 @@ mod tests {
                 other => panic!("expected inspect_world_worker outcome, got {other:?}"),
             };
 
-            assert_eq!(inspect.request_id, "req_toolbox_inspect_success");
+            assert_eq!(inspect.request_id, "toolbox-req_toolbox_inspect_success");
             assert_eq!(
                 inspect.orchestration_session_id,
                 startup_context.orchestration_session_id()

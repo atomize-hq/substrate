@@ -2,10 +2,20 @@
 
 Source spec: [SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)  
 Source plan: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
+Execution model: four sequential implementation packets  
+Phase: `TASKS`  
+Status: Packet 4 closeout verified on `2026-06-10`
+
+## Current tree note
+
+1. Packets `1` through `3` are already landed on the live repo before this Packet `4` pass.
+2. This Packet `4` pass owns non-Codex validation/support-posture truth coverage, operator/reporting truth surfaces, and slice closeout docs only.
+3. Packet `4` does not widen Slice `53` into `claude_code` live host-tool parity, public toolbox CLI execution, or transport redesign.
+4. Final validation surfaced one bounded async-repl closeout in [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs): a one-token clippy fix plus expectation realignment for toolbox-routing tests. Packet `4` keeps that follow-up local to the validation wall rather than widening Slice `53` semantics.
 
 ## Task List
 
-- [ ] Task 53.1: Preserve dynamic orchestrator selection and add explicit live-tool validation/support posture
+- [x] Task 53.1: Preserve dynamic orchestrator selection and add explicit live-tool validation/support posture
   - Acceptance:
     - selected orchestrator resolution still flows through effective config + effective inventory + exact backend policy
     - validation/support posture is derived from resolved runtime family, not literal `agent_id`
@@ -19,7 +29,7 @@ Source plan: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-
     - `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
     - `crates/shell/src/execution/agents_cmd.rs`
 
-- [ ] Task 53.2: Add a bounded first-validated Codex-backed host toolbox-env plus prompt-contract injection path at the prompt-submission boundary
+- [x] Task 53.2: Add a bounded first-validated Codex-backed host toolbox-env plus prompt-contract injection path at the prompt-submission boundary
   - Acceptance:
     - the Codex-backed path receives a real seven-tool surface in the first smoke-validated landing
     - that surface is enabled by runtime-owned `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` / `SUBSTRATE_AGENT_TOOLBOX_VERSION` injection via UAA rather than assuming direct generic tool-list injection
@@ -38,7 +48,7 @@ Source plan: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-
     - `crates/gateway/src/adapter_runtime.rs`
     - `crates/shell/Cargo.toml` (only if a bounded UAA dependency adjustment is required)
 
-- [ ] Task 53.3: Reuse Slice 52 tool semantics for live first-validated host tool invocation
+- [x] Task 53.3: Reuse Slice 52 tool semantics for live first-validated host tool invocation
   - Acceptance:
     - live tool calls on the first validated Codex-backed path route through `tool_invocation_contract.rs`
     - runtime-owned request/session/caller/world fields remain shell-injected
@@ -51,7 +61,7 @@ Source plan: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-
     - `crates/shell/src/execution/prompt_fulfillment.rs`
     - `crates/shell/src/repl/async_repl.rs`
 
-- [ ] Task 53.4: Add non-Codex validation/support-posture truth coverage for selected `claude_code` orchestrators
+- [x] Task 53.4: Add non-Codex validation/support-posture truth coverage for selected `claude_code` orchestrators
   - Acceptance:
     - selected `claude_code` host sessions keep existing prompt-turn behavior
     - reporting does not overclaim parity or guaranteed host-tool support for that family
@@ -65,7 +75,7 @@ Source plan: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-
     - `crates/shell/tests/agent_public_control_surface_v1.rs`
     - `crates/shell/src/execution/agents_cmd.rs`
 
-- [ ] Task 53.5: Add truthful operator/reporting surfaces for first-family landing state
+- [x] Task 53.5: Add truthful operator/reporting surfaces for first-family landing state
   - Acceptance:
     - `substrate agent doctor --json` and/or `substrate agent toolbox status --json` distinguish the first validated Codex-backed path from broader runtime validation/support posture
     - reporting does not overclaim `claude_code` parity
@@ -78,7 +88,7 @@ Source plan: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-
     - `crates/shell/tests/agent_public_control_surface_v1.rs`
     - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
 
-- [ ] Task 53.6: Close validation wall and update slice tracker truth
+- [x] Task 53.6: Close validation wall and update slice tracker truth
   - Acceptance:
     - workspace fmt/clippy/targeted tests are green
     - remaining-scope tracker records the dynamic-selection clarification and any dependency/parity deferrals

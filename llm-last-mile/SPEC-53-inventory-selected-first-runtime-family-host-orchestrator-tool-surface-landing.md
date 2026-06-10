@@ -9,7 +9,8 @@ Companion inputs:
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md)
 Phase: `SPECIFY`  
-Status: drafted on `2026-06-09` after repo-truth gut check of live orchestrator selection, runtime-family realization, and current host prompt-submission surfaces.
+Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-10`  
+Validation note: Packet 4 closed the first-family validation wall without widening Slice `53` into `claude_code` parity or a Codex-only runtime gate. The landed repo truth is: the Codex-backed path remains the first smoke-validated host-tool floor, selected `claude_code` host paths keep their existing non-tool-staged prompt-launch posture, and `substrate agent doctor --json` / `substrate agent toolbox status --json` now have focused coverage that they report non-Codex validation/support posture truthfully instead of overclaiming parity. Final closeout also absorbed one bounded async-repl validation follow-up in [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs): a one-token clippy fix plus expectation realignment for toolbox-routing tests so the green validation wall stays true in the live tree.
 
 ## Assumptions
 

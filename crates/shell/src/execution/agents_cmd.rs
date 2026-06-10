@@ -8,13 +8,14 @@ use crate::execution::agent_runtime::control::request_private_stop;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::PersistedWorldBinding;
 use crate::execution::agent_runtime::control::{
-    authoritative_host_toolbox_surface_enabled, maybe_compose_prompt_with_authoritative_host_toolbox_contract,
-    launch_hidden_owner_helper, load_hidden_owner_helper_launch_plan, load_public_prompt_source,
-    persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
-    remove_hidden_owner_helper_launch_plan, run_public_prompt_command, toolbox_transport_path,
-    toolbox_transport_path_for_home, HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperLaunchReceipt,
-    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan, OwnerHelperMode,
-    PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
+    authoritative_host_toolbox_surface_enabled, launch_hidden_owner_helper,
+    load_hidden_owner_helper_launch_plan, load_public_prompt_source,
+    maybe_compose_prompt_with_authoritative_host_toolbox_contract, persist_runtime_stop_closeout,
+    public_prompt_rendered_exit_code, remove_hidden_owner_helper_launch_plan,
+    run_public_prompt_command, toolbox_transport_path, toolbox_transport_path_for_home,
+    HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperLaunchReceipt, HiddenOwnerHelperParticipantPlan,
+    HiddenOwnerHelperSessionPlan, OwnerHelperMode, PublicPromptAction, PublicPromptCommandRequest,
+    PublicPromptInput, PublicSessionPosture,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
@@ -60,9 +61,7 @@ use crate::execution::config_model::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::policy_snapshot;
-use crate::execution::prompt_fulfillment::{
-    HOST_TOOLBOX_CONTRACT_VERSION_V1,
-};
+use crate::execution::prompt_fulfillment::HOST_TOOLBOX_CONTRACT_VERSION_V1;
 #[cfg(target_os = "linux")]
 use crate::execution::{ReplPersistentSessionClient, ReplSessionStartParams};
 use anyhow::{Context, Result};
@@ -4634,6 +4633,41 @@ mod tests {
         assert_eq!(
             plan.resolved_contract.execution_scope,
             AgentExecutionScope::Host
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn build_start_launch_plan_keeps_non_codex_host_prompt_truthful_without_toolbox_contract() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        write_test_runtime_inventory_with_unscoped_member(
+            &substrate_home,
+            &workspace_root,
+            "host",
+            None,
+        );
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
+
+        let context = command_context_for_test(&workspace_root);
+        let mut args = omitted_scope_start_args("cli:claude_code");
+        args.prompt_source.prompt = Some("hello from claude start".to_string());
+        let plan = build_start_launch_plan(&args, &context)
+            .expect("non-Codex host launch plan should still resolve");
+
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code");
+        assert_eq!(
+            plan.resolved_contract.execution_scope,
+            AgentExecutionScope::Host
+        );
+        assert!(
+            plan.helper_plan.startup_prompt.is_none(),
+            "selected claude_code host starts must keep the existing prompt-turn path instead of staging the first validated Codex-backed toolbox contract"
         );
     }
 

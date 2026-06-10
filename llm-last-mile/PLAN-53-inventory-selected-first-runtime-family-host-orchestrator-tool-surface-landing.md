@@ -4,7 +4,8 @@ Source spec: [SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-
 Source tracker note: [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)  
 Prior slice: [PLAN-52.md](./PLAN-52.md)  
 Plan type: first live runtime-family landing above the frozen Slice `52` adapter contract  
-Status: proposed on `2026-06-09`
+Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-10`
+Validation note: Packet 4 finished by locking the operator/reporting truth surfaces around the first validated Codex-backed floor, adding focused non-Codex posture coverage, updating the tracker so remaining work stays bounded to later parity/smoke follow-through rather than reopening selection, transport, or Codex-first semantics, and absorbing one bounded async-repl validation closeout in [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs) so the packet-wide validation wall reruns green.
 
 ## Objective
 

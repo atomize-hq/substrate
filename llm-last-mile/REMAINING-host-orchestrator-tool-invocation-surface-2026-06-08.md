@@ -205,53 +205,13 @@ Repo-truth consequence:
 
 ## Recommended Slice Order
 
-If the team wants the narrowest honest implementation sequence, the order should be:
+Slice `52` plus Slice `53` now cover the first three slots in the original sequence:
 
-### Slice A: Runtime-owned adapter contract freeze
+1. the shared runtime-owned adapter contract freeze,
+2. the first Codex-backed live runtime-family landing,
+3. the initial receipt/resume hardening plus Packet `4` operator/tracker truth closeout.
 
-Objective:
-
-1. freeze the agent-visible tool vocabulary,
-2. freeze which arguments are model-supplied versus runtime-injected,
-3. freeze receipt-oriented result semantics for `run_world_task` and `spawn_world_worker`,
-4. keep the slice bounded to contract/adapter-shape work rather than full runtime-family productization.
-
-Why first:
-
-1. both supported runtime families need one shared semantic contract,
-2. later implementation slices should not invent their own ad hoc tool shapes.
-
-### Slice B: First runtime-family adapter landing
-
-Recommended first landed runtime-family exposure:
-
-1. `codex`
-
-Objective:
-
-1. keep host orchestrator selection dynamic from effective config + effective inventory + exact backend policy,
-2. expose the frozen tool set when the selected orchestrator resolves to the first landed runtime family,
-3. route tool calls through the landed internal toolbox transport,
-4. prove runtime-owned injection of session/caller/world identity without hard-coding the orchestrator id.
-
-Why second:
-
-1. it creates the first end-to-end live host-agent delegation path,
-2. it proves whether the adapter model is honest before parity work begins,
-3. it keeps `codex` as the first landed exposure mechanism without corrupting the repo's dynamic selection truth.
-
-### Slice C: Receipt/resume/inspection hardening
-
-Objective:
-
-1. tighten the lived experience around `task_run_id`, retained-worker receipts, and later follow-up calls,
-2. prove the host can move on or park and later resume/inspect/cancel safely,
-3. keep the control-plane model receipt-oriented rather than synchronous-only.
-
-Why third:
-
-1. the first adapter landing may prove the visibility/mechanics seam,
-2. this slice then makes the orchestration behavior operationally solid.
+The remaining honest order is therefore:
 
 ### Slice D: Second runtime-family parity
 
@@ -270,26 +230,26 @@ Why fourth:
 1. parity work should consume the proven contract and first-family lessons,
 2. it should not reopen the core transport or tool semantics.
 
-### Slice E: Docs, smoke, and truth alignment
+### Slice E: Broader smoke and docs follow-through after parity or surface widening
 
 Objective:
 
-1. align runtime docs with the now-live agent-visible tool surface,
-2. capture bounded smoke expectations,
+1. align runtime docs with any later multi-family live surface that actually lands,
+2. capture bounded smoke expectations beyond the current first-family validation wall,
 3. keep queued MCP language clearly separate from the landed Substrate-native adapter path.
 
 Why last:
 
-1. docs should describe what actually landed,
-2. this keeps earlier slices focused on runtime truth first.
+1. Slice `53` already closed the first-family operator/tracker truth surfaces,
+2. any broader doc/smoke pass should wait until later parity or surface widening changes real repo truth again.
 
 ## Parity Strategy Recommendation
 
 The safer default is:
 
-1. shared semantic contract first,
-2. dynamic inventory-selected landing with `codex` as the first supported live tool-exposure family,
-3. `claude_code` parity second.
+1. keep the landed shared semantic contract and Codex-backed first validated floor as the baseline,
+2. land `claude_code` parity next only when the live surface can be proven without overclaiming support,
+3. run any broader docs/smoke refresh only after that later parity truth exists.
 
 Why:
 
@@ -348,6 +308,15 @@ The next spec should still choose explicitly:
 4. **First runtime-family landing**
    - The next execution-bearing follow-on after Slice `52` remains the first real runtime-family adapter landing, with `codex` still the narrower default first target unless live repo truth changes.
 
+### 2026-06-10 — Slice 53 Packet 4 closeout deferrals
+
+1. **Second runtime-family live host-tool parity remains deferred**
+   - Slice `53` closed the first-family validation wall and truthful operator/reporting surfaces, but it did not land a smoke-validated `claude_code` host-tool surface.
+   - Follow-up slice family: later Slice `54+` parity work should consume the already-landed contract, Codex-backed floor, and Packet `4` reporting truth without reopening selection or transport semantics.
+2. **Broader multi-family smoke/doc refresh remains deferred until parity truth changes**
+   - Packet `4` already aligned the first-family truth surfaces in repo-local slice artifacts and operator outputs.
+   - Follow-up slice family: only reopen a broader docs/smoke pass after later runtime-family parity or other live surface widening materially changes repo truth.
+
 ## Resolved Since Last Update
 
 ### 2026-06-08
@@ -367,6 +336,21 @@ The next spec should still choose explicitly:
    - Packet `4` validation surfaced that [`tool_invocation_contract.rs`](../crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs) still needed a bounded internal refactor so the Slice `52` adapter-contract module would satisfy `cargo clippy --workspace --all-targets -- -D warnings`.
    - Packet `4` resolution: keep the refactor local to the contract module, preserve the frozen request/receipt semantics, and record the closeout docs truthfully so the green validation wall is not described as docs-only when one bounded code follow-up was actually required.
 
+### 2026-06-10 — Slice 53 Packet 4 closeout
+
+1. **Resolved operator-truth gap: first-family validation/support posture is now explicit on doctor/toolbox surfaces**
+   - Packet `4` closed the remaining reporting gap by keeping exact selected backend ids visible while publishing the landed live-tool posture on `substrate agent doctor --json` and `substrate agent toolbox status --json`.
+   - The first validated Codex-backed floor remains explicit, and selected `claude_code` orchestrators are reported as `not_yet_smoke_validated` / `not_yet_guaranteed` instead of being silently treated as parity or blocked by documentation wording alone.
+2. **Resolved non-Codex coverage gap: selected claude host launch truth is now tested without claiming live parity**
+   - Packet `4` added focused coverage in [`agents_cmd.rs`](../crates/shell/src/execution/agents_cmd.rs) and [`agent_successor_contract_ahcsitc0.rs`](../crates/shell/tests/agent_successor_contract_ahcsitc0.rs) that the selected non-Codex host path stays on the exact `cli:claude_code` runtime-family truth and does not stage the first validated Codex-only toolbox contract.
+   - Resolution stays bounded to truthful posture/launch-plan/operator coverage only; Slice `53` still does not claim a smoke-validated `claude_code` live host-tool surface.
+3. **Resolved slice-artifact drift: Slice 53 repo-local spec/plan/tasks now describe the landed Packet 4 closeout truth**
+   - Packet `4` updated the Slice `53` repo-local artifacts so they stop reading as proposed-only work after the operator/reporting closeout and validation wall landed.
+   - The remaining ledger now points forward to later runtime-family parity and broader follow-through rather than restating already-landed first-family work as still pending.
+4. **Resolved validation follow-up: Packet 4 needed one bounded async-repl closeout**
+   - Packet `4` reran the required workspace validation wall and surfaced two local issues in [`async_repl.rs`](../crates/shell/src/repl/async_repl.rs): one `clippy -D warnings` needless-borrow fix at the internal toolbox transport registration seam, and a small expectation drift set in toolbox-routing tests whose assertions no longer matched the frozen live contract/routing truth.
+   - Packet `4` resolution: keep the follow-up inside `async_repl.rs`, applying the one-token clippy fix plus test expectation realignment only, so the green validation wall remains truthful without widening Slice `53` beyond operator/reporting/tracker closeout scope.
+
 ## Do Not Reopen
 
 The following should stay frozen unless live evidence forces otherwise:
@@ -382,7 +366,7 @@ The following should stay frozen unless live evidence forces otherwise:
 
 Current repo truth is:
 
-1. the internal toolbox transport and typed dispatch runtime are already landed,
-2. the remaining missing seam is the live host agent’s tool-invocation surface,
-3. that remaining seam is likely a small multi-slice family rather than one patch,
-4. the honest order is shared adapter contract first, then first-family live adapter landing, then receipt/resume hardening, then second-family parity, then docs/smoke truth alignment.
+1. the internal toolbox transport, shared adapter contract, first Codex-backed live landing, and Packet `4` operator/tracker truth surfaces are now landed,
+2. the Codex-backed path is the first smoke-validated host-tool floor while selected non-Codex host paths remain truthfully reported as not-yet-validated / not-yet-guaranteed rather than silently forced through a Codex-only gate,
+3. the main remaining execution seam is second runtime-family parity for `claude_code`,
+4. any broader docs/smoke refresh should wait until that later parity or other live surface widening changes repo truth again.

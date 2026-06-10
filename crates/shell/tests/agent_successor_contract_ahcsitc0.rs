@@ -1591,6 +1591,50 @@ fn agent_toolbox_status_json_reports_template_when_no_active_orchestrator_sessio
 }
 
 #[test]
+fn agent_toolbox_status_json_publishes_non_codex_live_tool_posture_without_overclaiming_parity() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+
+    let output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "toolbox status should stay readable for a selected claude_code orchestrator: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json.pointer("/orchestrator/backend_id")
+            .and_then(Value::as_str),
+        Some("cli:claude_code"),
+        "toolbox status must keep the exact selected backend visible: {json}"
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/live_tool_support/runtime_family")
+            .and_then(Value::as_str),
+        Some("claude_code")
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/live_tool_support/validation_state")
+            .and_then(Value::as_str),
+        Some("not_yet_smoke_validated"),
+        "toolbox status must distinguish non-Codex posture from the first validated Codex-backed floor: {json}"
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/live_tool_support/support_state")
+            .and_then(Value::as_str),
+        Some("not_yet_guaranteed"),
+        "toolbox status must not overclaim claude_code parity: {json}"
+    );
+    assert!(
+        json.pointer("/orchestrator/live_tool_support/reason")
+            .and_then(Value::as_str)
+            .is_some_and(|reason| reason.contains("not yet smoke-validated")),
+        "toolbox status must explain the non-Codex posture truthfully: {json}"
+    );
+}
+
+#[test]
 fn agent_toolbox_env_requires_an_active_orchestrator_session() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
@@ -4965,6 +5009,52 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
             "not_applicable",
         ],
         "host-only doctor fixture should report a not_applicable world boundary after the four required passes: {json}"
+    );
+}
+
+#[test]
+fn agent_doctor_json_publishes_non_codex_live_tool_posture_without_overclaiming_parity() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_doctor_contract();
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent doctor should succeed for the selected claude_code host orchestrator fixture: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json.pointer("/orchestrator/backend_id")
+            .and_then(Value::as_str),
+        Some("cli:claude_code"),
+        "doctor must keep the exact selected backend visible: {json}"
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/live_tool_support/runtime_family")
+            .and_then(Value::as_str),
+        Some("claude_code")
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/live_tool_support/validation_state")
+            .and_then(Value::as_str),
+        Some("not_yet_smoke_validated"),
+        "doctor must distinguish non-Codex posture from the first validated Codex-backed floor: {json}"
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/live_tool_support/support_state")
+            .and_then(Value::as_str),
+        Some("not_yet_guaranteed"),
+        "doctor must not overclaim claude_code parity: {json}"
+    );
+    assert!(
+        json.pointer("/orchestrator/live_tool_support/reason")
+            .and_then(Value::as_str)
+            .is_some_and(
+                |reason| reason.contains("ordinary host-session behavior remains unchanged")
+            ),
+        "doctor must explain the non-Codex posture truthfully: {json}"
     );
 }
 
