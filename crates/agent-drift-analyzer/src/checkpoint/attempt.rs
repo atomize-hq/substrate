@@ -2,9 +2,12 @@ use std::collections::BTreeMap;
 
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef};
 use camino::Utf8PathBuf;
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::context::CommandObservation;
+
+use super::diagnostics::{build_diagnostic_signatures, DiagnosticSignature};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CommandAttempt {
@@ -48,13 +51,15 @@ pub(crate) enum AttemptOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct VerificationAttempt {
     pub attempt_ordinal: usize,
+    pub command_row: RowRef,
     pub verifier: VerifierKind,
     pub target_scope: VerificationScope,
     pub exercise_state: ExerciseState,
     pub outcome: AttemptOutcome,
+    pub signatures: Vec<DiagnosticSignature>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub(crate) enum VerifierKind {
     CargoCheck,
     CargoTest,
@@ -160,8 +165,10 @@ pub(crate) fn build_verification_attempts(
             let output = attempt_output_text(attempt, rows);
             Some(VerificationAttempt {
                 attempt_ordinal: attempt.ordinal,
+                command_row: attempt.command_row.clone(),
                 verifier,
                 exercise_state: exercise_state(attempt, &target_scope, &output),
+                signatures: build_diagnostic_signatures(attempt, &target_scope, &output),
                 target_scope,
                 outcome: attempt.outcome,
             })
@@ -493,9 +500,7 @@ fn output_shows_test_execution(output: &str, target_scope: &VerificationScope) -
             || previous_nonempty_line
                 .as_deref()
                 .is_some_and(|prior| line_matches_requested_target(prior, target_scope));
-        if line_has_explicit_test_execution(&line)
-            && (!requires_target_match || target_matches)
-        {
+        if line_has_explicit_test_execution(&line) && (!requires_target_match || target_matches) {
             return true;
         }
         previous_nonempty_line = Some(line);
@@ -534,17 +539,9 @@ fn line_has_test_status(line: &str) -> bool {
 }
 
 fn line_starts_with_js_status(line: &str) -> bool {
-    [
-        "fail ",
-        "pass ",
-        "(fail)",
-        "(pass)",
-        "✕ ",
-        "✓ ",
-        "× ",
-    ]
-    .iter()
-    .any(|prefix| line.starts_with(prefix))
+    ["fail ", "pass ", "(fail)", "(pass)", "✕ ", "✓ ", "× "]
+        .iter()
+        .any(|prefix| line.starts_with(prefix))
 }
 
 fn cargo_role(tokens: &[String]) -> Option<CommandAttemptRole> {
@@ -1231,8 +1228,14 @@ mod tests {
         let verification = build_verification_attempts(&attempts, &rows);
         assert_eq!(verification.len(), 3);
 
-        assert_eq!(verification[0].target_scope.paths, vec!["./...".to_string()]);
-        assert_eq!(verification[0].target_scope.tests, vec!["./...".to_string()]);
+        assert_eq!(
+            verification[0].target_scope.paths,
+            vec!["./...".to_string()]
+        );
+        assert_eq!(
+            verification[0].target_scope.tests,
+            vec!["./...".to_string()]
+        );
         assert!(!verification[0].target_scope.broad);
 
         assert_eq!(verification[1].target_scope.paths, Vec::<String>::new());

@@ -1,4 +1,5 @@
 mod attempt;
+mod diagnostics;
 mod export;
 mod schema;
 
