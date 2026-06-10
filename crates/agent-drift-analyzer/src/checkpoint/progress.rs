@@ -22,7 +22,6 @@ use super::{
 };
 
 const MAX_PROGRESS_EVIDENCE_ITEMS: usize = 8;
-const MAX_COMPARABLE_CHECKPOINT_CHAIN: usize = 6;
 
 pub(crate) fn build_session_progress(
     analysis: &CheckpointAnalysis,
@@ -288,6 +287,7 @@ fn assess_troubleshooting_progress(
         &analysis.interval.command_attempts,
     );
     let mut signals = Vec::new();
+    let mut positive_confidence = Confidence::Medium;
 
     if previous_failed.exercise_state == ExerciseState::BlockedBeforeTarget
         && current.exercise_state == ExerciseState::TargetExercised
@@ -313,6 +313,12 @@ fn assess_troubleshooting_progress(
         let frontier_advanced = frontier_rank(current_signature.failure_class)
             > frontier_rank(previous_signature.failure_class);
         if frontier_advanced {
+            positive_confidence = positive_confidence.max(troubleshooting_advancing_confidence(
+                previous_failed,
+                current,
+                Some(previous_signature),
+                Some(current_signature),
+            ));
             signals.push(progress_signal(
                 ProgressSignalCode::FailureFrontierAdvanced,
                 SignalPolarity::Positive,
@@ -329,6 +335,12 @@ fn assess_troubleshooting_progress(
         }
         let fail_count_delta = comparable_fail_count_delta(previous_signature, current_signature);
         if matches!(fail_count_delta, Some(Ordering::Less)) {
+            positive_confidence = positive_confidence.max(troubleshooting_advancing_confidence(
+                previous_failed,
+                current,
+                Some(previous_signature),
+                Some(current_signature),
+            ));
             signals.push(progress_signal(
                 ProgressSignalCode::FailureCountReduced,
                 SignalPolarity::Positive,
@@ -434,7 +446,7 @@ fn assess_troubleshooting_progress(
         }
     }
 
-    classify_progress_outcome(dimension, signals, Confidence::High, Confidence::Medium)
+    classify_progress_outcome(dimension, signals, positive_confidence, Confidence::Medium)
 }
 
 fn assess_planning_progress(
@@ -653,9 +665,8 @@ fn assess_implementation_progress(
                 current,
                 &analysis.interval.command_attempts,
             );
-            let scope_aligned =
-                edit_overlap.strength >= EditOverlapStrength::Moderate
-                    || working_set_overlaps_verifier_scope(analysis, previous_failed, current);
+            let scope_aligned = edit_overlap.strength >= EditOverlapStrength::Moderate
+                || working_set_overlaps_verifier_scope(analysis, previous_failed, current);
             signals.push(progress_signal(
                 ProgressSignalCode::VerificationClean,
                 SignalPolarity::Positive,
@@ -768,9 +779,8 @@ fn assess_implementation_progress(
             current,
             &analysis.interval.command_attempts,
         );
-        let scope_aligned =
-            edit_overlap.strength >= EditOverlapStrength::Moderate
-                || working_set_overlaps_verifier_scope(analysis, previous_failed, current);
+        let scope_aligned = edit_overlap.strength >= EditOverlapStrength::Moderate
+            || working_set_overlaps_verifier_scope(analysis, previous_failed, current);
 
         if let (Some(previous_signature), Some(current_signature)) =
             (previous_signature, current_signature)
@@ -1205,17 +1215,14 @@ fn prior_verification_attempts(
 
     let mut collected = Vec::new();
     let mut newer = &analyses[current_index];
-    let mut checkpoints_scanned = 0;
+    let mut scanned_any = false;
     for older in analyses[..current_index].iter().rev() {
-        if checkpoints_scanned >= MAX_COMPARABLE_CHECKPOINT_CHAIN {
-            break;
-        }
-        if checkpoints_scanned > 0 && comparable_window_boundary(newer, older, current) {
+        if scanned_any && comparable_window_boundary(newer, older, current) {
             break;
         }
 
         collected.extend(older.interval.verification_attempts.clone());
-        checkpoints_scanned += 1;
+        scanned_any = true;
         newer = older;
     }
 
@@ -1379,6 +1386,69 @@ fn best_signature(attempt: &VerificationAttempt) -> Option<&DiagnosticSignature>
         .signatures
         .iter()
         .min_by(|left, right| signature_sort_key(left).cmp(&signature_sort_key(right)))
+}
+
+fn troubleshooting_advancing_confidence(
+    previous: &VerificationAttempt,
+    current: &VerificationAttempt,
+    previous_signature: Option<&DiagnosticSignature>,
+    current_signature: Option<&DiagnosticSignature>,
+) -> Confidence {
+    let Some(previous_signature) = previous_signature else {
+        return Confidence::Medium;
+    };
+    let Some(current_signature) = current_signature else {
+        return Confidence::Medium;
+    };
+
+    let parser_strong = previous_signature.parser_confidence == Confidence::High
+        && current_signature.parser_confidence == Confidence::High;
+    let target_overlap_strong = diagnostic_targets_overlap(previous_signature, current_signature)
+        || focused_verifier_targets_overlap(previous, current);
+
+    if parser_strong && target_overlap_strong {
+        Confidence::High
+    } else {
+        Confidence::Medium
+    }
+}
+
+fn diagnostic_targets_overlap(
+    previous: &DiagnosticSignature,
+    current: &DiagnosticSignature,
+) -> bool {
+    previous.target_fingerprint.is_some()
+        && previous.target_fingerprint == current.target_fingerprint
+        && precise_target_fingerprint(previous)
+        && precise_target_fingerprint(current)
+        || collection_overlap(&previous.failing_paths, &current.failing_paths)
+        || collection_overlap(&previous.failing_tests, &current.failing_tests)
+}
+
+fn precise_target_fingerprint(signature: &DiagnosticSignature) -> bool {
+    signature
+        .target_fingerprint
+        .as_deref()
+        .is_some_and(|fingerprint| {
+            fingerprint.contains("path:")
+                || fingerprint.contains("test:")
+                || fingerprint.contains("cmd:")
+        })
+}
+
+fn focused_verifier_targets_overlap(
+    previous: &VerificationAttempt,
+    current: &VerificationAttempt,
+) -> bool {
+    !previous.target_scope.broad
+        && !current.target_scope.broad
+        && scopes_overlap(&previous.target_scope, &current.target_scope)
+}
+
+fn collection_overlap(left: &[String], right: &[String]) -> bool {
+    let left = left.iter().collect::<BTreeSet<_>>();
+    let right = right.iter().collect::<BTreeSet<_>>();
+    !left.is_empty() && !right.is_empty() && !left.is_disjoint(&right)
 }
 
 fn signature_sort_key(signature: &DiagnosticSignature) -> (u8, bool, usize, usize, usize) {
