@@ -431,10 +431,21 @@ fn exercise_state(
 }
 
 fn test_attempt_uses_nonexecuting_flags(attempt: &CommandAttempt) -> bool {
-    attempt.family == "cargo"
-        && normalized_command_tokens(&attempt.raw_command)
-            .iter()
-            .any(|token| token == "--no-run")
+    let tokens = normalized_command_tokens(&attempt.raw_command);
+    match attempt.family.as_str() {
+        "cargo" => tokens.iter().any(|token| token == "--no-run"),
+        "pytest" => pytest_collect_only_requested(&tokens),
+        "python" | "uv" if tokens.iter().any(|token| token == "pytest") => {
+            pytest_collect_only_requested(&tokens)
+        }
+        _ => false,
+    }
+}
+
+fn pytest_collect_only_requested(tokens: &[String]) -> bool {
+    tokens
+        .iter()
+        .any(|token| token == "--collect-only" || token == "--co")
 }
 
 fn attempt_output_text(attempt: &CommandAttempt, rows: &[CompactionRow]) -> String {
@@ -1329,6 +1340,43 @@ mod tests {
         assert_eq!(verification[0].verifier, VerifierKind::CargoTest);
         assert_eq!(verification[0].outcome, AttemptOutcome::Clean);
         assert_eq!(verification[0].exercise_state, ExerciseState::Unknown);
+    }
+
+    #[test]
+    fn checkpoints_leave_pytest_collect_only_attempts_unknown_when_targets_never_execute() {
+        let cases = [
+            (
+                "pytest --collect-only tests/checkpoints_test.py::test_pairing",
+                "Exit code: 0\n=================== test session starts ===================\ncollected 1 item\n\n<Dir repo>\n  <Module tests/checkpoints_test.py>\n    <Function test_pairing>",
+            ),
+            (
+                "python -m pytest --co tests/checkpoints_test.py::test_pairing",
+                "Exit code: 0\n=================== test session starts ===================\ncollected 1 item\n\n<Dir repo>\n  <Module tests/checkpoints_test.py>\n    <Function test_pairing>",
+            ),
+            (
+                "uv run pytest --collect-only tests/checkpoints_test.py::test_pairing",
+                "Exit code: 0\n=================== test session starts ===================\ncollected 1 item\n\n<Dir repo>\n  <Module tests/checkpoints_test.py>\n    <Function test_pairing>",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            let verification = build_verification_attempts(&attempts, &rows);
+
+            assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(verification[0].verifier, VerifierKind::Pytest, "{command}");
+            assert_eq!(verification[0].outcome, AttemptOutcome::Clean, "{command}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::Unknown,
+                "{command}"
+            );
+        }
     }
 
     #[test]
