@@ -5,12 +5,11 @@ use std::{
 
 use agent_session_compactor::RowRef;
 
-use crate::context::collect_command_observations;
 use crate::inference::{ChildWorkVisibility, DelegationTopology};
 
 use super::attempt::{
-    build_command_attempts, build_verification_attempts, AttemptOutcome, CommandAttempt,
-    CommandAttemptRole, ExerciseState, VerificationAttempt, VerificationScope, VerifierKind,
+    AttemptOutcome, CommandAttempt, CommandAttemptRole, ExerciseState, VerificationAttempt,
+    VerificationScope, VerifierKind,
 };
 use super::diagnostics::{
     classify_edit_overlap, match_diagnostic_signatures, DiagnosticMatchKind, DiagnosticSignature,
@@ -23,6 +22,7 @@ use super::{
 };
 
 const MAX_PROGRESS_EVIDENCE_ITEMS: usize = 8;
+const MAX_COMPARABLE_CHECKPOINT_CHAIN: usize = 6;
 
 pub(crate) fn build_session_progress(
     analysis: &CheckpointAnalysis,
@@ -35,16 +35,28 @@ pub(crate) fn build_session_progress(
 
     let mut progress = match session_archetype.label {
         SessionArchetypeLabel::Troubleshooting => {
-            assess_troubleshooting_progress(analysis, default_dimension(session_archetype.label))
+            assess_troubleshooting_progress(
+                analysis,
+                default_dimension(session_archetype.label),
+                session_archetype.label,
+            )
         }
         SessionArchetypeLabel::Planning => {
             assess_planning_progress(analysis, default_dimension(session_archetype.label))
         }
         SessionArchetypeLabel::AutonomousImplementation => {
-            assess_implementation_progress(analysis, default_dimension(session_archetype.label))
+            assess_implementation_progress(
+                analysis,
+                default_dimension(session_archetype.label),
+                session_archetype.label,
+            )
         }
         SessionArchetypeLabel::VerificationCloseout => {
-            assess_closeout_progress(analysis, default_dimension(session_archetype.label))
+            assess_closeout_progress(
+                analysis,
+                default_dimension(session_archetype.label),
+                session_archetype.label,
+            )
         }
     };
 
@@ -70,7 +82,7 @@ fn parent_visible_orchestration_progress(
     archetype_label: SessionArchetypeLabel,
 ) -> Option<SessionProgress> {
     let topology = analysis.delegation.topology?;
-    let visibility = analysis.delegation.child_work_visibility?;
+    let visibility = effective_child_work_visibility(analysis);
     if !matches!(
         topology,
         DelegationTopology::DelegatingParent | DelegationTopology::MixedOrAmbiguous
@@ -78,14 +90,14 @@ fn parent_visible_orchestration_progress(
         return None;
     }
 
-    let orchestration_attempts = analysis
-        .interval
-        .command_attempts
-        .iter()
-        .filter(|attempt| attempt.role == CommandAttemptRole::Orchestration)
-        .collect::<Vec<_>>();
-    if orchestration_attempts.is_empty()
-        || !has_only_parent_visible_orchestration_evidence(analysis)
+    let orchestration_attempts = parent_visible_orchestration_attempts(analysis);
+    let synthesis_attempts = parent_visible_synthesis_attempts(analysis);
+    let visible_child_surface = has_visible_child_surface(analysis);
+    let parent_visible_synthesis_case =
+        visible_child_surface && !synthesis_attempts.is_empty() && source_edits(analysis).is_empty();
+    if !parent_visible_synthesis_case
+        && ((orchestration_attempts.is_empty() && synthesis_attempts.is_empty())
+            || !has_parent_visible_orchestration_evidence(analysis, visibility))
     {
         return None;
     }
@@ -95,6 +107,7 @@ fn parent_visible_orchestration_progress(
             .iter()
             .flat_map(|attempt| attempt_evidence(*attempt, "parent-visible orchestration row"))
             .collect(),
+        parent_visible_synthesis_evidence(&synthesis_attempts),
         delegation_supporting_evidence(
             analysis,
             "only parent-visible orchestration evidence was available for progress assessment",
@@ -119,7 +132,8 @@ fn parent_visible_orchestration_progress(
         limiting_evidence,
     );
 
-    let parent_synthesis = has_parent_visible_synthesis(&orchestration_attempts);
+    let parent_synthesis =
+        has_parent_visible_synthesis(&orchestration_attempts, &synthesis_attempts);
     let prior_parent_visible = previous_checkpoint_was_parent_visible(analysis);
     let status = if parent_synthesis {
         ProgressStatus::Mixed
@@ -152,12 +166,13 @@ fn parent_visible_orchestration_progress(
 fn assess_troubleshooting_progress(
     analysis: &CheckpointAnalysis,
     dimension: ProgressDimension,
+    archetype_label: SessionArchetypeLabel,
 ) -> SessionProgress {
     let current_attempts = &analysis.interval.verification_attempts;
     let Some(current) = current_attempts.last() else {
         return insufficient_progress(dimension, None, None);
     };
-    let prior_attempts = comparable_attempts(analysis, current_attempts, current);
+    let prior_attempts = comparable_attempts(analysis, current_attempts, current, archetype_label);
     let best_failed = best_failed_attempt(&prior_attempts);
     let best_clean = best_clean_attempt(&prior_attempts);
     let latest_failed = latest_failed_attempt(&prior_attempts);
@@ -295,9 +310,10 @@ fn assess_troubleshooting_progress(
         (previous_signature, current_signature)
     {
         let match_kind = match_diagnostic_signatures(previous_signature, current_signature);
-        if frontier_rank(current_signature.failure_class)
-            > frontier_rank(previous_signature.failure_class)
-        {
+        let frontier_advanced =
+            frontier_rank(current_signature.failure_class)
+                > frontier_rank(previous_signature.failure_class);
+        if frontier_advanced {
             signals.push(progress_signal(
                 ProgressSignalCode::FailureFrontierAdvanced,
                 SignalPolarity::Positive,
@@ -381,10 +397,14 @@ fn assess_troubleshooting_progress(
                 ]),
             ));
         }
-        if matches!(
-            match_kind,
-            DiagnosticMatchKind::Exact | DiagnosticMatchKind::StrongFuzzy
-        ) && edit_overlap.strength >= EditOverlapStrength::Moderate
+        if edit_overlap.strength >= EditOverlapStrength::Moderate
+            && (frontier_advanced
+                || matches!(
+                    match_kind,
+                    DiagnosticMatchKind::Exact
+                        | DiagnosticMatchKind::StrongFuzzy
+                        | DiagnosticMatchKind::FrontierRelated
+                ))
         {
             signals.push(progress_signal(
                 ProgressSignalCode::FailingScopeEdited,
@@ -563,6 +583,7 @@ fn assess_planning_progress(
 fn assess_implementation_progress(
     analysis: &CheckpointAnalysis,
     dimension: ProgressDimension,
+    archetype_label: SessionArchetypeLabel,
 ) -> SessionProgress {
     let source_edits = source_edits(analysis);
     let test_edits = test_edits(analysis);
@@ -570,7 +591,7 @@ fn assess_implementation_progress(
     let Some(current) = current_attempts.last() else {
         return insufficient_progress(dimension, None, None);
     };
-    let prior_attempts = comparable_attempts(analysis, current_attempts, current);
+    let prior_attempts = comparable_attempts(analysis, current_attempts, current, archetype_label);
     let best_failed = best_failed_attempt(&prior_attempts);
     let best_clean = best_clean_attempt(&prior_attempts);
     let latest_failed = latest_failed_attempt(&prior_attempts);
@@ -855,6 +876,7 @@ fn assess_implementation_progress(
 fn assess_closeout_progress(
     analysis: &CheckpointAnalysis,
     dimension: ProgressDimension,
+    archetype_label: SessionArchetypeLabel,
 ) -> SessionProgress {
     let source_edits = source_edits(analysis);
     let closeout_artifact_edits = closeout_artifact_edits(analysis);
@@ -862,7 +884,7 @@ fn assess_closeout_progress(
     let Some(current) = current_attempts.last() else {
         return insufficient_progress(dimension, None, None);
     };
-    let prior_attempts = comparable_attempts(analysis, current_attempts, current);
+    let prior_attempts = comparable_attempts(analysis, current_attempts, current, archetype_label);
     let best_clean = best_clean_attempt(&prior_attempts);
 
     let mut signals = Vec::new();
@@ -1011,10 +1033,7 @@ fn apply_delegation_caps(
     let Some(topology) = analysis.delegation.topology else {
         return progress;
     };
-    let visibility = analysis
-        .delegation
-        .child_work_visibility
-        .unwrap_or(ChildWorkVisibility::None);
+    let visibility = effective_child_work_visibility(analysis);
 
     if matches!(topology, DelegationTopology::SingleAgent) {
         return progress;
@@ -1123,8 +1142,9 @@ fn comparable_attempts<'a>(
     analysis: &'a CheckpointAnalysis,
     current_attempts: &'a [VerificationAttempt],
     current: &'a VerificationAttempt,
+    _archetype_label: SessionArchetypeLabel,
 ) -> Vec<VerificationAttempt> {
-    let previous_attempts = prior_verification_attempts(analysis);
+    let previous_attempts = prior_verification_attempts(analysis, current);
     let mut combined = Vec::new();
     combined.extend(previous_attempts);
     combined.extend(
@@ -1139,14 +1159,104 @@ fn comparable_attempts<'a>(
         .collect::<Vec<_>>()
 }
 
-fn prior_verification_attempts(analysis: &CheckpointAnalysis) -> Vec<VerificationAttempt> {
-    let Some(previous) = &analysis.previous else {
+fn prior_verification_attempts(
+    analysis: &CheckpointAnalysis,
+    current: &VerificationAttempt,
+) -> Vec<VerificationAttempt> {
+    let Some(_) = &analysis.previous else {
         return Vec::new();
     };
-    let command_observations = collect_command_observations(&previous.window.compact_rows);
-    let command_attempts =
-        build_command_attempts(&previous.window.compact_rows, &command_observations);
-    build_verification_attempts(&command_attempts, &previous.window.compact_rows)
+    let analyses = super::checkpoint_analyses(&analysis.current.window);
+    let Some(current_index) = analyses.len().checked_sub(1) else {
+        return Vec::new();
+    };
+
+    let mut collected = Vec::new();
+    let mut newer = &analyses[current_index];
+    let mut checkpoints_scanned = 0;
+    for older in analyses[..current_index].iter().rev() {
+        if checkpoints_scanned >= MAX_COMPARABLE_CHECKPOINT_CHAIN {
+            break;
+        }
+        if checkpoints_scanned > 0 && comparable_window_boundary(newer, older, current) {
+            break;
+        }
+
+        collected.extend(older.interval.verification_attempts.clone());
+        checkpoints_scanned += 1;
+        newer = older;
+    }
+
+    collected
+}
+
+fn comparable_window_boundary(
+    newer: &CheckpointAnalysis,
+    older: &CheckpointAnalysis,
+    _current: &VerificationAttempt,
+) -> bool {
+    strong_archetype_boundary(newer, older)
+        || explicit_replan_boundary(newer, older)
+        || delegation_visibility_changed(newer, older)
+        || objective_or_truth_artifacts_shifted(newer, older)
+        || working_set_pivoted(newer, older)
+}
+
+fn strong_archetype_boundary(newer: &CheckpointAnalysis, older: &CheckpointAnalysis) -> bool {
+    let newer_archetype = super::build_session_archetype(newer);
+    let older_archetype = super::build_session_archetype(older);
+    newer_archetype.label != older_archetype.label
+        && newer_archetype.confidence == Confidence::High
+        && older_archetype.confidence == Confidence::High
+}
+
+fn explicit_replan_boundary(newer: &CheckpointAnalysis, older: &CheckpointAnalysis) -> bool {
+    let newer_objective = normalize_task_text(&newer.current.task_frame.objective);
+    let older_objective = normalize_task_text(&older.current.task_frame.objective);
+    newer_objective != older_objective
+        && ["replan", "pivot", "switch", "instead"]
+            .iter()
+            .any(|keyword| newer_objective.contains(keyword))
+}
+
+fn delegation_visibility_changed(newer: &CheckpointAnalysis, older: &CheckpointAnalysis) -> bool {
+    newer.delegation.topology != older.delegation.topology
+        || newer.delegation.child_work_visibility != older.delegation.child_work_visibility
+}
+
+fn objective_or_truth_artifacts_shifted(
+    newer: &CheckpointAnalysis,
+    older: &CheckpointAnalysis,
+) -> bool {
+    let newer_truth = working_set(&newer.current.task_frame.truth_artifacts);
+    let older_truth = working_set(&older.current.task_frame.truth_artifacts);
+    let truth_shifted = sets_mostly_unrelated(&newer_truth, &older_truth);
+    let objective_shifted = normalize_task_text(&newer.current.task_frame.objective)
+        != normalize_task_text(&older.current.task_frame.objective);
+
+    truth_shifted || (objective_shifted && truth_shifted)
+}
+
+fn working_set_pivoted(newer: &CheckpointAnalysis, older: &CheckpointAnalysis) -> bool {
+    let newer_working = working_set(&newer.current.task_frame.working_set_paths);
+    let older_working = working_set(&older.current.task_frame.working_set_paths);
+    sets_mostly_unrelated(&newer_working, &older_working)
+}
+
+fn sets_mostly_unrelated(left: &BTreeSet<String>, right: &BTreeSet<String>) -> bool {
+    if left.is_empty() || right.is_empty() {
+        return false;
+    }
+
+    let overlap = left.intersection(right).count();
+    overlap == 0 || overlap * 2 < left.len().min(right.len())
+}
+
+fn normalize_task_text(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
 }
 
 fn attempts_are_comparable(left: &VerificationAttempt, right: &VerificationAttempt) -> bool {
@@ -1311,35 +1421,134 @@ fn test_edits(analysis: &CheckpointAnalysis) -> Vec<&CommandAttempt> {
         .collect()
 }
 
-fn has_only_parent_visible_orchestration_evidence(analysis: &CheckpointAnalysis) -> bool {
+fn has_parent_visible_orchestration_evidence(
+    analysis: &CheckpointAnalysis,
+    visibility: ChildWorkVisibility,
+) -> bool {
     !analysis.interval.command_attempts.is_empty()
-        && analysis.interval.verification_attempts.is_empty()
-        && analysis
-            .interval
-            .command_attempts
-            .iter()
-            .all(|attempt| attempt.role == CommandAttemptRole::Orchestration)
+        && source_edits(analysis).is_empty()
+        && analysis.interval.command_attempts.iter().all(|attempt| {
+            is_parent_visible_attempt(attempt, Some(visibility))
+        })
+        && match visibility {
+            ChildWorkVisibility::Opaque => {
+                parent_visible_synthesis_attempts(analysis).is_empty()
+                    || parent_visible_orchestration_attempts(analysis)
+                        .iter()
+                        .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1"))
+            }
+            ChildWorkVisibility::Partial => true,
+            ChildWorkVisibility::None => false,
+        }
 }
 
-fn has_parent_visible_synthesis(orchestration_attempts: &[&CommandAttempt]) -> bool {
-    orchestration_attempts
+fn effective_child_work_visibility(analysis: &CheckpointAnalysis) -> ChildWorkVisibility {
+    if has_visible_child_surface(analysis) {
+        ChildWorkVisibility::Partial
+    } else {
+        analysis
+            .delegation
+            .child_work_visibility
+            .unwrap_or(ChildWorkVisibility::None)
+    }
+}
+
+fn has_visible_child_surface(analysis: &CheckpointAnalysis) -> bool {
+    analysis.delegation.supporting_evidence.iter().any(|evidence| {
+        evidence
+            .reason
+            .contains("delegation child rollout surface links child/subagent work")
+    })
+}
+
+fn is_parent_visible_attempt(
+    attempt: &CommandAttempt,
+    visibility: Option<ChildWorkVisibility>,
+) -> bool {
+    matches!(attempt.role, CommandAttemptRole::Orchestration | CommandAttemptRole::Read)
+        || matches!(visibility, Some(ChildWorkVisibility::Partial))
+            && is_parent_visible_synthesis_attempt(attempt)
+}
+
+fn is_parent_visible_synthesis_attempt(attempt: &CommandAttempt) -> bool {
+    matches!(
+        attempt.role,
+        CommandAttemptRole::Compile
+            | CommandAttemptRole::Test
+            | CommandAttemptRole::Lint
+            | CommandAttemptRole::FormatCheck
+            | CommandAttemptRole::Build
+            | CommandAttemptRole::Replay
+    ) || (attempt.role == CommandAttemptRole::Edit
+        && attempt
+            .paths
+            .iter()
+            .any(|path| is_plan_artifact_path(path) || is_closeout_artifact_path(path)))
+}
+
+fn parent_visible_orchestration_attempts(analysis: &CheckpointAnalysis) -> Vec<&CommandAttempt> {
+    analysis
+        .interval
+        .command_attempts
         .iter()
-        .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1"))
+        .filter(|attempt| attempt.role == CommandAttemptRole::Orchestration)
+        .collect()
+}
+
+fn parent_visible_synthesis_attempts(analysis: &CheckpointAnalysis) -> Vec<&CommandAttempt> {
+    analysis
+        .interval
+        .command_attempts
+        .iter()
+        .filter(|attempt| is_parent_visible_synthesis_attempt(attempt))
+        .collect()
+}
+
+fn parent_visible_synthesis_evidence(attempts: &[&CommandAttempt]) -> Vec<EvidenceRef> {
+    attempts
+        .iter()
+        .flat_map(|attempt| {
+            let reason = match attempt.role {
+                CommandAttemptRole::Edit => {
+                    "parent incorporated visible delegated results into a plan/spec/handoff artifact"
+                }
+                CommandAttemptRole::Compile
+                | CommandAttemptRole::Test
+                | CommandAttemptRole::Lint
+                | CommandAttemptRole::FormatCheck
+                | CommandAttemptRole::Build
+                | CommandAttemptRole::Replay => {
+                    "parent-owned verification followed visible delegated results"
+                }
+                _ => "parent-visible synthesis row",
+            };
+            attempt_evidence(*attempt, reason)
+        })
+        .collect()
+}
+
+fn has_parent_visible_synthesis(
+    orchestration_attempts: &[&CommandAttempt],
+    synthesis_attempts: &[&CommandAttempt],
+) -> bool {
+    !synthesis_attempts.is_empty()
+        || orchestration_attempts
+            .iter()
+            .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1"))
 }
 
 fn previous_checkpoint_was_parent_visible(analysis: &CheckpointAnalysis) -> bool {
-    let Some(previous) = &analysis.previous else {
-        return false;
-    };
-    let command_observations = collect_command_observations(&previous.window.compact_rows);
-    let attempts = build_command_attempts(&previous.window.compact_rows, &command_observations);
-    let verification_attempts =
-        build_verification_attempts(&attempts, &previous.window.compact_rows);
-    !attempts.is_empty()
-        && verification_attempts.is_empty()
-        && attempts
-            .iter()
-            .all(|attempt| attempt.role == CommandAttemptRole::Orchestration)
+    let analyses = super::checkpoint_analyses(&analysis.current.window);
+    analyses
+        .iter()
+        .rev()
+        .nth(1)
+        .is_some_and(|previous| {
+            has_parent_visible_orchestration_evidence(
+                previous,
+                effective_child_work_visibility(previous),
+            )
+        })
 }
 
 fn working_set(paths: &[String]) -> BTreeSet<String> {
