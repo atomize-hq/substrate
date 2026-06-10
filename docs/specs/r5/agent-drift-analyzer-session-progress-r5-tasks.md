@@ -253,7 +253,8 @@ verification command for the current packet is green or the failure is documente
 
 - [ ] Task R5-7.1: Add frozen progress acceptance fixture README and expected-case docs.
   - Acceptance: fixture README explains included cases, exclusions, and why delegated cases are only
-    guardrail checks in R5.
+    guardrail checks in R5; bounded semantic acceptance still requires at least one annotated
+    real-rollout case.
   - Verify: Manual review.
   - Files:
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/README.md`
@@ -261,8 +262,10 @@ verification command for the current packet is green or the failure is documente
 
 - [ ] Task R5-7.2: Add bounded progress acceptance tests.
   - Acceptance: acceptance tests assert final/selected checkpoint progress status, dimension,
-    confidence bounds, and evidence presence for a small committed corpus while the legacy R2
-    acceptance wall remains stable unless intentionally widened.
+    confidence bounds, and evidence presence for a small committed corpus, including at least one
+    annotated real-rollout case for any bounded semantic acceptance claim, while the legacy R2
+    acceptance wall remains stable unless intentionally widened; realistic bundle-shaped cases are
+    supporting coverage only.
   - Verify: `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
@@ -270,7 +273,8 @@ verification command for the current packet is green or the failure is documente
 
 - [ ] Task R5-7.3: Run full verification wall and update docs with final status.
   - Acceptance: analyzer and sentinel full test walls pass or failures are documented with precise
-    reason and follow-up owner; docs reflect the final implemented fixture coverage.
+    reason and follow-up owner; docs reflect the final implemented fixture coverage and whether the
+    annotated real-rollout acceptance bar was met before claiming bounded semantic acceptance.
   - Verify:
     ```bash
     cargo fmt --all -- --check

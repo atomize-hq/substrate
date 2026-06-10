@@ -26,7 +26,8 @@ Packet `R5-0` locks the fixture-manifest direction as follows:
    `crates/agent-drift-sentinel/tests/live_end_to_end.rs` during `R5-6`.
 4. Bounded semantic acceptance lands only in
    `crates/agent-drift-analyzer/tests/progress_acceptance.rs` plus
-   `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**` during `R5-7`.
+   `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**` during `R5-7`, and
+   claiming it requires at least one annotated real-rollout case in that corpus.
 5. The frozen R2 acceptance wall under
    `crates/agent-drift-analyzer/tests/acceptance_fixtures.rs` and
    `crates/agent-drift-analyzer/tests/fixtures/acceptance/**` stays stable unless `R5-7`
@@ -412,7 +413,7 @@ dimension:
     comparable evidence exists, the fixture should move to a concrete archetype-specific row
 - Why competing statuses lose:
   - none of `advancing`, `stalled`, or `regressing` has enough comparable evidence
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; delegated semantic guardrail case: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 
 ## Fixture: r5_delegated_parent_opaque
 
@@ -489,13 +490,14 @@ dimension:
 ## Acceptance Wall Notes
 
 The R5 implementation should not claim real semantic acceptance until at least a small committed
-corpus exists. Synthetic fixtures can prove deterministic rules, but a bounded real-rollout or
-bundle-shaped corpus should prove the labels remain honest on realistic traces.
+corpus exists. Synthetic fixtures can prove deterministic rules, but bounded semantic acceptance
+still requires at least one annotated real-rollout case; bundle-shaped cases can only provide
+supporting coverage to show the labels remain honest on realistic traces.
 
 Packet `R5-0` locks that this bounded semantic corpus belongs to `R5-7`; earlier packets can prove
 deterministic behavior and compatibility, but must not overclaim semantic acceptance.
 
-Recommended first real/bundle-shaped cases:
+Recommended first annotated real-rollout / supporting bundle-shaped cases:
 
 1. non-subagent recovered sticky session from the R1E/R2 family,
 2. non-subagent active failure with repeated non-zero verification,

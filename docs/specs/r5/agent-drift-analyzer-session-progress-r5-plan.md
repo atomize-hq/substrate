@@ -6,7 +6,8 @@ Current family state on 2026-06-09:
 
 - Packet `R5-0` is the landed doc-lock packet for the family.
 - Packets `R5-1` through `R5-7` remain future implementation packets.
-- Packet `R5-7` is the first packet allowed to claim bounded semantic acceptance for `R5`.
+- Packet `R5-7` is the first packet allowed to claim bounded semantic acceptance for `R5`, and
+  only after at least one annotated real-rollout acceptance pass.
 
 ## Objective
 
@@ -289,7 +290,8 @@ cargo test -p agent-drift-sentinel -- --nocapture
 - Add or extend committed analyzer acceptance fixtures for progress semantics.
 - Use a dedicated progress-acceptance harness/corpus as the R5 semantic wall; keep the frozen R2
   `tests/fixtures/acceptance` wall legacy-stability-only unless intentionally widened.
-- Include small real-rollout or realistic bundle-shaped cases across the core dimensions.
+- Include at least one annotated real-rollout case for the bounded semantic acceptance claim;
+  realistic bundle-shaped cases may extend supporting coverage across the core dimensions.
 - Update fixture manifest with actual fixture locations and deferrals.
 - Run focused and full test walls.
 - This is the only packet allowed to claim bounded semantic acceptance / real-rollout proof for
@@ -347,7 +349,7 @@ Must be sequential:
 | Planning convergence becomes prose magic | Use structural proxies only; cap confidence conservatively. |
 | Delegation gets over-modeled | Use guardrails and defer real parent/child semantics to R7. |
 | Sentinel compatibility duplicates grow | Accept duplication for R5; R8 owns consolidation. |
-| Synthetic tests hide semantic bugs | Add bounded real-rollout/bundle-shaped acceptance cases. |
+| Synthetic tests hide semantic bugs | Add at least one annotated real-rollout acceptance case plus supporting bundle-shaped cases. |
 
 ## Verification Checkpoints
 

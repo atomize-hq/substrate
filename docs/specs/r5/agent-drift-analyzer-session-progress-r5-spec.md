@@ -50,11 +50,14 @@ Packet `R5-0` closes the remaining family-shaping questions for `R5`.
    non-delegated workflow dimension.
 5. The family verification story is fixed: `R5-0` is manual doc review only; `R5-1` through
    `R5-6` prove schema/behavior/presentation/compatibility; `R5-7` is the first packet allowed to
-   claim bounded semantic acceptance on a dedicated progress corpus.
+   claim bounded semantic acceptance on a dedicated progress corpus, and only after at least one
+   annotated real-rollout acceptance pass.
 6. `progress_debug.jsonl` is optional, debug-only, and never required for packet or family
    review-clean status in `R5`.
 7. The frozen `R2` acceptance wall stays stable by default; `R5` semantic acceptance uses a
-   dedicated `progress_acceptance.rs` harness plus `tests/fixtures/progress_acceptance/**`.
+   dedicated `progress_acceptance.rs` harness plus `tests/fixtures/progress_acceptance/**`, with
+   realistic bundle-shaped cases serving only as supporting coverage around the required annotated
+   real-rollout case.
 
 ## Objective
 
