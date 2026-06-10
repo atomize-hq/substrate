@@ -73,6 +73,10 @@ Terminology rule for this repository:
 
 ## Current State Summary
 
+- Current sequencing source-of-truth:
+  - the consolidated remaining-scope picture now lives in [`llm-last-mile/REMAINING-overall-scope-2026-06-10.md`](./llm-last-mile/REMAINING-overall-scope-2026-06-10.md),
+  - this matrix should stay aligned to that note for slice-order / remaining-scope truth while continuing to track broader v1 product, hardening, parity, and governance gaps.
+
 - Design-alignment note:
   - the currently landed runtime still persists `pending_inbox_count` and per-session `inbox/` artifacts,
   - but the forward design stack has now pivoted to [DESIGN-durable-orchestration-obligation-ledger.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-durable-orchestration-obligation-ledger.md), where the canonical durable artifact is one session-local obligation ledger and inbox/review plus auto-attach are projections over that same record,
@@ -96,18 +100,21 @@ Terminology rule for this repository:
   - The broad PID-based orchestration-stamping concern is mostly retired from production event emission; the remaining authority cleanup is narrower.
 - The gateway lifecycle runtime remains separately visible for nested `status|sync|restart` work, but prompt-bearing pure-agent orchestration now shares the same gateway-owned adapter fulfillment seam.
 - The main remaining gaps are:
+  - the immediate next execution seam is no longer the first host-tool landing; that floor is already landed for the Codex-backed path, and the active remaining host-tool seam is `claude_code` parity plus later reporting/docs follow-through,
   - `substrate -c` is still shell wrap mode rather than an agent-prompt caller surface,
   - the shipped public control plane is intentionally narrow: root `start` is host-only, existing-session prompt-taking accepts only exact `orchestration_session_id` plus exact `backend_id`, there is still no default-agent routing, and there is still no public world-root start,
   - exact targeted turns now exist on both narrow caller surfaces, but they stay intentionally strict: the REPL keeps exact `::<backend_id> <prompt>`, public follow-up keeps exact `(orchestration_session_id, backend_id)`, detached world follow-up still requires `reattach`, and there is still no broader member-selector surface,
   - broader operator-facing routing policy outside those exact caller paths is still unsettled; there is still no default-agent surface and no broader fuzzy non-REPL targeting contract,
   - `substrate agent status` now degrades torn parent/session linkage into warnings on the read surface, but strict control-plane surfaces such as `toolbox status` / `toolbox env` still fail closed and the trace-only fallback remains coarse when the rows omit `participant_id`,
+  - Family-2 local semantics are no longer the open question: the bounded `host_inbox -> local obligation -> router` path is landed, and the remaining Family-2 scope has moved outward to host-global ingress coordination, broader federation/delivery, and later public/operator inbox UX,
   - macOS/Lima now uses the same shared-owner/member-runtime backend seam as Linux for the supported forwarded path, with regression coverage for shared-owner proof, member dispatch, targeted follow-up reuse, and guest-owned cancel.
   - Linux remains the source-of-truth ownership implementation and still has the broadest platform maturity; Windows/WSL remains fail-closed outside the supported contract.
-  - The remaining v1 work should now be tracked as five explicit buckets rather than a loose tail:
+  - The remaining v1 work should now be tracked as six explicit buckets rather than a loose tail:
     - freeze the broader caller-surface contract,
     - harden the read-side and strict control surfaces,
-    - decide whether toolbox implementation is a near-term goal or stays deliberately introspection-only,
+    - finish runtime-family host-tool parity and later reporting/docs follow-through above the already-landed first Codex-backed floor,
     - make the Linux/macOS/Windows parity bar explicit for v1,
+    - capture the remaining Family-2 host-global ingress lifecycle / federation follow-ons clearly,
     - and clean up the remaining naming/session-handle/compatibility governance leftovers.
 
 ## Gap Matrix
@@ -147,16 +154,20 @@ Terminology rule for this repository:
 | Tuple-axis policy surface and status visibility | `Landed for policy, trace, and agent status; gateway status contract normalization remains` | ADR-0042 and ADR-0043 are implemented, `llm.constraints.{routers,providers,protocols,auth_authorities}` is parsed/validated/merged/explained/enforced in the policy stack, `AgentEvent` and trace rows carry explicit tuple fields, `substrate agent status` projects tuple metadata, and the gateway status runtime/tests already emit top-level `identity_tuple` and `placement_posture` siblings | The remaining follow-on is not basic tuple visibility; it is contract normalization for strict status surfaces. In particular, `docs/contracts/gateway/status-schema.md` still owns only `status` plus `client_wiring.*`, so any published tuple metadata on gateway status needs an explicit schema-owner update rather than continuing as code/test-only drift |
 | Secret handoff into the world gateway | `Landed` | Host-side policy/auth selection still owns auth-source precedence, `world-service` now delivers a read-once `GatewayAuthBundleV1` over inherited FD via `SUBSTRATE_LLM_AUTH_BUNDLE_FD`, and `gateway` integrated startup overlays that bundle in memory before provider construction | Remaining work is follow-on hardening and broader parity, not the default carrier: integrated delivery no longer depends on secret-bearing child env vars |
 | Integrated gateway backend realization | `Partial` | Inventory-backed `llm.routing.default_backend` selection is live, `world-service` resolves that selection through `GatewayBackendBinding`, integrated config rendering is already binding-driven across the supported backend set, and the integrated auth carrier is a read-once FD-delivered bundle rather than one-off child env vars | The remaining gap is adapter-driven auth realization rather than config rendering: the transport auth schema still has Codex-specific shaping, shell-side auth synthesis still special-cases exact backend ids such as `cli:codex` / `cli:claude_code`, and the in-world Codex handoff still collapses to hardcoded `cli:codex`, so distinct Codex-family backend ids are not yet realized through a fully generic adapter-owned auth contract. Codex remains the regression floor for that parity seam |
-| Toolbox surface | `Partial` | Config, `toolbox status`, `toolbox env`, live-session endpoint derivation, world-binding projection, and the session-scoped internal toolbox transport are present; Slice `52` now freezes the runtime-owned host-tool adapter contract above that transport | The remaining gap is no longer “does toolbox exist?” or “must v1 be internal MCP?”. The next seam is the first runtime-family host-tool landing from Slice `53`: inject `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` / `SUBSTRATE_AGENT_TOOLBOX_VERSION`, disclose the seven-tool contract in startup/system prompt text, and bridge live calls through the frozen contract. Codex is the first real smoke/validation floor for that landing, but the docs should not turn that into a forced runtime gate or hard-coded orchestrator identity. Public toolbox verbs, mutating human CLI use, and internal MCP landing remain deferred |
+| Toolbox surface | `Landed for the first Codex-backed runtime floor; second-family parity remains` | Config, `toolbox status`, `toolbox env`, live-session endpoint derivation, world-binding projection, the session-scoped internal toolbox transport, the Slice `52` frozen seven-tool adapter contract, and the Slice `53` first live Codex-backed host-tool landing are now present | The remaining gap is no longer the first live landing. It is the next runtime-family parity seam: preserve the same seven-tool semantics, runtime-owned field injection, and receipt/follow-up rules while landing truthful `claude_code` parity without turning the already-landed Codex-backed floor into a forced runtime gate or hard-coded orchestrator identity. Public toolbox verbs, mutating human CLI use, and internal MCP landing remain deferred |
 | Toolbox role in orchestration | `Constrained by design` | Toolbox remains a runtime-owned internal control-plane seam: operator-visible `toolbox status|env` stay read-side, while any live host tool surface is layered above the same transport through a runtime-family adapter rather than by making the model talk to the socket directly | Nothing here should become a second execution plane, a member-launch path, or a reason to hard-code `codex` as orchestrator identity |
-| Toolbox near-term implementation scope | `Specified and narrowed` | The visible toolbox surface remains intentionally read-side for operators (`status|env` plus derived projection), but the near-term runtime path is now explicit: Slice `52` froze the shared seven-tool contract and Slice `53` narrows the first **validated** landing to the Codex-backed path via runtime-owned env injection plus startup/system-prompt tool disclosure | The remaining open scope is implementation breadth, not architectural direction: keep the adapter generic where honest, use Codex as the first real smoke/validation floor, avoid forcing or blocking other selected runtimes unless the code truly requires it, and make later parity/reporting truth explicit. Internal MCP/auth/audit work remains queued rather than the v1 critical path |
+| Toolbox near-term implementation scope | `Specified, first floor landed, parity follow-on remains` | The visible toolbox surface remains intentionally read-side for operators (`status|env` plus derived projection), and the runtime path is now explicit and partly landed: Slice `52` froze the shared seven-tool contract while Slice `53` landed the first **validated** Codex-backed floor via runtime-owned env injection plus startup/system-prompt tool disclosure | The remaining open scope is no longer whether the first floor exists. It is breadth and parity: land `claude_code` parity above the same contract, keep operator/reporting truth explicit, and do broader docs/smoke follow-through only after parity or other live surface widening changes repo truth. Internal MCP/auth/audit work remains queued rather than the v1 critical path |
 | Cross-platform parity bar for v1 | `Still open` | Linux is the source-of-truth path, macOS/Lima is supported through the forwarded shared-owner/member-runtime seam, and Windows/WSL still fails closed outside the supported contract | The remaining decision is not technical possibility but product scope: whether Windows/WSL parity is required for the v1 bar or is explicitly deferred while Linux and supported macOS/Lima remain the only intended v1 paths |
+| Family-2 host-global ingress follow-ons | `Partial; local semantics landed, broader coordination still open` | The repo has already landed the bounded `host_inbox -> local obligation -> router` path, including router-owned local execution boundary, deny-by-default routing gates, bounded host-targeting, wrong-host fail-closed behavior, and ingress-ready identity/causation envelope widening | The remaining Family-2 gap is no longer first local materialization. It is the later host-global ingress lifecycle/federation layer: receive-cursor and sync-state coordination if still needed, broader remote ingress delivery/materialization, lease/lock coordination, and later federation/productization work |
+| Family-2 public/operator inbox UX | `Deferred` | Internal host-inbox persistence/materialization exists as a runtime boundary and review/attach direction continues to point toward obligation-ledger projections | The remaining gap is product-facing UX only: no public host-inbox review/manage surface is shipped yet, and any broader router/federation operator UX remains later follow-on scope |
 | Governance cleanup | `Open, lower-level but real` | The mainline runtime shape is now much clearer: real UAA integration is live, narrow public session control exists, and compatibility dual-writes remain intentional for now | The repo still owes a governance cleanup pass covering local `agent-api-*` vs external `agent_api` naming deconfliction, a cleaner public session-handle contract, and an eventual compatibility-output retirement plan once the current cutover is considered complete |
 | Custom Substrate harness | `Deferred by intent` | Product intent allows for a future Substrate-native harness layer | Do not block v1 on this; revisit only after CLI-agent orchestration through UAA is working cleanly |
 
 ## Remaining Documented v1 Work
 
-The remaining work after the current dispatch/control/lifecycle design stack should be treated as explicit tracked follow-on scope, not as background assumptions:
+The remaining work after the current dispatch/control/lifecycle design stack should be treated as explicit tracked follow-on scope, not as background assumptions.
+
+The immediate next execution-bearing seam from the current consolidated remaining-scope picture is **runtime-family host-tool parity for `claude_code`**. The list below remains broader than that one seam because this matrix also tracks repo-wide v1 productization, hardening, parity, and governance work.
 
 1. Freeze the broader caller-surface contract.
 - The main open product question is still caller-surface breadth.
@@ -168,18 +179,25 @@ The remaining work after the current dispatch/control/lifecycle design stack sho
 - This also includes better session-selector and remediation ergonomics without widening selector aliases: keep `orchestration_session_id` as the only public handle, but make current-session discovery, stale-owner diagnostics, and bounded repair/reap/invalidate workflows less hostile.
 - Tuple-axis policy narrowing and tuple projection are already landed in policy, trace, and `agent status`; the remaining follow-on here is contract normalization for strict status surfaces such as gateway status, where code/tests already publish tuple metadata that the current schema contract does not yet own.
 
-3. Land the first runtime-family host-tool surface above the existing toolbox transport.
-- The current visible toolbox surface remains intentionally introspection-only for operators.
-- The active v1 seam is now the Slice `52`/`53` path: frozen seven-tool contract, runtime-owned toolbox endpoint/version env injection, and startup/system-prompt tool disclosure for the selected host runtime family.
-- The current narrowed landing is `codex` first as the real smoke/validation floor while preserving dynamic orchestrator selection from config + inventory + exact backend policy; that should not by itself force `codex` or block other selected runtimes unless the implementation proves a real incompatibility.
+3. Finish runtime-family host-tool parity above the existing toolbox transport.
+- The current visible toolbox surface remains intentionally introspection-only for operators, but the first live runtime-family landing is no longer hypothetical: the Slice `52`/`53` path has already landed the frozen seven-tool contract plus the first Codex-backed validated floor.
+- The active remaining seam is now second runtime-family parity: preserve the same semantic contract, runtime-owned endpoint/version injection, startup/system-prompt disclosure model, and truthful validation/support posture while landing `claude_code` above the same transport.
 - Internal MCP/auth/audit work and any mutating public toolbox verbs remain deferred so toolbox does not become a second execution plane.
 
-4. Make the v1 parity call explicitly.
+4. Do the bounded host-tool reporting/docs follow-through after parity or other live surface widening.
+- The first-family Codex-backed validation/reporting floor is already landed.
+- The remaining follow-through is broader runtime-family smoke coverage plus docs/operator-truth alignment once later parity or other live surface widening materially changes repo truth again.
+
+5. Make the v1 parity call explicitly.
 - Linux remains the factual source-of-truth path.
 - macOS/Lima is supported on the forwarded shared-owner/member-runtime seam.
 - Windows/WSL remains fail-closed today, so the repo needs an explicit product decision on whether that stays intentionally deferred for v1.
 
-5. Clean up the governance leftovers.
+6. Capture the remaining Family-2 host-global ingress and federation follow-ons clearly.
+- The local `host_inbox -> local obligation -> router` boundary is already landed.
+- The remaining Family-2 scope is the later host-global ingress lifecycle/federation layer: receive-cursor and sync-state coordination if still needed, broader remote delivery/materialization, lease/lock coordination, and later public/operator host-inbox UX.
+
+7. Clean up the governance leftovers.
 - These are lower-level than caller semantics or dispatch/router work, but they are still real remaining scope.
 - The concrete items are local `agent-api-*` versus external `agent_api` naming deconfliction, a cleaner public session-handle contract, and eventual retirement of flat compatibility outputs after the current cutover is complete.
 
@@ -221,9 +239,9 @@ These are the decisions that still need to be made to keep the path forward clea
 - macOS/Lima is now on the supported shared-owner/member-runtime path through the forwarded backend seam; the next parity question is Windows/WSL or any broader non-Linux backend model, not whether Lima needs a different orchestration design.
 - The open question is the parity bar for non-Linux backends after that, not whether the host-orchestrator / world-member model itself is still the intended placement rule.
 
-9. How far the first runtime-family host-tool landing should go before parity follow-ons.
-- The current architecture is no longer choosing between “introspection-only toolbox” and “internal MCP soon” as the near-term v1 question; the narrowed path is already the Slice `52`/`53` adapter landing above the existing transport.
-- The real remaining decisions are landing breadth: whether reporting lives first in `doctor`, `toolbox status`, or both; whether one real Codex-backed smoke is required in the first slice; how much of the adapter can already stay runtime-generic; and how soon broader runtime validation/parity should follow.
+9. How far to push second runtime-family parity and later host-tool follow-through.
+- The current architecture is no longer choosing whether the first landing should exist at all; the Slice `52`/`53` adapter path already landed the first Codex-backed validated floor above the existing transport.
+- The real remaining decisions are parity and follow-through breadth: how much of the already-landed adapter stays runtime-generic in practice, what exactly `claude_code` parity must prove before it is called supported, and how soon broader runtime validation/docs/reporting follow after that later parity truth exists.
 
 ## Recommended v1 Runtime Slice
 
@@ -239,4 +257,4 @@ The thin-slice recommendation is still correct, but the remaining scope is now m
 8. Keep the landed auth-bundle handoff as the default integrated carrier so nested/in-world gateway work does not regress back to secret-bearing child env vars.
 9. Keep macOS/Lima on the same shared-owner/member-runtime path as Linux while deciding whether any future non-Linux backend should meet that same bar or stay fail-closed.
 
-At this point, the missing work is broader caller-surface productization, control-plane/status hardening, and parity decisions, not basic UAA adoption, REPL targeted-turn grammar, REPL user-turn dispatch, session persistence, event modeling, gateway secret-carrier honesty, or Linux member-runtime placement.
+At this point, the missing work is no longer basic UAA adoption, REPL targeted-turn grammar, REPL user-turn dispatch, session persistence, event modeling, gateway secret-carrier honesty, or Linux member-runtime placement. The live remaining work is broader caller-surface productization, control-plane/status hardening, second runtime-family host-tool parity plus later reporting/docs follow-through, explicit platform-parity decisions, Family-2 host-global ingress/federation follow-ons, and governance cleanup.
