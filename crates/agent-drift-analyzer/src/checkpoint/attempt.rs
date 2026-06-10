@@ -206,28 +206,29 @@ fn derive_attempt_outcome(rows: &[&CompactionRow], exit_code: Option<i32>) -> At
 }
 
 fn parse_exit_code(rows: &[&CompactionRow]) -> Option<i32> {
-    let mut still_in_header = true;
-
     for row in rows {
-        for line in row.text.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Some(value) = trimmed.strip_prefix("Exit code: ") {
-                return value.trim().parse::<i32>().ok();
-            }
-            if matches!(trimmed, "Output:") || trimmed.starts_with("Wall time: ") {
-                continue;
-            }
+        if let Some(code) = parse_exit_code_from_row_header(&row.text) {
+            return Some(code);
+        }
+    }
 
-            still_in_header = false;
-            break;
+    None
+}
+
+fn parse_exit_code_from_row_header(text: &str) -> Option<i32> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some(value) = trimmed.strip_prefix("Exit code: ") {
+            return value.trim().parse::<i32>().ok();
+        }
+        if matches!(trimmed, "Output:") || trimmed.starts_with("Wall time: ") {
+            continue;
         }
 
-        if !still_in_header {
-            break;
-        }
+        break;
     }
 
     None
@@ -404,18 +405,36 @@ fn exercise_state(
             AttemptOutcome::Clean | AttemptOutcome::Failed => ExerciseState::TargetExercised,
             AttemptOutcome::Unknown => ExerciseState::Unknown,
         },
-        CommandAttemptRole::Test => match attempt.outcome {
-            AttemptOutcome::Clean => ExerciseState::TargetExercised,
-            AttemptOutcome::Failed if output_shows_test_execution(output, target_scope) => {
-                ExerciseState::TargetExercised
+        CommandAttemptRole::Test => {
+            if test_attempt_uses_nonexecuting_flags(attempt) {
+                return match attempt.outcome {
+                    AttemptOutcome::Failed if output_contains_compile_blocker(output) => {
+                        ExerciseState::BlockedBeforeTarget
+                    }
+                    _ => ExerciseState::Unknown,
+                };
             }
-            AttemptOutcome::Failed if output_contains_compile_blocker(output) => {
-                ExerciseState::BlockedBeforeTarget
+
+            match attempt.outcome {
+                AttemptOutcome::Clean => ExerciseState::TargetExercised,
+                AttemptOutcome::Failed if output_shows_test_execution(output, target_scope) => {
+                    ExerciseState::TargetExercised
+                }
+                AttemptOutcome::Failed if output_contains_compile_blocker(output) => {
+                    ExerciseState::BlockedBeforeTarget
+                }
+                AttemptOutcome::Failed | AttemptOutcome::Unknown => ExerciseState::Unknown,
             }
-            AttemptOutcome::Failed | AttemptOutcome::Unknown => ExerciseState::Unknown,
-        },
+        }
         _ => ExerciseState::Unknown,
     }
+}
+
+fn test_attempt_uses_nonexecuting_flags(attempt: &CommandAttempt) -> bool {
+    attempt.family == "cargo"
+        && normalized_command_tokens(&attempt.raw_command)
+            .iter()
+            .any(|token| token == "--no-run")
 }
 
 fn attempt_output_text(attempt: &CommandAttempt, rows: &[CompactionRow]) -> String {
@@ -1024,6 +1043,27 @@ mod tests {
     }
 
     #[test]
+    fn checkpoints_parse_exit_codes_from_later_paired_output_rows_after_change_summaries() {
+        let rows = vec![
+            tool_call(0, "functions.shell_command", "cargo test checkpoints"),
+            tool_output(
+                1,
+                "Updated files:\n- crates/agent-drift-analyzer/src/checkpoint/attempt.rs",
+            ),
+            tool_output(
+                2,
+                "Exit code: 101\nerror: could not compile `agent-drift-analyzer`",
+            ),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        assert_eq!(attempts.len(), 1);
+        assert_eq!(attempts[0].exit_code, Some(101));
+        assert_eq!(attempts[0].outcome, AttemptOutcome::Failed);
+        assert_eq!(attempts[0].output_rows.len(), 2);
+    }
+
+    #[test]
     fn checkpoints_classify_progress_specific_command_roles_deterministically() {
         let expectations = [
             (
@@ -1265,6 +1305,29 @@ mod tests {
 
         assert_eq!(verification.len(), 1);
         assert_eq!(verification[0].verifier, VerifierKind::Pytest);
+        assert_eq!(verification[0].exercise_state, ExerciseState::Unknown);
+    }
+
+    #[test]
+    fn checkpoints_leave_cargo_test_no_run_attempts_unknown_when_targets_never_execute() {
+        let rows = vec![
+            tool_call(
+                0,
+                "functions.shell_command",
+                "cargo test --test checkpoints --no-run",
+            ),
+            tool_output(
+                1,
+                "Exit code: 0\nFinished `test` profile [unoptimized + debuginfo] target(s) in 0.42s",
+            ),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        let verification = build_verification_attempts(&attempts, &rows);
+
+        assert_eq!(verification.len(), 1);
+        assert_eq!(verification[0].verifier, VerifierKind::CargoTest);
+        assert_eq!(verification[0].outcome, AttemptOutcome::Clean);
         assert_eq!(verification[0].exercise_state, ExerciseState::Unknown);
     }
 
