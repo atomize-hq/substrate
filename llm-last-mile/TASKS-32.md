@@ -2,7 +2,7 @@
 
 Source spec: [SPEC-32-internal-host-orchestrator-world-dispatch-bootstrap.md](./SPEC-32-internal-host-orchestrator-world-dispatch-bootstrap.md)  
 Source plan: [PLAN-32.md](./PLAN-32.md)  
-Source validation note: [REMAINING-family-1-scope-2026-05-30.md](./REMAINING-family-1-scope-2026-05-30.md)  
+Source validation note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
 Status: completed on `2026-05-30`

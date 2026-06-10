@@ -5,7 +5,7 @@ Status: draft design input. This document defines the missing agent-facing tool 
 Execution-note maintenance:
 
 1. keep this document focused on stable design authority,
-2. when execution work surfaces live-truth drift, explicit deferrals, or circle-back items for this seam, record them in [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md),
+2. when execution work surfaces live-truth drift, explicit deferrals, or circle-back items for this seam, record them in [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md),
 3. add those notes specifically under:
    - `## Newly Surfaced During Execution`
    - `## Deferred / Circle-Back Items`

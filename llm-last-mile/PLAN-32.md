@@ -1,7 +1,7 @@
 # PLAN-32: Internal Host-Orchestrator World Dispatch Bootstrap
 
 Source spec: [SPEC-32-internal-host-orchestrator-world-dispatch-bootstrap.md](./SPEC-32-internal-host-orchestrator-world-dispatch-bootstrap.md)  
-Source validation note: [REMAINING-family-1-scope-2026-05-30.md](./REMAINING-family-1-scope-2026-05-30.md)  
+Source validation note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Plan type: first implementation-bearing family-1 control-plane slice  
 Status: implemented and validated on `2026-05-30`
 

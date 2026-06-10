@@ -2,7 +2,7 @@
 
 Source spec: [SPEC-35-internal-retained-world-worker-inspect-snapshot.md](./SPEC-35-internal-retained-world-worker-inspect-snapshot.md)  
 Source plan: [PLAN-35.md](./PLAN-35.md)  
-Source validation note: [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)  
+Source validation note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Phase: `TASKS`  
 Execution model: four separate `/incremental-implementation` sessions  
 Status: completed on `2026-06-01`  
@@ -148,7 +148,7 @@ Session goal:
     - manual diff review
   - Expected files touched:
     - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md)
-    - [`llm-last-mile/REMAINING-family-1-scope-2026-05-31-post-slice-34.md`](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)
+    - [`llm-last-mile/REMAINING-overall-scope-2026-06-10.md`](./REMAINING-overall-scope-2026-06-10.md)
     - [`llm-last-mile/SPEC-35-internal-retained-world-worker-inspect-snapshot.md`](./SPEC-35-internal-retained-world-worker-inspect-snapshot.md)
     - [`llm-last-mile/PLAN-35.md`](./PLAN-35.md)
     - [`llm-last-mile/TASKS-35.md`](./TASKS-35.md)

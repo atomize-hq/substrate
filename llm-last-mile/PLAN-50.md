@@ -2,7 +2,7 @@
 
 Source spec: [SPEC-50-internal-family-2-ingress-ready-obligation-identity-and-causation-envelope.md](./SPEC-50-internal-family-2-ingress-ready-obligation-identity-and-causation-envelope.md)  
 Source prior slice: [PLAN-49.md](./PLAN-49.md)  
-Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Plan type: first post-`49` ingress-ready identity-envelope slice  
 Status: implemented and validation-aligned on `2026-06-08`
 

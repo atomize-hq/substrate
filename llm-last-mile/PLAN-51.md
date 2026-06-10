@@ -2,7 +2,7 @@
 
 Source spec: [SPEC-51-internal-family-2-host-global-inbox-layering-and-local-obligation-materialization-boundary.md](./SPEC-51-internal-family-2-host-global-inbox-layering-and-local-obligation-materialization-boundary.md)  
 Source prior slice: [PLAN-50.md](./PLAN-50.md)  
-Source remaining-scope note: [REMAINING-family-2-scope-2026-06-07.md](./REMAINING-family-2-scope-2026-06-07.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Plan type: first post-`50` host-global inbox layering slice  
 Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-08`
 Validation note: Packet 4's validation wall is green. Final validation required one narrow in-scope stabilization follow-up in [`crates/shell/src/execution/host_inbox_materialization.rs`](../crates/shell/src/execution/host_inbox_materialization.rs): two helper reads now use `unwrap_or_default()` for the existing unreadable-record fallback, which kept the closeout behavior-neutral and did not widen Slice `51`.

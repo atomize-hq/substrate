@@ -1,7 +1,7 @@
 # PLAN-52: Internal Runtime-Owned Host-Orchestrator Tool Adapter Contract Freeze
 
 Source spec: [SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md](./SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md)  
-Source tracker note: [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)  
+Source tracker note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Companion design inputs:
 - [DESIGN-internal-toolbox-transport-and-session-binding.md](./DESIGN-internal-toolbox-transport-and-session-binding.md)
 - [DESIGN-host-orchestrator-tool-invocation-surface.md](./DESIGN-host-orchestrator-tool-invocation-surface.md)
@@ -30,7 +30,7 @@ This plan assumes the `SPECIFY` artifact in [SPEC-52-internal-runtime-owned-host
 
 The canonical running ledger for new drift, deferrals, and circle-back items in this seam is:
 
-- [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)
+- [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)
 
 During any Packet `1`-`4` execution or review pass:
 

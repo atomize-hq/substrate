@@ -1,7 +1,7 @@
 # PLAN-35: Internal Retained World Worker Inspect Snapshot
 
 Source spec: [SPEC-35-internal-retained-world-worker-inspect-snapshot.md](./SPEC-35-internal-retained-world-worker-inspect-snapshot.md)  
-Source validation note: [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)  
+Source validation note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Plan type: fourth implementation-bearing Family-1 control-plane slice  
 Status: implemented and validated on `2026-06-01`  
 Landed posture note: the inspect contract, policy allowlisting, and ingress validation are landed repo-wide, but retained-worker inspect snapshot routing is Linux-only in v1 and fails closed on non-Linux builds.
@@ -162,7 +162,7 @@ Goal:
 Primary touch surface:
 
 1. `docs/CONFIGURATION.md`
-2. `llm-last-mile/REMAINING-family-1-scope-2026-05-31-post-slice-34.md`
+2. `llm-last-mile/REMAINING-overall-scope-2026-06-10.md`
 3. `llm-last-mile/SPEC-35-internal-retained-world-worker-inspect-snapshot.md`
 4. `llm-last-mile/PLAN-35.md`
 5. `llm-last-mile/TASKS-35.md`

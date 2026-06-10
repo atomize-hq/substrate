@@ -1,6 +1,6 @@
 # Spec: Internal Family-2 Ingress-Ready Obligation Identity And Causation Envelope
 
-Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Prior slice:
 - [SPEC-49-internal-family-2-host-targeted-obligation-envelope-and-wrong-host-fail-closed-boundary.md](./SPEC-49-internal-family-2-host-targeted-obligation-envelope-and-wrong-host-fail-closed-boundary.md)
 - [PLAN-49.md](./PLAN-49.md)

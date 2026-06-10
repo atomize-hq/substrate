@@ -1,7 +1,7 @@
 # PLAN-53: Inventory-Selected First Runtime-Family Host-Orchestrator Tool Surface Landing
 
 Source spec: [SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)  
-Source tracker note: [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)  
+Source tracker note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Prior slice: [PLAN-52.md](./PLAN-52.md)  
 Plan type: first live runtime-family landing above the frozen Slice `52` adapter contract  
 Status: landed runtime truth reviewed and Packet 4 closeout verified on `2026-06-10`
@@ -28,7 +28,7 @@ This plan assumes the `SPECIFY` artifact in [SPEC-53-inventory-selected-first-ru
 
 The canonical running ledger for new drift, deferrals, and circle-back items in this seam remains:
 
-- [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)
+- [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)
 
 During Packet `1`-`4` execution or review:
 
@@ -209,7 +209,7 @@ Primary touch surface:
 
 1. `crates/shell/src/execution/agents_cmd.rs`
 2. focused shell tests under `crates/shell/tests/`
-3. `llm-last-mile/REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md`
+3. `llm-last-mile/REMAINING-overall-scope-2026-06-10.md`
 
 Why last:
 

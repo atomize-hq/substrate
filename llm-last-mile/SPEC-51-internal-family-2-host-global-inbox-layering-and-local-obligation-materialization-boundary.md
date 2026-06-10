@@ -1,6 +1,6 @@
 # Spec: Internal Family-2 Host-Global Inbox Layering And Local Obligation Materialization Boundary
 
-Source remaining-scope note: [REMAINING-family-2-scope-2026-06-07.md](./REMAINING-family-2-scope-2026-06-07.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Prior slice:
 - [SPEC-50-internal-family-2-ingress-ready-obligation-identity-and-causation-envelope.md](./SPEC-50-internal-family-2-ingress-ready-obligation-identity-and-causation-envelope.md)
 - [PLAN-50.md](./PLAN-50.md)

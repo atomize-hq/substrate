@@ -30,7 +30,7 @@ It must **not**:
 
 For this slice family, every packet must keep the canonical seam tracker up to date:
 
-- [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)
+- [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)
 
 When a packet surfaces:
 
@@ -253,7 +253,7 @@ Proceed directly to the next packet only when:
 2. the packet checkpoint is satisfied,
 3. the Slice `52` boundaries still hold,
 4. the work has not widened into runtime-family landing, public CLI, or MCP work,
-5. any newly surfaced drift/deferral items have been recorded in [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md).
+5. any newly surfaced drift/deferral items have been recorded in [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md).
 
 Reopen spec/plan/tasks only if one of these becomes true:
 

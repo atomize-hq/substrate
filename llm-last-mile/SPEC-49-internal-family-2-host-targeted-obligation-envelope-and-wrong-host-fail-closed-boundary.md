@@ -1,6 +1,6 @@
 # Spec: Internal Family-2 Host-Targeted Obligation Envelope And Wrong-Host Fail-Closed Boundary
 
-Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Prior slice:
 - [SPEC-48-internal-family-2-router-owned-session-auto-attach-execution-boundary.md](./SPEC-48-internal-family-2-router-owned-session-auto-attach-execution-boundary.md)
 - [PLAN-48.md](./PLAN-48.md)

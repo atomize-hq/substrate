@@ -98,7 +98,7 @@ Status: Packet 4 closeout verified on `2026-06-10`
     - `cargo clippy --workspace --all-targets -- -D warnings`
     - `cargo test --workspace -- --nocapture`
   - Files:
-    - `llm-last-mile/REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md`
+    - `llm-last-mile/REMAINING-overall-scope-2026-06-10.md`
     - `llm-last-mile/SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md`
     - `llm-last-mile/PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md`
     - `llm-last-mile/TASKS-53.md`

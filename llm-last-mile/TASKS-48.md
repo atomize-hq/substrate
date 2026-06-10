@@ -2,7 +2,7 @@
 
 Source spec: [SPEC-48-internal-family-2-router-owned-session-auto-attach-execution-boundary.md](./SPEC-48-internal-family-2-router-owned-session-auto-attach-execution-boundary.md)  
 Source plan: [PLAN-48.md](./PLAN-48.md)  
-Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Phase: `TASKS`  
 Execution model: four sequential `/incremental-implementation` sessions  
 Status: Packets 1-4 landed; slice 48 closed on `2026-06-07` after Packet 4 aligned docs and reran the validation wall

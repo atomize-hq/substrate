@@ -1,6 +1,6 @@
 # Spec: Inventory-Selected First Runtime-Family Host-Orchestrator Tool Surface Landing
 
-Source tracker note: [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)  
+Source tracker note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Prior numbered slice: [SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md](./SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md)  
 Companion inputs:
 - [PLAN-52.md](./PLAN-52.md)

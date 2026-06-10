@@ -2,12 +2,12 @@
 
 Date: `2026-06-10`  
 Validated against:
-- [REMAINING-family-1-scope-2026-05-30.md](./REMAINING-family-1-scope-2026-05-30.md)
-- [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)
-- [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)
-- [REMAINING-family-2-scope-2026-06-07.md](./REMAINING-family-2-scope-2026-06-07.md)
-- [REMAINING-family-1-and-2-scope-2026-06-08.md](./REMAINING-family-1-and-2-scope-2026-06-08.md)
-- [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)
+- historical checkpoint `REMAINING-family-1-scope-2026-05-30.md` (now archived locally during cleanup)
+- historical checkpoint `REMAINING-family-1-scope-2026-05-31-post-slice-34.md` (now archived locally during cleanup)
+- historical checkpoint `REMAINING-family-2-scope-2026-05-30.md` (now archived locally during cleanup)
+- historical checkpoint `REMAINING-family-2-scope-2026-06-07.md` (now archived locally during cleanup)
+- historical checkpoint `REMAINING-family-1-and-2-scope-2026-06-08.md` (now archived locally during cleanup)
+- historical checkpoint `REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md` (now archived locally during cleanup)
 - [DESIGN-host-orchestrator-world-dispatch-contract.md](./DESIGN-host-orchestrator-world-dispatch-contract.md)
 - [DESIGN-retained-world-worker-messaging-and-steering-contract.md](./DESIGN-retained-world-worker-messaging-and-steering-contract.md)
 - [DESIGN-host-to-world-steering-policy-matrix.md](./DESIGN-host-to-world-steering-policy-matrix.md)
@@ -68,7 +68,7 @@ The older `REMAINING-*` files below should now be read as:
 
 File:
 
-1. [REMAINING-family-1-scope-2026-05-30.md](./REMAINING-family-1-scope-2026-05-30.md)
+1. `REMAINING-family-1-scope-2026-05-30.md`
 
 Current status:
 
@@ -80,7 +80,7 @@ Current status:
 
 File:
 
-1. [REMAINING-family-1-scope-2026-05-31-post-slice-34.md](./REMAINING-family-1-scope-2026-05-31-post-slice-34.md)
+1. `REMAINING-family-1-scope-2026-05-31-post-slice-34.md`
 
 Current status:
 
@@ -92,7 +92,7 @@ Current status:
 
 File:
 
-1. [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)
+1. `REMAINING-family-2-scope-2026-05-30.md`
 
 Current status:
 
@@ -104,7 +104,7 @@ Current status:
 
 File:
 
-1. [REMAINING-family-2-scope-2026-06-07.md](./REMAINING-family-2-scope-2026-06-07.md)
+1. `REMAINING-family-2-scope-2026-06-07.md`
 
 Current status:
 
@@ -116,7 +116,7 @@ Current status:
 
 File:
 
-1. [REMAINING-family-1-and-2-scope-2026-06-08.md](./REMAINING-family-1-and-2-scope-2026-06-08.md)
+1. `REMAINING-family-1-and-2-scope-2026-06-08.md`
 
 Current status:
 
@@ -128,7 +128,7 @@ Current status:
 
 File:
 
-1. [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md)
+1. `REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md`
 
 Current status:
 

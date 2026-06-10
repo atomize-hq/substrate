@@ -2,7 +2,7 @@
 
 Source spec: [SPEC-49-internal-family-2-host-targeted-obligation-envelope-and-wrong-host-fail-closed-boundary.md](./SPEC-49-internal-family-2-host-targeted-obligation-envelope-and-wrong-host-fail-closed-boundary.md)  
 Source prior slice: [PLAN-48.md](./PLAN-48.md)  
-Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Plan type: first post-`48` Family-2 envelope slice  
 Status: implemented and validation-aligned on `2026-06-07`
 

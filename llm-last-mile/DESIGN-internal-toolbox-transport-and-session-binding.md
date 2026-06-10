@@ -5,7 +5,7 @@ Status: draft design input. This document freezes the current landed internal to
 Execution-note maintenance:
 
 1. keep this document focused on stable transport/binding authority,
-2. when execution work above this transport surfaces live-truth drift, explicit deferrals, or circle-back items for the host-orchestrator tool-invocation seam, record them in [REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md](./REMAINING-host-orchestrator-tool-invocation-surface-2026-06-08.md),
+2. when execution work above this transport surfaces live-truth drift, explicit deferrals, or circle-back items for the host-orchestrator tool-invocation seam, record them in [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md),
 3. add those notes specifically under:
    - `## Newly Surfaced During Execution`
    - `## Deferred / Circle-Back Items`

@@ -1,6 +1,6 @@
 # Spec: Internal Family-2 Router-Owned Session Auto-Attach Execution Boundary
 
-Source remaining-scope note: [REMAINING-family-2-scope-2026-05-30.md](./REMAINING-family-2-scope-2026-05-30.md)  
+Source remaining-scope note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall-scope-2026-06-10.md)  
 Prior slices:
 - [SPEC-31-lazy-host-attach-for-host-rooted-world-start.md](./SPEC-31-lazy-host-attach-for-host-rooted-world-start.md)
 - [PLAN-31.md](./PLAN-31.md)
