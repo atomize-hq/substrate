@@ -447,7 +447,10 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(checkpoints.len(), 2);
     assert!(checkpoints
         .iter()
-        .all(|checkpoint| checkpoint.schema_version == "v0.5"));
+        .all(|checkpoint| checkpoint.schema_version == "v0.6"));
+    assert!(checkpoints
+        .iter()
+        .all(|checkpoint| checkpoint.session_progress.is_some()));
 
     let first = &checkpoints[0];
     let second = &checkpoints[1];
