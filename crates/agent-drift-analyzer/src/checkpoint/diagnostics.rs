@@ -108,6 +108,8 @@ pub(crate) fn build_diagnostic_signatures(
         &failing_symbols,
         failing_count,
     );
+    let location_hints =
+        discriminative_location_hints(output, &failing_paths, &failing_tests, &failing_symbols);
     let target_fingerprint =
         target_fingerprint(attempt, target_scope, &failing_paths, &failing_tests);
     let payload_hash_hex = hash_payload(
@@ -118,6 +120,7 @@ pub(crate) fn build_diagnostic_signatures(
         &failing_symbols,
         &failing_tests,
         &normalized_lines,
+        &location_hints,
     );
     let preview = normalized_lines
         .first()
@@ -147,7 +150,7 @@ pub(crate) fn match_diagnostic_signatures(
 ) -> DiagnosticMatchKind {
     if previous.verifier == current.verifier
         && previous.failure_class == current.failure_class
-        && previous.target_fingerprint == current.target_fingerprint
+        && matching_target_fingerprint(previous, current)
         && previous.payload_hash_hex == current.payload_hash_hex
     {
         return DiagnosticMatchKind::Exact;
@@ -157,7 +160,7 @@ pub(crate) fn match_diagnostic_signatures(
     let verifier_family_matches =
         verifier_family(previous.verifier) == verifier_family(current.verifier);
     let target_matches = scope_overlap >= EditOverlapStrength::Moderate
-        || previous.target_fingerprint == current.target_fingerprint;
+        || matching_target_fingerprint(previous, current);
 
     if previous.verifier == current.verifier
         && previous.failure_class == current.failure_class
@@ -548,6 +551,7 @@ fn hash_payload(
     failing_symbols: &[String],
     failing_tests: &[String],
     normalized_lines: &[String],
+    location_hints: &[String],
 ) -> String {
     let payload = serde_json::json!({
         "normalization_version": NORMALIZATION_VERSION,
@@ -560,6 +564,7 @@ fn hash_payload(
         "failing_tests": failing_tests,
         "failing_count": failing_count,
         "lines": normalized_lines,
+        "location_hints": location_hints,
     });
     let mut hasher = Sha256::new();
     hasher
@@ -577,6 +582,59 @@ fn canonical_output_lines(output: &str) -> Vec<String> {
     lines.sort();
     lines.dedup();
     lines
+}
+
+fn discriminative_location_hints(
+    output: &str,
+    failing_paths: &[String],
+    failing_tests: &[String],
+    failing_symbols: &[String],
+) -> Vec<String> {
+    if !failing_tests.is_empty() || !failing_symbols.is_empty() {
+        return Vec::new();
+    }
+
+    let locations = extract_location_hints(output);
+    if locations.is_empty() {
+        return Vec::new();
+    }
+
+    let normalized_paths = failing_paths.iter().cloned().collect::<BTreeSet<_>>();
+    let filtered = locations
+        .into_iter()
+        .filter(|location| {
+            normalized_paths.is_empty()
+                || normalized_paths.contains(&strip_line_column_suffix(location))
+        })
+        .collect::<Vec<_>>();
+    if filtered.is_empty() {
+        return Vec::new();
+    }
+
+    let collapsed = filtered
+        .iter()
+        .map(|location| strip_line_column_suffix(location))
+        .collect::<BTreeSet<_>>();
+    if collapsed.len() < filtered.len() || normalized_paths.len() == 1 {
+        return filtered;
+    }
+
+    Vec::new()
+}
+
+fn extract_location_hints(output: &str) -> Vec<String> {
+    strip_ansi(output)
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .lines()
+        .flat_map(|line| {
+            line.split_whitespace()
+                .filter_map(normalize_location_token)
+                .collect::<Vec<_>>()
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn normalize_line(line: &str) -> String {
@@ -644,6 +702,27 @@ fn normalize_path_token(token: &str) -> Option<String> {
     None
 }
 
+fn normalize_location_token(token: &str) -> Option<String> {
+    let cleaned = token
+        .trim_matches(|ch: char| {
+            matches!(
+                ch,
+                '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';'
+            )
+        })
+        .replace('\\', "/");
+    if cleaned.is_empty() {
+        return None;
+    }
+
+    let normalized = fold_repo_root_prefix(&cleaned);
+    if let Some(preserved) = preserve_line_column_suffix(&normalized) {
+        return Some(preserved);
+    }
+
+    None
+}
+
 fn fold_repo_root_prefix(path: &str) -> String {
     let components = path.split('/').collect::<Vec<_>>();
     for marker in [
@@ -668,6 +747,31 @@ fn strip_line_column_suffix(path: &str) -> String {
         return format!("{}:<line>", parts[..parts.len() - 1].join(":"));
     }
     path.to_string()
+}
+
+fn preserve_line_column_suffix(path: &str) -> Option<String> {
+    let parts = path.split(':').collect::<Vec<_>>();
+    if parts.len() >= 3
+        && parts[parts.len() - 1].chars().all(|ch| ch.is_ascii_digit())
+        && parts[parts.len() - 2].chars().all(|ch| ch.is_ascii_digit())
+    {
+        let base = parts[..parts.len() - 2].join(":");
+        if base.contains('/') && base.chars().any(|ch| ch == '.') {
+            return Some(format!(
+                "{}:{}:{}",
+                base,
+                parts[parts.len() - 2],
+                parts[parts.len() - 1]
+            ));
+        }
+    }
+    if parts.len() >= 2 && parts[parts.len() - 1].chars().all(|ch| ch.is_ascii_digit()) {
+        let base = parts[..parts.len() - 1].join(":");
+        if base.contains('/') && base.chars().any(|ch| ch == '.') {
+            return Some(format!("{}:{}", base, parts[parts.len() - 1]));
+        }
+    }
+    None
 }
 
 fn extract_paths_from_lines(lines: &[String]) -> Vec<String> {
@@ -785,11 +889,21 @@ fn scope_overlap(
             .iter()
             .any(|right| crate_root(left) == crate_root(right))
     });
-    if same_crate || previous.target_fingerprint == current.target_fingerprint {
+    if same_crate || matching_target_fingerprint(previous, current) {
         return EditOverlapStrength::Weak;
     }
 
     EditOverlapStrength::None
+}
+
+fn matching_target_fingerprint(
+    previous: &DiagnosticSignature,
+    current: &DiagnosticSignature,
+) -> bool {
+    matches!(
+        (&previous.target_fingerprint, &current.target_fingerprint),
+        (Some(previous), Some(current)) if previous == current
+    )
 }
 
 fn overlap_for_edit(
@@ -1034,7 +1148,7 @@ mod tests {
     };
 
     #[test]
-    fn checkpoints_canonicalize_diagnostics_across_ansi_paths_and_line_column_noise() {
+    fn checkpoints_canonicalize_diagnostics_across_ansi_paths_and_temp_root_noise() {
         let attempt = test_attempt(
             1,
             10,
@@ -1056,7 +1170,7 @@ mod tests {
         let right = build_diagnostic_signatures(
             &attempt,
             &scope,
-            "error[E0308] mismatched types\n --> /private/tmp/build-48271/crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs:77:9\nWall time: 9.48 seconds\nExit code: 101",
+            "error[E0308] mismatched types\n --> /private/tmp/build-48271/crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs:12:34\nWall time: 9.48 seconds\nExit code: 101",
         );
 
         assert_eq!(left.len(), 1);
@@ -1064,6 +1178,36 @@ mod tests {
         assert_eq!(left[0].payload_hash_hex, right[0].payload_hash_hex);
         assert_eq!(left[0].failure_class, FailureClass::CompileType);
         assert_eq!(left[0].failing_paths, right[0].failing_paths);
+    }
+
+    #[test]
+    fn checkpoints_keep_location_when_it_is_the_only_discriminative_signal() {
+        let attempt = test_attempt(
+            1,
+            10,
+            "cargo check -p agent-drift-analyzer",
+            CommandAttemptRole::Compile,
+            vec!["crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs".to_string()],
+        );
+        let scope = VerificationScope {
+            raw: attempt.raw_command.clone(),
+            paths: attempt.paths.clone(),
+            tests: Vec::new(),
+            broad: false,
+        };
+        let left = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "error[E0308] mismatched types\n --> crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs:12:34\nExit code: 101",
+        );
+        let right = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "error[E0308] mismatched types\n --> crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs:77:9\nExit code: 101",
+        );
+
+        assert_eq!(left[0].failing_paths, right[0].failing_paths);
+        assert_ne!(left[0].payload_hash_hex, right[0].payload_hash_hex);
     }
 
     #[test]
@@ -1202,6 +1346,27 @@ mod tests {
         assert_eq!(
             match_diagnostic_signatures(&frontier_left, &frontier_right),
             DiagnosticMatchKind::FrontierRelated
+        );
+
+        let broad_left = diagnostic_signature(
+            VerifierKind::CargoCheck,
+            FailureClass::CompileType,
+            None,
+            Vec::new(),
+            Vec::new(),
+            "broad-compile",
+        );
+        let broad_right = diagnostic_signature(
+            VerifierKind::CargoTest,
+            FailureClass::AssertionOrGolden,
+            None,
+            Vec::new(),
+            Vec::new(),
+            "broad-test",
+        );
+        assert_eq!(
+            match_diagnostic_signatures(&broad_left, &broad_right),
+            DiagnosticMatchKind::Unrelated
         );
 
         let weak_left = diagnostic_signature(
