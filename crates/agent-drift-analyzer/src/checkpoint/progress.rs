@@ -34,30 +34,24 @@ pub(crate) fn build_session_progress(
     }
 
     let mut progress = match session_archetype.label {
-        SessionArchetypeLabel::Troubleshooting => {
-            assess_troubleshooting_progress(
-                analysis,
-                default_dimension(session_archetype.label),
-                session_archetype.label,
-            )
-        }
+        SessionArchetypeLabel::Troubleshooting => assess_troubleshooting_progress(
+            analysis,
+            default_dimension(session_archetype.label),
+            session_archetype.label,
+        ),
         SessionArchetypeLabel::Planning => {
             assess_planning_progress(analysis, default_dimension(session_archetype.label))
         }
-        SessionArchetypeLabel::AutonomousImplementation => {
-            assess_implementation_progress(
-                analysis,
-                default_dimension(session_archetype.label),
-                session_archetype.label,
-            )
-        }
-        SessionArchetypeLabel::VerificationCloseout => {
-            assess_closeout_progress(
-                analysis,
-                default_dimension(session_archetype.label),
-                session_archetype.label,
-            )
-        }
+        SessionArchetypeLabel::AutonomousImplementation => assess_implementation_progress(
+            analysis,
+            default_dimension(session_archetype.label),
+            session_archetype.label,
+        ),
+        SessionArchetypeLabel::VerificationCloseout => assess_closeout_progress(
+            analysis,
+            default_dimension(session_archetype.label),
+            session_archetype.label,
+        ),
     };
 
     progress = apply_delegation_caps(analysis, progress);
@@ -93,8 +87,9 @@ fn parent_visible_orchestration_progress(
     let orchestration_attempts = parent_visible_orchestration_attempts(analysis);
     let synthesis_attempts = parent_visible_synthesis_attempts(analysis);
     let visible_child_surface = has_visible_child_surface(analysis);
-    let parent_visible_synthesis_case =
-        visible_child_surface && !synthesis_attempts.is_empty() && source_edits(analysis).is_empty();
+    let parent_visible_synthesis_case = visible_child_surface
+        && !synthesis_attempts.is_empty()
+        && source_edits(analysis).is_empty();
     if !parent_visible_synthesis_case
         && ((orchestration_attempts.is_empty() && synthesis_attempts.is_empty())
             || !has_parent_visible_orchestration_evidence(analysis, visibility))
@@ -310,9 +305,8 @@ fn assess_troubleshooting_progress(
         (previous_signature, current_signature)
     {
         let match_kind = match_diagnostic_signatures(previous_signature, current_signature);
-        let frontier_advanced =
-            frontier_rank(current_signature.failure_class)
-                > frontier_rank(previous_signature.failure_class);
+        let frontier_advanced = frontier_rank(current_signature.failure_class)
+            > frontier_rank(previous_signature.failure_class);
         if frontier_advanced {
             signals.push(progress_signal(
                 ProgressSignalCode::FailureFrontierAdvanced,
@@ -328,7 +322,8 @@ fn assess_troubleshooting_progress(
                 ]),
             ));
         }
-        if fail_count(current_signature) < fail_count(previous_signature) {
+        let fail_count_delta = comparable_fail_count_delta(previous_signature, current_signature);
+        if matches!(fail_count_delta, Some(Ordering::Less)) {
             signals.push(progress_signal(
                 ProgressSignalCode::FailureCountReduced,
                 SignalPolarity::Positive,
@@ -346,7 +341,7 @@ fn assess_troubleshooting_progress(
                 ]),
             ));
         }
-        if fail_count(current_signature) > fail_count(previous_signature) {
+        if matches!(fail_count_delta, Some(Ordering::Greater)) {
             signals.push(progress_signal(
                 ProgressSignalCode::FailureCountIncreased,
                 SignalPolarity::Negative,
@@ -782,7 +777,10 @@ fn assess_implementation_progress(
             }
             if frontier_rank(current_signature.failure_class)
                 > frontier_rank(previous_signature.failure_class)
-                || fail_count(current_signature) < fail_count(previous_signature)
+                || matches!(
+                    comparable_fail_count_delta(previous_signature, current_signature),
+                    Some(Ordering::Less)
+                )
             {
                 signals.push(progress_signal(
                     ProgressSignalCode::FailureFrontierAdvanced,
@@ -1302,8 +1300,14 @@ fn signature_sort_key(signature: &DiagnosticSignature) -> (u8, bool, usize, usiz
     )
 }
 
-fn fail_count(signature: &DiagnosticSignature) -> u32 {
-    signature.failing_count.unwrap_or(u32::MAX)
+fn comparable_fail_count_delta(
+    previous: &DiagnosticSignature,
+    current: &DiagnosticSignature,
+) -> Option<Ordering> {
+    match (previous.failing_count, current.failing_count) {
+        (Some(previous), Some(current)) => Some(current.cmp(&previous)),
+        _ => None,
+    }
 }
 
 fn frontier_rank(class: FailureClass) -> u8 {
@@ -1427,15 +1431,19 @@ fn has_parent_visible_orchestration_evidence(
 ) -> bool {
     !analysis.interval.command_attempts.is_empty()
         && source_edits(analysis).is_empty()
-        && analysis.interval.command_attempts.iter().all(|attempt| {
-            is_parent_visible_attempt(attempt, Some(visibility))
-        })
+        && analysis
+            .interval
+            .command_attempts
+            .iter()
+            .all(|attempt| is_parent_visible_attempt(attempt, Some(visibility)))
         && match visibility {
             ChildWorkVisibility::Opaque => {
                 parent_visible_synthesis_attempts(analysis).is_empty()
                     || parent_visible_orchestration_attempts(analysis)
                         .iter()
-                        .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1"))
+                        .any(|attempt| {
+                            matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1")
+                        })
             }
             ChildWorkVisibility::Partial => true,
             ChildWorkVisibility::None => false,
@@ -1454,20 +1462,26 @@ fn effective_child_work_visibility(analysis: &CheckpointAnalysis) -> ChildWorkVi
 }
 
 fn has_visible_child_surface(analysis: &CheckpointAnalysis) -> bool {
-    analysis.delegation.supporting_evidence.iter().any(|evidence| {
-        evidence
-            .reason
-            .contains("delegation child rollout surface links child/subagent work")
-    })
+    analysis
+        .delegation
+        .supporting_evidence
+        .iter()
+        .any(|evidence| {
+            evidence
+                .reason
+                .contains("delegation child rollout surface links child/subagent work")
+        })
 }
 
 fn is_parent_visible_attempt(
     attempt: &CommandAttempt,
     visibility: Option<ChildWorkVisibility>,
 ) -> bool {
-    matches!(attempt.role, CommandAttemptRole::Orchestration | CommandAttemptRole::Read)
-        || matches!(visibility, Some(ChildWorkVisibility::Partial))
-            && is_parent_visible_synthesis_attempt(attempt)
+    matches!(
+        attempt.role,
+        CommandAttemptRole::Orchestration | CommandAttemptRole::Read
+    ) || matches!(visibility, Some(ChildWorkVisibility::Partial))
+        && is_parent_visible_synthesis_attempt(attempt)
 }
 
 fn is_parent_visible_synthesis_attempt(attempt: &CommandAttempt) -> bool {
@@ -1539,16 +1553,12 @@ fn has_parent_visible_synthesis(
 
 fn previous_checkpoint_was_parent_visible(analysis: &CheckpointAnalysis) -> bool {
     let analyses = super::checkpoint_analyses(&analysis.current.window);
-    analyses
-        .iter()
-        .rev()
-        .nth(1)
-        .is_some_and(|previous| {
-            has_parent_visible_orchestration_evidence(
-                previous,
-                effective_child_work_visibility(previous),
-            )
-        })
+    analyses.iter().rev().nth(1).is_some_and(|previous| {
+        has_parent_visible_orchestration_evidence(
+            previous,
+            effective_child_work_visibility(previous),
+        )
+    })
 }
 
 fn working_set(paths: &[String]) -> BTreeSet<String> {
@@ -1761,22 +1771,42 @@ fn failed_attempt_frontier_cmp(
     left: &VerificationAttempt,
     right: &VerificationAttempt,
 ) -> Ordering {
-    failed_attempt_frontier_key(left).cmp(&failed_attempt_frontier_key(right))
+    let left_signature = best_signature(left);
+    let right_signature = best_signature(right);
+
+    matches!(left.exercise_state, ExerciseState::TargetExercised)
+        .cmp(&matches!(
+            right.exercise_state,
+            ExerciseState::TargetExercised
+        ))
+        .then_with(|| {
+            left_signature
+                .map(|signature| frontier_rank(signature.failure_class))
+                .unwrap_or_default()
+                .cmp(
+                    &right_signature
+                        .map(|signature| frontier_rank(signature.failure_class))
+                        .unwrap_or_default(),
+                )
+        })
+        .then_with(|| comparable_fail_count_frontier_cmp(left_signature, right_signature))
+        .then_with(|| {
+            scope_cardinality(&left.target_scope).cmp(&scope_cardinality(&right.target_scope))
+        })
+        .then_with(|| left.attempt_ordinal.cmp(&right.attempt_ordinal))
 }
 
-fn failed_attempt_frontier_key(attempt: &VerificationAttempt) -> (u8, u8, u32, usize, usize) {
-    let signature = best_signature(attempt);
-    (
-        matches!(attempt.exercise_state, ExerciseState::TargetExercised) as u8,
-        signature
-            .map(|signature| frontier_rank(signature.failure_class))
-            .unwrap_or_default(),
-        signature
-            .map(|signature| u32::MAX.saturating_sub(fail_count(signature)))
-            .unwrap_or_default(),
-        scope_cardinality(&attempt.target_scope),
-        attempt.attempt_ordinal,
-    )
+fn comparable_fail_count_frontier_cmp(
+    left: Option<&DiagnosticSignature>,
+    right: Option<&DiagnosticSignature>,
+) -> Ordering {
+    match (
+        left.and_then(|signature| signature.failing_count),
+        right.and_then(|signature| signature.failing_count),
+    ) {
+        (Some(left), Some(right)) => right.cmp(&left),
+        _ => Ordering::Equal,
+    }
 }
 
 fn verification_attempt_preview(attempt: &VerificationAttempt) -> String {
@@ -1811,6 +1841,209 @@ fn has_negative_signal(signals: &[ProgressSignal]) -> bool {
             SignalPolarity::Negative | SignalPolarity::Mixed
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::checkpoint::checkpoint_analyses;
+    use crate::input::BundleSession;
+    use agent_session_compactor::{CompactionKind, CompactionRow, UserMessageRole};
+    use camino::Utf8PathBuf;
+
+    #[test]
+    fn troubleshooting_present_to_missing_fail_count_stays_conservative() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot checkpoints::captures_progress without changing scope.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\nAssertionError: expected advancing",
+            ),
+            prompt_row(
+                3,
+                "turn-002",
+                "/goal Re-run the same troubleshooting verifier before widening scope.",
+            ),
+            tool_call_row(
+                4,
+                "turn-002",
+                "functions.shell_command",
+                "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+            ),
+            tool_output_row(
+                5,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert_lacks_signal(&progress, ProgressSignalCode::FailureCountReduced);
+        assert_lacks_signal(&progress, ProgressSignalCode::FailureCountIncreased);
+        assert_lacks_signal(&progress, ProgressSignalCode::FailureFrontierAdvanced);
+    }
+
+    #[test]
+    fn troubleshooting_missing_to_present_fail_count_stays_conservative() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot checkpoints::captures_progress without changing scope.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+            ),
+            prompt_row(
+                3,
+                "turn-002",
+                "/goal Re-run the same troubleshooting verifier before widening scope.",
+            ),
+            tool_call_row(
+                4,
+                "turn-002",
+                "functions.shell_command",
+                "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+            ),
+            tool_output_row(
+                5,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\nAssertionError: expected advancing",
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert_lacks_signal(&progress, ProgressSignalCode::FailureCountReduced);
+        assert_lacks_signal(&progress, ProgressSignalCode::FailureCountIncreased);
+        assert_lacks_signal(&progress, ProgressSignalCode::FailureFrontierAdvanced);
+    }
+
+    fn last_analysis(rows: Vec<CompactionRow>) -> CheckpointAnalysis {
+        let session = BundleSession {
+            session_id: "session-r5-4".to_string(),
+            archival_rows: rows.clone(),
+            compact_rows: rows,
+        };
+        checkpoint_analyses(&session)
+            .pop()
+            .expect("checkpoint analysis")
+    }
+
+    fn prompt_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+        row(
+            event_index,
+            turn_id,
+            CompactionKind::UserMessage,
+            text,
+            None,
+        )
+    }
+
+    fn tool_output_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+        row(event_index, turn_id, CompactionKind::ToolOutput, text, None)
+    }
+
+    fn tool_call_row(
+        event_index: usize,
+        turn_id: &str,
+        tool_name: &str,
+        text: &str,
+    ) -> CompactionRow {
+        row(
+            event_index,
+            turn_id,
+            CompactionKind::ToolCall,
+            text,
+            Some(format!(
+                "{{\"call_id\":\"call-{event_index}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
+            )),
+        )
+    }
+
+    fn row(
+        event_index: usize,
+        turn_id: &str,
+        kind: CompactionKind,
+        text: &str,
+        dedupe_identity: Option<String>,
+    ) -> CompactionRow {
+        CompactionRow {
+            source_file: Utf8PathBuf::from("/tmp/session-r5-4/rollout.jsonl"),
+            source_kind: agent_session_compactor::SourceKind::CodexRolloutJsonl,
+            session_id: Some("session-r5-4".to_string()),
+            turn_id: Some(turn_id.to_string()),
+            event_index,
+            line_number: event_index + 1,
+            row_ordinal: 0,
+            timestamp: None,
+            kind,
+            user_message_role: matches!(kind, CompactionKind::UserMessage)
+                .then_some(UserMessageRole::Prompt),
+            dedupe_identity,
+            text: text.to_string(),
+            canonical_text: text.to_string(),
+            text_hash_hex: format!("hash-{}", text.split_whitespace().collect::<String>()),
+        }
+    }
+
+    fn assert_has_signal(progress: &SessionProgress, code: ProgressSignalCode) {
+        assert!(
+            progress.signals.iter().any(|signal| signal.code == code),
+            "expected progress signal {:?}, got {:?}",
+            code,
+            progress
+                .signals
+                .iter()
+                .map(|signal| signal.code)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    fn assert_lacks_signal(progress: &SessionProgress, code: ProgressSignalCode) {
+        assert!(
+            progress.signals.iter().all(|signal| signal.code != code),
+            "expected progress signal {:?} to be absent, got {:?}",
+            code,
+            progress
+                .signals
+                .iter()
+                .map(|signal| signal.code)
+                .collect::<Vec<_>>()
+        );
+    }
 }
 
 fn negative_signal_evidence(signals: &[ProgressSignal]) -> Vec<EvidenceRef> {

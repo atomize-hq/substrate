@@ -1351,7 +1351,12 @@ fn checkpoints_keep_parent_visible_synthesis_capped_under_partial_child_visibili
             "turn-001",
             "/goal Coordinate delegated findings without claiming child execution progress.",
         ),
-        tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
+        tool_call_row(
+            1,
+            "turn-001",
+            "spawn_agent",
+            "{\"goal\":\"fix packet R5-4\"}",
+        ),
         tool_call_row(
             2,
             "turn-001",
@@ -1898,6 +1903,120 @@ could not compile `agent-drift-analyzer` (lib test) due to 1 previous error"#,
         progress.status,
         ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
     ));
+}
+
+#[test]
+fn checkpoints_keep_implementation_present_to_missing_fail_count_conservative() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Land the Packet R5-4 implementation in checkpoint/progress.rs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\nAssertionError: expected advancing",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Apply the narrow Packet R5-4 patch, then rerun the same verifier.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            6,
+            "turn-002",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ImplementationVerificationWall
+    );
+    assert_eq!(progress.status, ProgressStatus::Stalled);
+    assert_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+}
+
+#[test]
+fn checkpoints_keep_implementation_missing_to_present_fail_count_conservative() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Land the Packet R5-4 implementation in checkpoint/progress.rs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Apply the narrow Packet R5-4 patch, then rerun the same verifier.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            6,
+            "turn-002",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\nAssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ImplementationVerificationWall
+    );
+    assert_eq!(progress.status, ProgressStatus::Stalled);
+    assert_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
 }
 
 #[test]
@@ -2726,6 +2845,22 @@ fn assert_progress_signal(
     assert!(
         progress.signals.iter().any(|signal| signal.code == code),
         "expected progress signal {:?}, got {:?}",
+        code,
+        progress
+            .signals
+            .iter()
+            .map(|signal| signal.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+fn assert_absent_progress_signal(
+    progress: &agent_drift_analyzer::SessionProgress,
+    code: ProgressSignalCode,
+) {
+    assert!(
+        progress.signals.iter().all(|signal| signal.code != code),
+        "expected progress signal {:?} to be absent, got {:?}",
         code,
         progress
             .signals
