@@ -6,8 +6,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4", "v0.5"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, v0.4, or v0.5";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6"];
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str =
+    "v0.2, v0.3, v0.4, v0.5, or v0.6";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CheckpointCursor {
@@ -255,6 +256,33 @@ fn validate_checkpoint_contract(
                 "v0.5 checkpoints must serialize explicit session archetype",
             )?;
             validate_drift_score_state_contract(path, line_number, checkpoint, "v0.5")
+        }
+        Some("v0.6") => {
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.6",
+                "turn_context",
+                "v0.6 checkpoints must serialize explicit turn context",
+            )?;
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.6",
+                "session_archetype",
+                "v0.6 checkpoints must serialize explicit session archetype",
+            )?;
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.6",
+                "session_progress",
+                "v0.6 checkpoints must serialize explicit session progress",
+            )?;
+            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.6")
         }
         _ => Ok(()),
     }
