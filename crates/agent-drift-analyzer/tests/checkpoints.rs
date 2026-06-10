@@ -5,8 +5,8 @@ mod support;
 use std::fs;
 
 use agent_drift_analyzer::{
-    AnalyzeRequest, AnalyzeResult, Confidence, ProgressDimension, ProgressStatus,
-    SessionArchetypeLabel,
+    AnalyzeRequest, AnalyzeResult, Confidence, ProgressDimension, ProgressSignalCode,
+    ProgressStatus, SessionArchetypeLabel,
 };
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
@@ -1305,6 +1305,451 @@ fn checkpoints_lock_pr_response_loop_as_medium_autonomous_implementation() {
     );
 }
 
+#[test]
+fn checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_parent_work() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Coordinate delegated work without overclaiming child progress.",
+        ),
+        tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
+        developer_row(
+            2,
+            "turn-001",
+            "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "wait_agent",
+            "{\"session_id\":\"019ea333-3333-7333-8333-333333333333\"}",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled | ProgressStatus::Mixed
+    ));
+    assert_eq!(progress.confidence, Confidence::Low);
+    assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+}
+
+#[test]
+fn checkpoints_mark_troubleshooting_frontier_advancement_from_compile_to_test_failure() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot why checkpoints::captures_progress is blocked.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,200p' crates/agent-drift-analyzer/src/checkpoint/progress.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/progress.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            6,
+            "turn-001",
+            "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+        ),
+        tool_call_row(
+            7,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,260p' crates/agent-drift-analyzer/src/checkpoint/progress.rs\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            8,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            9,
+            "turn-001",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::Advancing);
+    assert_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_mark_repeated_same_troubleshooting_signature_as_stalled() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot checkpoints::captures_progress without changing scope.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Re-run the same troubleshooting verifier before widening scope.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            5,
+            "turn-002",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::Stalled);
+    assert_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_mark_planning_narrowing_as_advancing() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", "/goal Plan Packet R5-4 conservatively."),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'R5-4' docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,200p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md\",\"workdir\":\"/repo\"}",
+        ),
+        prompt_row(3, "turn-002", "/goal Narrow the plan to the concrete packet artifact."),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '170,230p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+    assert_eq!(progress.status, ProgressStatus::Advancing);
+    assert_progress_signal(progress, ProgressSignalCode::PlanArtifactCreated);
+    assert_progress_signal(progress, ProgressSignalCode::CandidateSetNarrowed);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_mark_broad_planning_meander_as_stalled() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", "/goal Plan Packet R5-4 before coding."),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'progress' docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,200p' docs/specs/r5/DESIGN-r5-progress-window-and-frontier-model.md\",\"workdir\":\"/repo\"}",
+        ),
+        prompt_row(3, "turn-002", "/goal Keep scanning before committing to an artifact."),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,200p' docs/specs/r5/DESIGN-r5-archetype-progress-rules.md\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,200p' docs/specs/r5/DESIGN-r5-delegation-progress-guardrails.md\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+    assert_eq!(progress.status, ProgressStatus::Stalled);
+    assert_progress_signal(progress, ProgressSignalCode::CandidateSetExpanded);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_mark_implementation_wall_advancement_with_concentrated_edits() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Land the Packet R5-4 implementation in checkpoint/progress.rs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Apply the narrow source and test patch, then rerun the same verifier.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            6,
+            "turn-002",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ImplementationVerificationWall
+    );
+    assert_eq!(progress.status, ProgressStatus::Advancing);
+    assert_progress_signal(progress, ProgressSignalCode::WorkingSetConcentrated);
+    assert_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_mark_repeated_implementation_failure_after_unrelated_edits_as_stalled() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Land the Packet R5-4 implementation in checkpoint/progress.rs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Keep coding, but the edits drift away from the failing verifier scope.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-sentinel/src/operator_surface.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            6,
+            "turn-002",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert!(matches!(
+        progress.dimension,
+        ProgressDimension::ImplementationVerificationWall
+            | ProgressDimension::TroubleshootingFrontier
+    ));
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::Stalled | ProgressStatus::Mixed
+    ));
+    assert_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_mark_closeout_scope_narrowing_as_advancing() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Implement the patch and then verify it.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        assistant_row(
+            3,
+            "turn-001",
+            "The implementation is in place. Next I am gathering proof only.",
+        ),
+        prompt_row(
+            4,
+            "turn-002",
+            "/goal Verify the existing patch, narrow the residual proof, and record it.",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            6,
+            "turn-002",
+            "Exit code: 0\nrunning 27 tests\n\ntest result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+        ),
+        tool_call_row(
+            7,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            8,
+            "turn-002",
+            "Exit code: 0\nrunning 1 test\ntest checkpoints::captures_progress ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out",
+        ),
+        tool_call_row(
+            9,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: .codex/handoffs/2026-06-10-r5-4-closeout.md\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::VerificationCloseoutNarrowing
+    );
+    assert_eq!(progress.status, ProgressStatus::Advancing);
+    assert_progress_signal(progress, ProgressSignalCode::VerificationScopeNarrowed);
+    assert_progress_signal(progress, ProgressSignalCode::ResidualScopeShrank);
+    assert_progress_signal(progress, ProgressSignalCode::VerificationClean);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
 fn analyze_custom_rows(rows: Vec<CompactionRow>) -> AnalyzeResult {
     let tool_rows = rows
         .iter()
@@ -1408,6 +1853,22 @@ fn assert_evidence_contains(evidence: &[agent_drift_analyzer::EvidenceRef], frag
         evidence
             .iter()
             .map(|item| item.reason.as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
+fn assert_progress_signal(
+    progress: &agent_drift_analyzer::SessionProgress,
+    code: ProgressSignalCode,
+) {
+    assert!(
+        progress.signals.iter().any(|signal| signal.code == code),
+        "expected progress signal {:?}, got {:?}",
+        code,
+        progress
+            .signals
+            .iter()
+            .map(|signal| signal.code)
             .collect::<Vec<_>>()
     );
 }

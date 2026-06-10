@@ -1,6 +1,7 @@
 mod attempt;
 mod diagnostics;
 mod export;
+mod progress;
 mod schema;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,6 +19,7 @@ use attempt::{
     build_command_attempts, build_verification_attempts, CommandAttempt, VerificationAttempt,
 };
 use camino::Utf8PathBuf;
+use progress::build_session_progress;
 
 pub use export::{
     export_checkpoints, summarize_checkpoint_diagnostics, CheckpointDiagnosticStats,
@@ -348,7 +350,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let diagnostics = checkpoint_diagnostics_from_analysis(analysis, task_frame, &drift_scores);
     let expected_next_step = expected_next_step(task_frame);
     let session_archetype = build_session_archetype(analysis);
-    let session_progress = build_conservative_session_progress(&session_archetype);
+    let session_progress = build_session_progress(analysis, &session_archetype);
     Checkpoint {
         schema_version: "v0.6".to_string(),
         session_id: analysis.session_id.clone(),
@@ -363,30 +365,6 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
-    }
-}
-
-fn build_conservative_session_progress(session_archetype: &SessionArchetype) -> SessionProgress {
-    SessionProgress {
-        status: ProgressStatus::InsufficientEvidence,
-        dimension: progress_dimension_for_archetype(session_archetype.label),
-        confidence: Confidence::Low,
-        signals: Vec::new(),
-        supporting_evidence: Vec::new(),
-        counter_evidence: Vec::new(),
-    }
-}
-
-fn progress_dimension_for_archetype(label: SessionArchetypeLabel) -> ProgressDimension {
-    match label {
-        SessionArchetypeLabel::Troubleshooting => ProgressDimension::TroubleshootingFrontier,
-        SessionArchetypeLabel::Planning => ProgressDimension::PlanningConvergence,
-        SessionArchetypeLabel::AutonomousImplementation => {
-            ProgressDimension::ImplementationVerificationWall
-        }
-        SessionArchetypeLabel::VerificationCloseout => {
-            ProgressDimension::VerificationCloseoutNarrowing
-        }
     }
 }
 
