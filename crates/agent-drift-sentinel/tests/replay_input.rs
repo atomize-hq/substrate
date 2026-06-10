@@ -4,7 +4,8 @@ use std::fs;
 
 use agent_drift_analyzer::{
     checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftState,
-    SessionArchetype, SessionArchetypeLabel, TaskFrame, TurnActivityMix, TurnContext,
+    ProgressDimension, ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress,
+    TaskFrame, TurnActivityMix, TurnContext,
     TurnExecutionMode,
 };
 use agent_drift_sentinel::input::{load_replay_bundle, InputError};
@@ -192,6 +193,17 @@ fn sample_session_archetype(checkpoint: &Checkpoint) -> SessionArchetype {
     }
 }
 
+fn sample_session_progress() -> SessionProgress {
+    SessionProgress {
+        status: ProgressStatus::InsufficientEvidence,
+        dimension: ProgressDimension::PlanningConvergence,
+        confidence: Confidence::Low,
+        signals: Vec::new(),
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    }
+}
+
 #[test]
 fn replay_input_loads_and_sorts_v0_3_checkpoints() {
     let fixture = ReplayFixture::from_checkpoints(
@@ -276,6 +288,45 @@ fn replay_input_loads_and_sorts_v0_5_checkpoints() {
             .expect("v0.5 session archetype")
             .label,
         SessionArchetypeLabel::Planning
+    );
+}
+
+#[test]
+fn replay_input_loads_and_sorts_v0_6_checkpoints() {
+    let mut session_beta = schema_checkpoint("v0.6", "session-beta", 2, 0, false, "continue");
+    session_beta.turn_context = Some(sample_turn_context(2));
+    session_beta.session_archetype = Some(sample_session_archetype(&session_beta));
+    session_beta.session_progress = Some(sample_session_progress());
+
+    let mut session_alpha_late = schema_checkpoint("v0.6", "session-alpha", 3, 65, true, "repair");
+    session_alpha_late.turn_context = Some(sample_turn_context(3));
+    session_alpha_late.session_archetype = Some(sample_session_archetype(&session_alpha_late));
+    session_alpha_late.session_progress = Some(sample_session_progress());
+
+    let mut session_alpha_early = schema_checkpoint("v0.6", "session-alpha", 1, 85, true, "repair");
+    session_alpha_early.turn_context = Some(sample_turn_context(1));
+    session_alpha_early.session_archetype = Some(sample_session_archetype(&session_alpha_early));
+    session_alpha_early.session_progress = Some(sample_session_progress());
+
+    let fixture = ReplayFixture::from_checkpoints(
+        vec![session_beta, session_alpha_late, session_alpha_early],
+        sample_summary(),
+    );
+
+    let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load replay bundle");
+
+    assert_eq!(bundle.schema_version, "v0.6");
+    assert_eq!(bundle.checkpoints.len(), 3);
+    assert_eq!(bundle.checkpoints[0].checkpoint_id, "session-alpha:0001");
+    assert_eq!(bundle.checkpoints[1].checkpoint_id, "session-alpha:0003");
+    assert_eq!(bundle.checkpoints[2].checkpoint_id, "session-beta:0002");
+    assert_eq!(
+        bundle.checkpoints[0]
+            .session_progress
+            .as_ref()
+            .expect("v0.6 session progress")
+            .dimension,
+        ProgressDimension::PlanningConvergence
     );
 }
 
@@ -459,6 +510,46 @@ fn replay_input_rejects_v0_5_checkpoints_missing_session_archetype() {
         } if schema_version == "v0.5" && field == "session_archetype"
     ));
     assert!(error.to_string().contains("missing session_archetype"));
+}
+
+#[test]
+fn replay_input_rejects_v0_6_checkpoints_missing_session_progress() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let checkpoint_dir = root.join("checkpoint");
+    fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+
+    let mut checkpoint = schema_checkpoint("v0.6", "session-alpha", 1, 85, true, "repair");
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    checkpoint.session_progress = Some(sample_session_progress());
+    let mut malformed_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    malformed_json
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("session_progress");
+    let malformed_line =
+        serde_json::to_string(&malformed_json).expect("serialize malformed checkpoint");
+    fs::write(
+        checkpoint_dir.join("checkpoints.jsonl"),
+        format!("{malformed_line}\n"),
+    )
+    .expect("write checkpoints");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
+
+    let error = load_replay_bundle(&checkpoint_dir)
+        .expect_err("v0.6 checkpoints missing session progress must fail closed");
+
+    assert!(matches!(
+        error,
+        InputError::ContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.6" && field == "session_progress"
+    ));
+    assert!(error.to_string().contains("missing session_progress"));
 }
 
 #[test]

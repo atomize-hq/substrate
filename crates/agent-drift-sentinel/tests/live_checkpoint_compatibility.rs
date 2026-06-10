@@ -4,8 +4,9 @@ use std::fs;
 
 use agent_drift_analyzer::{
     checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftClass,
-    DriftState, EvidenceRef, SessionArchetype, SessionArchetypeLabel, TaskFrame, TurnActivityMix,
-    TurnContext, TurnExecutionMode,
+    DriftState, EvidenceRef, ProgressDimension, ProgressStatus, SessionArchetype,
+    SessionArchetypeLabel, SessionProgress, TaskFrame, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
 };
 use agent_drift_sentinel::{
     load_live_fixture,
@@ -138,6 +139,17 @@ fn sample_session_archetype(checkpoint: &Checkpoint) -> SessionArchetype {
     }
 }
 
+fn sample_session_progress() -> SessionProgress {
+    SessionProgress {
+        status: ProgressStatus::InsufficientEvidence,
+        dimension: ProgressDimension::PlanningConvergence,
+        confidence: Confidence::Low,
+        signals: Vec::new(),
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    }
+}
+
 #[test]
 fn live_checkpoint_compatibility_accepts_v0_3_checkpoint() {
     let checkpoint = schema_checkpoint(
@@ -210,6 +222,28 @@ fn live_checkpoint_compatibility_accepts_v0_5_checkpoint() {
     );
     checkpoint.turn_context = Some(sample_turn_context(1));
     checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");
+
+    assert_eq!(compatibility.cursor.ordinal, 1);
+    assert_eq!(compatibility.max_flagged_score, Some(88));
+    assert!(compatibility.flagged);
+}
+
+#[test]
+fn live_checkpoint_compatibility_accepts_v0_6_checkpoint() {
+    let mut checkpoint = schema_checkpoint(
+        "v0.6",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    checkpoint.session_progress = Some(sample_session_progress());
 
     let compatibility =
         verify_live_checkpoint_compatibility(&checkpoint).expect("checkpoint is live-compatible");
@@ -560,6 +594,56 @@ fn live_checkpoint_compatibility_rejects_v0_5_fixture_missing_session_archetype(
     assert!(error
         .to_string()
         .contains("missing checkpoint.session_archetype"));
+}
+
+#[test]
+fn live_checkpoint_compatibility_rejects_v0_6_fixture_missing_session_progress() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let mut checkpoint = schema_checkpoint(
+        "v0.6",
+        "session-alpha",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    checkpoint.session_progress = Some(sample_session_progress());
+    let mut checkpoint_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    checkpoint_json
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("session_progress");
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint_json,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let error = load_live_fixture(&fixture_path)
+        .expect_err("v0.6 fixtures missing session progress must fail");
+
+    assert!(matches!(
+        error,
+        LiveInputError::FixtureContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.6" && field == "checkpoint.session_progress"
+    ));
+    assert!(error
+        .to_string()
+        .contains("missing checkpoint.session_progress"));
 }
 
 #[test]
