@@ -176,6 +176,89 @@ pub(crate) fn build_verification_attempts(
         .collect()
 }
 
+pub(crate) fn verification_target_from_command(
+    command: &str,
+) -> Option<(VerifierKind, VerificationScope)> {
+    let family = command_family(command)?;
+    let tokens = normalized_command_tokens(command);
+    let role = classify_command_attempt_role(command, &family, &family);
+    let verifier = match role {
+        CommandAttemptRole::Compile => Some(VerifierKind::CargoCheck),
+        CommandAttemptRole::Lint => Some(VerifierKind::CargoClippy),
+        CommandAttemptRole::FormatCheck => Some(VerifierKind::CargoFmt),
+        CommandAttemptRole::Build => Some(if family == "cargo" {
+            VerifierKind::CargoBuild
+        } else {
+            VerifierKind::GenericBuild
+        }),
+        CommandAttemptRole::Replay => Some(VerifierKind::Replay),
+        CommandAttemptRole::Test => Some(match family.as_str() {
+            "cargo" => VerifierKind::CargoTest,
+            "npm" => VerifierKind::NpmTest,
+            "pnpm" => VerifierKind::PnpmTest,
+            "pytest" => VerifierKind::Pytest,
+            "vitest" => VerifierKind::Vitest,
+            "jest" => VerifierKind::Jest,
+            "bun" => VerifierKind::BunTest,
+            "deno" => VerifierKind::DenoTest,
+            "python" | "uv" if tokens.iter().any(|token| token == "pytest") => VerifierKind::Pytest,
+            _ => VerifierKind::GenericTest,
+        }),
+        _ => None,
+    }?;
+
+    let mut paths = Vec::new();
+    let mut tests = Vec::new();
+
+    match family.as_str() {
+        "cargo" if role == CommandAttemptRole::Test => {
+            tests.extend(cargo_test_targets(&tokens));
+        }
+        "pytest" => {
+            let (more_paths, more_tests) =
+                pytest_targets(tokens.iter().skip(1).map(String::as_str));
+            paths.extend(more_paths);
+            tests.extend(more_tests);
+        }
+        "python" | "uv"
+            if role == CommandAttemptRole::Test && tokens.iter().any(|token| token == "pytest") =>
+        {
+            let pytest_index = tokens
+                .iter()
+                .position(|token| token == "pytest")
+                .unwrap_or(tokens.len());
+            let (more_paths, more_tests) =
+                pytest_targets(tokens.iter().skip(pytest_index + 1).map(String::as_str));
+            paths.extend(more_paths);
+            tests.extend(more_tests);
+        }
+        "npm" | "pnpm" | "vitest" | "jest" | "bun" | "deno" if role == CommandAttemptRole::Test => {
+            let (more_paths, more_tests) = js_test_targets(&tokens, &family);
+            paths.extend(more_paths);
+            tests.extend(more_tests);
+        }
+        _ if role == CommandAttemptRole::Test => {
+            tests.extend(generic_test_targets(&tokens, &family));
+        }
+        _ => {}
+    }
+
+    paths.sort();
+    paths.dedup();
+    tests.sort();
+    tests.dedup();
+
+    Some((
+        verifier,
+        VerificationScope {
+            raw: command.trim().to_string(),
+            broad: paths.is_empty() && tests.is_empty(),
+            paths,
+            tests,
+        },
+    ))
+}
+
 fn pair_output_rows(rows: &[CompactionRow], command_index: usize) -> Vec<&CompactionRow> {
     let mut paired = Vec::new();
     for (offset, row) in rows.iter().enumerate().skip(command_index + 1) {

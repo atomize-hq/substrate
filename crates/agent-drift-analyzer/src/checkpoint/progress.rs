@@ -8,8 +8,8 @@ use agent_session_compactor::RowRef;
 use crate::inference::{ChildWorkVisibility, DelegationTopology};
 
 use super::attempt::{
-    AttemptOutcome, CommandAttempt, CommandAttemptRole, ExerciseState, VerificationAttempt,
-    VerificationScope, VerifierKind,
+    verification_target_from_command, AttemptOutcome, CommandAttempt, CommandAttemptRole,
+    ExerciseState, VerificationAttempt, VerificationScope, VerifierKind,
 };
 use super::diagnostics::{
     classify_attempt_scope_edit_overlap, classify_edit_overlap, match_diagnostic_signatures,
@@ -923,10 +923,10 @@ fn assess_closeout_progress(
     let source_edits = source_edits(analysis);
     let closeout_artifact_edits = closeout_artifact_edits(analysis);
     let current_attempts = &analysis.interval.verification_attempts;
-    let Some(current) = current_attempts.last() else {
-        return insufficient_progress(dimension, None, None);
-    };
-    let prior_attempts = comparable_attempts(analysis, current_attempts, current, archetype_label);
+    let current = current_attempts.last();
+    let prior_attempts = current
+        .map(|current| comparable_attempts(analysis, current_attempts, current, archetype_label))
+        .unwrap_or_else(|| prior_closeout_attempts_in_window(analysis));
     let best_clean = best_clean_attempt(&prior_attempts);
 
     let mut signals = Vec::new();
@@ -948,7 +948,7 @@ fn assess_closeout_progress(
         ));
     }
 
-    if let Some(previous_clean) = best_clean {
+    if let (Some(previous_clean), Some(current)) = (best_clean, current) {
         if current.outcome == AttemptOutcome::Failed {
             signals.push(progress_signal(
                 ProgressSignalCode::PreviouslyCleanScopeBroken,
@@ -972,21 +972,36 @@ fn assess_closeout_progress(
         }
     }
 
-    if current.outcome != AttemptOutcome::Clean {
-        if !source_edits.is_empty() {
-            return progress_from_signals(
-                ProgressStatus::Mixed,
-                dimension,
-                Confidence::Medium,
-                signals,
-                Vec::new(),
-            );
-        }
-        return insufficient_progress(dimension, None, None);
-    }
+    let artifact_target = current
+        .is_none()
+        .then(|| artifact_closeout_target(analysis))
+        .flatten();
 
-    if let Some(previous) = prior_attempts.first() {
-        if scope_is_narrower(&current.target_scope, &previous.target_scope) {
+    if let Some(current) = current {
+        if current.outcome != AttemptOutcome::Clean {
+            if !source_edits.is_empty() {
+                return progress_from_signals(
+                    ProgressStatus::Mixed,
+                    dimension,
+                    Confidence::Medium,
+                    signals,
+                    Vec::new(),
+                );
+            }
+            return insufficient_progress(dimension, None, None);
+        }
+
+        let repeated_clean = prior_attempts.iter().find(|candidate| {
+            candidate.outcome == AttemptOutcome::Clean
+                && candidate.target_scope == current.target_scope
+        });
+        let broader_clean = most_relevant_broader_clean_attempt(
+            &prior_attempts,
+            current.verifier,
+            &current.target_scope,
+        );
+
+        if let Some(previous) = broader_clean.filter(|_| repeated_clean.is_none()) {
             signals.push(progress_signal(
                 ProgressSignalCode::VerificationScopeNarrowed,
                 SignalPolarity::Positive,
@@ -1012,17 +1027,132 @@ fn assess_closeout_progress(
                 ]),
             ));
         }
+
+        signals.push(progress_signal(
+            ProgressSignalCode::VerificationClean,
+            SignalPolarity::Positive,
+            SignalStrength::Strong,
+            "closeout proof completed cleanly without reopening source work",
+            None,
+            Some(current.target_scope.raw.clone()),
+            attempt_evidence(current, "clean closeout proof command"),
+        ));
+
+        if !closeout_artifact_edits.is_empty() {
+            signals.push(progress_signal(
+                ProgressSignalCode::PlanArtifactRefined,
+                SignalPolarity::Positive,
+                SignalStrength::Weak,
+                "closeout artifact was refined after proof",
+                None,
+                None,
+                closeout_artifact_edits
+                    .iter()
+                    .flat_map(|attempt| {
+                        attempt_evidence(
+                            *attempt,
+                            "summary/handoff/fixture artifact refined after proof",
+                        )
+                    })
+                    .collect(),
+            ));
+        }
+
+        if source_edits.is_empty() && repeated_clean.is_some() && closeout_artifact_edits.is_empty()
+        {
+            return progress_from_signals(
+                ProgressStatus::Stalled,
+                dimension,
+                Confidence::Medium,
+                signals,
+                repeated_clean
+                    .map(|attempt| {
+                        attempt_evidence(attempt, "earlier identical clean closeout proof")
+                    })
+                    .unwrap_or_default(),
+            );
+        }
+
+        if !source_edits.is_empty() {
+            let counter = negative_signal_evidence(&signals);
+            return progress_from_signals(
+                ProgressStatus::Mixed,
+                dimension,
+                Confidence::Medium,
+                signals,
+                counter,
+            );
+        }
+
+        return progress_from_signals(
+            ProgressStatus::Advancing,
+            dimension,
+            if source_edits.is_empty() {
+                Confidence::High
+            } else {
+                Confidence::Medium
+            },
+            signals,
+            Vec::new(),
+        );
     }
 
-    signals.push(progress_signal(
-        ProgressSignalCode::VerificationClean,
-        SignalPolarity::Positive,
-        SignalStrength::Strong,
-        "closeout proof completed cleanly without reopening source work",
-        None,
-        Some(current.target_scope.raw.clone()),
-        attempt_evidence(current, "clean closeout proof command"),
-    ));
+    let Some((artifact_verifier, artifact_scope)) = artifact_target else {
+        return insufficient_progress(dimension, None, None);
+    };
+    let broader_clean =
+        most_relevant_broader_clean_attempt(&prior_attempts, artifact_verifier, &artifact_scope);
+
+    if let Some(previous) = broader_clean {
+        signals.push(progress_signal(
+            ProgressSignalCode::VerificationScopeNarrowed,
+            SignalPolarity::Positive,
+            SignalStrength::Moderate,
+            "closeout artifact narrowed to a smaller residual verification scope",
+            Some(previous.target_scope.raw.clone()),
+            Some(artifact_scope.raw.clone()),
+            merge_evidence(vec![
+                attempt_evidence(previous, "earlier broader closeout proof"),
+                closeout_artifact_edits
+                    .iter()
+                    .flat_map(|attempt| {
+                        attempt_evidence(
+                            *attempt,
+                            "later closeout artifact recorded a narrower residual scope",
+                        )
+                    })
+                    .collect(),
+                task_frame_evidence(
+                    analysis,
+                    "closeout objective kept only the narrowed residual verification scope",
+                ),
+            ]),
+        ));
+        signals.push(progress_signal(
+            ProgressSignalCode::ResidualScopeShrank,
+            SignalPolarity::Positive,
+            SignalStrength::Moderate,
+            "the residual closeout scope became smaller and more explicit",
+            Some(previous.target_scope.raw.clone()),
+            Some(artifact_scope.raw.clone()),
+            merge_evidence(vec![
+                attempt_evidence(previous, "earlier broader residual scope"),
+                closeout_artifact_edits
+                    .iter()
+                    .flat_map(|attempt| {
+                        attempt_evidence(
+                            *attempt,
+                            "later handoff/checklist refined the residual scope",
+                        )
+                    })
+                    .collect(),
+                task_frame_evidence(
+                    analysis,
+                    "current closeout objective names only the smaller residual scope",
+                ),
+            ]),
+        ));
+    }
 
     if !closeout_artifact_edits.is_empty() {
         signals.push(progress_signal(
@@ -1055,17 +1185,17 @@ fn assess_closeout_progress(
         );
     }
 
-    progress_from_signals(
-        ProgressStatus::Advancing,
-        dimension,
-        if source_edits.is_empty() {
-            Confidence::High
-        } else {
-            Confidence::Medium
-        },
-        signals,
-        Vec::new(),
-    )
+    if broader_clean.is_some() && !closeout_artifact_edits.is_empty() {
+        return progress_from_signals(
+            ProgressStatus::Advancing,
+            dimension,
+            Confidence::Medium,
+            signals,
+            Vec::new(),
+        );
+    }
+
+    insufficient_progress(dimension, None, None)
 }
 
 fn apply_delegation_caps(
@@ -1201,6 +1331,31 @@ fn comparable_attempts<'a>(
         .collect::<Vec<_>>()
 }
 
+fn prior_closeout_attempts_in_window(analysis: &CheckpointAnalysis) -> Vec<VerificationAttempt> {
+    let Some(_) = &analysis.previous else {
+        return Vec::new();
+    };
+    let analyses = super::checkpoint_analyses(&analysis.current.window);
+    let Some(current_index) = analyses.len().checked_sub(1) else {
+        return Vec::new();
+    };
+
+    let mut collected = Vec::new();
+    let mut newer = &analyses[current_index];
+    let mut scanned_any = false;
+    for older in analyses[..current_index].iter().rev() {
+        if scanned_any && closeout_window_boundary(newer, older) {
+            break;
+        }
+
+        collected.extend(older.interval.verification_attempts.clone());
+        scanned_any = true;
+        newer = older;
+    }
+
+    collected
+}
+
 fn prior_verification_attempts(
     analysis: &CheckpointAnalysis,
     current: &VerificationAttempt,
@@ -1227,6 +1382,14 @@ fn prior_verification_attempts(
     }
 
     collected
+}
+
+fn closeout_window_boundary(newer: &CheckpointAnalysis, older: &CheckpointAnalysis) -> bool {
+    strong_archetype_boundary(newer, older)
+        || explicit_replan_boundary(newer, older)
+        || delegation_visibility_changed(newer, older)
+        || objective_or_truth_artifacts_shifted(newer, older)
+        || working_set_pivoted(newer, older)
 }
 
 fn comparable_window_boundary(
@@ -1379,6 +1542,37 @@ fn attempts_are_comparable(left: &VerificationAttempt, right: &VerificationAttem
             || right.target_scope.broad;
     }
     false
+}
+
+fn attempt_matches_target(
+    candidate: &VerificationAttempt,
+    verifier: VerifierKind,
+    scope: &VerificationScope,
+) -> bool {
+    if candidate.verifier == verifier && scopes_overlap(&candidate.target_scope, scope) {
+        return true;
+    }
+
+    candidate.outcome == AttemptOutcome::Clean
+        && verifier_family(candidate.verifier) == verifier_family(verifier)
+        && scopes_overlap(&candidate.target_scope, scope)
+}
+
+fn most_relevant_broader_clean_attempt<'a>(
+    prior_attempts: &'a [VerificationAttempt],
+    verifier: VerifierKind,
+    current_scope: &VerificationScope,
+) -> Option<&'a VerificationAttempt> {
+    prior_attempts
+        .iter()
+        .filter(|candidate| candidate.outcome == AttemptOutcome::Clean)
+        .filter(|candidate| attempt_matches_target(candidate, verifier, current_scope))
+        .filter(|candidate| scope_is_narrower(current_scope, &candidate.target_scope))
+        .min_by(|left, right| {
+            scope_cardinality(&left.target_scope)
+                .cmp(&scope_cardinality(&right.target_scope))
+                .then_with(|| right.attempt_ordinal.cmp(&left.attempt_ordinal))
+        })
 }
 
 fn best_signature(attempt: &VerificationAttempt) -> Option<&DiagnosticSignature> {
@@ -1564,6 +1758,17 @@ fn closeout_artifact_edits(analysis: &CheckpointAnalysis) -> Vec<&CommandAttempt
                 .any(|path| is_closeout_artifact_path(path))
         })
         .collect()
+}
+
+fn artifact_closeout_target(
+    analysis: &CheckpointAnalysis,
+) -> Option<(VerifierKind, VerificationScope)> {
+    analysis
+        .current
+        .task_frame
+        .verification_commands
+        .iter()
+        .find_map(|command| verification_target_from_command(command))
 }
 
 fn source_edits(analysis: &CheckpointAnalysis) -> Vec<&CommandAttempt> {

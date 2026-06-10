@@ -2507,6 +2507,234 @@ PATCH","workdir":"/repo"}"#,
 }
 
 #[test]
+fn checkpoints_mark_repeated_identical_clean_closeout_proof_as_stalled() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Implement the patch and then verify it.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.apply_patch",
+            r#"{"command":"apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs
+*** End Patch
+PATCH","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            r#"Exit code: 0
+running 1 test
+test checkpoints::captures_progress ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out"#,
+        ),
+        assistant_row(
+            4,
+            "turn-001",
+            "The implementation is in place. Next I am gathering closeout proof only.",
+        ),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Verify the existing patch with the same focused closeout proof.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            7,
+            "turn-002",
+            r#"Exit code: 0
+running 1 test
+test checkpoints::captures_progress ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out"#,
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::VerificationCloseoutNarrowing
+    );
+    assert_eq!(progress.status, ProgressStatus::Stalled);
+    assert_progress_signal(progress, ProgressSignalCode::VerificationClean);
+    assert!(!progress.supporting_evidence.is_empty());
+}
+
+#[test]
+fn checkpoints_do_not_reemit_closeout_narrowing_on_a_narrow_rerun() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Implement the patch and then verify it.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            "Exit code: 0\nrunning 27 tests\n\ntest result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+        ),
+        assistant_row(
+            4,
+            "turn-001",
+            "The implementation is in place. Next I am gathering proof only.",
+        ),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Verify the existing patch, narrow the residual proof, and record it.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            7,
+            "turn-002",
+            "Exit code: 0\nrunning 1 test\ntest checkpoints::captures_progress ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out",
+        ),
+        prompt_row(
+            8,
+            "turn-003",
+            "/goal Re-run the same narrowed closeout proof without changing scope.",
+        ),
+        tool_call_row(
+            9,
+            "turn-003",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            10,
+            "turn-003",
+            "Exit code: 0\nrunning 1 test\ntest checkpoints::captures_progress ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::VerificationCloseoutNarrowing
+    );
+    assert_eq!(progress.status, ProgressStatus::Stalled);
+    assert_progress_signal(progress, ProgressSignalCode::VerificationClean);
+    assert_absent_progress_signal(progress, ProgressSignalCode::VerificationScopeNarrowed);
+    assert_absent_progress_signal(progress, ProgressSignalCode::ResidualScopeShrank);
+}
+
+#[test]
+fn checkpoints_mark_artifact_only_closeout_residual_narrowing_as_advancing() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Implement the patch and then verify it.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            "Exit code: 0\nrunning 27 tests\n\ntest result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+        ),
+        assistant_row(
+            4,
+            "turn-001",
+            "The implementation is in place. Next I am gathering closeout proof only.",
+        ),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Verify the existing patch across the broader closeout proof first.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            7,
+            "turn-002",
+            "Exit code: 0\nrunning 27 tests\n\ntest result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+        ),
+        prompt_row(
+            8,
+            "turn-003",
+            "/goal Definition of done: complete closeout by recording only the remaining residual proof in the handoff. Verify: cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture.",
+        ),
+        tool_call_row(
+            9,
+            "turn-003",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: .codex/handoffs/2026-06-10-r5-4-closeout.md\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::VerificationCloseoutNarrowing
+    );
+    assert_eq!(progress.status, ProgressStatus::Advancing);
+    assert_progress_signal(progress, ProgressSignalCode::VerificationScopeNarrowed);
+    assert_progress_signal(progress, ProgressSignalCode::ResidualScopeShrank);
+    assert_progress_signal(progress, ProgressSignalCode::PlanArtifactRefined);
+    assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
+}
+
+#[test]
 fn checkpoints_mark_implementation_regression_when_previously_clean_scope_breaks() {
     let result = analyze_custom_rows(vec![
         prompt_row(
