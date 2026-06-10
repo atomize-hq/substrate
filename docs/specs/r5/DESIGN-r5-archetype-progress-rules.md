@@ -257,7 +257,11 @@ PlanArtifactRefined
 R5 should use `ParentVisibleOrchestration` only when delegation prevents honest archetype-native
 progress claims.
 
-### Advancing Signals
+### Parent-Visible Signals In R5
+
+These signals are limiting/context evidence only. In R5 they may support only
+`insufficient_evidence`, `stalled`, or `mixed` under `ParentVisibleOrchestration`; they never
+authorize an `advancing` parent-visible fallback label.
 
 1. Parent spawns child with clear instructions.
 2. Parent receives a visible child result link or summary.
@@ -269,6 +273,13 @@ progress claims.
 1. Parent repeatedly waits without child-visible progress.
 2. Parent retries orchestration commands with no new evidence.
 3. Parent switches child instructions without visible output.
+
+### Mixed Signals
+
+1. Parent receives some visible child result context, but the checkpoint also includes limiting
+   evidence such as waiting, retries, or materially incomplete visibility.
+2. Parent updates plan/handoff from visible child output, but the target remains only partly
+   exercised from the parent's visible evidence.
 
 ### Insufficient Evidence
 

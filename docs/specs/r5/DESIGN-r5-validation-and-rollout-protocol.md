@@ -97,7 +97,7 @@ The first R5 implementation should cover at least these cases:
 | `r5_planning_candidate_set_narrows_to_spec` | broad scan narrows into spec/plan/tasks artifact | `advancing / planning_convergence` |
 | `r5_planning_broad_scan_meanders` | repeated broad reads/searches expand candidate set with no artifact | `stalled` or low-confidence `mixed / planning_convergence` |
 | `r5_implementation_wall_advances` | source edits plus aligned tests move verifier from focused to broader proof | `advancing / implementation_verification_wall` |
-| `r5_implementation_same_failure_unrelated_edits` | same verifier failure repeats after unrelated edits | `stalled / implementation_verification_wall` |
+| `r5_implementation_same_failure_unrelated_edits` | same verifier failure repeats after unrelated edits | `stalled / implementation_verification_wall`, or `mixed / implementation_verification_wall` when unrelated churn is materially present as counter-evidence |
 | `r5_closeout_clean_proof_no_source_churn` | proof commands pass, residual scope shrinks, no source churn | `advancing / verification_closeout_narrowing` |
 | `r5_closeout_scope_narrows_to_residual` | closeout proof narrows the remaining residual scope and emits `VerificationScopeNarrowed` plus `ResidualScopeShrank` | `advancing / verification_closeout_narrowing` |
 | `r5_closeout_reopens_source_churn` | closeout-labeled checkpoint introduces new source changes and breaks proof | `regressing` or `mixed / verification_closeout_narrowing` |
