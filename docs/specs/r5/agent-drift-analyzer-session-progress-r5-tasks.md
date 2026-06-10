@@ -168,7 +168,8 @@ verification command for the current packet is green or the failure is documente
 
 - [ ] Task R5-4.4: Implement implementation verification-wall progress.
   - Acceptance: concentrated source/test edits plus advancing verifier produce advancing; unrelated
-    churn plus same verifier failure produces stalled or regressing.
+    churn plus same verifier failure produces stalled or mixed unless a previously clean or later
+    frontier was actually broken.
   - Verify: focused implementation progress tests.
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`

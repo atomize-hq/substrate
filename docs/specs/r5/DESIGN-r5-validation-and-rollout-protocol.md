@@ -52,7 +52,7 @@ R5 should add:
 docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md
 ```
 
-Each fixture entry should record:
+Semantic progress fixture entries should record:
 
 ```text
 Fixture id:
@@ -65,6 +65,20 @@ Counter-evidence:
 Comparable attempts:
 Window/reset expectation:
 Why competing statuses lose:
+Implementation fixture location:
+```
+
+Schema/compatibility fixtures are the intentional carve-out. Because they validate payload
+compatibility and rendering parity rather than a runtime progress label, they may omit
+`Archetype`, `Expected dimension`, `Expected status`, `Expected confidence`, and `Why competing
+statuses lose`, and instead record:
+
+```text
+Fixture id:
+Expected:
+Required tests:
+Comparable attempts:
+Window/reset expectation:
 Implementation fixture location:
 ```
 

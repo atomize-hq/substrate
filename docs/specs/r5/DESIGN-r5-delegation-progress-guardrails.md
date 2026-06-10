@@ -56,7 +56,7 @@ input.
 Allowed:
 
 ```text
-"parent-visible orchestration progressed after child result became visible"
+"parent-visible orchestration evidence changed after child result became visible"
 "child-opaque delegation limited progress certainty"
 "progress is insufficiently evidenced because child implementation is opaque"
 ```
@@ -74,8 +74,8 @@ Not allowed:
 | Topology | Visibility | Allowed R5 output |
 |---|---|---|
 | `single_agent` | `none` | normal archetype-native progress rules |
-| `delegating_parent` | `partial` | visible evidence only; max `medium`; attach limiting signal when relevant |
-| `delegating_parent` | `opaque` | `parent_visible_orchestration` or `insufficient_evidence`; max `low` |
+| `delegating_parent` | `partial` | visible evidence only; max `medium`; `ParentVisibleOrchestration` stays limited to `insufficient_evidence`, `stalled`, or `mixed`; attach limiting signal when relevant |
+| `delegating_parent` | `opaque` | dimension may fall back to `parent_visible_orchestration`; status stays limited to `insufficient_evidence`, `stalled`, or `mixed`; max `low` |
 | `delegated_child` | partial/opaque/unknown | treat as low-confidence unless this rollout itself contains direct child work; do not stitch parent context |
 | `mixed_or_ambiguous` | `opaque` | prefer `insufficient_evidence`; max `low` |
 
@@ -100,12 +100,16 @@ Recommended reason text:
 Use `ProgressDimension::ParentVisibleOrchestration` when the progress evidence is about the parent
 orchestrating work, not about the child executing implementation.
 
-Positive signals:
+Visible parent-owned signals:
 
 1. child spawned with visible instructions,
 2. child result link or summary appears in the parent trace,
 3. parent incorporates visible child result into a plan, spec, handoff, or verification step,
 4. parent closes child work after visible result.
+
+In R5-0, those signals may justify only `insufficient_evidence`, `stalled`, or `mixed` under
+`ParentVisibleOrchestration`. They do not authorize an `advancing` parent-visible fallback label in
+this family.
 
 Negative/stalled signals:
 
@@ -165,12 +169,14 @@ When delegation is opaque:
 R5 should include at least these delegation cases:
 
 1. single-agent troubleshooting still behaves normally,
-2. delegating parent with opaque child work returns low-confidence `insufficient_evidence` or
-   `parent_visible_orchestration`,
-3. partial child visibility can produce parent-visible progress but includes limiting signal,
+2. delegating parent with opaque child work returns a low-confidence
+   `parent_visible_orchestration` dimension with status limited to `insufficient_evidence`,
+   `stalled`, or `mixed`,
+3. partial child visibility can still yield parent-visible limiting evidence without an
+   `advancing` parent-visible fallback label,
 4. parent wait loop does not become child implementation stall,
-5. parent spawn/result/close sequence can produce orchestration progress without claiming child
-   code progress.
+5. parent spawn/result/close sequence remains parent-visible orchestration evidence without
+   claiming child code progress or `advancing` under `ParentVisibleOrchestration`.
 
 ## Relationship To R7
 
@@ -196,7 +202,8 @@ This design does not:
 ## Locked Decisions After Packet R5-0
 
 1. `ParentVisibleOrchestration` is an R5 delegation-only fallback dimension; non-delegated
-   orchestration does not use it in this family.
+   orchestration does not use it in this family, and the fallback resolves only to
+   `insufficient_evidence`, `stalled`, or `mixed` in R5-0.
 2. Delegated cases never exceed `Medium` confidence in R5, and opaque visibility stays capped at
    `Low`.
 3. If a debug artifact is emitted, it should include delegation markers internally, but the public

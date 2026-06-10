@@ -49,7 +49,11 @@ Each fixture expectation must include:
 
 Each required row below therefore makes the comparability contract explicit. Schema/compatibility
 rows still record `Comparable attempts` and `Window/reset expectation`, but those fields describe
-payload/surface comparability rather than runtime progress-window ids.
+payload/surface comparability rather than runtime progress-window ids. They are an explicit
+template carve-out: semantic progress rows use the full archetype/dimension/status/confidence
+shape, while schema/compatibility rows may instead use `Expected`, `Required tests`,
+`Comparable attempts`, `Window/reset expectation`, and `Implementation fixture location` because
+they validate payload/surface behavior rather than runtime progress labels.
 
 Public labels use serialized snake_case values:
 
