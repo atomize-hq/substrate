@@ -82,14 +82,15 @@ pub(crate) fn build_diagnostic_signatures(
         return Vec::new();
     }
 
-    let normalized_lines = canonical_output_lines(output);
-    if normalized_lines.is_empty() && attempt.exit_code.is_none() {
+    let ordered_lines = normalized_output_lines(output);
+    if ordered_lines.is_empty() && attempt.exit_code.is_none() {
         return Vec::new();
     }
+    let normalized_lines = canonical_output_lines(&ordered_lines);
 
-    let mut failing_paths = extract_paths_from_lines(&normalized_lines);
-    let mut failing_tests = extract_tests_from_lines(&normalized_lines);
-    let failing_symbols = extract_symbols_from_lines(&normalized_lines);
+    let mut failing_paths = extract_paths_from_lines(&ordered_lines);
+    let mut failing_tests = extract_tests_from_lines(&ordered_lines);
+    let failing_symbols = extract_symbols_from_lines(&ordered_lines);
 
     if failing_paths.is_empty() {
         failing_paths = target_scope.paths.clone();
@@ -572,13 +573,17 @@ fn hash_payload(
     format!("{:x}", hasher.finalize())
 }
 
-fn canonical_output_lines(output: &str) -> Vec<String> {
+fn normalized_output_lines(output: &str) -> Vec<String> {
     let sanitized = strip_ansi(output).replace("\r\n", "\n").replace('\r', "\n");
-    let mut lines = sanitized
+    sanitized
         .lines()
         .map(normalize_line)
         .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
+        .collect()
+}
+
+fn canonical_output_lines(lines: &[String]) -> Vec<String> {
+    let mut lines = lines.to_vec();
     lines.sort();
     lines.dedup();
     lines
@@ -647,13 +652,14 @@ fn normalize_line(line: &str) -> String {
         return String::new();
     }
 
-    let normalized = trimmed
-        .replace('\t', " ")
-        .split_whitespace()
-        .map(normalize_token)
-        .collect::<Vec<_>>()
-        .join(" ");
-    normalized.trim().to_string()
+    let normalized_tokens = normalize_seed_tokens(
+        trimmed
+            .replace('\t', " ")
+            .split_whitespace()
+            .map(normalize_token)
+            .collect::<Vec<_>>(),
+    );
+    normalized_tokens.join(" ").trim().to_string()
 }
 
 fn normalize_token(token: &str) -> String {
@@ -671,6 +677,49 @@ fn normalize_token(token: &str) -> String {
         normalized = "<seed>".to_string();
     }
     normalized
+}
+
+fn normalize_seed_tokens(tokens: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::with_capacity(tokens.len());
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = &tokens[index];
+        if token == "<seed>" {
+            normalized.push("<seed>".to_string());
+            index += 1;
+            if tokens
+                .get(index)
+                .is_some_and(|next| looks_like_seed_value(next))
+            {
+                index += 1;
+            }
+            continue;
+        }
+        if token.eq_ignore_ascii_case("seed")
+            && tokens
+                .get(index + 1)
+                .is_some_and(|next| looks_like_seed_value(next))
+        {
+            normalized.push("<seed>".to_string());
+            index += 2;
+            continue;
+        }
+        normalized.push(token.clone());
+        index += 1;
+    }
+    normalized
+}
+
+fn looks_like_seed_value(token: &str) -> bool {
+    let trimmed = token
+        .trim_matches(|ch: char| {
+            matches!(
+                ch,
+                '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';' | '.'
+            )
+        })
+        .trim_start_matches('#');
+    !trimmed.is_empty() && trimmed.chars().all(|ch| ch.is_ascii_digit())
 }
 
 fn normalize_path_token(token: &str) -> Option<String> {
@@ -1288,7 +1337,7 @@ mod tests {
 
     use super::{
         build_diagnostic_signatures, classify_edit_overlap, match_diagnostic_signatures,
-        DiagnosticMatchKind, EditOverlapStrength, FailureClass,
+        normalize_line, DiagnosticMatchKind, EditOverlapStrength, FailureClass,
     };
     use crate::checkpoint::attempt::{
         AttemptOutcome, CommandAttempt, CommandAttemptRole, ExerciseState, VerificationAttempt,
@@ -1739,6 +1788,81 @@ mod tests {
                 assert!(signatures[0].failing_tests.contains(&expected));
             }
         }
+    }
+
+    #[test]
+    fn checkpoints_parse_multi_file_js_failures_without_cross_file_misattribution() {
+        let attempt = test_attempt(1, 10, "jest", CommandAttemptRole::Test, vec![]);
+        let scope = VerificationScope {
+            raw: "jest".to_string(),
+            paths: Vec::new(),
+            tests: Vec::new(),
+            broad: true,
+        };
+
+        let signatures = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "FAIL tests/a.test.ts\n  suite a\n    ✕ test a (1 ms)\nFAIL tests/b.test.ts\n  suite b\n    ✕ test b (2 ms)\nAssertionError: expected advancing\nTests:       2 failed, 2 total",
+        );
+
+        assert_eq!(signatures[0].failure_class, FailureClass::AssertionOrGolden);
+        assert_eq!(signatures[0].failing_count, Some(2));
+        for expected in [
+            "tests/a.test.ts".to_string(),
+            "tests/b.test.ts".to_string(),
+            "tests/a.test.ts > suite a > test a".to_string(),
+            "tests/b.test.ts > suite b > test b".to_string(),
+            "suite a > test a".to_string(),
+            "suite b > test b".to_string(),
+            "test a".to_string(),
+            "test b".to_string(),
+        ] {
+            assert!(signatures[0].failing_tests.contains(&expected));
+        }
+        for unexpected in [
+            "tests/a.test.ts > suite b > test b".to_string(),
+            "tests/b.test.ts > suite a > test a".to_string(),
+        ] {
+            assert!(!signatures[0].failing_tests.contains(&unexpected));
+        }
+    }
+
+    #[test]
+    fn checkpoints_normalize_common_seed_noise_shapes_before_hashing() {
+        assert_eq!(
+            normalize_line("Randomized with seed 1234"),
+            "Randomized with <seed>"
+        );
+        assert_eq!(normalize_line("rerun with seed 42"), "rerun with <seed>");
+        assert_eq!(normalize_line("seed: 99"), "<seed>");
+
+        let attempt = test_attempt(
+            1,
+            10,
+            "cargo test -p agent-drift-analyzer checkpoints",
+            CommandAttemptRole::Test,
+            vec![],
+        );
+        let scope = VerificationScope {
+            raw: attempt.raw_command.clone(),
+            paths: Vec::new(),
+            tests: vec!["checkpoints".to_string()],
+            broad: false,
+        };
+
+        let left = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "Randomized with seed 1234\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\nAssertionError: expected advancing\nExit code: 101",
+        );
+        let right = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "Randomized with seed 42\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\nAssertionError: expected advancing\nExit code: 101",
+        );
+
+        assert_eq!(left[0].payload_hash_hex, right[0].payload_hash_hex);
     }
 
     fn diagnostic_signature(
