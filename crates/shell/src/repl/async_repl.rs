@@ -54,6 +54,11 @@ use crate::execution::agent_runtime::control::{
 use crate::execution::agent_runtime::dispatch_contract::{
     CancelWorldWorkOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
 };
+#[cfg(all(test, unix))]
+use crate::execution::agent_runtime::dispatch_contract::{
+    ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
+    RunWorldTaskOutcomeV1,
+};
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
@@ -64,6 +69,12 @@ use crate::execution::agent_runtime::tool_invocation_contract::{
     authoritative_world_binding_for_session_v1, normalize_host_tool_invocation_outcome_v1,
     translate_host_tool_invocation_request_to_internal_dispatch_request_v1,
     HostToolInvocationRequestEnvelopeV1, HostToolNameV1, HostToolRuntimeDispatchMetadataV1,
+};
+#[cfg(all(test, unix))]
+use crate::execution::agent_runtime::tool_invocation_contract::{
+    HostToolCancelWorldWorkOutcomeV1, HostToolContinueWorldWorkerOutcomeV1,
+    HostToolForkWorldWorkerReceiptV1, HostToolInspectWorldWorkerOutcomeV1,
+    HostToolSpawnWorldWorkerReceiptV1, HostToolStopWorldWorkerOutcomeV1,
 };
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
@@ -5207,6 +5218,230 @@ fn exit_code_is_cancelled(exit_code: i32) -> bool {
 }
 
 #[cfg(all(test, unix))]
+fn translate_internal_toolbox_legacy_dispatch_request_to_host_tool_envelope(
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let legacy_action = request
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_else(|| panic!("legacy toolbox request must include action: {request:?}"));
+    let legacy_payload = request
+        .get("payload")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let legacy_payload_kind = legacy_payload
+        .get("payload_kind")
+        .and_then(serde_json::Value::as_str);
+    let tool_name = legacy_action;
+    let payload = normalize_internal_toolbox_legacy_payload_for_host_tool(
+        tool_name,
+        legacy_payload_kind,
+        &legacy_payload,
+    );
+    let arguments = match tool_name {
+        "run_world_task" | "spawn_world_worker" => serde_json::json!({
+            "target_backend_id": request.get("target_backend_id").cloned(),
+            "payload": payload,
+        }),
+        "fork_world_worker"
+        | "continue_world_worker"
+        | "inspect_world_worker"
+        | "cancel_world_work"
+        | "stop_world_worker" => {
+            let mut arguments = serde_json::Map::new();
+            if let Some(task_run_id) = request
+                .get("task_run_id")
+                .cloned()
+                .filter(|value| !value.is_null())
+            {
+                arguments.insert("task_run_id".to_string(), task_run_id);
+            }
+            if let Some(participant_id) = request
+                .get("target_participant_id")
+                .cloned()
+                .filter(|value| !value.is_null())
+            {
+                arguments.insert("participant_id".to_string(), participant_id);
+            }
+            arguments.insert("payload".to_string(), payload);
+            serde_json::Value::Object(arguments)
+        }
+        other => panic!("unsupported toolbox action in legacy test request: {other}"),
+    };
+
+    serde_json::json!({
+        "version": 1,
+        "tool_name": tool_name,
+        "tool_call_id": request.get("request_id").cloned(),
+        "arguments": arguments,
+    })
+}
+
+#[cfg(all(test, unix))]
+fn normalize_internal_toolbox_legacy_payload_for_host_tool(
+    tool_name: &str,
+    legacy_payload_kind: Option<&str>,
+    payload: &serde_json::Value,
+) -> serde_json::Value {
+    let mut object = match payload {
+        serde_json::Value::Object(map) => map.clone(),
+        other => {
+            panic!("legacy toolbox payload must be an object for {tool_name}: {other:?}");
+        }
+    };
+    object.remove("payload_kind");
+    let _ = legacy_payload_kind;
+    serde_json::Value::Object(object)
+}
+
+#[cfg(all(test, unix))]
+fn decode_internal_toolbox_legacy_world_dispatch_outcome(
+    request: &WorldDispatchRequestV1,
+    outcome: serde_json::Value,
+) -> Result<WorldDispatchOutcomeV1> {
+    match request.action {
+        WorldDispatchActionV1::RunWorldTask => Ok(WorldDispatchOutcomeV1::RunWorldTask(
+            serde_json::from_value::<RunWorldTaskOutcomeV1>(outcome)
+                .context("failed to decode normalized run_world_task receipt")?,
+        )),
+        WorldDispatchActionV1::SpawnWorldWorker => Ok(WorldDispatchOutcomeV1::SpawnWorldWorker(
+            serde_json::from_value::<HostToolSpawnWorldWorkerReceiptV1>(outcome)
+                .map(|spawn| SpawnWorldWorkerOutcomeV1 {
+                    request_id: spawn.request_id,
+                    orchestration_session_id: spawn.orchestration_session_id,
+                    action: spawn.action,
+                    mode: spawn.mode,
+                    participant_id: spawn.participant_id,
+                    orchestrator_participant_id: spawn.orchestrator_participant_id,
+                    parent_participant_id: spawn.parent_participant_id,
+                    resumed_from_participant_id: spawn.resumed_from_participant_id,
+                    target_backend_id: spawn.target_backend_id,
+                    world_id: spawn.world_id,
+                    world_generation: spawn.world_generation,
+                    launch_span_id: spawn.launch_span_id,
+                    summary: spawn.summary,
+                })
+                .context("failed to decode normalized spawn_world_worker receipt")?,
+        )),
+        WorldDispatchActionV1::ForkWorldWorker => Ok(WorldDispatchOutcomeV1::ForkWorldWorker(
+            serde_json::from_value::<HostToolForkWorldWorkerReceiptV1>(outcome)
+                .map(|fork| ForkWorldWorkerOutcomeV1 {
+                    request_id: fork.request_id,
+                    orchestration_session_id: fork.orchestration_session_id,
+                    action: fork.action,
+                    mode: fork.mode,
+                    orchestrator_participant_id: fork.orchestrator_participant_id,
+                    source_participant_id: fork.source_participant_id,
+                    child_participant_id: fork.participant_id,
+                    target_backend_id: fork.target_backend_id,
+                    world_id: fork.world_id,
+                    world_generation: fork.world_generation,
+                    summary: fork.summary,
+                })
+                .context("failed to decode normalized fork_world_worker receipt")?,
+        )),
+        WorldDispatchActionV1::ContinueWorldWorker => {
+            Ok(WorldDispatchOutcomeV1::ContinueWorldWorker(
+                serde_json::from_value::<HostToolContinueWorldWorkerOutcomeV1>(outcome)
+                    .map(|continue_outcome| ContinueWorldWorkerOutcomeV1 {
+                        request_id: continue_outcome.request_id,
+                        orchestration_session_id: continue_outcome.orchestration_session_id,
+                        action: continue_outcome.action,
+                        mode: continue_outcome.mode,
+                        orchestrator_participant_id: continue_outcome
+                            .orchestrator_participant_id,
+                        target_participant_id: continue_outcome.participant_id,
+                        target_backend_id: continue_outcome.target_backend_id,
+                        world_id: continue_outcome.world_id,
+                        world_generation: continue_outcome.world_generation,
+                        source_participant_id: continue_outcome.source_participant_id,
+                        child_participant_id: continue_outcome.child_participant_id,
+                        thread_id: continue_outcome.thread_id,
+                        worker_event: continue_outcome.worker_event,
+                        summary: continue_outcome.summary,
+                    })
+                    .context("failed to decode normalized continue_world_worker outcome")?,
+            ))
+        }
+        WorldDispatchActionV1::InspectWorldWorker => {
+            Ok(WorldDispatchOutcomeV1::InspectWorldWorker(
+                serde_json::from_value::<HostToolInspectWorldWorkerOutcomeV1>(outcome)
+                    .and_then(|inspect| {
+                        let target_participant_id = inspect
+                            .participant_id
+                            .or(inspect.task_run_id)
+                            .ok_or_else(|| {
+                                serde_json::Error::io(std::io::Error::new(
+                                    std::io::ErrorKind::InvalidData,
+                                    "normalized inspect_world_worker outcome omitted identity handle",
+                                ))
+                            })?;
+                        Ok(InspectWorldWorkerOutcomeV1 {
+                            request_id: inspect.request_id,
+                            orchestration_session_id: inspect.orchestration_session_id,
+                            action: inspect.action,
+                            mode: inspect.mode,
+                            orchestrator_participant_id: inspect.orchestrator_participant_id,
+                            target_participant_id,
+                            target_backend_id: inspect.target_backend_id,
+                            world_id: inspect.world_id,
+                            world_generation: inspect.world_generation,
+                            snapshot: inspect.snapshot,
+                            summary: inspect.summary,
+                        })
+                    })
+                    .context("failed to decode normalized inspect_world_worker outcome")?,
+            ))
+        }
+        WorldDispatchActionV1::CancelWorldWork => Ok(WorldDispatchOutcomeV1::CancelWorldWork(
+            serde_json::from_value::<HostToolCancelWorldWorkOutcomeV1>(outcome)
+                .and_then(|cancel| {
+                    let target_participant_id = cancel.participant_id.or(cancel.task_run_id).ok_or_else(
+                        || {
+                            serde_json::Error::io(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "normalized cancel_world_work outcome omitted identity handle",
+                            ))
+                        },
+                    )?;
+                    Ok(CancelWorldWorkOutcomeV1 {
+                        request_id: cancel.request_id,
+                        orchestration_session_id: cancel.orchestration_session_id,
+                        action: cancel.action,
+                        mode: cancel.mode,
+                        orchestrator_participant_id: cancel.orchestrator_participant_id,
+                        target_participant_id,
+                        target_backend_id: cancel.target_backend_id,
+                        world_id: cancel.world_id,
+                        world_generation: cancel.world_generation,
+                        state: cancel.state,
+                        closeout: cancel.closeout,
+                        summary: cancel.summary,
+                    })
+                })
+                .context("failed to decode normalized cancel_world_work outcome")?,
+        )),
+        WorldDispatchActionV1::StopWorldWorker => Ok(WorldDispatchOutcomeV1::StopWorldWorker(
+            serde_json::from_value::<HostToolStopWorldWorkerOutcomeV1>(outcome)
+                .map(|stop| StopWorldWorkerOutcomeV1 {
+                    request_id: stop.request_id,
+                    orchestration_session_id: stop.orchestration_session_id,
+                    action: stop.action,
+                    mode: stop.mode,
+                    orchestrator_participant_id: stop.orchestrator_participant_id,
+                    target_participant_id: stop.participant_id,
+                    target_backend_id: stop.target_backend_id,
+                    world_id: stop.world_id,
+                    world_generation: stop.world_generation,
+                    closeout: stop.closeout,
+                    summary: stop.summary,
+                })
+                .context("failed to decode normalized stop_world_worker outcome")?,
+        )),
+    }
+}
+
+#[cfg(all(test, unix))]
 async fn request_internal_toolbox_world_dispatch(
     path: &Path,
     request: &WorldDispatchRequestV1,
@@ -5220,8 +5455,11 @@ async fn request_internal_toolbox_world_dispatch(
             path.display()
         )
     })?;
+    let envelope = translate_internal_toolbox_legacy_dispatch_request_to_host_tool_envelope(
+        &serde_json::to_value(request).context("serialize legacy internal toolbox request")?,
+    );
     stream
-        .write_all(serde_json::to_string(request)?.as_bytes())
+        .write_all(serde_json::to_string(&envelope)?.as_bytes())
         .await?;
     stream.write_all(b"\n").await?;
     stream.flush().await?;
@@ -5245,7 +5483,8 @@ async fn request_internal_toolbox_world_dispatch(
             continue;
         }
         if payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
-            return serde_json::from_value(
+            return decode_internal_toolbox_legacy_world_dispatch_outcome(
+                request,
                 payload
                     .get("outcome")
                     .cloned()
