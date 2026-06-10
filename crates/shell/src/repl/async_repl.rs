@@ -60,6 +60,11 @@ use crate::execution::agent_runtime::orchestration_session::{
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
+use crate::execution::agent_runtime::tool_invocation_contract::{
+    authoritative_world_binding_for_session_v1, normalize_host_tool_invocation_outcome_v1,
+    translate_host_tool_invocation_request_to_internal_dispatch_request_v1,
+    HostToolInvocationRequestEnvelopeV1, HostToolNameV1, HostToolRuntimeDispatchMetadataV1,
+};
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, materialize_runtime_descriptor,
@@ -1883,8 +1888,23 @@ struct RemoteRetainedRunControl {
 
 #[derive(Debug)]
 struct InternalToolboxDispatchRequest {
-    request: WorldDispatchRequestV1,
+    request: InternalToolboxDispatchRequestKind,
     response_tx: InternalToolboxDispatchResponseSender,
+}
+
+#[derive(Debug)]
+enum InternalToolboxDispatchRequestKind {
+    DirectWorldDispatch(WorldDispatchRequestV1),
+    HostToolInvocation {
+        request: HostToolInvocationRequestEnvelopeV1,
+        runtime_context: InternalToolboxRuntimeContext,
+    },
+}
+
+#[derive(Clone, Debug)]
+struct InternalToolboxRuntimeContext {
+    orchestration_session_id: String,
+    caller_participant_id: String,
 }
 
 type InternalToolboxDispatchResponseSender = mpsc::UnboundedSender<serde_json::Value>;
@@ -1913,6 +1933,16 @@ fn internal_toolbox_run_world_task_started_frame(
 }
 
 fn internal_toolbox_success_result_frame(outcome: WorldDispatchOutcomeV1) -> serde_json::Value {
+    internal_toolbox_success_result_frame_value(serde_json::to_value(outcome).unwrap_or_else(
+        |_| {
+            serde_json::json!({
+                "error": "internal toolbox response serialization failed"
+            })
+        },
+    ))
+}
+
+fn internal_toolbox_success_result_frame_value(outcome: serde_json::Value) -> serde_json::Value {
     serde_json::json!({
         "version": 1,
         "frame_kind": "result",
@@ -3577,18 +3607,18 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             .run_attach_control(&continuity_session_id)
             .await
     } else {
-        let orchestration_session_id = {
-            manifest
-                .lock()
-                .expect("runtime manifest mutex poisoned")
-                .handle
-                .orchestration_session_id
-                .clone()
+        let (orchestration_session_id, caller_participant_id) = {
+            let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+            (
+                manifest_guard.handle.orchestration_session_id.clone(),
+                manifest_guard.handle.participant_id.clone(),
+            )
         };
         if host_toolbox_surface_requested {
             if let Some(request_tx) = startup_toolbox_request_tx {
                 let transport = register_internal_toolbox_transport_for_session(
                     &orchestration_session_id,
+                    &caller_participant_id,
                     request_tx.clone(),
                 )
                 .await
@@ -4957,19 +4987,23 @@ async fn register_internal_toolbox_transport(
     runtime: &AsyncReplAgentRuntime,
     request_tx: InternalToolboxDispatchRequestSender,
 ) -> Result<InternalToolboxTransport> {
-    let orchestration_session_id = runtime
+    let manifest = runtime
         .manifest
         .lock()
         .expect("runtime manifest mutex poisoned")
-        .handle
-        .orchestration_session_id
         .clone();
-    register_internal_toolbox_transport_for_session(&orchestration_session_id, request_tx).await
+    register_internal_toolbox_transport_for_session(
+        &manifest.handle.orchestration_session_id,
+        &manifest.handle.participant_id,
+        request_tx,
+    )
+    .await
 }
 
 #[cfg(unix)]
 async fn register_internal_toolbox_transport_for_session(
     orchestration_session_id: &str,
+    caller_participant_id: &str,
     request_tx: InternalToolboxDispatchRequestSender,
 ) -> Result<InternalToolboxTransport> {
     use tokio::io::{AsyncBufReadExt, BufReader};
@@ -5008,6 +5042,10 @@ async fn register_internal_toolbox_transport_for_session(
     })?;
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
     let path_for_task = path.clone();
+    let runtime_context = InternalToolboxRuntimeContext {
+        orchestration_session_id: orchestration_session_id.to_string(),
+        caller_participant_id: caller_participant_id.to_string(),
+    };
     let task = tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -5017,6 +5055,7 @@ async fn register_internal_toolbox_transport_for_session(
                         break;
                     };
                     let request_tx = request_tx.clone();
+                    let runtime_context = runtime_context.clone();
                     tokio::spawn(async move {
                         let mut reader = BufReader::new(stream);
                         let mut line = String::new();
@@ -5028,7 +5067,10 @@ async fn register_internal_toolbox_transport_for_session(
                                 write_internal_toolbox_frame(&mut stream, &payload).await;
                                 return;
                             }
-                            Ok(_) => match serde_json::from_str::<WorldDispatchRequestV1>(line.trim()) {
+                            Ok(_) => match decode_internal_toolbox_dispatch_request(
+                                line.trim(),
+                                &runtime_context,
+                            ) {
                                 Ok(request) => {
                                     let (response_tx, response_rx) = mpsc::unbounded_channel();
                                     if request_tx
@@ -5238,83 +5280,257 @@ async fn handle_internal_toolbox_dispatch_request(
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) {
-    #[cfg(target_os = "linux")]
-    if request.request.action == WorldDispatchActionV1::RunWorldTask {
-        let InternalToolboxDispatchRequest {
-            request,
-            response_tx,
-        } = request;
-        let Some(startup_context) = startup_context else {
-            let _ = response_tx.send(internal_toolbox_error_result_frame(
-                "owner_unreachable: internal world dispatch bootstrap requires a live orchestrator runtime",
-            ));
-            return;
-        };
-        let store = startup_context.store.clone();
-        tokio::spawn(async move {
-            let (started_task_run_id_tx, mut started_task_run_id_rx) = mpsc::unbounded_channel();
-            let dispatch = dispatch_run_world_task_request_with_started_task_run_id_tx(
-                &store,
-                request,
-                started_task_run_id_tx,
-            );
-            pin_mut!(dispatch);
-            let mut started_task_run_id_forwarded = false;
-            let mut started_task_run_id_rx_closed = false;
-            loop {
-                tokio::select! {
-                    maybe_task_run_id = started_task_run_id_rx.recv(),
-                    if !started_task_run_id_forwarded && !started_task_run_id_rx_closed => {
-                        match maybe_task_run_id {
-                            Some(task_run_id) => {
-                                let _ = response_tx.send(
-                                    internal_toolbox_run_world_task_started_frame(task_run_id),
-                                );
-                                started_task_run_id_forwarded = true;
+    let InternalToolboxDispatchRequest {
+        request,
+        response_tx,
+    } = request;
+    match request {
+        InternalToolboxDispatchRequestKind::DirectWorldDispatch(request) => {
+            #[cfg(target_os = "linux")]
+            if request.action == WorldDispatchActionV1::RunWorldTask {
+                let response_tx = response_tx.clone();
+                let Some(startup_context) = startup_context else {
+                    let _ = response_tx.send(internal_toolbox_error_result_frame(
+                        "owner_unreachable: internal world dispatch bootstrap requires a live orchestrator runtime",
+                    ));
+                    return;
+                };
+                let store = startup_context.store.clone();
+                tokio::spawn(async move {
+                    let (started_task_run_id_tx, mut started_task_run_id_rx) =
+                        mpsc::unbounded_channel();
+                    let dispatch = dispatch_run_world_task_request_with_started_task_run_id_tx(
+                        &store,
+                        request,
+                        started_task_run_id_tx,
+                    );
+                    pin_mut!(dispatch);
+                    let mut started_task_run_id_forwarded = false;
+                    let mut started_task_run_id_rx_closed = false;
+                    loop {
+                        tokio::select! {
+                            maybe_task_run_id = started_task_run_id_rx.recv(),
+                            if !started_task_run_id_forwarded && !started_task_run_id_rx_closed => {
+                                match maybe_task_run_id {
+                                    Some(task_run_id) => {
+                                        let _ = response_tx.send(
+                                            internal_toolbox_run_world_task_started_frame(task_run_id),
+                                        );
+                                        started_task_run_id_forwarded = true;
+                                    }
+                                    None => {
+                                        started_task_run_id_rx_closed = true;
+                                    }
+                                }
                             }
-                            None => {
-                                started_task_run_id_rx_closed = true;
+                            response = &mut dispatch => {
+                                if !started_task_run_id_forwarded {
+                                    match started_task_run_id_rx.try_recv() {
+                                        Ok(task_run_id) => {
+                                            let _ = response_tx.send(
+                                                internal_toolbox_run_world_task_started_frame(task_run_id),
+                                            );
+                                        }
+                                        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+                                        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {}
+                                    }
+                                }
+                                let payload = match response {
+                                    Ok(outcome) => internal_toolbox_success_result_frame(outcome),
+                                    Err(err) => internal_toolbox_error_result_frame(err.to_string()),
+                                };
+                                let _ = response_tx.send(payload);
+                                break;
                             }
                         }
                     }
-                    response = &mut dispatch => {
-                        if !started_task_run_id_forwarded {
-                            match started_task_run_id_rx.try_recv() {
-                                Ok(task_run_id) => {
-                                    let _ = response_tx.send(
-                                        internal_toolbox_run_world_task_started_frame(task_run_id),
-                                    );
+                });
+                return;
+            }
+
+            let response = handle_internal_toolbox_world_dispatch_request(
+                request,
+                startup_context,
+                member_runtimes,
+                agent_printer,
+                telemetry,
+            )
+            .await;
+            let payload = match response {
+                Ok(outcome) => internal_toolbox_success_result_frame(outcome),
+                Err(err) => internal_toolbox_error_result_frame(err.to_string()),
+            };
+            let _ = response_tx.send(payload);
+        }
+        InternalToolboxDispatchRequestKind::HostToolInvocation {
+            request,
+            runtime_context,
+        } => {
+            let Some(startup_context) = startup_context else {
+                let _ = response_tx.send(internal_toolbox_error_result_frame(
+                    "owner_unreachable: internal world dispatch bootstrap requires a live orchestrator runtime",
+                ));
+                return;
+            };
+            let session_snapshot = startup_context.snapshot();
+            let world_binding = match authoritative_world_binding_for_session_v1(&session_snapshot)
+            {
+                Ok(binding) => binding,
+                Err(err) => {
+                    let _ = response_tx.send(internal_toolbox_error_result_frame(err.to_string()));
+                    return;
+                }
+            };
+            let metadata = match internal_toolbox_runtime_dispatch_metadata(
+                &runtime_context,
+                request.tool_call_id.as_deref(),
+            ) {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    let _ = response_tx.send(internal_toolbox_error_result_frame(err.to_string()));
+                    return;
+                }
+            };
+            let translated =
+                match translate_host_tool_invocation_request_to_internal_dispatch_request_v1(
+                    &startup_context.store,
+                    &metadata,
+                    &world_binding,
+                    request,
+                ) {
+                    Ok(translated) => translated,
+                    Err(err) => {
+                        let _ =
+                            response_tx.send(internal_toolbox_error_result_frame(err.to_string()));
+                        return;
+                    }
+                };
+
+            #[cfg(target_os = "linux")]
+            if translated.tool_name == HostToolNameV1::RunWorldTask {
+                let response_tx = response_tx.clone();
+                let store = startup_context.store.clone();
+                tokio::spawn(async move {
+                    let (started_task_run_id_tx, mut started_task_run_id_rx) =
+                        mpsc::unbounded_channel();
+                    let dispatch = dispatch_run_world_task_request_with_started_task_run_id_tx(
+                        &store,
+                        translated.dispatch_request,
+                        started_task_run_id_tx,
+                    );
+                    pin_mut!(dispatch);
+                    let mut started_task_run_id_forwarded = false;
+                    let mut started_task_run_id_rx_closed = false;
+                    loop {
+                        tokio::select! {
+                            maybe_task_run_id = started_task_run_id_rx.recv(),
+                            if !started_task_run_id_forwarded && !started_task_run_id_rx_closed => {
+                                match maybe_task_run_id {
+                                    Some(task_run_id) => {
+                                        let _ = response_tx.send(
+                                            internal_toolbox_run_world_task_started_frame(task_run_id),
+                                        );
+                                        started_task_run_id_forwarded = true;
+                                    }
+                                    None => {
+                                        started_task_run_id_rx_closed = true;
+                                    }
                                 }
-                                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
-                                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {}
+                            }
+                            response = &mut dispatch => {
+                                if !started_task_run_id_forwarded {
+                                    match started_task_run_id_rx.try_recv() {
+                                        Ok(task_run_id) => {
+                                            let _ = response_tx.send(
+                                                internal_toolbox_run_world_task_started_frame(task_run_id),
+                                            );
+                                        }
+                                        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+                                        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {}
+                                    }
+                                }
+                                let payload = match response {
+                                    Ok(outcome) => match normalize_host_tool_invocation_outcome_v1(
+                                        HostToolNameV1::RunWorldTask,
+                                        &outcome,
+                                    ) {
+                                        Ok(normalized) => internal_toolbox_success_result_frame_value(normalized),
+                                        Err(err) => internal_toolbox_error_result_frame(err.to_string()),
+                                    },
+                                    Err(err) => internal_toolbox_error_result_frame(err.to_string()),
+                                };
+                                let _ = response_tx.send(payload);
+                                break;
                             }
                         }
-                        let payload = match response {
-                            Ok(outcome) => internal_toolbox_success_result_frame(outcome),
-                            Err(err) => internal_toolbox_error_result_frame(err.to_string()),
-                        };
-                        let _ = response_tx.send(payload);
-                        break;
+                    }
+                });
+                return;
+            }
+
+            let response = handle_internal_toolbox_world_dispatch_request(
+                translated.dispatch_request,
+                Some(startup_context),
+                member_runtimes,
+                agent_printer,
+                telemetry,
+            )
+            .await;
+            let payload = match response {
+                Ok(outcome) => {
+                    match normalize_host_tool_invocation_outcome_v1(translated.tool_name, &outcome)
+                    {
+                        Ok(normalized) => internal_toolbox_success_result_frame_value(normalized),
+                        Err(err) => internal_toolbox_error_result_frame(err.to_string()),
                     }
                 }
-            }
-        });
-        return;
+                Err(err) => internal_toolbox_error_result_frame(err.to_string()),
+            };
+            let _ = response_tx.send(payload);
+        }
+    }
+}
+
+fn decode_internal_toolbox_dispatch_request(
+    raw: &str,
+    runtime_context: &InternalToolboxRuntimeContext,
+) -> anyhow::Result<InternalToolboxDispatchRequestKind> {
+    if let Ok(request) = serde_json::from_str::<WorldDispatchRequestV1>(raw) {
+        return Ok(InternalToolboxDispatchRequestKind::DirectWorldDispatch(
+            request,
+        ));
     }
 
-    let response = handle_internal_toolbox_world_dispatch_request(
-        request.request,
-        startup_context,
-        member_runtimes,
-        agent_printer,
-        telemetry,
-    )
-    .await;
-    let payload = match response {
-        Ok(outcome) => internal_toolbox_success_result_frame(outcome),
-        Err(err) => internal_toolbox_error_result_frame(err.to_string()),
-    };
-    let _ = request.response_tx.send(payload);
+    let request = serde_json::from_str::<HostToolInvocationRequestEnvelopeV1>(raw)
+        .context("expected a world dispatch request or a host tool invocation envelope")?;
+    Ok(InternalToolboxDispatchRequestKind::HostToolInvocation {
+        request,
+        runtime_context: runtime_context.clone(),
+    })
+}
+
+fn internal_toolbox_runtime_dispatch_metadata(
+    runtime_context: &InternalToolboxRuntimeContext,
+    tool_call_id: Option<&str>,
+) -> anyhow::Result<HostToolRuntimeDispatchMetadataV1> {
+    let correlation = tool_call_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let unique = Uuid::new_v4().simple().to_string();
+    let request_id = correlation
+        .clone()
+        .map(|tool_call_id| format!("toolbox-{tool_call_id}"))
+        .unwrap_or_else(|| format!("req_toolbox_{unique}"));
+    let idempotency_key = correlation
+        .map(|tool_call_id| format!("toolbox-{tool_call_id}"))
+        .unwrap_or_else(|| format!("idem_toolbox_{unique}"));
+    Ok(HostToolRuntimeDispatchMetadataV1 {
+        request_id,
+        idempotency_key,
+        orchestration_session_id: runtime_context.orchestration_session_id.clone(),
+        caller_participant_id: runtime_context.caller_participant_id.clone(),
+    })
 }
 
 async fn handle_internal_toolbox_world_dispatch_request(

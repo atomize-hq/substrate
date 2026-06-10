@@ -1,18 +1,20 @@
 #![allow(dead_code)]
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::execution::config_model::AgentExecutionScope;
 
 use super::{
     dispatch_contract::{
         CancelWorldWorkOutcomeV1, CancelWorldWorkTerminalStateV1, ContinueWorldWorkerEventV1,
-        ContinueWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1, RetainedWorkerCancelCloseoutV1,
-        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
-        SpawnWorldWorkerOutcomeV1, StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1,
-        WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldTaskTerminalStateV1,
+        ContinueWorldWorkerOutcomeV1, ForkWorldWorkerOutcomeV1, InspectWorldWorkerOutcomeV1,
+        RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
+        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1,
+        StopWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1, WorldDispatchActionV1,
+        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1, WorldTaskTerminalStateV1,
     },
     mapping::MEMBER_ROLE,
     state_store::AgentRuntimeStateStore,
@@ -84,6 +86,19 @@ impl HostToolNameV1 {
             WorldDispatchActionV1::InspectWorldWorker => Self::InspectWorldWorker,
             WorldDispatchActionV1::CancelWorldWork => Self::CancelWorldWork,
             WorldDispatchActionV1::StopWorldWorker => Self::StopWorldWorker,
+        }
+    }
+
+    pub(crate) fn from_str(raw: &str) -> anyhow::Result<Self> {
+        match raw.trim() {
+            "run_world_task" => Ok(Self::RunWorldTask),
+            "spawn_world_worker" => Ok(Self::SpawnWorldWorker),
+            "fork_world_worker" => Ok(Self::ForkWorldWorker),
+            "continue_world_worker" => Ok(Self::ContinueWorldWorker),
+            "inspect_world_worker" => Ok(Self::InspectWorldWorker),
+            "cancel_world_work" => Ok(Self::CancelWorldWork),
+            "stop_world_worker" => Ok(Self::StopWorldWorker),
+            other => bail!("unknown_host_tool: unsupported tool_name {other:?}"),
         }
     }
 
@@ -218,6 +233,21 @@ pub(crate) struct HostToolSpawnWorldWorkerReceiptV1 {
     pub world_id: String,
     pub world_generation: u64,
     pub launch_span_id: String,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolForkWorldWorkerReceiptV1 {
+    pub request_id: String,
+    pub orchestration_session_id: String,
+    pub action: WorldDispatchActionV1,
+    pub mode: WorldDispatchModeV1,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub source_participant_id: String,
+    pub target_backend_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
     pub summary: String,
 }
 
@@ -506,16 +536,43 @@ impl HostToolRuntimeWorldBindingV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct RunWorldTaskToolCallV1 {
     pub target_backend_id: String,
     pub payload: TaskPayloadV1,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct SpawnWorldWorkerToolCallV1 {
     pub target_backend_id: String,
     pub payload: WorkerSpawnPayloadV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct HostToolInvocationRequestEnvelopeV1 {
+    #[serde(default = "host_tool_contract_version_v1")]
+    pub version: u32,
+    pub tool_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(default)]
+    pub arguments: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+struct HostToolFollowUpArgumentsV1<P> {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    task_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    participant_id: Option<String>,
+    payload: P,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TranslatedHostToolInvocationV1 {
+    pub tool_name: HostToolNameV1,
+    pub dispatch_request: WorldDispatchRequestV1,
+    pub tool_call_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -535,6 +592,10 @@ struct BuildDispatchRequestArgsV1 {
     task_run_id: Option<String>,
     target_participant_id: Option<String>,
     payload: WorldDispatchPayloadV1,
+}
+
+fn host_tool_contract_version_v1() -> u32 {
+    1
 }
 
 pub(crate) fn translate_run_world_task_to_internal_dispatch_request_v1(
@@ -617,6 +678,40 @@ pub(crate) fn normalize_spawn_world_worker_receipt_v1(
         world_id: outcome.world_id.clone(),
         world_generation: outcome.world_generation,
         launch_span_id: outcome.launch_span_id.clone(),
+        summary: outcome.summary.clone(),
+    })
+}
+
+pub(crate) fn normalize_fork_world_worker_receipt_v1(
+    outcome: &ForkWorldWorkerOutcomeV1,
+) -> anyhow::Result<HostToolForkWorldWorkerReceiptV1> {
+    ensure_expected_mode(
+        outcome.action,
+        outcome.mode,
+        WorldDispatchModeV1::Retained,
+        "exact retained-worker receipt",
+    )?;
+    Ok(HostToolForkWorldWorkerReceiptV1 {
+        request_id: outcome.request_id.clone(),
+        orchestration_session_id: outcome.orchestration_session_id.clone(),
+        action: outcome.action,
+        mode: outcome.mode,
+        participant_id: canonicalize_required_identity_value(
+            "child_participant_id",
+            Some(&outcome.child_participant_id),
+            "fork_world_worker",
+            "exact retained-worker receipt",
+        )?,
+        orchestrator_participant_id: outcome.orchestrator_participant_id.clone(),
+        source_participant_id: canonicalize_required_identity_value(
+            "source_participant_id",
+            Some(&outcome.source_participant_id),
+            "fork_world_worker",
+            "exact source retained-worker linkage",
+        )?,
+        target_backend_id: outcome.target_backend_id.clone(),
+        world_id: outcome.world_id.clone(),
+        world_generation: outcome.world_generation,
         summary: outcome.summary.clone(),
     })
 }
@@ -953,6 +1048,174 @@ fn build_dispatch_request_v1(
     };
     request.clone().validate()?;
     Ok(request)
+}
+
+pub(crate) fn authoritative_world_binding_for_session_v1(
+    session: &crate::execution::agent_runtime::OrchestrationSessionRecord,
+) -> anyhow::Result<HostToolRuntimeWorldBindingV1> {
+    authoritative_world_binding(session)
+}
+
+pub(crate) fn translate_host_tool_invocation_request_to_internal_dispatch_request_v1(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    world_binding: &HostToolRuntimeWorldBindingV1,
+    request: HostToolInvocationRequestEnvelopeV1,
+) -> anyhow::Result<TranslatedHostToolInvocationV1> {
+    if request.version != host_tool_contract_version_v1() {
+        bail!(
+            "unsupported_host_toolbox_version: expected version {} but received {}",
+            host_tool_contract_version_v1(),
+            request.version
+        );
+    }
+
+    let tool_name = HostToolNameV1::from_str(&request.tool_name)?;
+    let dispatch_request = match tool_name {
+        HostToolNameV1::RunWorldTask => {
+            let call =
+                decode_tool_arguments_v1::<RunWorldTaskToolCallV1>(tool_name, request.arguments)?;
+            translate_run_world_task_to_internal_dispatch_request_v1(metadata, world_binding, call)?
+        }
+        HostToolNameV1::SpawnWorldWorker => {
+            let call = decode_tool_arguments_v1::<SpawnWorldWorkerToolCallV1>(
+                tool_name,
+                request.arguments,
+            )?;
+            translate_spawn_world_worker_to_internal_dispatch_request_v1(
+                metadata,
+                world_binding,
+                call,
+            )?
+        }
+        HostToolNameV1::ForkWorldWorker => translate_follow_up_arguments_v1(
+            store,
+            metadata,
+            tool_name,
+            request.arguments,
+            WorldDispatchPayloadV1::WorkerFork,
+        )?,
+        HostToolNameV1::ContinueWorldWorker => translate_follow_up_arguments_v1(
+            store,
+            metadata,
+            tool_name,
+            request.arguments,
+            WorldDispatchPayloadV1::WorkerContinue,
+        )?,
+        HostToolNameV1::InspectWorldWorker => translate_follow_up_arguments_v1(
+            store,
+            metadata,
+            tool_name,
+            request.arguments,
+            WorldDispatchPayloadV1::WorkerInspect,
+        )?,
+        HostToolNameV1::CancelWorldWork => translate_follow_up_arguments_v1(
+            store,
+            metadata,
+            tool_name,
+            request.arguments,
+            WorldDispatchPayloadV1::WorkerCancel,
+        )?,
+        HostToolNameV1::StopWorldWorker => translate_follow_up_arguments_v1(
+            store,
+            metadata,
+            tool_name,
+            request.arguments,
+            WorldDispatchPayloadV1::WorkerStop,
+        )?,
+    };
+
+    Ok(TranslatedHostToolInvocationV1 {
+        tool_name,
+        dispatch_request,
+        tool_call_id: canonicalize_handle_value("tool_call_id", request.tool_call_id.as_deref())?,
+    })
+}
+
+pub(crate) fn normalize_host_tool_invocation_outcome_v1(
+    tool_name: HostToolNameV1,
+    outcome: &WorldDispatchOutcomeV1,
+) -> anyhow::Result<Value> {
+    match (tool_name, outcome) {
+        (HostToolNameV1::RunWorldTask, WorldDispatchOutcomeV1::RunWorldTask(run)) => {
+            serde_json::to_value(normalize_run_world_task_receipt_v1(run)?)
+                .context("serialize normalized run_world_task receipt")
+        }
+        (HostToolNameV1::SpawnWorldWorker, WorldDispatchOutcomeV1::SpawnWorldWorker(spawn)) => {
+            serde_json::to_value(normalize_spawn_world_worker_receipt_v1(spawn)?)
+                .context("serialize normalized spawn_world_worker receipt")
+        }
+        (HostToolNameV1::ForkWorldWorker, WorldDispatchOutcomeV1::ForkWorldWorker(fork)) => {
+            serde_json::to_value(normalize_fork_world_worker_receipt_v1(fork)?)
+                .context("serialize normalized fork_world_worker receipt")
+        }
+        (
+            HostToolNameV1::ContinueWorldWorker,
+            WorldDispatchOutcomeV1::ContinueWorldWorker(continue_outcome),
+        ) => serde_json::to_value(normalize_continue_world_worker_outcome_v1(
+            continue_outcome,
+        )?)
+        .context("serialize normalized continue_world_worker outcome"),
+        (
+            HostToolNameV1::InspectWorldWorker,
+            WorldDispatchOutcomeV1::InspectWorldWorker(inspect),
+        ) => serde_json::to_value(normalize_inspect_world_worker_outcome_v1(inspect)?)
+            .context("serialize normalized inspect_world_worker outcome"),
+        (HostToolNameV1::CancelWorldWork, WorldDispatchOutcomeV1::CancelWorldWork(cancel)) => {
+            serde_json::to_value(normalize_cancel_world_work_outcome_v1(cancel)?)
+                .context("serialize normalized cancel_world_work outcome")
+        }
+        (HostToolNameV1::StopWorldWorker, WorldDispatchOutcomeV1::StopWorldWorker(stop)) => {
+            serde_json::to_value(normalize_stop_world_worker_outcome_v1(stop)?)
+                .context("serialize normalized stop_world_worker outcome")
+        }
+        _ => bail!(
+            "host_tool_outcome_mismatch: tool {} received incompatible internal outcome",
+            tool_name.as_str()
+        ),
+    }
+}
+
+fn decode_tool_arguments_v1<T>(tool_name: HostToolNameV1, arguments: Value) -> anyhow::Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    serde_json::from_value(arguments).with_context(|| {
+        format!(
+            "invalid_tool_arguments: tool {} received arguments that do not match the frozen contract",
+            tool_name.as_str()
+        )
+    })
+}
+
+fn translate_follow_up_arguments_v1<P>(
+    store: &AgentRuntimeStateStore,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    tool_name: HostToolNameV1,
+    arguments: Value,
+    payload_builder: impl FnOnce(P) -> WorldDispatchPayloadV1,
+) -> anyhow::Result<WorldDispatchRequestV1>
+where
+    P: for<'de> Deserialize<'de>,
+{
+    let call = decode_tool_arguments_v1::<HostToolFollowUpArgumentsV1<P>>(tool_name, arguments)?;
+    let handle = tool_name
+        .contract()
+        .follow_up_handle_requirement
+        .resolve_exact_handle(call.task_run_id.as_deref(), call.participant_id.as_deref())?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing_follow_up_handle: tool {} requires an exact follow-up handle",
+                tool_name.as_str()
+            )
+        })?;
+    translate_follow_up_tool_to_internal_dispatch_request_v1(
+        store,
+        metadata,
+        tool_name,
+        handle,
+        payload_builder(call.payload),
+    )
 }
 
 fn ensure_tool_accepts_follow_up_handle(

@@ -96,7 +96,9 @@ pub(crate) fn compose_prompt_with_host_toolbox_contract(prompt: &str) -> String 
         "{HOST_TOOLBOX_PROMPT_PREAMBLE}
 - The runtime exports {SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_ENV} plus {SUBSTRATE_AGENT_TOOLBOX_VERSION_ENV}={HOST_TOOLBOX_CONTRACT_VERSION_V1}.
 - Available tools: {tool_names}.
+- Call the endpoint with versioned host-tool requests that provide only tool arguments; Substrate injects request_id, idempotency_key, orchestration_session_id, caller_participant_id, world_id, and world_generation before dispatch.
 - Fresh requests: run_world_task uses target_backend_id plus task payload and returns task_run_id; spawn_world_worker uses target_backend_id plus worker payload and returns participant_id.
+- Retained allocation receipts: fork_world_worker returns the child retained-worker participant_id plus explicit source_participant_id lineage.
 - Retained follow-ups: fork_world_worker, continue_world_worker, and stop_world_worker require the exact retained-worker participant_id.
 - Mixed follow-ups: inspect_world_worker and cancel_world_work require exactly one exact handle: task_run_id for an active task or participant_id for a retained worker.
 - Do not provide runtime-owned fields. Substrate injects request_id, idempotency_key, orchestration_session_id, caller_participant_id, world_id, and world_generation.
