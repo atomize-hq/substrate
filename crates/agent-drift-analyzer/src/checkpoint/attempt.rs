@@ -443,7 +443,6 @@ fn output_contains_compile_blocker(output: &str) -> bool {
         "failed to compile",
         "compilation failed",
         "error[",
-        "error:",
         "cannot find",
         "unresolved import",
     ]
@@ -1292,6 +1291,33 @@ mod tests {
             verification[0].exercise_state,
             ExerciseState::TargetExercised
         );
+    }
+
+    #[test]
+    fn checkpoints_leave_truncated_runtime_failure_text_unknown_without_execution_evidence() {
+        let cases = [
+            (
+                "pytest tests/checkpoints_test.py::test_pairing",
+                "Exit code: 1\nAssertionError: expected progress",
+            ),
+            (
+                "vitest run tests/foo.test.ts",
+                "Exit code: 1\nTypeError: expected 2",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            let verification = build_verification_attempts(&attempts, &rows);
+
+            assert_eq!(verification.len(), 1);
+            assert_eq!(verification[0].exercise_state, ExerciseState::Unknown);
+        }
     }
 
     #[test]
