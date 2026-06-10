@@ -537,18 +537,21 @@ impl HostToolRuntimeWorldBindingV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct RunWorldTaskToolCallV1 {
     pub target_backend_id: String,
     pub payload: TaskPayloadV1,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct SpawnWorldWorkerToolCallV1 {
     pub target_backend_id: String,
     pub payload: WorkerSpawnPayloadV1,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct HostToolInvocationRequestEnvelopeV1 {
     #[serde(default = "host_tool_contract_version_v1")]
     pub version: u32,
@@ -560,6 +563,7 @@ pub(crate) struct HostToolInvocationRequestEnvelopeV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 struct HostToolFollowUpArgumentsV1<P> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     task_run_id: Option<String>,
@@ -1178,14 +1182,27 @@ pub(crate) fn normalize_host_tool_invocation_outcome_v1(
 
 fn decode_tool_arguments_v1<T>(tool_name: HostToolNameV1, arguments: Value) -> anyhow::Result<T>
 where
-    T: for<'de> Deserialize<'de>,
+    T: for<'de> Deserialize<'de> + Serialize,
 {
-    serde_json::from_value(arguments).with_context(|| {
+    let decoded: T = serde_json::from_value(arguments.clone()).with_context(|| {
         format!(
             "invalid_tool_arguments: tool {} received arguments that do not match the frozen contract",
             tool_name.as_str()
         )
-    })
+    })?;
+    let normalized = serde_json::to_value(&decoded).with_context(|| {
+        format!(
+            "invalid_tool_arguments: tool {} failed to re-serialize decoded arguments for exact contract comparison",
+            tool_name.as_str()
+        )
+    })?;
+    if normalized != arguments {
+        bail!(
+            "invalid_tool_arguments: tool {} received arguments that do not match the frozen contract",
+            tool_name.as_str()
+        );
+    }
+    Ok(decoded)
 }
 
 fn translate_follow_up_arguments_v1<P>(
@@ -1196,7 +1213,7 @@ fn translate_follow_up_arguments_v1<P>(
     payload_builder: impl FnOnce(P) -> WorldDispatchPayloadV1,
 ) -> anyhow::Result<WorldDispatchRequestV1>
 where
-    P: for<'de> Deserialize<'de>,
+    P: for<'de> Deserialize<'de> + Serialize,
 {
     let call = decode_tool_arguments_v1::<HostToolFollowUpArgumentsV1<P>>(tool_name, arguments)?;
     let handle = tool_name
@@ -1284,11 +1301,13 @@ mod tests {
         normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
         normalize_stop_world_worker_outcome_v1, resolve_follow_up_dispatch_authority_v1,
         translate_follow_up_tool_to_internal_dispatch_request_v1,
+        translate_host_tool_invocation_request_to_internal_dispatch_request_v1,
         translate_run_world_task_to_internal_dispatch_request_v1,
         translate_spawn_world_worker_to_internal_dispatch_request_v1,
         HostToolFollowUpHandleRequirementV1, HostToolFollowUpHandleV1,
-        HostToolModelArgumentFamilyV1, HostToolNameV1, HostToolRuntimeDispatchMetadataV1,
-        HostToolRuntimeWorldBindingV1, RunWorldTaskToolCallV1, SpawnWorldWorkerToolCallV1,
+        HostToolInvocationRequestEnvelopeV1, HostToolModelArgumentFamilyV1, HostToolNameV1,
+        HostToolRuntimeDispatchMetadataV1, HostToolRuntimeWorldBindingV1, RunWorldTaskToolCallV1,
+        SpawnWorldWorkerToolCallV1,
     };
     use crate::execution::agent_runtime::dispatch_contract::{
         CancelWorldWorkOutcomeV1, ContinueWorldWorkerEventClassV1, ContinueWorldWorkerEventV1,
@@ -1610,6 +1629,91 @@ mod tests {
         assert!(request.task_run_id.is_none());
         assert!(request.target_participant_id.is_none());
         assert_eq!(validated.target_backend_id, "cli:claude_code_world");
+    }
+
+    #[test]
+    fn dispatch_contract_adapter_rejects_host_tool_envelope_unknown_top_level_fields() {
+        let err =
+            serde_json::from_value::<HostToolInvocationRequestEnvelopeV1>(serde_json::json!({
+                "version": 1,
+                "tool_name": "run_world_task",
+                "tool_call_id": "call-packet3",
+                "arguments": {
+                    "target_backend_id": "cli:codex_world",
+                    "payload": {
+                        "prompt": "Run the task."
+                    }
+                },
+                "request_id": "runtime-owned"
+            }))
+            .expect_err("host tool envelope must fail closed on unknown top-level fields");
+
+        assert!(
+            err.to_string().contains("unknown field `request_id`"),
+            "unexpected serde error for unknown host-tool envelope field: {err}"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_rejects_unknown_runtime_owned_argument_keys_for_run_world_task() {
+        with_store(|store| {
+            let err = translate_host_tool_invocation_request_to_internal_dispatch_request_v1(
+                store,
+                &sample_runtime_metadata(),
+                &sample_world_binding(),
+                HostToolInvocationRequestEnvelopeV1 {
+                    version: 1,
+                    tool_name: "run_world_task".to_string(),
+                    tool_call_id: Some("call-packet3-run".to_string()),
+                    arguments: serde_json::json!({
+                        "target_backend_id": "cli:codex_world",
+                        "payload": {
+                            "prompt": "Run the task."
+                        },
+                        "world_id": "runtime-owned-field-must-be-rejected"
+                    }),
+                },
+            )
+            .expect_err(
+                "run_world_task bridge must fail closed on unknown/runtime-owned argument keys",
+            );
+
+            assert_eq!(
+                err.to_string(),
+                "invalid_tool_arguments: tool run_world_task received arguments that do not match the frozen contract"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_rejects_unknown_nested_payload_keys_for_run_world_task() {
+        with_store(|store| {
+            let err = translate_host_tool_invocation_request_to_internal_dispatch_request_v1(
+                store,
+                &sample_runtime_metadata(),
+                &sample_world_binding(),
+                HostToolInvocationRequestEnvelopeV1 {
+                    version: 1,
+                    tool_name: "run_world_task".to_string(),
+                    tool_call_id: Some("call-packet3-run-nested".to_string()),
+                    arguments: serde_json::json!({
+                        "target_backend_id": "cli:codex_world",
+                        "payload": {
+                            "prompt": "Run the task.",
+                            "world_generation": 99
+                        }
+                    }),
+                },
+            )
+            .expect_err("run_world_task bridge must fail closed on unknown nested payload keys");
+
+            assert_eq!(
+                err.to_string(),
+                "invalid_tool_arguments: tool run_world_task received arguments that do not match the frozen contract"
+            );
+        });
     }
 
     #[test]
