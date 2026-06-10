@@ -83,6 +83,11 @@ fn parent_visible_orchestration_progress(
     ) {
         return None;
     }
+    if archetype_label == SessionArchetypeLabel::Planning
+        && !plan_artifact_edits(analysis).is_empty()
+    {
+        return None;
+    }
 
     let orchestration_attempts = parent_visible_orchestration_attempts(analysis);
     let synthesis_attempts = parent_visible_synthesis_attempts(analysis);
@@ -1229,10 +1234,7 @@ fn objective_or_truth_artifacts_shifted(
     let newer_truth = working_set(&newer.current.task_frame.truth_artifacts);
     let older_truth = working_set(&older.current.task_frame.truth_artifacts);
     let truth_shifted = sets_mostly_unrelated(&newer_truth, &older_truth);
-    let objective_shifted = normalize_task_text(&newer.current.task_frame.objective)
-        != normalize_task_text(&older.current.task_frame.objective);
-
-    truth_shifted || (objective_shifted && truth_shifted)
+    truth_shifted || material_objective_delta(newer, older)
 }
 
 fn working_set_pivoted(newer: &CheckpointAnalysis, older: &CheckpointAnalysis) -> bool {
@@ -1255,6 +1257,66 @@ fn normalize_task_text(text: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_ascii_lowercase()
+}
+
+fn material_objective_delta(newer: &CheckpointAnalysis, older: &CheckpointAnalysis) -> bool {
+    if !newer.task_frame_delta.task_frame_transitioned {
+        return false;
+    }
+    if objective_continues_current_line_of_work(&newer.current.task_frame.objective) {
+        return false;
+    }
+
+    let newer_terms = objective_terms(&newer.current.task_frame.objective);
+    let older_terms = objective_terms(&older.current.task_frame.objective);
+    if newer_terms.is_empty() || older_terms.is_empty() {
+        return false;
+    }
+
+    sets_mostly_unrelated(&newer_terms, &older_terms)
+}
+
+fn objective_continues_current_line_of_work(text: &str) -> bool {
+    let normalized = normalize_task_text(text);
+    [
+        "same",
+        "re-run",
+        "rerun",
+        "follow-up",
+        "latest",
+        "continue",
+        "again",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
+}
+
+fn objective_terms(text: &str) -> BTreeSet<String> {
+    text.split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter_map(|term| {
+            let normalized = term.to_ascii_lowercase();
+            (normalized.len() >= 3
+                && !matches!(
+                    normalized.as_str(),
+                    "the"
+                        | "and"
+                        | "for"
+                        | "with"
+                        | "into"
+                        | "from"
+                        | "that"
+                        | "this"
+                        | "while"
+                        | "without"
+                        | "same"
+                        | "keep"
+                        | "packet"
+                        | "scope"
+                        | "goal"
+                ))
+            .then_some(normalized)
+        })
+        .collect()
 }
 
 fn attempts_are_comparable(left: &VerificationAttempt, right: &VerificationAttempt) -> bool {

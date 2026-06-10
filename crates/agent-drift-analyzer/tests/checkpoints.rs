@@ -1405,18 +1405,24 @@ AssertionError: expected advancing"#,
 }
 
 #[test]
-fn checkpoints_keep_parent_owned_planning_progress_out_of_orchestration_fallback() {
+fn checkpoints_keep_visible_child_result_plus_parent_plan_refinement_in_planning() {
     let result = analyze_custom_rows(vec![
         prompt_row(
             0,
             "turn-001",
             "/goal Coordinate delegated findings while refining the packet plan myself.",
         ),
-        tool_call_row(1, "turn-001", "spawn_agent", r#"{"goal":"inspect packet R5-4"}"#),
-        developer_row(
+        tool_call_row(
+            1,
+            "turn-001",
+            "spawn_agent",
+            r#"{"goal":"inspect packet R5-4"}"#,
+        ),
+        tool_call_row(
             2,
             "turn-001",
-            "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
+            "functions.shell_command",
+            r#"{"command":"printf 'child rollout ' && sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl","workdir":"/repo"}"#,
         ),
         tool_call_row(
             3,
@@ -1442,10 +1448,11 @@ PATCH","workdir":"/repo"}"#,
         .expect("session progress");
 
     assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
-    assert!(matches!(
-        progress.status,
-        ProgressStatus::Advancing | ProgressStatus::InsufficientEvidence
-    ));
+    assert_progress_signal(progress, ProgressSignalCode::PlanArtifactCreated);
+    assert_ne!(
+        progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
 }
 
 #[test]
@@ -2493,6 +2500,88 @@ PATCH","workdir":"/repo"}"#,
         ),
         tool_output_row(
             7,
+            "turn-003",
+            r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+    assert!(!progress.signals.iter().any(|signal| {
+        signal.code == ProgressSignalCode::FailureSignatureRepeated
+            || signal.code == ProgressSignalCode::PreviouslyCleanScopeBroken
+    }));
+}
+
+#[test]
+fn checkpoints_reset_comparability_after_a_material_objective_pivot_without_replan_keywords() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot checkpoints::captures_progress without changing scope.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/progress.rs","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+        ),
+        prompt_row(
+            4,
+            "turn-002",
+            "/goal Document the reviewer-facing progress-window rationale for packet R5-4.",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/progress.rs","workdir":"/repo"}"#,
+        ),
+        prompt_row(
+            6,
+            "turn-003",
+            "/goal Keep documenting the reviewer-facing progress-window rationale for packet R5-4.",
+        ),
+        tool_call_row(
+            7,
+            "turn-003",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            8,
             "turn-003",
             r#"Exit code: 101
 running 1 test
