@@ -206,15 +206,23 @@ pub(crate) fn classify_edit_overlap(
         .chain(current_signature.failing_tests.iter())
         .cloned()
         .collect::<BTreeSet<_>>();
+    let scope_symbols = previous_signature
+        .failing_symbols
+        .iter()
+        .chain(current_signature.failing_symbols.iter())
+        .cloned()
+        .chain(
+            scope_tests
+                .iter()
+                .flat_map(|test| test_scope_tokens(test).into_iter()),
+        )
+        .collect::<BTreeSet<_>>();
 
     let mut strongest = EditOverlapStrength::None;
     let mut edit_evidence = Vec::new();
 
-    for edit in edits
-        .iter()
-        .filter(|attempt| attempt.role == CommandAttemptRole::Edit)
-    {
-        let overlap = overlap_for_edit(edit, &scope_paths, &scope_tests);
+    for edit in edits.iter().filter(|attempt| is_write_attempt(attempt)) {
+        let overlap = overlap_for_edit(edit, &scope_paths, &scope_tests, &scope_symbols);
         if overlap > strongest {
             strongest = overlap;
             edit_evidence.clear();
@@ -788,6 +796,7 @@ fn overlap_for_edit(
     edit: &CommandAttempt,
     failing_paths: &BTreeSet<String>,
     failing_tests: &BTreeSet<String>,
+    failing_symbols: &BTreeSet<String>,
 ) -> EditOverlapStrength {
     if edit
         .paths
@@ -805,6 +814,7 @@ fn overlap_for_edit(
                 .iter()
                 .filter_map(|test| normalize_path_token(test))
                 .any(|test_path| same_counterpart_scope(path, &test_path))
+            || path_matches_symbol(path, failing_symbols)
     }) {
         return EditOverlapStrength::Moderate;
     }
@@ -818,6 +828,15 @@ fn overlap_for_edit(
     }
 
     EditOverlapStrength::None
+}
+
+fn is_write_attempt(attempt: &CommandAttempt) -> bool {
+    matches!(
+        attempt.role,
+        CommandAttemptRole::Edit
+            | CommandAttemptRole::FormatWrite
+            | CommandAttemptRole::DependencyMutation
+    ) || (attempt.role == CommandAttemptRole::Unknown && !attempt.paths.is_empty())
 }
 
 fn comparable_frontier(left: FailureClass, right: FailureClass) -> bool {
@@ -962,6 +981,11 @@ fn same_counterpart_scope(left: &str, right: &str) -> bool {
             == normalize_counterpart_stem(&file_stem(right))
 }
 
+fn path_matches_symbol(path: &str, symbols: &BTreeSet<String>) -> bool {
+    let normalized = normalize_counterpart_stem(&file_stem(path));
+    symbols.iter().any(|symbol| normalized == *symbol)
+}
+
 fn normalize_counterpart_stem(stem: &str) -> String {
     stem.replace("_test", "")
         .replace(".test", "")
@@ -969,6 +993,20 @@ fn normalize_counterpart_stem(stem: &str) -> String {
         .replace("_spec", "")
         .replace(".spec", "")
         .replace("-spec", "")
+}
+
+fn test_scope_tokens(test: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let parts = test.split("::").collect::<Vec<_>>();
+    if parts.len() > 1 {
+        for token in &parts[..parts.len() - 1] {
+            let normalized = normalize_counterpart_stem(token);
+            if !normalized.is_empty() {
+                tokens.push(normalized);
+            }
+        }
+    }
+    tokens
 }
 
 fn crate_root(path: &str) -> String {
@@ -1254,6 +1292,46 @@ mod tests {
         let none = classify_edit_overlap(&previous, &current, &[unrelated_edit]);
         assert_eq!(none.strength, EditOverlapStrength::None);
         assert!(none.evidence.is_empty());
+    }
+
+    #[test]
+    fn checkpoints_classify_edit_overlap_for_write_attempts_and_test_symbol_scope() {
+        let previous = verification_attempt(
+            1,
+            10,
+            diagnostic_signature(
+                VerifierKind::CargoTest,
+                FailureClass::AssertionOrGolden,
+                Some("pkg:agent-drift-analyzer|test:checkpoints".to_string()),
+                Vec::new(),
+                vec!["checkpoints::captures_progress".to_string()],
+                "before",
+            ),
+        );
+        let current = verification_attempt(
+            2,
+            20,
+            diagnostic_signature(
+                VerifierKind::CargoTest,
+                FailureClass::AssertionOrGolden,
+                Some("pkg:agent-drift-analyzer|test:checkpoints".to_string()),
+                Vec::new(),
+                vec!["checkpoints::captures_progress".to_string()],
+                "after",
+            ),
+        );
+
+        let format_write = test_attempt(
+            3,
+            15,
+            "cargo fmt --all",
+            CommandAttemptRole::FormatWrite,
+            vec!["crates/agent-drift-analyzer/tests/checkpoints.rs".to_string()],
+        );
+
+        let overlap = classify_edit_overlap(&previous, &current, &[format_write]);
+        assert_eq!(overlap.strength, EditOverlapStrength::Moderate);
+        assert_eq!(overlap.evidence.len(), 3);
     }
 
     fn diagnostic_signature(
