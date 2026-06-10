@@ -1013,7 +1013,7 @@ fn format_checkpoint_progress(progress: Option<&SessionProgress>) -> String {
         format_progress_dimension(progress.dimension),
         format_confidence(progress.confidence),
         format_progress_support(progress),
-        format_archetype_evidence(&progress.counter_evidence)
+        format_progress_evidence(&progress.counter_evidence)
     )
 }
 
@@ -1125,28 +1125,86 @@ fn format_progress_support(progress: &SessionProgress) -> String {
     const DISPLAY_LIMIT: usize = 2;
     const SUMMARY_LIMIT: usize = 64;
 
-    let mut summaries = progress
-        .signals
-        .iter()
-        .map(|signal| truncate_for_summary(&signal.summary, SUMMARY_LIMIT))
-        .fold(Vec::<String>::new(), |mut acc, summary| {
-            if acc.iter().all(|existing| existing != &summary) {
-                acc.push(summary);
-            }
-            acc
-        });
-
-    if summaries.is_empty() {
-        return format_archetype_evidence(&progress.supporting_evidence);
+    if progress.signals.is_empty() {
+        return format_progress_evidence(&progress.supporting_evidence);
     }
 
-    let remaining = summaries.len().saturating_sub(DISPLAY_LIMIT);
-    summaries.truncate(DISPLAY_LIMIT);
+    format_compact_items(
+        progress.signals.iter().map(|signal| signal.summary.as_str()),
+        DISPLAY_LIMIT,
+        SUMMARY_LIMIT,
+    )
+}
+
+fn format_progress_evidence(evidence: &[crate::checkpoint::EvidenceRef]) -> String {
+    const DISPLAY_LIMIT: usize = 2;
+    const REASON_LIMIT: usize = 64;
+
+    format_compact_items(
+        evidence.iter().map(|item| item.reason.as_str()),
+        DISPLAY_LIMIT,
+        REASON_LIMIT,
+    )
+}
+
+fn format_compact_items<'a>(
+    items: impl IntoIterator<Item = &'a str>,
+    display_limit: usize,
+    summary_limit: usize,
+) -> String {
+    let mut unique_items = Vec::<String>::new();
+    for item in items {
+        if unique_items.iter().all(|existing| existing != item) {
+            unique_items.push(item.to_string());
+        }
+    }
+
+    if unique_items.is_empty() {
+        return "none".to_string();
+    }
+
+    let visible_count = unique_items.len().min(display_limit);
+    let mut displayed = disambiguate_truncated_items(&unique_items[..visible_count], summary_limit);
+    let remaining = unique_items.len().saturating_sub(display_limit);
     if remaining > 0 {
-        summaries.push(format!("+{remaining} more"));
+        displayed.push(format!("+{remaining} more"));
     }
 
-    summaries.join("; ")
+    displayed.join("; ")
+}
+
+fn disambiguate_truncated_items(items: &[String], summary_limit: usize) -> Vec<String> {
+    if items.is_empty() {
+        return Vec::new();
+    }
+
+    let mut prefix_len = summary_limit.saturating_sub(3);
+    let max_prefix_len = items
+        .iter()
+        .map(|item| item.chars().count())
+        .max()
+        .unwrap_or(prefix_len);
+
+    loop {
+        let rendered = items
+            .iter()
+            .map(|item| truncate_for_summary_with_prefix(item, prefix_len))
+            .collect::<Vec<_>>();
+        let unique_rendered = rendered.iter().cloned().collect::<BTreeSet<_>>();
+        if unique_rendered.len() == rendered.len() || prefix_len >= max_prefix_len {
+            return rendered;
+        }
+        prefix_len += 1;
+    }
+}
+
+fn truncate_for_summary_with_prefix(text: &str, prefix_len: usize) -> String {
+    if text.chars().count() <= prefix_len {
+        return text.to_string();
+    }
+
+    let truncated = text.chars().take(prefix_len).collect::<String>();
+    format!("{truncated}...")
 }
 
 fn truncate_for_summary(text: &str, limit: usize) -> String {

@@ -371,6 +371,76 @@ fn export_bundle_renders_unavailable_progress_for_legacy_checkpoint_surfaces() {
 }
 
 #[test]
+fn export_bundle_keeps_same_prefix_progress_support_and_counter_items_distinct() {
+    let session = fixture_session(
+        "session-progress-distinct",
+        vec![fixture_row(
+            "session-progress-distinct",
+            0,
+            CompactionKind::UserMessage,
+            "/goal Inspect Packet R5-5 progress rendering only.",
+            Some(UserMessageRole::Prompt),
+        )],
+    );
+    let mut checkpoint = fixture_checkpoint_with_archetype(
+        &session,
+        1,
+        0,
+        Confidence::Medium,
+        SessionArchetype {
+            label: SessionArchetypeLabel::Troubleshooting,
+            confidence: Confidence::Medium,
+            supporting_evidence: Vec::new(),
+            counter_evidence: Vec::new(),
+        },
+    );
+    let support_prefix = "s".repeat(61);
+    let counter_prefix = "c".repeat(61);
+    let support_a = format!("{support_prefix}A long support detail stays distinct");
+    let support_b = format!("{support_prefix}B long support detail stays distinct");
+    let counter_a = format!("{counter_prefix}A long counter detail stays distinct");
+    let counter_b = format!("{counter_prefix}B long counter detail stays distinct");
+    checkpoint.schema_version = "v0.6".to_string();
+    checkpoint.session_progress = Some(SessionProgress {
+        status: ProgressStatus::Mixed,
+        dimension: ProgressDimension::TroubleshootingFrontier,
+        confidence: Confidence::Medium,
+        signals: vec![
+            progress_signal(&support_a),
+            progress_signal(&support_b),
+            progress_signal("short support overflow item"),
+        ],
+        supporting_evidence: Vec::new(),
+        counter_evidence: vec![
+            EvidenceRef {
+                row: RowRef::from_row(&session.compact_rows[0]),
+                reason: counter_a.clone(),
+            },
+            EvidenceRef {
+                row: RowRef::from_row(&session.compact_rows[0]),
+                reason: counter_b.clone(),
+            },
+            EvidenceRef {
+                row: RowRef::from_row(&session.compact_rows[0]),
+                reason: "short counter overflow item".to_string(),
+            },
+        ],
+    });
+
+    let summary = export_summary(vec![session], vec![checkpoint]);
+    let progress_line = summary
+        .lines()
+        .find(|line| line.contains("  progress: `status=mixed"))
+        .expect("progress line");
+
+    assert!(progress_line.contains(&format!("{}A...", "s".repeat(61))));
+    assert!(progress_line.contains(&format!("{}B...", "s".repeat(61))));
+    assert!(progress_line.contains(&format!("{}A...", "c".repeat(61))));
+    assert!(progress_line.contains(&format!("{}B...", "c".repeat(61))));
+    assert_eq!(progress_line.matches("+1 more").count(), 2);
+}
+
+#[test]
 fn export_bundle_distinguishes_many_short_conversational_turns_in_summary() {
     let mut bundle = load_sample_bundle();
     for row in bundle
@@ -1205,6 +1275,18 @@ fn fixture_checkpoint_with_archetype(
     checkpoint
 }
 
+fn progress_signal(summary: &str) -> agent_drift_analyzer::ProgressSignal {
+    agent_drift_analyzer::ProgressSignal {
+        code: agent_drift_analyzer::ProgressSignalCode::FailureSignatureRepeated,
+        polarity: agent_drift_analyzer::SignalPolarity::Mixed,
+        strength: agent_drift_analyzer::SignalStrength::Moderate,
+        summary: summary.to_string(),
+        before: None,
+        after: None,
+        evidence: Vec::new(),
+    }
+}
+
 fn format_optional_metric(metric: Option<f64>) -> String {
     metric
         .map(|value| format!("{value:.2}"))
@@ -1352,60 +1434,73 @@ fn format_progress_dimension(dimension: ProgressDimension) -> &'static str {
 }
 
 fn format_progress_support(progress: &SessionProgress) -> String {
-    let mut summaries = progress
-        .signals
-        .iter()
-        .map(|signal| truncate_for_summary(&signal.summary, 64))
-        .fold(Vec::<String>::new(), |mut acc, summary| {
-            if acc.iter().all(|existing| existing != &summary) {
-                acc.push(summary);
-            }
-            acc
-        });
-
-    if summaries.is_empty() {
+    if progress.signals.is_empty() {
         return format_reasons(&progress.supporting_evidence);
     }
 
-    let remaining = summaries.len().saturating_sub(2);
-    summaries.truncate(2);
-    if remaining > 0 {
-        summaries.push(format!("+{remaining} more"));
-    }
-
-    summaries.join("; ")
+    format_compact_items(progress.signals.iter().map(|signal| signal.summary.as_str()), 2, 64)
 }
 
 fn format_reasons(evidence: &[EvidenceRef]) -> String {
-    if evidence.is_empty() {
+    format_compact_items(evidence.iter().map(|item| item.reason.as_str()), 2, 64)
+}
+
+fn format_compact_items<'a>(
+    items: impl IntoIterator<Item = &'a str>,
+    display_limit: usize,
+    summary_limit: usize,
+) -> String {
+    let mut unique_items = Vec::<String>::new();
+    for item in items {
+        if unique_items.iter().all(|existing| existing != item) {
+            unique_items.push(item.to_string());
+        }
+    }
+
+    if unique_items.is_empty() {
         return "none".to_string();
     }
 
-    let mut reasons = Vec::<String>::new();
-    for item in evidence {
-        if reasons.iter().any(|reason| reason == &item.reason) {
-            continue;
-        }
-        reasons.push(truncate_for_summary(&item.reason, 64));
-    }
-
-    let remaining = reasons.len().saturating_sub(2);
-    reasons.truncate(2);
+    let visible_count = unique_items.len().min(display_limit);
+    let mut displayed = disambiguate_truncated_items(&unique_items[..visible_count], summary_limit);
+    let remaining = unique_items.len().saturating_sub(display_limit);
     if remaining > 0 {
-        reasons.push(format!("+{remaining} more"));
+        displayed.push(format!("+{remaining} more"));
     }
 
-    reasons.join("; ")
+    displayed.join("; ")
 }
 
-fn truncate_for_summary(text: &str, limit: usize) -> String {
-    if text.chars().count() <= limit {
+fn disambiguate_truncated_items(items: &[String], summary_limit: usize) -> Vec<String> {
+    if items.is_empty() {
+        return Vec::new();
+    }
+
+    let mut prefix_len = summary_limit.saturating_sub(3);
+    let max_prefix_len = items
+        .iter()
+        .map(|item| item.chars().count())
+        .max()
+        .unwrap_or(prefix_len);
+
+    loop {
+        let rendered = items
+            .iter()
+            .map(|item| truncate_for_summary_with_prefix(item, prefix_len))
+            .collect::<Vec<_>>();
+        let unique_rendered = rendered.iter().cloned().collect::<BTreeSet<_>>();
+        if unique_rendered.len() == rendered.len() || prefix_len >= max_prefix_len {
+            return rendered;
+        }
+        prefix_len += 1;
+    }
+}
+
+fn truncate_for_summary_with_prefix(text: &str, prefix_len: usize) -> String {
+    if text.chars().count() <= prefix_len {
         return text.to_string();
     }
 
-    let truncated = text
-        .chars()
-        .take(limit.saturating_sub(3))
-        .collect::<String>();
+    let truncated = text.chars().take(prefix_len).collect::<String>();
     format!("{truncated}...")
 }
