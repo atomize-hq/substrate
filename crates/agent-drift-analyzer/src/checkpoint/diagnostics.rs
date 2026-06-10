@@ -903,23 +903,41 @@ fn extract_tests_from_lines(lines: &[String]) -> Vec<String> {
     let mut tests = BTreeSet::new();
     let mut active_js_file = None::<String>;
     let mut active_js_suite = None::<String>;
+    let mut in_rust_failure_listing = false;
 
     for line in lines {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             active_js_suite = None;
+            in_rust_failure_listing = false;
             continue;
+        }
+
+        if trimmed.eq_ignore_ascii_case("failures:") {
+            in_rust_failure_listing = true;
+            continue;
+        }
+        if trimmed.starts_with("test result:") {
+            in_rust_failure_listing = false;
+        }
+
+        if let Some(test_id) = extract_rust_test_name_from_result_line(trimmed)
+            .or_else(|| extract_rust_test_name_from_failure_header(trimmed))
+        {
+            insert_rust_test_id(&mut tests, &test_id);
         }
 
         for token in line.split_whitespace() {
             let cleaned = trim_test_token(token);
-            if cleaned.contains("::") {
+            if extract_pytest_node_id_path(cleaned).is_some() {
                 tests.insert(cleaned.to_string());
                 if let Some(name) = cleaned.rsplit("::").next() {
                     if name.starts_with("test") {
                         tests.insert(name.to_string());
                     }
                 }
+            } else if looks_like_rust_test_id(cleaned, in_rust_failure_listing) {
+                insert_rust_test_id(&mut tests, cleaned);
             } else if looks_like_test_path(cleaned) {
                 tests.insert(cleaned.to_string());
             }
@@ -1061,6 +1079,51 @@ fn insert_js_test_descriptor(tests: &mut BTreeSet<String>, file: Option<&str>, d
     }
 }
 
+fn looks_like_rust_test_id(token: &str, in_failure_listing: bool) -> bool {
+    in_failure_listing && looks_like_rust_identifier_chain(token)
+}
+
+fn looks_like_rust_identifier_chain(token: &str) -> bool {
+    if !token.contains("::") || token.contains('/') || token.contains('.') || token.contains('-') {
+        return false;
+    }
+
+    token.split("::").all(|segment| {
+        !segment.is_empty()
+            && segment
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    })
+}
+
+fn extract_rust_test_name_from_result_line(line: &str) -> Option<String> {
+    let remainder = line.strip_prefix("test ")?;
+    let candidate = remainder.split_whitespace().next()?;
+    looks_like_rust_identifier_chain(candidate).then(|| candidate.to_string())
+}
+
+fn extract_rust_test_name_from_failure_header(line: &str) -> Option<String> {
+    let candidate = line
+        .strip_prefix("---- ")?
+        .strip_suffix(" stdout ----")
+        .or_else(|| line.strip_prefix("---- ")?.strip_suffix(" stderr ----"))?
+        .trim();
+    looks_like_rust_identifier_chain(candidate).then(|| candidate.to_string())
+}
+
+fn insert_rust_test_id(tests: &mut BTreeSet<String>, test_id: &str) {
+    if !looks_like_rust_identifier_chain(test_id) {
+        return;
+    }
+
+    tests.insert(test_id.to_string());
+    if let Some(name) = test_id.rsplit("::").next() {
+        if name.starts_with("test") {
+            tests.insert(name.to_string());
+        }
+    }
+}
+
 fn extract_symbols_from_lines(lines: &[String]) -> Vec<String> {
     let mut symbols = BTreeSet::new();
     for line in lines {
@@ -1116,7 +1179,7 @@ fn scope_overlap(
     current: &DiagnosticSignature,
 ) -> EditOverlapStrength {
     let exact = intersects(&previous.failing_paths, &current.failing_paths)
-        || intersects(&previous.failing_tests, &current.failing_tests)
+        || strong_test_overlap(previous, current)
         || intersects(&previous.failing_symbols, &current.failing_symbols);
     if exact {
         return EditOverlapStrength::Strong;
@@ -1143,6 +1206,32 @@ fn scope_overlap(
     }
 
     EditOverlapStrength::None
+}
+
+fn strong_test_overlap(previous: &DiagnosticSignature, current: &DiagnosticSignature) -> bool {
+    let previous_keys = previous
+        .failing_tests
+        .iter()
+        .filter(|test| qualifies_for_strong_test_overlap(test))
+        .collect::<BTreeSet<_>>();
+    current
+        .failing_tests
+        .iter()
+        .filter(|test| qualifies_for_strong_test_overlap(test))
+        .any(|test| previous_keys.contains(&test))
+}
+
+fn qualifies_for_strong_test_overlap(test: &str) -> bool {
+    looks_like_test_path(test)
+        || extract_pytest_node_id_path(test).is_some()
+        || looks_like_rust_identifier_chain(test)
+        || js_test_descriptor_path(test).is_some()
+}
+
+fn js_test_descriptor_path(test: &str) -> Option<String> {
+    let (candidate, _) = test.split_once(" > ")?;
+    let normalized = normalize_path_token(candidate)?;
+    looks_like_test_path(&normalized).then_some(normalized)
 }
 
 fn matching_target_fingerprint(
@@ -1399,8 +1488,9 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        build_diagnostic_signatures, classify_edit_overlap, match_diagnostic_signatures,
-        normalize_line, DiagnosticMatchKind, EditOverlapStrength, FailureClass,
+        build_diagnostic_signatures, classify_edit_overlap, extract_tests_from_lines,
+        match_diagnostic_signatures, normalize_line, DiagnosticMatchKind, EditOverlapStrength,
+        FailureClass,
     };
     use crate::checkpoint::attempt::{
         AttemptOutcome, CommandAttempt, CommandAttemptRole, ExerciseState, VerificationAttempt,
@@ -1581,6 +1671,17 @@ mod tests {
             FailureClass::ReplayMismatch
         );
         assert_eq!(replay_signature[0].failing_count, Some(1));
+    }
+
+    #[test]
+    fn checkpoints_ignore_non_test_namespace_tokens_when_extracting_tests() {
+        let extracted = extract_tests_from_lines(&[
+            "fixtures/replay/session.json:10:5 InputError::FixtureContractGap: missing field `session_progress`"
+                .to_string(),
+            "error: replay contract mismatch".to_string(),
+        ]);
+
+        assert!(extracted.is_empty());
     }
 
     #[test]
@@ -1970,6 +2071,41 @@ mod tests {
         ] {
             assert!(!signatures[0].failing_tests.contains(&unexpected));
         }
+    }
+
+    #[test]
+    fn checkpoints_do_not_treat_cross_file_js_alias_collisions_as_strong_overlap() {
+        let left = diagnostic_signature(
+            VerifierKind::Vitest,
+            FailureClass::AssertionOrGolden,
+            Some("path:tests/a.test.ts".to_string()),
+            vec!["tests/a.test.ts".to_string()],
+            vec![
+                "tests/a.test.ts".to_string(),
+                "tests/a.test.ts > progress window > rejects stale frontier".to_string(),
+                "progress window > rejects stale frontier".to_string(),
+                "rejects stale frontier".to_string(),
+            ],
+            "hash-a",
+        );
+        let right = diagnostic_signature(
+            VerifierKind::Vitest,
+            FailureClass::AssertionOrGolden,
+            Some("path:tests/b.test.ts".to_string()),
+            vec!["tests/b.test.ts".to_string()],
+            vec![
+                "tests/b.test.ts".to_string(),
+                "tests/b.test.ts > progress window > rejects stale frontier".to_string(),
+                "progress window > rejects stale frontier".to_string(),
+                "rejects stale frontier".to_string(),
+            ],
+            "hash-b",
+        );
+
+        assert_eq!(
+            match_diagnostic_signatures(&left, &right),
+            DiagnosticMatchKind::WeakRelated
+        );
     }
 
     #[test]
