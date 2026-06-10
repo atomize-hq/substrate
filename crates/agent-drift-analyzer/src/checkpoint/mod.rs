@@ -2139,7 +2139,7 @@ mod tests {
                 row(
                     2,
                     CompactionKind::ToolOutput,
-                    "running 1 test\nExit code: 0",
+                    "Exit code: 0\nOutput:\nrunning 1 test",
                 ),
             ],
             compact_rows: vec![
@@ -2156,7 +2156,7 @@ mod tests {
                 row(
                     2,
                     CompactionKind::ToolOutput,
-                    "running 1 test\nExit code: 0",
+                    "Exit code: 0\nOutput:\nrunning 1 test",
                 ),
             ],
         };

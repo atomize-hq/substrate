@@ -206,12 +206,31 @@ fn derive_attempt_outcome(rows: &[&CompactionRow], exit_code: Option<i32>) -> At
 }
 
 fn parse_exit_code(rows: &[&CompactionRow]) -> Option<i32> {
-    rows.iter().find_map(|row| {
-        row.text.lines().find_map(|line| {
-            line.strip_prefix("Exit code: ")
-                .and_then(|value| value.trim().parse::<i32>().ok())
-        })
-    })
+    let mut still_in_header = true;
+
+    for row in rows {
+        for line in row.text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(value) = trimmed.strip_prefix("Exit code: ") {
+                return value.trim().parse::<i32>().ok();
+            }
+            if matches!(trimmed, "Output:") || trimmed.starts_with("Wall time: ") {
+                continue;
+            }
+
+            still_in_header = false;
+            break;
+        }
+
+        if !still_in_header {
+            break;
+        }
+    }
+
+    None
 }
 
 fn normalize_command(command: &str) -> String {
@@ -336,6 +355,13 @@ fn verification_scope(attempt: &CommandAttempt) -> VerificationScope {
             paths.extend(more_paths);
             tests.extend(more_tests);
         }
+        "npm" | "pnpm" | "vitest" | "bun" | "deno"
+            if attempt.role == CommandAttemptRole::Test =>
+        {
+            let (more_paths, more_tests) = js_test_targets(&tokens, &attempt.family);
+            paths.extend(more_paths);
+            tests.extend(more_tests);
+        }
         _ if attempt.role == CommandAttemptRole::Test => {
             tests.extend(generic_test_targets(&tokens, &attempt.family));
         }
@@ -417,30 +443,47 @@ fn output_contains_compile_blocker(output: &str) -> bool {
 }
 
 fn output_shows_test_execution(output: &str, target_scope: &VerificationScope) -> bool {
-    let lower = output.to_ascii_lowercase();
-    if [
-        "running ",
-        "test result:",
-        "failures:",
-        "collected ",
-        "passed",
-        "failed",
-        "ok",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
-    {
-        return true;
-    }
+    let requires_target_match = !(target_scope.paths.is_empty() && target_scope.tests.is_empty());
 
+    output
+        .lines()
+        .map(|line| line.trim().to_ascii_lowercase())
+        .filter(|line| !line.is_empty())
+        .any(|line| {
+            line_has_explicit_test_execution(&line)
+                && (!requires_target_match || line_matches_requested_target(&line, target_scope))
+        })
+}
+
+fn line_has_explicit_test_execution(line: &str) -> bool {
+    line.starts_with("running ")
+        || line.contains("test result:")
+        || line.contains(" ... ok")
+        || line.contains(" ... failed")
+        || line.contains(" ... ignored")
+        || (line.contains("::") && line_has_test_status(line))
+        || (line
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_digit())
+            && line_has_test_status(line))
+}
+
+fn line_matches_requested_target(line: &str, target_scope: &VerificationScope) -> bool {
     target_scope
         .tests
         .iter()
-        .any(|test| lower.contains(&test.to_ascii_lowercase()))
+        .any(|test| line.contains(&test.to_ascii_lowercase()))
         || target_scope
             .paths
             .iter()
-            .any(|path| lower.contains(&path.to_ascii_lowercase()))
+            .any(|path| line.contains(&path.to_ascii_lowercase()))
+}
+
+fn line_has_test_status(line: &str) -> bool {
+    [" passed", " failed", " skipped", " xfailed", " xpassed"]
+        .iter()
+        .any(|needle| line.contains(needle))
 }
 
 fn cargo_role(tokens: &[String]) -> Option<CommandAttemptRole> {
@@ -592,6 +635,49 @@ fn generic_test_targets(tokens: &[String], family: &str) -> Vec<String> {
     positional_targets(args, &["-k", "-m", "-t", "--filter", "--grep", "--project"])
 }
 
+fn js_test_targets(tokens: &[String], family: &str) -> (Vec<String>, Vec<String>) {
+    let Some(args) = tokens_after_family(tokens, family) else {
+        return (Vec::new(), Vec::new());
+    };
+
+    let runner_args = strip_js_runner_verbs(args);
+    let mut paths = Vec::new();
+    let mut tests = Vec::new();
+    let mut index = 0;
+
+    while index < runner_args.len() {
+        let token = runner_args[index].as_str();
+        if token == "--" {
+            index += 1;
+            continue;
+        }
+
+        if token.starts_with('-') {
+            if let Some((value, consumed)) = js_filter_value(runner_args, index) {
+                tests.push(value);
+                index += consumed;
+                continue;
+            }
+
+            index += if js_option_takes_value(token) && !token.contains('=') {
+                2
+            } else {
+                1
+            };
+            continue;
+        }
+
+        if js_token_looks_like_path(token) {
+            paths.push(token.to_string());
+        } else {
+            tests.push(token.to_string());
+        }
+        index += 1;
+    }
+
+    (paths, tests)
+}
+
 fn pytest_targets<'a>(tokens: impl Iterator<Item = &'a str>) -> (Vec<String>, Vec<String>) {
     let mut paths = Vec::new();
     let mut tests = Vec::new();
@@ -637,6 +723,81 @@ fn positional_targets(tokens: &[String], options_with_values: &[&str]) -> Vec<St
         index += 1;
     }
     targets
+}
+
+fn strip_js_runner_verbs(mut tokens: &[String]) -> &[String] {
+    loop {
+        let Some(index) = first_target_token_index(tokens) else {
+            return tokens;
+        };
+
+        match tokens[index].as_str() {
+            "test" | "run" | "exec" | "dlx" | "vitest" | "bun" | "deno" => {
+                tokens = &tokens[index + 1..];
+            }
+            _ => return tokens,
+        }
+    }
+}
+
+fn first_target_token_index(tokens: &[String]) -> Option<usize> {
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = tokens[index].as_str();
+        if token == "--" {
+            return Some(index + 1).filter(|next| *next < tokens.len());
+        }
+        if token.starts_with('-') {
+            index += if js_option_takes_value(token) && !token.contains('=') {
+                2
+            } else {
+                1
+            };
+            continue;
+        }
+        return Some(index);
+    }
+    None
+}
+
+fn js_filter_value(tokens: &[String], index: usize) -> Option<(String, usize)> {
+    let token = tokens.get(index)?.as_str();
+    for option in ["-t", "--grep", "--filter", "--testnamepattern"] {
+        if token == option {
+            return tokens.get(index + 1).cloned().map(|value| (value, 2));
+        }
+        if let Some(value) = token.strip_prefix(&format!("{option}=")) {
+            return Some((value.to_string(), 1));
+        }
+    }
+    None
+}
+
+fn js_option_takes_value(token: &str) -> bool {
+    matches!(
+        token,
+        "-C"
+            | "--prefix"
+            | "--dir"
+            | "-w"
+            | "--workspace"
+            | "--filter"
+            | "-F"
+            | "-c"
+            | "--config"
+            | "--reporter"
+            | "--project"
+    )
+}
+
+fn js_token_looks_like_path(token: &str) -> bool {
+    token.contains('/')
+        || token.contains('\\')
+        || [
+            ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts",
+        ]
+        .iter()
+        .any(|suffix| token.ends_with(suffix))
 }
 
 fn normalized_command_tokens(command: &str) -> Vec<String> {
@@ -807,6 +968,22 @@ mod tests {
     }
 
     #[test]
+    fn checkpoints_ignore_late_embedded_exit_code_mentions_inside_output_body() {
+        let rows = vec![
+            tool_call(0, "functions.shell_command", "cargo test checkpoints"),
+            tool_output(
+                1,
+                "Output:\nreplaying historical notes\nA prior run reported Exit code: 0 yesterday",
+            ),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        assert_eq!(attempts.len(), 1);
+        assert_eq!(attempts[0].exit_code, None);
+        assert_eq!(attempts[0].outcome, AttemptOutcome::Unknown);
+    }
+
+    #[test]
     fn checkpoints_classify_progress_specific_command_roles_deterministically() {
         let expectations = [
             (
@@ -871,6 +1048,42 @@ mod tests {
     }
 
     #[test]
+    fn checkpoints_extract_js_verification_scope_without_treating_runner_verbs_as_targets() {
+        let rows = vec![
+            tool_call(0, "functions.shell_command", "npm test"),
+            tool_call(1, "functions.shell_command", "pnpm test -- --runInBand"),
+            tool_call(2, "functions.shell_command", "vitest run tests/checkpoints.test.ts"),
+            tool_call(3, "functions.shell_command", "bun test tests/checkpoints.test.ts"),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        let verification = build_verification_attempts(&attempts, &rows);
+        assert_eq!(verification.len(), 4);
+
+        assert_eq!(verification[0].target_scope.paths, Vec::<String>::new());
+        assert_eq!(verification[0].target_scope.tests, Vec::<String>::new());
+        assert!(verification[0].target_scope.broad);
+
+        assert_eq!(verification[1].target_scope.paths, Vec::<String>::new());
+        assert_eq!(verification[1].target_scope.tests, Vec::<String>::new());
+        assert!(verification[1].target_scope.broad);
+
+        assert_eq!(
+            verification[2].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[2].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[2].target_scope.broad);
+
+        assert_eq!(
+            verification[3].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[3].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[3].target_scope.broad);
+    }
+
+    #[test]
     fn checkpoints_derive_verification_attempts_and_target_exercise_state() {
         let blocked_rows = vec![
             tool_call(0, "functions.shell_command", "cargo test checkpoints"),
@@ -902,7 +1115,7 @@ mod tests {
             tool_call(0, "functions.shell_command", "pytest tests/checkpoints_test.py::test_pairing"),
             tool_output(
                 1,
-                "=================== test session starts ===================\ncollected 1 item\n\ntests/checkpoints_test.py::test_pairing FAILED\nExit code: 1",
+                "Exit code: 1\nOutput:\n=================== test session starts ===================\ncollected 1 item\n\ntests/checkpoints_test.py::test_pairing FAILED",
             ),
         ];
         let exercised_attempts =
@@ -921,6 +1134,28 @@ mod tests {
                 "tests/checkpoints_test.py::test_pairing".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn checkpoints_leave_pytest_collection_import_failures_unknown_before_target_execution() {
+        let rows = vec![
+            tool_call(
+                0,
+                "functions.shell_command",
+                "pytest tests/checkpoints_test.py::test_pairing",
+            ),
+            tool_output(
+                1,
+                "=================== test session starts ===================\ncollected 0 items / 1 error\n\n==================================== ERRORS ====================================\n____________ ERROR collecting tests/checkpoints_test.py ____________\nImportError while importing test module '/repo/tests/checkpoints_test.py'.\nExit code: 2",
+            ),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        let verification = build_verification_attempts(&attempts, &rows);
+
+        assert_eq!(verification.len(), 1);
+        assert_eq!(verification[0].verifier, VerifierKind::Pytest);
+        assert_eq!(verification[0].exercise_state, ExerciseState::Unknown);
     }
 
     fn command_observations(rows: &[CompactionRow]) -> Vec<CommandObservation> {
