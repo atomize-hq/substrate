@@ -11,8 +11,7 @@ use crate::operator_surface::warning_fingerprint;
 use crate::scheduler::TriggerClass;
 
 const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str =
-    "v0.2, v0.3, v0.4, v0.5, or v0.6";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, v0.4, v0.5, or v0.6";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCheckpointEvent {

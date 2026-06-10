@@ -996,7 +996,10 @@ fn truncate_for_summary(text: &str, limit: usize) -> String {
         return text.to_string();
     }
 
-    let truncated = text.chars().take(limit.saturating_sub(3)).collect::<String>();
+    let truncated = text
+        .chars()
+        .take(limit.saturating_sub(3))
+        .collect::<String>();
     format!("{truncated}...")
 }
 

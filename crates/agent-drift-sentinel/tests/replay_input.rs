@@ -5,8 +5,7 @@ use std::fs;
 use agent_drift_analyzer::{
     checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftState,
     ProgressDimension, ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress,
-    TaskFrame, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use agent_drift_sentinel::input::{load_replay_bundle, InputError};
 use agent_session_compactor::RowRef;
