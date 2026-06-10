@@ -39,11 +39,11 @@ use crate::execution::agent_runtime::control::{
     invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
     mark_runtime_startup_failed, maybe_build_runtime_owned_toolbox_env,
     note_runtime_stop_requested, persist_runtime_snapshots, persist_world_binding_authority,
-    private_cancel_request_channel,
-    private_prompt_request_channel, private_stop_request_channel, prompt_runtime_from_parts,
-    register_private_cancel_transport, register_private_prompt_transport,
-    register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
-    runtime_stop_transport_ids, spawn_local_private_cancel_owner, spawn_local_private_prompt_owner,
+    private_cancel_request_channel, private_prompt_request_channel, private_stop_request_channel,
+    prompt_runtime_from_parts, register_private_cancel_transport,
+    register_private_prompt_transport, register_private_stop_transport,
+    runtime_controls_parent_session, runtime_is_terminal, runtime_stop_transport_ids,
+    spawn_local_private_cancel_owner, spawn_local_private_prompt_owner,
     spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_transport_path,
     HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding,
     PrivateCancelRequestReceiver, PrivateCancelTransport, PrivatePromptTransport,
@@ -576,9 +576,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             world_id: session.world_id.clone(),
             world_generation: session.world_generation,
         });
-        let mut agent_runtime = match start_host_orchestrator_runtime_with_prepared(
+        let (toolbox_request_tx, mut toolbox_request_rx) =
+            internal_toolbox_dispatch_request_channel();
+        let mut agent_runtime = match start_host_orchestrator_runtime_with_prepared_with_toolbox_request_tx(
             prepared_runtime,
             initial_world_binding.as_ref(),
+            Some(&toolbox_request_tx),
             &agent_printer,
             &mut telemetry,
         )
@@ -600,8 +603,6 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         };
         let mut member_runtimes = RetainedMemberRuntimeMap::new();
         let mut pending_member_replacements = PendingMemberReplacementMap::new();
-        let (toolbox_request_tx, mut toolbox_request_rx) =
-            internal_toolbox_dispatch_request_channel();
         ensure_internal_toolbox_transport_registered(
             agent_runtime.as_mut(),
             startup_context.as_ref(),
@@ -761,6 +762,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 dormant_host_bootstrap: &mut dormant_host_bootstrap,
                                 agent_runtime: &mut agent_runtime,
                                 world_session: &mut world_session,
+                                toolbox_request_tx: &toolbox_request_tx,
                                 member_runtimes: &mut member_runtimes,
                                 pending_member_replacements: &mut pending_member_replacements,
                                 agent_printer: &agent_printer,
@@ -1699,6 +1701,7 @@ struct TargetedTurnDispatchContext<'a> {
     dormant_host_bootstrap: &'a mut Option<ResolvedHostOrchestratorBootstrap>,
     agent_runtime: &'a mut Option<AsyncReplAgentRuntime>,
     world_session: &'a mut Option<WorldSession>,
+    toolbox_request_tx: &'a InternalToolboxDispatchRequestSender,
     member_runtimes: &'a mut RetainedMemberRuntimeMap,
     pending_member_replacements: &'a mut PendingMemberReplacementMap,
     agent_printer: &'a ReplPrinter,
@@ -2739,6 +2742,8 @@ fn prepare_hidden_owner_helper_runtime(
 
 async fn wait_for_hidden_owner_helper_completion(
     runtime: AsyncReplAgentRuntime,
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    toolbox_request_rx: Option<InternalToolboxDispatchRequestReceiver>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<i32> {
@@ -2766,6 +2771,8 @@ async fn wait_for_hidden_owner_helper_completion(
     } = runtime;
 
     let mut join_failed = false;
+    let mut toolbox_request_rx = toolbox_request_rx;
+    let mut member_runtimes = RetainedMemberRuntimeMap::new();
 
     match &mut retained_control {
         RetainedRunControl::Local(retained_control) => {
@@ -2781,6 +2788,9 @@ async fn wait_for_hidden_owner_helper_completion(
                     cancel_requested: &cancel_requested,
                     auto_park_rx: &mut auto_park_rx,
                     private_stop_rx: &mut private_stop_rx,
+                    startup_context,
+                    toolbox_request_rx: &mut toolbox_request_rx,
+                    member_runtimes: &mut member_runtimes,
                     cancel_transport: &mut cancel_transport,
                     cancel_owner_task: &mut cancel_owner_task,
                     stop_transport: &mut stop_transport,
@@ -2929,6 +2939,9 @@ struct HiddenOwnerHelperLocalRuntimeContext<'a> {
     cancel_requested: &'a Arc<AtomicBool>,
     auto_park_rx: &'a mut Option<UnboundedReceiver<()>>,
     private_stop_rx: &'a mut Option<PrivateStopRequestReceiver>,
+    startup_context: Option<&'a RuntimeOrchestrationContext>,
+    toolbox_request_rx: &'a mut Option<InternalToolboxDispatchRequestReceiver>,
+    member_runtimes: &'a mut RetainedMemberRuntimeMap,
     cancel_transport: &'a mut Option<PrivateCancelTransport>,
     cancel_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
     stop_transport: &'a mut Option<PrivateStopTransport>,
@@ -2957,6 +2970,9 @@ async fn wait_for_hidden_owner_helper_local_runtime(
         cancel_requested,
         auto_park_rx,
         private_stop_rx,
+        startup_context,
+        toolbox_request_rx,
+        member_runtimes,
         cancel_transport,
         cancel_owner_task,
         stop_transport,
@@ -2973,187 +2989,211 @@ async fn wait_for_hidden_owner_helper_local_runtime(
         return HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed: true };
     };
 
-    let outcome = tokio::select! {
-        result = &mut completion_task => {
-            join_failed |= result.is_err();
-            if !join_failed
-                && completed_hidden_owner_helper_should_auto_park(auto_park_rx).await
-            {
-                shutdown_host_orchestrator_runtime_with_mode(
-                    AsyncReplAgentRuntime {
-                        descriptor,
-                        orchestration_session: Arc::clone(orchestration_session),
-                        manifest: Arc::clone(manifest),
-                        store: store.clone(),
-                        uaa_session_handle_id: uaa_session_handle_id.to_string(),
-                        host_toolbox_surface_authoritative: Arc::clone(
-                            host_toolbox_surface_authoritative,
-                        ),
-                        retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
-                            cancel: retained_control.cancel.clone(),
-                            event_task: retained_control.event_task.take(),
-                            completion_task: None,
-                        }),
-                        shutdown_requested: Arc::clone(shutdown_requested),
-                        cancel_requested: Arc::clone(cancel_requested),
-                        auto_park_rx: auto_park_rx.take(),
-                        private_stop_rx: private_stop_rx.take(),
-                        cancel_transport: cancel_transport.take(),
-                        cancel_owner_task: cancel_owner_task.take(),
-                        stop_transport: stop_transport.take(),
-                        stop_owner_task: stop_owner_task.take(),
-                        prompt_transport: prompt_transport.take(),
-                        prompt_owner_task: prompt_owner_task.take(),
-                        toolbox_transport: toolbox_transport.take(),
-                        heartbeat_stop_tx: heartbeat_stop_tx.take(),
-                        heartbeat_task: heartbeat_task.take(),
-                    },
-                    HostRuntimeShutdownMode::ParkIfResumable,
-                    agent_printer,
-                    telemetry,
-                )
-                .await;
-                HiddenOwnerHelperLocalRuntimeOutcome::AutoParked
-            } else {
-                HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
+    let outcome = loop {
+        tokio::select! {
+            result = &mut completion_task => {
+                join_failed |= result.is_err();
+                break if !join_failed
+                    && completed_hidden_owner_helper_should_auto_park(auto_park_rx).await
+                {
+                    shutdown_host_orchestrator_runtime_with_mode(
+                        AsyncReplAgentRuntime {
+                            descriptor,
+                            orchestration_session: Arc::clone(orchestration_session),
+                            manifest: Arc::clone(manifest),
+                            store: store.clone(),
+                            uaa_session_handle_id: uaa_session_handle_id.to_string(),
+                            host_toolbox_surface_authoritative: Arc::clone(
+                                host_toolbox_surface_authoritative,
+                            ),
+                            retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
+                                cancel: retained_control.cancel.clone(),
+                                event_task: retained_control.event_task.take(),
+                                completion_task: None,
+                            }),
+                            shutdown_requested: Arc::clone(shutdown_requested),
+                            cancel_requested: Arc::clone(cancel_requested),
+                            auto_park_rx: auto_park_rx.take(),
+                            private_stop_rx: private_stop_rx.take(),
+                            cancel_transport: cancel_transport.take(),
+                            cancel_owner_task: cancel_owner_task.take(),
+                            stop_transport: stop_transport.take(),
+                            stop_owner_task: stop_owner_task.take(),
+                            prompt_transport: prompt_transport.take(),
+                            prompt_owner_task: prompt_owner_task.take(),
+                            toolbox_transport: toolbox_transport.take(),
+                            heartbeat_stop_tx: heartbeat_stop_tx.take(),
+                            heartbeat_task: heartbeat_task.take(),
+                        },
+                        HostRuntimeShutdownMode::ParkIfResumable,
+                        agent_printer,
+                        telemetry,
+                    )
+                    .await;
+                    HiddenOwnerHelperLocalRuntimeOutcome::AutoParked
+                } else {
+                    HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
+                };
             }
-        }
-        maybe_request = async {
-            match private_stop_rx.as_mut() {
-                Some(stop_rx) => stop_rx.recv().await,
-                None => std::future::pending().await,
-            }
-        } => {
-            let request = match maybe_request {
-                Some(request) => request,
-                None => {
+            maybe_request = async {
+                match private_stop_rx.as_mut() {
+                    Some(stop_rx) => stop_rx.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                let request = match maybe_request {
+                    Some(request) => request,
+                    None => {
+                        join_failed |= completion_task.await.is_err();
+                        break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
+                    }
+                };
+
+                if runtime_is_terminal(manifest) {
+                    let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
                     join_failed |= completion_task.await.is_err();
-                    return HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
+                    break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
                 }
-            };
 
-            if runtime_is_terminal(manifest) {
-                let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
-                join_failed |= completion_task.await.is_err();
-                return HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
-            }
+                if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
+                    persist_hidden_owner_helper_stop_failure(
+                        store,
+                        orchestration_session,
+                        manifest,
+                        format!("failed to persist stop request before shutdown: {err:#}"),
+                    );
+                    let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                    shutdown_requested.store(true, Ordering::SeqCst);
+                    retained_control.cancel.cancel();
+                    join_failed |= completion_task.await.is_err();
+                    break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
+                }
 
-            if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
-                persist_hidden_owner_helper_stop_failure(
-                    store,
-                    orchestration_session,
-                    manifest,
-                    format!("failed to persist stop request before shutdown: {err:#}"),
-                );
-                let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                if let Some(mut owned_stop_transport) = stop_transport.take() {
+                    owned_stop_transport.close().await;
+                }
+                if let Some(mut owned_prompt_transport) = prompt_transport.take() {
+                    owned_prompt_transport.close().await;
+                }
+                if let Some(mut owned_toolbox_transport) = toolbox_transport.take() {
+                    host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                    owned_toolbox_transport.close().await;
+                }
+                if let Some(task) = prompt_owner_task.take() {
+                    let _ = task.await;
+                }
                 shutdown_requested.store(true, Ordering::SeqCst);
+                if let Some(stop_tx) = heartbeat_stop_tx.take() {
+                    let _ = stop_tx.send(());
+                }
                 retained_control.cancel.cancel();
-                join_failed |= completion_task.await.is_err();
-                return HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
-            }
 
-            let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
-            if let Some(mut owned_stop_transport) = stop_transport.take() {
-                owned_stop_transport.close().await;
-            }
-            if let Some(mut owned_prompt_transport) = prompt_transport.take() {
-                owned_prompt_transport.close().await;
-            }
-            if let Some(mut owned_toolbox_transport) = toolbox_transport.take() {
-                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
-                owned_toolbox_transport.close().await;
-            }
-            if let Some(task) = prompt_owner_task.take() {
-                let _ = task.await;
-            }
-            shutdown_requested.store(true, Ordering::SeqCst);
-            if let Some(stop_tx) = heartbeat_stop_tx.take() {
-                let _ = stop_tx.send(());
-            }
-            retained_control.cancel.cancel();
-
-            let mut completion_observed = false;
-            let mut stop_failed = false;
-            tokio::select! {
-                result = &mut completion_task => {
-                    completion_observed = true;
-                    join_failed |= result.is_err();
-                    stop_failed |= result.is_err();
+                let mut completion_observed = false;
+                let mut stop_failed = false;
+                tokio::select! {
+                    result = &mut completion_task => {
+                        completion_observed = true;
+                        join_failed |= result.is_err();
+                        stop_failed |= result.is_err();
+                    }
+                    _ = tokio::time::sleep(LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT) => {
+                        completion_task.abort();
+                        let _ = completion_task.await;
+                        stop_failed = true;
+                    }
                 }
-                _ = tokio::time::sleep(LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT) => {
-                    completion_task.abort();
-                    let _ = completion_task.await;
-                    stop_failed = true;
+
+                if let Some(task) = retained_control.event_task.take() {
+                    match tokio::time::timeout(LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT, task).await {
+                        Ok(_) => {}
+                        Err(_) => join_failed = true,
+                    }
+                }
+                if let Some(task) = heartbeat_task.take() {
+                    let _ = task.await;
+                }
+
+                if stop_failed || !completion_observed {
+                    persist_hidden_owner_helper_stop_failure(
+                        store,
+                        orchestration_session,
+                        manifest,
+                        "hidden owner-helper stop did not produce authoritative terminal completion"
+                            .to_string(),
+                    );
+                }
+                break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
+            }
+            maybe_auto_park = async {
+                match auto_park_rx.as_mut() {
+                    Some(requests) => requests.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                if maybe_auto_park.is_some() {
+                    retained_control.completion_task = Some(completion_task);
+                    shutdown_host_orchestrator_runtime_with_mode(
+                        AsyncReplAgentRuntime {
+                            descriptor,
+                            orchestration_session: Arc::clone(orchestration_session),
+                            manifest: Arc::clone(manifest),
+                            store: store.clone(),
+                            uaa_session_handle_id: uaa_session_handle_id.to_string(),
+                            host_toolbox_surface_authoritative: Arc::clone(
+                                host_toolbox_surface_authoritative,
+                            ),
+                            retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
+                                cancel: retained_control.cancel.clone(),
+                                event_task: retained_control.event_task.take(),
+                                completion_task: retained_control.completion_task.take(),
+                            }),
+                            shutdown_requested: Arc::clone(shutdown_requested),
+                            cancel_requested: Arc::clone(cancel_requested),
+                            auto_park_rx: auto_park_rx.take(),
+                            private_stop_rx: private_stop_rx.take(),
+                            cancel_transport: cancel_transport.take(),
+                            cancel_owner_task: cancel_owner_task.take(),
+                            stop_transport: stop_transport.take(),
+                            stop_owner_task: stop_owner_task.take(),
+                            prompt_transport: prompt_transport.take(),
+                            prompt_owner_task: prompt_owner_task.take(),
+                            toolbox_transport: toolbox_transport.take(),
+                            heartbeat_stop_tx: heartbeat_stop_tx.take(),
+                            heartbeat_task: heartbeat_task.take(),
+                        },
+                        HostRuntimeShutdownMode::ParkIfResumable,
+                        agent_printer,
+                        telemetry,
+                    )
+                    .await;
+                    break HiddenOwnerHelperLocalRuntimeOutcome::AutoParked;
+                } else {
+                    join_failed |= completion_task.await.is_err();
+                    break HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed };
                 }
             }
-
-            if let Some(task) = retained_control.event_task.take() {
-                match tokio::time::timeout(LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT, task).await {
-                    Ok(_) => {}
-                    Err(_) => join_failed = true,
+            maybe_toolbox_request = async {
+                match toolbox_request_rx.as_mut() {
+                    Some(toolbox_rx) => toolbox_rx.recv().await,
+                    None => std::future::pending().await,
                 }
-            }
-            if let Some(task) = heartbeat_task.take() {
-                let _ = task.await;
-            }
-
-            if stop_failed || !completion_observed {
-                persist_hidden_owner_helper_stop_failure(
-                    store,
-                    orchestration_session,
-                    manifest,
-                    "hidden owner-helper stop did not produce authoritative terminal completion"
-                        .to_string(),
-                );
-            }
-            HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
-        }
-        maybe_auto_park = async {
-            match auto_park_rx.as_mut() {
-                Some(requests) => requests.recv().await,
-                None => std::future::pending().await,
-            }
-        } => {
-            if maybe_auto_park.is_some() {
-                retained_control.completion_task = Some(completion_task);
-                shutdown_host_orchestrator_runtime_with_mode(
-                    AsyncReplAgentRuntime {
-                        descriptor,
-                        orchestration_session: Arc::clone(orchestration_session),
-                        manifest: Arc::clone(manifest),
-                        store: store.clone(),
-                        uaa_session_handle_id: uaa_session_handle_id.to_string(),
-                        host_toolbox_surface_authoritative: Arc::clone(
-                            host_toolbox_surface_authoritative,
-                        ),
-                        retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
-                            cancel: retained_control.cancel.clone(),
-                            event_task: retained_control.event_task.take(),
-                            completion_task: retained_control.completion_task.take(),
-                        }),
-                        shutdown_requested: Arc::clone(shutdown_requested),
-                        cancel_requested: Arc::clone(cancel_requested),
-                        auto_park_rx: auto_park_rx.take(),
-                        private_stop_rx: private_stop_rx.take(),
-                        cancel_transport: cancel_transport.take(),
-                        cancel_owner_task: cancel_owner_task.take(),
-                        stop_transport: stop_transport.take(),
-                        stop_owner_task: stop_owner_task.take(),
-                        prompt_transport: prompt_transport.take(),
-                        prompt_owner_task: prompt_owner_task.take(),
-                        toolbox_transport: toolbox_transport.take(),
-                        heartbeat_stop_tx: heartbeat_stop_tx.take(),
-                        heartbeat_task: heartbeat_task.take(),
-                    },
-                    HostRuntimeShutdownMode::ParkIfResumable,
-                    agent_printer,
-                    telemetry,
-                )
-                .await;
-                HiddenOwnerHelperLocalRuntimeOutcome::AutoParked
-            } else {
-                join_failed |= completion_task.await.is_err();
-                HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
+            } => {
+                match maybe_toolbox_request {
+                    Some(request) => {
+                        handle_internal_toolbox_dispatch_request(
+                            request,
+                            startup_context,
+                            member_runtimes,
+                            agent_printer,
+                            telemetry,
+                        )
+                        .await;
+                    }
+                    None => {
+                        *toolbox_request_rx = None;
+                    }
+                }
             }
         }
     };
@@ -3236,6 +3276,7 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
         let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
             .map_err(|failure| anyhow!(failure.message))?;
+        let helper_startup_context = prepared.startup_context.clone();
         let initial_world_binding = match (
             plan.session.world_id.as_ref(),
             plan.session.world_generation,
@@ -3252,13 +3293,15 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
                 stream_path: startup_prompt.stream_path.clone(),
             }
         });
-        let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+        let (toolbox_request_tx, toolbox_request_rx) = internal_toolbox_dispatch_request_channel();
+        let runtime = start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
             Some(prepared),
             initial_world_binding.as_ref(),
             initial_prompt,
             matches!(plan.mode, OwnerHelperMode::Attach),
             true,
             matches!(plan.mode, OwnerHelperMode::ResumeOneTurn),
+            Some(&toolbox_request_tx),
             &ReplPrinter::Stdout,
             &mut telemetry,
         )
@@ -3267,23 +3310,49 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         let Some(runtime) = runtime else {
             return Ok(0);
         };
-        wait_for_hidden_owner_helper_completion(runtime, &ReplPrinter::Stdout, &mut telemetry).await
+        wait_for_hidden_owner_helper_completion(
+            runtime,
+            Some(&helper_startup_context),
+            Some(toolbox_request_rx),
+            &ReplPrinter::Stdout,
+            &mut telemetry,
+        )
+        .await
     })
 }
 
+#[allow(dead_code)]
 async fn start_host_orchestrator_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
     initial_world_binding: Option<&PersistedWorldBinding>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
-    start_host_orchestrator_runtime_with_prepared_prompt(
+    start_host_orchestrator_runtime_with_prepared_with_toolbox_request_tx(
+        prepared,
+        initial_world_binding,
+        None,
+        agent_printer,
+        telemetry,
+    )
+    .await
+}
+
+async fn start_host_orchestrator_runtime_with_prepared_with_toolbox_request_tx(
+    prepared: Option<PreparedAgentRuntime>,
+    initial_world_binding: Option<&PersistedWorldBinding>,
+    startup_toolbox_request_tx: Option<&InternalToolboxDispatchRequestSender>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
         prepared,
         initial_world_binding,
         None,
         false,
         false,
         false,
+        startup_toolbox_request_tx,
         agent_printer,
         telemetry,
     )
@@ -3298,6 +3367,32 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     control_only_attach: bool,
     runtime_owns_private_stop: bool,
     auto_park_after_public_turn: bool,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
+        prepared,
+        initial_world_binding,
+        initial_prompt,
+        control_only_attach,
+        runtime_owns_private_stop,
+        auto_park_after_public_turn,
+        None,
+        agent_printer,
+        telemetry,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
+    prepared: Option<PreparedAgentRuntime>,
+    initial_world_binding: Option<&PersistedWorldBinding>,
+    initial_prompt: Option<InitialExecPromptPlan>,
+    control_only_attach: bool,
+    runtime_owns_private_stop: bool,
+    auto_park_after_public_turn: bool,
+    startup_toolbox_request_tx: Option<&InternalToolboxDispatchRequestSender>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
@@ -3327,15 +3422,14 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             .role
             .clone()
     };
-    let host_toolbox_surface_authoritative = Arc::new(AtomicBool::new(
-        authoritative_host_toolbox_surface_enabled(
-            &descriptor.backend_id,
-            descriptor.execution_scope,
-            runtime_role.as_str(),
-            &startup_context.effective_config,
-            &startup_context.base_policy,
-        ),
-    ));
+    let host_toolbox_surface_requested = authoritative_host_toolbox_surface_enabled(
+        &descriptor.backend_id,
+        descriptor.execution_scope,
+        runtime_role.as_str(),
+        &startup_context.effective_config,
+        &startup_context.base_policy,
+    );
+    let host_toolbox_surface_authoritative = Arc::new(AtomicBool::new(false));
     let controls_parent_session = runtime_controls_parent_session(&runtime_role);
     if controls_parent_session || initial_world_binding.is_some() {
         if let Err(err) = persist_world_binding_authority(
@@ -3436,6 +3530,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             scope: "host".to_string(),
         });
     }
+    let mut startup_toolbox_transport: Option<InternalToolboxTransport> = None;
     let control = match if control_only_attach {
         let Some(continuity_session_id) = startup_extensions
             .get(AGENT_API_SESSION_RESUME_V1)
@@ -3490,6 +3585,23 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                 .orchestration_session_id
                 .clone()
         };
+        if host_toolbox_surface_requested {
+            if let Some(request_tx) = startup_toolbox_request_tx {
+                let transport = register_internal_toolbox_transport_for_session(
+                    &orchestration_session_id,
+                    request_tx.clone(),
+                )
+                .await
+                .map_err(|err| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "failed to register startup internal toolbox transport: {err:#}"
+                    ),
+                })?;
+                host_toolbox_surface_authoritative.store(true, Ordering::SeqCst);
+                startup_toolbox_transport = Some(transport);
+            }
+        }
         let request = agent_api::AgentWrapperRunRequest {
             prompt: match initial_prompt.as_ref() {
                 Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
@@ -3520,6 +3632,10 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     } {
         Ok(control) => control,
         Err(err) => {
+            if let Some(mut transport) = startup_toolbox_transport.take() {
+                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                transport.close().await;
+            }
             let failure = runtime_bootstrap_failure_from_wrapper_error(err);
             if let Some(backchannel) = startup_backchannel.as_ref() {
                 let (orchestration_snapshot, manifest_snapshot) = {
@@ -4335,6 +4451,10 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                     &mut heartbeat_task,
                 )
                 .await;
+                if let Some(mut transport) = startup_toolbox_transport.take() {
+                    host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                    transport.close().await;
+                }
                 let message = format!("failed to register private cancel transport: {err:#}");
                 mark_runtime_startup_failed(
                     &startup_context.store,
@@ -4376,6 +4496,10 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                 &mut heartbeat_task,
             )
             .await;
+            if let Some(mut transport) = startup_toolbox_transport.take() {
+                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                transport.close().await;
+            }
             let message = format!("failed to register private stop transport: {err:#}");
             mark_runtime_startup_failed(
                 &startup_context.store,
@@ -4422,6 +4546,10 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                 &mut heartbeat_task,
             )
             .await;
+            if let Some(mut transport) = startup_toolbox_transport.take() {
+                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                transport.close().await;
+            }
             let message = format!("failed to register private prompt transport: {err:#}");
             mark_runtime_startup_failed(
                 &startup_context.store,
@@ -4466,7 +4594,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         stop_owner_task,
         prompt_transport: Some(prompt_transport),
         prompt_owner_task: Some(prompt_owner_task),
-        toolbox_transport: None,
+        toolbox_transport: startup_toolbox_transport,
         heartbeat_stop_tx,
         heartbeat_task,
     }))
@@ -4669,6 +4797,7 @@ async fn dispatch_targeted_follow_up_turn(
         dormant_host_bootstrap,
         agent_runtime,
         world_session,
+        toolbox_request_tx,
         member_runtimes,
         pending_member_replacements,
         agent_printer,
@@ -4707,7 +4836,7 @@ async fn dispatch_targeted_follow_up_turn(
                         world_id: session.world_id.clone(),
                         world_generation: session.world_generation,
                     });
-                let runtime = match start_host_orchestrator_runtime_with_prepared_prompt(
+                let runtime = match start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
                     Some(prepared),
                     initial_world_binding.as_ref(),
                     Some(InitialExecPromptPlan::Replace(
@@ -4716,6 +4845,7 @@ async fn dispatch_targeted_follow_up_turn(
                     false,
                     false,
                     false,
+                    Some(toolbox_request_tx),
                     agent_printer,
                     telemetry,
                 )
@@ -4827,9 +4957,6 @@ async fn register_internal_toolbox_transport(
     runtime: &AsyncReplAgentRuntime,
     request_tx: InternalToolboxDispatchRequestSender,
 ) -> Result<InternalToolboxTransport> {
-    use tokio::io::{AsyncBufReadExt, BufReader};
-    use tokio::net::UnixListener;
-
     let orchestration_session_id = runtime
         .manifest
         .lock()
@@ -4837,6 +4964,17 @@ async fn register_internal_toolbox_transport(
         .handle
         .orchestration_session_id
         .clone();
+    register_internal_toolbox_transport_for_session(&orchestration_session_id, request_tx).await
+}
+
+#[cfg(unix)]
+async fn register_internal_toolbox_transport_for_session(
+    orchestration_session_id: &str,
+    request_tx: InternalToolboxDispatchRequestSender,
+) -> Result<InternalToolboxTransport> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::net::UnixListener;
+
     let path = internal_toolbox_transport_path(&orchestration_session_id);
     let parent = path.parent().ok_or_else(|| {
         anyhow::anyhow!(
@@ -5841,15 +5979,14 @@ async fn start_remote_member_runtime_with_prepared(
             .role
             .clone()
     };
-    let host_toolbox_surface_authoritative = Arc::new(AtomicBool::new(
-        authoritative_host_toolbox_surface_enabled(
+    let host_toolbox_surface_authoritative =
+        Arc::new(AtomicBool::new(authoritative_host_toolbox_surface_enabled(
             &descriptor.backend_id,
             descriptor.execution_scope,
             runtime_role.as_str(),
             &startup_context.effective_config,
             &startup_context.base_policy,
-        ),
-    ));
+        )));
     let persist_participant_result = {
         let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
         startup_context.store.persist_participant(&manifest_guard)
@@ -10298,6 +10435,8 @@ mod tests {
                     ReplSessionTelemetry::new(helper_config, "async-test-helper");
                 wait_for_hidden_owner_helper_completion(
                     runtime,
+                    None,
+                    None,
                     &ReplPrinter::Stdout,
                     &mut helper_telemetry,
                 )

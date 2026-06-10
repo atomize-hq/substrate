@@ -3458,6 +3458,7 @@ mod tests {
     };
     use crate::execution::config_model::AgentExecutionScope;
     use std::path::PathBuf;
+    use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
     #[cfg(unix)]
