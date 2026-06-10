@@ -912,15 +912,12 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
     let family = command.family.as_str();
     let raw_command = command.raw_command.to_ascii_lowercase();
     let tool_name = command.tool_name.as_str();
+    let tokens = normalized_command_tokens(&command.raw_command);
 
     if matches!(
         tool_name,
         "spawn_agent" | "wait_agent" | "close_agent" | "multi_agent_v1"
-    ) || raw_command.contains("spawn_agent")
-        || raw_command.contains("wait_agent")
-        || raw_command.contains("close_agent")
-        || raw_command.contains("multi_agent_v1")
-    {
+    ) {
         return CommandRole::Orchestration;
     }
 
@@ -934,6 +931,25 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
         return role;
     }
 
+    if matches!(
+        family,
+        "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq"
+    ) {
+        return CommandRole::Exploration;
+    }
+
+    if matches!(
+        family,
+        "spawn_agent" | "wait_agent" | "close_agent" | "multi_agent_v1"
+    ) || tokens.iter().any(|token| {
+        matches!(
+            token.as_str(),
+            "spawn_agent" | "wait_agent" | "close_agent" | "multi_agent_v1"
+        )
+    }) {
+        return CommandRole::Orchestration;
+    }
+
     if requires_shallow_subcommand_parse(family) {
         return CommandRole::Neutral;
     }
@@ -942,12 +958,7 @@ fn classify_command_role(command: &CommandObservation) -> CommandRole {
         return CommandRole::Verification;
     }
 
-    if command.read_like
-        || matches!(
-            family,
-            "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq"
-        )
-    {
+    if command.read_like {
         return CommandRole::Exploration;
     }
 
@@ -2196,6 +2207,11 @@ mod tests {
                 "rg",
                 "rg -n 'session_archetype' crates/agent-drift-analyzer/src/checkpoint/mod.rs",
             ),
+            command_observation("sed", "sed -n '1,120p' docs/REPLAY.md"),
+            command_observation(
+                "rg",
+                "rg -n 'spawn_agent' docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md",
+            ),
         ] {
             assert_eq!(classify_command_role(&command), CommandRole::Exploration);
         }
@@ -2254,6 +2270,10 @@ mod tests {
         );
         assert_eq!(
             classify_command_role(&command_observation("git", "git status --short")),
+            CommandRole::Exploration
+        );
+        assert_eq!(
+            classify_command_role(&command_observation("git", "git show HEAD:docs/REPLAY.md")),
             CommandRole::Exploration
         );
         assert_eq!(

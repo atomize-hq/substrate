@@ -243,19 +243,13 @@ fn classify_command_attempt_role(
     family: &str,
 ) -> CommandAttemptRole {
     let normalized = raw_command.to_ascii_lowercase();
+    let tokens = normalized_command_tokens(raw_command);
+
     if matches!(
         tool_name,
         "spawn_agent" | "wait_agent" | "close_agent" | "multi_agent_v1"
-    ) || normalized.contains("spawn_agent")
-        || normalized.contains("wait_agent")
-        || normalized.contains("close_agent")
-        || normalized.contains("multi_agent_v1")
-    {
+    ) {
         return CommandAttemptRole::Orchestration;
-    }
-
-    if normalized.contains("replay") || family.eq_ignore_ascii_case("replay") {
-        return CommandAttemptRole::Replay;
     }
 
     if matches!(family, "apply_patch" | "mkdir" | "mv" | "cp")
@@ -272,20 +266,35 @@ fn classify_command_attempt_role(
     }
 
     if family == "git" {
-        return git_role(&normalized_command_tokens(raw_command))
-            .unwrap_or(CommandAttemptRole::Unknown);
+        return git_role(&tokens).unwrap_or(CommandAttemptRole::Unknown);
     }
 
-    if let Some(role) = cargo_role(&normalized_command_tokens(raw_command)) {
+    if let Some(role) = cargo_role(&tokens) {
         return role;
     }
 
-    if let Some(role) = npm_like_role(&normalized_command_tokens(raw_command), family) {
+    if let Some(role) = npm_like_role(&tokens, family) {
         return role;
     }
 
-    if let Some(role) = shell_wrapped_test_role(&normalized_command_tokens(raw_command)) {
+    if let Some(role) = shell_wrapped_test_role(&tokens) {
         return role;
+    }
+
+    if family.eq_ignore_ascii_case("replay") || tokens.iter().any(|token| token == "replay") {
+        return CommandAttemptRole::Replay;
+    }
+
+    if matches!(
+        family,
+        "spawn_agent" | "wait_agent" | "close_agent" | "multi_agent_v1"
+    ) || tokens.iter().any(|token| {
+        matches!(
+            token.as_str(),
+            "spawn_agent" | "wait_agent" | "close_agent" | "multi_agent_v1"
+        )
+    }) {
+        return CommandAttemptRole::Orchestration;
     }
 
     match family {
@@ -355,9 +364,7 @@ fn verification_scope(attempt: &CommandAttempt) -> VerificationScope {
             paths.extend(more_paths);
             tests.extend(more_tests);
         }
-        "npm" | "pnpm" | "vitest" | "bun" | "deno"
-            if attempt.role == CommandAttemptRole::Test =>
-        {
+        "npm" | "pnpm" | "vitest" | "bun" | "deno" if attempt.role == CommandAttemptRole::Test => {
             let (more_paths, more_tests) = js_test_targets(&tokens, &attempt.family);
             paths.extend(more_paths);
             tests.extend(more_tests);
@@ -397,11 +404,11 @@ fn exercise_state(
         },
         CommandAttemptRole::Test => match attempt.outcome {
             AttemptOutcome::Clean => ExerciseState::TargetExercised,
-            AttemptOutcome::Failed if output_contains_compile_blocker(output) => {
-                ExerciseState::BlockedBeforeTarget
-            }
             AttemptOutcome::Failed if output_shows_test_execution(output, target_scope) => {
                 ExerciseState::TargetExercised
+            }
+            AttemptOutcome::Failed if output_contains_compile_blocker(output) => {
+                ExerciseState::BlockedBeforeTarget
             }
             AttemptOutcome::Failed | AttemptOutcome::Unknown => ExerciseState::Unknown,
         },
@@ -462,11 +469,7 @@ fn line_has_explicit_test_execution(line: &str) -> bool {
         || line.contains(" ... failed")
         || line.contains(" ... ignored")
         || (line.contains("::") && line_has_test_status(line))
-        || (line
-            .chars()
-            .next()
-            .is_some_and(|ch| ch.is_ascii_digit())
-            && line_has_test_status(line))
+        || (line.chars().next().is_some_and(|ch| ch.is_ascii_digit()) && line_has_test_status(line))
 }
 
 fn line_matches_requested_target(line: &str, target_scope: &VerificationScope) -> bool {
@@ -776,8 +779,7 @@ fn js_filter_value(tokens: &[String], index: usize) -> Option<(String, usize)> {
 fn js_option_takes_value(token: &str) -> bool {
     matches!(
         token,
-        "-C"
-            | "--prefix"
+        "-C" | "--prefix"
             | "--dir"
             | "-w"
             | "--workspace"
@@ -793,11 +795,9 @@ fn js_option_takes_value(token: &str) -> bool {
 fn js_token_looks_like_path(token: &str) -> bool {
     token.contains('/')
         || token.contains('\\')
-        || [
-            ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts",
-        ]
-        .iter()
-        .any(|suffix| token.ends_with(suffix))
+        || [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"]
+            .iter()
+            .any(|suffix| token.ends_with(suffix))
 }
 
 fn normalized_command_tokens(command: &str) -> Vec<String> {
@@ -1048,12 +1048,45 @@ mod tests {
     }
 
     #[test]
+    fn checkpoints_keep_read_and_vcs_commands_with_replay_or_spawn_agent_text_out_of_special_roles()
+    {
+        let expectations = [
+            (
+                "sed -n '1,120p' docs/REPLAY.md",
+                CommandAttemptRole::Read,
+            ),
+            (
+                "rg -n 'spawn_agent' docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md",
+                CommandAttemptRole::Read,
+            ),
+            (
+                "git show HEAD:docs/REPLAY.md",
+                CommandAttemptRole::VcsInspection,
+            ),
+        ];
+
+        for (command, expected_role) in expectations {
+            let rows = vec![tool_call(0, tool_name_for(command), command)];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            assert_eq!(attempts[0].role, expected_role, "{command}");
+        }
+    }
+
+    #[test]
     fn checkpoints_extract_js_verification_scope_without_treating_runner_verbs_as_targets() {
         let rows = vec![
             tool_call(0, "functions.shell_command", "npm test"),
             tool_call(1, "functions.shell_command", "pnpm test -- --runInBand"),
-            tool_call(2, "functions.shell_command", "vitest run tests/checkpoints.test.ts"),
-            tool_call(3, "functions.shell_command", "bun test tests/checkpoints.test.ts"),
+            tool_call(
+                2,
+                "functions.shell_command",
+                "vitest run tests/checkpoints.test.ts",
+            ),
+            tool_call(
+                3,
+                "functions.shell_command",
+                "bun test tests/checkpoints.test.ts",
+            ),
         ];
 
         let attempts = build_command_attempts(&rows, &command_observations(&rows));
@@ -1156,6 +1189,31 @@ mod tests {
         assert_eq!(verification.len(), 1);
         assert_eq!(verification[0].verifier, VerifierKind::Pytest);
         assert_eq!(verification[0].exercise_state, ExerciseState::Unknown);
+    }
+
+    #[test]
+    fn checkpoints_keep_failed_tests_with_error_text_as_target_exercised_once_output_shows_execution(
+    ) {
+        let rows = vec![
+            tool_call(
+                0,
+                "functions.shell_command",
+                "pytest tests/checkpoints_test.py::test_pairing",
+            ),
+            tool_output(
+                1,
+                "Exit code: 1\nOutput:\n=================== test session starts ===================\ncollected 1 item\n\ntests/checkpoints_test.py::test_pairing FAILED\nAssertionError: expected progress",
+            ),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        let verification = build_verification_attempts(&attempts, &rows);
+
+        assert_eq!(verification.len(), 1);
+        assert_eq!(
+            verification[0].exercise_state,
+            ExerciseState::TargetExercised
+        );
     }
 
     fn command_observations(rows: &[CompactionRow]) -> Vec<CommandObservation> {
