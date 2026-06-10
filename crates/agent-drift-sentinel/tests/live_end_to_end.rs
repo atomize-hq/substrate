@@ -3,8 +3,9 @@
 mod support;
 
 use agent_drift_analyzer::{
-    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, SessionArchetype,
-    SessionArchetypeLabel, TurnActivityMix, TurnContext, TurnExecutionMode,
+    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, ProgressDimension, ProgressStatus,
+    SessionArchetype, SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
 };
 use camino::Utf8PathBuf;
 
@@ -433,6 +434,87 @@ fn live_end_to_end_replay_and_live_surfaces_share_archetype_rendering_for_v0_5_c
 }
 
 #[test]
+fn live_end_to_end_replay_and_live_surfaces_share_progress_rendering_for_v0_6_checkpoints() {
+    let mut checkpoints = support::sample_checkpoints();
+    for (index, checkpoint) in checkpoints.iter_mut().take(2).enumerate() {
+        checkpoint.schema_version = "v0.6".to_string();
+        checkpoint.turn_context = Some(sample_turn_context(index + 1));
+        checkpoint.session_archetype = Some(sample_session_archetype(
+            checkpoint,
+            if index == 0 {
+                SessionArchetypeLabel::AutonomousImplementation
+            } else {
+                SessionArchetypeLabel::VerificationCloseout
+            },
+        ));
+        checkpoint.session_progress = Some(sample_session_progress(
+            checkpoint,
+            if index == 0 {
+                ProgressStatus::Advancing
+            } else {
+                ProgressStatus::Mixed
+            },
+            if index == 0 {
+                ProgressDimension::ImplementationVerificationWall
+            } else {
+                ProgressDimension::VerificationCloseoutNarrowing
+            },
+        ));
+    }
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        checkpoints[..2].to_vec(),
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live_visible = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live visible checkpoint");
+    let live_silent = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            checkpoints[1].clone(),
+            Some("fixture".to_string()),
+        ))
+        .expect("live silent checkpoint");
+
+    let replay_visible = &replay.report.visible_warnings[0];
+    let replay_silent = &replay.report.silent_checkpoints[0];
+    let replay_visible_render = replay_visible.render_console_block(None);
+    let live_visible_render = live_visible.presentation.render_console_block(None);
+    let replay_silent_render = replay_silent.render_console_block(None);
+    let live_silent_render = live_silent.presentation.render_console_block(None);
+
+    assert_eq!(
+        extract_progress_line(&replay_visible_render),
+        extract_progress_line(&live_visible_render)
+    );
+    assert_eq!(
+        extract_progress_line(&replay_silent_render),
+        extract_progress_line(&live_silent_render)
+    );
+    assert!(replay_visible_render.contains(
+        "- Progress: status=advancing dimension=implementation_verification_wall confidence=medium"
+    ));
+    assert!(replay_silent_render.contains(
+        "- Progress: status=mixed dimension=verification_closeout_narrowing confidence=medium"
+    ));
+}
+
+#[test]
 fn live_end_to_end_replay_and_live_surfaces_share_posture_for_transition_sequences() {
     let checkpoints = vec![
         checkpoint_with_state(
@@ -769,6 +851,12 @@ fn extract_archetype_line(rendered: &str) -> Option<&str> {
         .find(|line| line.starts_with("- Archetype: "))
 }
 
+fn extract_progress_line(rendered: &str) -> Option<&str> {
+    rendered
+        .lines()
+        .find(|line| line.starts_with("- Progress: "))
+}
+
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
@@ -874,6 +962,29 @@ fn sample_session_archetype(
         counter_evidence: vec![EvidenceRef {
             row: checkpoint.boundary.start.clone(),
             reason: "inspection-style command widened the visible search space".to_string(),
+        }],
+    }
+}
+
+fn sample_session_progress(
+    checkpoint: &Checkpoint,
+    status: ProgressStatus,
+    dimension: ProgressDimension,
+) -> SessionProgress {
+    SessionProgress {
+        status,
+        dimension,
+        confidence: Confidence::Medium,
+        signals: Vec::new(),
+        supporting_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "progress evidence stayed focused on the active verification target"
+                .to_string(),
+        }],
+        counter_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "one branch of the session remained open while verification narrowed"
+                .to_string(),
         }],
     }
 }

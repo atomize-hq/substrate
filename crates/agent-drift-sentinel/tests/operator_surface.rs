@@ -3,8 +3,9 @@
 mod support;
 
 use agent_drift_analyzer::{
-    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, SessionArchetype,
-    SessionArchetypeLabel, TurnActivityMix, TurnContext, TurnExecutionMode,
+    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, ProgressDimension, ProgressStatus,
+    SessionArchetype, SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
 };
 use agent_drift_sentinel::{
     execute,
@@ -212,6 +213,77 @@ fn operator_surface_renders_compact_archetype_inspection_for_v0_5_checkpoints() 
     assert!(rendered.contains("+1 more"));
     assert!(rendered.contains("counter[inspection-style command widened the visible search space]"));
     assert!(rendered.contains("- Diagnostics: task_frame_transitioned=true"));
+}
+
+#[test]
+fn operator_surface_renders_compact_progress_inspection_for_v0_6_checkpoints() {
+    let mut visible = checkpoint_with_schema_state(
+        "v0.6",
+        "session-progress",
+        1,
+        DriftClass::TruthGroundingGap,
+        DriftState::Active,
+        82,
+        true,
+        "align plan to repo truth",
+        &["flagged score for session-progress:1"],
+    );
+    visible.turn_context = Some(sample_turn_context(1));
+    visible.session_archetype = Some(sample_session_archetype(
+        &visible,
+        SessionArchetypeLabel::AutonomousImplementation,
+    ));
+    visible.session_progress = Some(sample_session_progress(
+        &visible,
+        ProgressStatus::Advancing,
+        ProgressDimension::ImplementationVerificationWall,
+    ));
+
+    let mut silent = checkpoint_with_schema_state(
+        "v0.6",
+        "session-progress",
+        2,
+        DriftClass::TruthGroundingGap,
+        DriftState::Recovered,
+        20,
+        false,
+        "continue on the current task frame",
+        &["explicit analyzer recovery evidence"],
+    );
+    silent.turn_context = Some(sample_turn_context(2));
+    silent.session_archetype = Some(sample_session_archetype(
+        &silent,
+        SessionArchetypeLabel::VerificationCloseout,
+    ));
+    silent.session_progress = Some(sample_session_progress(
+        &silent,
+        ProgressStatus::Mixed,
+        ProgressDimension::VerificationCloseoutNarrowing,
+    ));
+
+    let fixture =
+        support::ReplayFixture::from_checkpoints(vec![visible, silent], support::sample_summary());
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let visible_render = result.report.visible_warnings[0].render_console_block(None);
+    let silent_render = result.report.silent_checkpoints[0].render_console_block(None);
+
+    assert!(visible_render.contains(
+        "- Progress: status=advancing dimension=implementation_verification_wall confidence=medium"
+    ));
+    assert!(silent_render.contains(
+        "- Progress: status=mixed dimension=verification_closeout_narrowing confidence=medium"
+    ));
+    assert_progress_line_after_archetype(&visible_render);
+    assert_progress_line_after_archetype(&silent_render);
 }
 
 #[test]
@@ -724,4 +796,41 @@ fn sample_session_archetype(
             reason: "inspection-style command widened the visible search space".to_string(),
         }],
     }
+}
+
+fn sample_session_progress(
+    checkpoint: &Checkpoint,
+    status: ProgressStatus,
+    dimension: ProgressDimension,
+) -> SessionProgress {
+    SessionProgress {
+        status,
+        dimension,
+        confidence: Confidence::Medium,
+        signals: Vec::new(),
+        supporting_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "progress evidence stayed focused on the active verification target"
+                .to_string(),
+        }],
+        counter_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "one branch of the session remained open while verification narrowed"
+                .to_string(),
+        }],
+    }
+}
+
+fn assert_progress_line_after_archetype(rendered: &str) {
+    let lines = rendered.lines().collect::<Vec<_>>();
+    let archetype_index = lines
+        .iter()
+        .position(|line| line.starts_with("- Archetype: "))
+        .expect("archetype line");
+    let progress_index = lines
+        .iter()
+        .position(|line| line.starts_with("- Progress: "))
+        .expect("progress line");
+
+    assert_eq!(progress_index, archetype_index + 1);
 }

@@ -2,8 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use agent_drift_analyzer::{
-    Checkpoint, DriftClass, DriftState, EvidenceRef, SessionArchetype, SessionArchetypeLabel,
-    TurnActivityMix, TurnContext, TurnExecutionMode,
+    Checkpoint, DriftClass, DriftState, EvidenceRef, ProgressDimension, ProgressStatus,
+    SessionArchetype, SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
 };
 use camino::Utf8Path;
 
@@ -131,6 +132,12 @@ impl CheckpointPresentation {
                 format_session_archetype_summary(session_archetype)
             ));
         }
+        if let Some(session_progress) = self.checkpoint.session_progress.as_ref() {
+            lines.push(format!(
+                "- Progress: {}",
+                format_session_progress_summary(session_progress)
+            ));
+        }
         lines.push(format!(
             "- Diagnostics: {}",
             self.diagnostics_summary.render_console_summary()
@@ -215,6 +222,17 @@ fn format_session_archetype_summary(archetype: &SessionArchetype) -> String {
     )
 }
 
+fn format_session_progress_summary(progress: &SessionProgress) -> String {
+    format!(
+        "status={} dimension={} confidence={} support[{}] counter[{}]",
+        format_progress_status(progress.status),
+        format_progress_dimension(progress.dimension),
+        confidence_name(progress.confidence),
+        format_progress_support(progress),
+        format_progress_evidence(&progress.counter_evidence)
+    )
+}
+
 fn format_session_archetype_label(label: SessionArchetypeLabel) -> &'static str {
     match label {
         SessionArchetypeLabel::Troubleshooting => "troubleshooting",
@@ -245,6 +263,77 @@ fn format_archetype_evidence(evidence: &[EvidenceRef]) -> String {
     let mut displayed = unique_reasons
         .into_iter()
         .take(DISPLAY_LIMIT)
+        .collect::<Vec<_>>();
+    if remaining > 0 {
+        displayed.push(format!("+{remaining} more"));
+    }
+
+    displayed.join("; ")
+}
+
+fn format_progress_status(status: ProgressStatus) -> &'static str {
+    match status {
+        ProgressStatus::Advancing => "advancing",
+        ProgressStatus::Mixed => "mixed",
+        ProgressStatus::Stalled => "stalled",
+        ProgressStatus::Regressing => "regressing",
+        ProgressStatus::InsufficientEvidence => "insufficient_evidence",
+    }
+}
+
+fn format_progress_dimension(dimension: ProgressDimension) -> &'static str {
+    match dimension {
+        ProgressDimension::TroubleshootingFrontier => "troubleshooting_frontier",
+        ProgressDimension::PlanningConvergence => "planning_convergence",
+        ProgressDimension::ImplementationVerificationWall => "implementation_verification_wall",
+        ProgressDimension::VerificationCloseoutNarrowing => "verification_closeout_narrowing",
+        ProgressDimension::ParentVisibleOrchestration => "parent_visible_orchestration",
+    }
+}
+
+fn format_progress_support(progress: &SessionProgress) -> String {
+    const DISPLAY_LIMIT: usize = 2;
+    const SUMMARY_LIMIT: usize = 64;
+
+    if progress.signals.is_empty() {
+        return format_progress_evidence(&progress.supporting_evidence);
+    }
+
+    format_compact_items(
+        progress
+            .signals
+            .iter()
+            .map(|signal| signal.summary.as_str()),
+        DISPLAY_LIMIT,
+        SUMMARY_LIMIT,
+    )
+}
+
+fn format_progress_evidence(evidence: &[EvidenceRef]) -> String {
+    format_compact_items(evidence.iter().map(|item| item.reason.as_str()), 2, 64)
+}
+
+fn format_compact_items<'a>(
+    items: impl IntoIterator<Item = &'a str>,
+    display_limit: usize,
+    summary_limit: usize,
+) -> String {
+    let mut unique_items = Vec::<String>::new();
+    for item in items {
+        let item = truncate(item, summary_limit);
+        if unique_items.iter().all(|existing| existing != &item) {
+            unique_items.push(item);
+        }
+    }
+
+    if unique_items.is_empty() {
+        return "none".to_string();
+    }
+
+    let remaining = unique_items.len().saturating_sub(display_limit);
+    let mut displayed = unique_items
+        .into_iter()
+        .take(display_limit)
         .collect::<Vec<_>>();
     if remaining > 0 {
         displayed.push(format!("+{remaining} more"));

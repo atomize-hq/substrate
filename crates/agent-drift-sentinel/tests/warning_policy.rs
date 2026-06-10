@@ -27,7 +27,7 @@ fn warning_policy_keeps_low_signal_or_duplicate_checkpoints_silent() {
         .iter()
         .any(|checkpoint| checkpoint
             .render_console_block(None)
-            .contains("below visible score threshold")));
+            .contains("scheduler cooldown deferred replay evaluation")));
     assert!(result
         .report
         .silent_checkpoints
