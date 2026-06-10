@@ -109,8 +109,13 @@ pub(crate) fn build_diagnostic_signatures(
         &failing_symbols,
         failing_count,
     );
-    let location_hints =
-        discriminative_location_hints(output, &failing_paths, &failing_tests, &failing_symbols);
+    let location_hints = discriminative_location_hints(
+        output,
+        &failing_paths,
+        &failing_tests,
+        &failing_symbols,
+        &normalized_lines,
+    );
     let target_fingerprint =
         target_fingerprint(attempt, target_scope, &failing_paths, &failing_tests);
     let payload_hash_hex = hash_payload(
@@ -594,6 +599,7 @@ fn discriminative_location_hints(
     failing_paths: &[String],
     failing_tests: &[String],
     failing_symbols: &[String],
+    normalized_lines: &[String],
 ) -> Vec<String> {
     if !failing_tests.is_empty() || !failing_symbols.is_empty() {
         return Vec::new();
@@ -620,11 +626,57 @@ fn discriminative_location_hints(
         .iter()
         .map(|location| strip_line_column_suffix(location))
         .collect::<BTreeSet<_>>();
+    if has_non_location_discriminator(normalized_lines, &normalized_paths) {
+        return Vec::new();
+    }
+
     if collapsed.len() < filtered.len() || normalized_paths.len() == 1 {
         return filtered;
     }
 
     Vec::new()
+}
+
+fn has_non_location_discriminator(
+    normalized_lines: &[String],
+    normalized_paths: &BTreeSet<String>,
+) -> bool {
+    normalized_lines
+        .iter()
+        .filter_map(|line| strip_location_scaffolding(line, normalized_paths))
+        .any(|line| line_has_specific_discriminator(&line))
+}
+
+fn strip_location_scaffolding(line: &str, normalized_paths: &BTreeSet<String>) -> Option<String> {
+    let mut stripped = line.to_string();
+    for path in normalized_paths {
+        stripped = stripped.replace(path, " ");
+    }
+
+    let stripped = stripped
+        .trim_matches(|ch: char| matches!(ch, ' ' | '-' | '>' | '|' | ':'))
+        .trim();
+    (!stripped.is_empty()).then(|| stripped.to_string())
+}
+
+fn line_has_specific_discriminator(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    lower.contains('`')
+        || lower.contains("::")
+        || contains_any(
+            &lower,
+            &[
+                "cannot find ",
+                "unresolved import",
+                "expected ",
+                "found ",
+                "trait bound",
+                "method ",
+                "field ",
+                "variant ",
+                "similar name exists",
+            ],
+        )
 }
 
 fn extract_location_hints(output: &str) -> Vec<String> {
@@ -1416,6 +1468,38 @@ mod tests {
 
         assert_eq!(left[0].failing_paths, right[0].failing_paths);
         assert_ne!(left[0].payload_hash_hex, right[0].payload_hash_hex);
+    }
+
+    #[test]
+    fn checkpoints_ignore_location_drift_when_non_location_payload_is_already_specific() {
+        let attempt = test_attempt(
+            1,
+            10,
+            "cargo check -p agent-drift-analyzer",
+            CommandAttemptRole::Compile,
+            vec!["crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs".to_string()],
+        );
+        let scope = VerificationScope {
+            raw: attempt.raw_command.clone(),
+            paths: attempt.paths.clone(),
+            tests: Vec::new(),
+            broad: false,
+        };
+        let left = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "error[E0425] cannot find value `session_frontier` in this scope\n --> crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs:12:34\nhelp: a local variable with a similar name exists: `session_window`\nExit code: 101",
+        );
+        let right = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "error[E0425] cannot find value `session_frontier` in this scope\n --> crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs:77:9\nhelp: a local variable with a similar name exists: `session_window`\nExit code: 101",
+        );
+
+        assert_eq!(left.len(), 1);
+        assert_eq!(right.len(), 1);
+        assert_eq!(left[0].failing_paths, right[0].failing_paths);
+        assert_eq!(left[0].payload_hash_hex, right[0].payload_hash_hex);
     }
 
     #[test]
