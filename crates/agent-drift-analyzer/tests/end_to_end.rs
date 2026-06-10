@@ -139,6 +139,34 @@ fn end_to_end_summary_surfaces_compact_session_archetype_inspection() {
 }
 
 #[test]
+fn end_to_end_summary_surfaces_progress_distribution_and_checkpoint_lines() {
+    let fixture = BundleFixture::sample();
+    let request = AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    };
+
+    let result = agent_drift_analyzer::analyze_bundle(&request).expect("analyze sample bundle");
+    let summary = fs::read_to_string(&result.summary_path).expect("summary");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert!(summary.contains("Progress status distribution: `"));
+    assert!(summary.contains("Progress dimension distribution: `"));
+    assert!(summary.contains("- Progress status distribution: `"));
+    assert!(summary.contains("- Progress dimension distribution: `"));
+    assert_eq!(
+        summary.matches("  progress: `status=").count(),
+        checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.session_progress.is_some())
+            .count()
+    );
+    assert!(summary.contains("  archetype: `label="));
+    assert!(summary.contains("  delegation: `topology="));
+    assert!(summary.contains("  turn: `turn-001"));
+}
+
+#[test]
 fn end_to_end_reruns_preserve_identical_turn_context_and_ordinal_stability() {
     let mut bundle = load_sample_bundle();
     for row in bundle

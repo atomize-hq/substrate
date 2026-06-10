@@ -11,7 +11,8 @@ use agent_drift_analyzer::checkpoint::{
 };
 use agent_drift_analyzer::{
     BundleSession, Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, DriftState,
-    EvidenceRef, SessionArchetype, SessionArchetypeLabel, TaskFrame,
+    EvidenceRef, ProgressDimension, ProgressStatus, SessionArchetype, SessionArchetypeLabel,
+    SessionProgress, TaskFrame,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -301,6 +302,72 @@ fn export_bundle_renders_compact_session_archetype_inspection() {
     assert!(summary.contains("source edit command strengthened implementation-like evidence"));
     assert!(summary.contains("+1 more]"));
     assert!(summary.contains("counter[inspection-style command widened the visible search space]`"));
+}
+
+#[test]
+fn export_bundle_renders_progress_distribution_and_compact_progress_lines() {
+    let fixture = BundleFixture::sample();
+    let result = agent_drift_analyzer::analyze_bundle(&agent_drift_analyzer::AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze sample bundle");
+    let summary = fs::read_to_string(&result.summary_path).expect("summary");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    let expected_status_distribution = format_progress_status_distribution(&checkpoints);
+    let expected_dimension_distribution = format_progress_dimension_distribution(&checkpoints);
+
+    assert!(summary.contains(&format!(
+        "Progress status distribution: `{expected_status_distribution}`"
+    )));
+    assert!(summary.contains(&format!(
+        "Progress dimension distribution: `{expected_dimension_distribution}`"
+    )));
+    assert!(summary.contains(&format!(
+        "- Progress status distribution: `{expected_status_distribution}`"
+    )));
+    assert!(summary.contains(&format!(
+        "- Progress dimension distribution: `{expected_dimension_distribution}`"
+    )));
+
+    for checkpoint in &checkpoints {
+        assert!(summary.contains(&format!(
+            "  progress: `{}`",
+            format_checkpoint_progress(checkpoint.session_progress.as_ref())
+        )));
+    }
+}
+
+#[test]
+fn export_bundle_renders_unavailable_progress_for_legacy_checkpoint_surfaces() {
+    let session = fixture_session(
+        "session-legacy-progress",
+        vec![fixture_row(
+            "session-legacy-progress",
+            0,
+            CompactionKind::UserMessage,
+            "/goal Preserve legacy export rendering.",
+            Some(UserMessageRole::Prompt),
+        )],
+    );
+    let checkpoint = fixture_checkpoint_with_archetype(
+        &session,
+        1,
+        0,
+        Confidence::Low,
+        SessionArchetype {
+            label: SessionArchetypeLabel::Planning,
+            confidence: Confidence::Low,
+            supporting_evidence: Vec::new(),
+            counter_evidence: Vec::new(),
+        },
+    );
+    let summary = export_summary(vec![session], vec![checkpoint]);
+
+    assert!(summary
+        .contains("  archetype: `label=planning confidence=low support[none] counter[none]`"));
+    assert!(summary.contains("  progress: `unavailable`"));
 }
 
 #[test]
@@ -1181,4 +1248,164 @@ fn format_confidence_distribution(
             )
         })
         .unwrap_or_else(|| "unavailable".to_string())
+}
+
+fn format_progress_status_distribution(checkpoints: &[Checkpoint]) -> String {
+    let observed = checkpoints
+        .iter()
+        .filter_map(|checkpoint| checkpoint.session_progress.as_ref())
+        .collect::<Vec<_>>();
+    if observed.is_empty() {
+        return "unavailable".to_string();
+    }
+
+    [
+        ProgressStatus::Advancing,
+        ProgressStatus::Mixed,
+        ProgressStatus::Stalled,
+        ProgressStatus::Regressing,
+        ProgressStatus::InsufficientEvidence,
+    ]
+    .into_iter()
+    .map(|status| {
+        format!(
+            "{}={}",
+            format_progress_status(status),
+            observed
+                .iter()
+                .filter(|progress| progress.status == status)
+                .count()
+        )
+    })
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
+fn format_progress_dimension_distribution(checkpoints: &[Checkpoint]) -> String {
+    let observed = checkpoints
+        .iter()
+        .filter_map(|checkpoint| checkpoint.session_progress.as_ref())
+        .collect::<Vec<_>>();
+    if observed.is_empty() {
+        return "unavailable".to_string();
+    }
+
+    [
+        ProgressDimension::TroubleshootingFrontier,
+        ProgressDimension::PlanningConvergence,
+        ProgressDimension::ImplementationVerificationWall,
+        ProgressDimension::VerificationCloseoutNarrowing,
+        ProgressDimension::ParentVisibleOrchestration,
+    ]
+    .into_iter()
+    .map(|dimension| {
+        format!(
+            "{}={}",
+            format_progress_dimension(dimension),
+            observed
+                .iter()
+                .filter(|progress| progress.dimension == dimension)
+                .count()
+        )
+    })
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
+fn format_checkpoint_progress(progress: Option<&SessionProgress>) -> String {
+    let Some(progress) = progress else {
+        return "unavailable".to_string();
+    };
+
+    format!(
+        "status={} dimension={} confidence={} support[{}] counter[{}]",
+        format_progress_status(progress.status),
+        format_progress_dimension(progress.dimension),
+        match progress.confidence {
+            Confidence::Low => "low",
+            Confidence::Medium => "medium",
+            Confidence::High => "high",
+        },
+        format_progress_support(progress),
+        format_reasons(&progress.counter_evidence)
+    )
+}
+
+fn format_progress_status(status: ProgressStatus) -> &'static str {
+    match status {
+        ProgressStatus::Advancing => "advancing",
+        ProgressStatus::Mixed => "mixed",
+        ProgressStatus::Stalled => "stalled",
+        ProgressStatus::Regressing => "regressing",
+        ProgressStatus::InsufficientEvidence => "insufficient_evidence",
+    }
+}
+
+fn format_progress_dimension(dimension: ProgressDimension) -> &'static str {
+    match dimension {
+        ProgressDimension::TroubleshootingFrontier => "troubleshooting_frontier",
+        ProgressDimension::PlanningConvergence => "planning_convergence",
+        ProgressDimension::ImplementationVerificationWall => "implementation_verification_wall",
+        ProgressDimension::VerificationCloseoutNarrowing => "verification_closeout_narrowing",
+        ProgressDimension::ParentVisibleOrchestration => "parent_visible_orchestration",
+    }
+}
+
+fn format_progress_support(progress: &SessionProgress) -> String {
+    let mut summaries = progress
+        .signals
+        .iter()
+        .map(|signal| truncate_for_summary(&signal.summary, 64))
+        .fold(Vec::<String>::new(), |mut acc, summary| {
+            if acc.iter().all(|existing| existing != &summary) {
+                acc.push(summary);
+            }
+            acc
+        });
+
+    if summaries.is_empty() {
+        return format_reasons(&progress.supporting_evidence);
+    }
+
+    let remaining = summaries.len().saturating_sub(2);
+    summaries.truncate(2);
+    if remaining > 0 {
+        summaries.push(format!("+{remaining} more"));
+    }
+
+    summaries.join("; ")
+}
+
+fn format_reasons(evidence: &[EvidenceRef]) -> String {
+    if evidence.is_empty() {
+        return "none".to_string();
+    }
+
+    let mut reasons = Vec::<String>::new();
+    for item in evidence {
+        if reasons.iter().any(|reason| reason == &item.reason) {
+            continue;
+        }
+        reasons.push(truncate_for_summary(&item.reason, 64));
+    }
+
+    let remaining = reasons.len().saturating_sub(2);
+    reasons.truncate(2);
+    if remaining > 0 {
+        reasons.push(format!("+{remaining} more"));
+    }
+
+    reasons.join("; ")
+}
+
+fn truncate_for_summary(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        return text.to_string();
+    }
+
+    let truncated = text
+        .chars()
+        .take(limit.saturating_sub(3))
+        .collect::<String>();
+    format!("{truncated}...")
 }

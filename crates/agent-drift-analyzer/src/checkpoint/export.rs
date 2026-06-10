@@ -8,8 +8,9 @@ use time::OffsetDateTime;
 
 use super::checkpoint_analyses;
 use crate::checkpoint::{
-    Checkpoint, Confidence, DriftClass, SessionArchetype, SessionArchetypeLabel, TaskFrame,
-    TurnActivityMix, TurnContext, TurnExecutionMode,
+    Checkpoint, Confidence, DriftClass, ProgressDimension, ProgressStatus, SessionArchetype,
+    SessionArchetypeLabel, SessionProgress, TaskFrame, TurnActivityMix, TurnContext,
+    TurnExecutionMode,
 };
 use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
 use crate::input::BundleSession;
@@ -25,6 +26,50 @@ pub struct ConfidenceDistribution {
     pub low: usize,
     pub medium: usize,
     pub high: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProgressDistribution {
+    status_counts: BTreeMap<ProgressStatus, usize>,
+    dimension_counts: BTreeMap<ProgressDimension, usize>,
+}
+
+impl Default for ProgressDistribution {
+    fn default() -> Self {
+        Self {
+            status_counts: progress_status_counts(),
+            dimension_counts: progress_dimension_counts(),
+        }
+    }
+}
+
+impl std::ops::Add for ProgressDistribution {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut status_counts = self.status_counts;
+        for status in progress_statuses() {
+            *status_counts.entry(status).or_default() +=
+                rhs.status_counts.get(&status).copied().unwrap_or(0);
+        }
+
+        let mut dimension_counts = self.dimension_counts;
+        for dimension in progress_dimensions() {
+            *dimension_counts.entry(dimension).or_default() +=
+                rhs.dimension_counts.get(&dimension).copied().unwrap_or(0);
+        }
+
+        Self {
+            status_counts,
+            dimension_counts,
+        }
+    }
+}
+
+impl ProgressDistribution {
+    fn observed_count(&self) -> usize {
+        self.status_counts.values().sum()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -311,6 +356,14 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
             format_confidence_distribution(&overall.checkpoint_stats)
         ),
         format!(
+            "Progress status distribution: `{}`",
+            format_progress_status_distribution(&overall.progress_distribution)
+        ),
+        format!(
+            "Progress dimension distribution: `{}`",
+            format_progress_dimension_distribution(&overall.progress_distribution)
+        ),
+        format!(
             "Working-set churn: `{}`",
             format_optional_metric(overall.checkpoint_stats.working_set_churn())
         ),
@@ -382,6 +435,14 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
         lines.push(format!(
             "- Task-frame confidence distribution: `{}`",
             format_confidence_distribution(&session_summary.checkpoint_stats)
+        ));
+        lines.push(format!(
+            "- Progress status distribution: `{}`",
+            format_progress_status_distribution(&session_summary.progress_distribution)
+        ));
+        lines.push(format!(
+            "- Progress dimension distribution: `{}`",
+            format_progress_dimension_distribution(&session_summary.progress_distribution)
         ));
         lines.push(format!(
             "- Working-set churn: `{}`",
@@ -461,6 +522,10 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
                 "  archetype: `{}`",
                 format_checkpoint_archetype(checkpoint.session_archetype.as_ref())
             ));
+            lines.push(format!(
+                "  progress: `{}`",
+                format_checkpoint_progress(checkpoint.session_progress.as_ref())
+            ));
         }
         lines.push(String::new());
     }
@@ -482,6 +547,7 @@ struct SessionSummary {
     session_id: String,
     metrics: SessionSummaryMetrics,
     checkpoint_stats: CheckpointDiagnosticStats,
+    progress_distribution: ProgressDistribution,
     diagnostics: SessionDiagnostics,
     spacing: SpacingAccumulator,
     checkpoints: Vec<Checkpoint>,
@@ -553,6 +619,7 @@ struct OverallSummaryMetrics {
     longest_flagged_streak: usize,
     user_message_roles: UserMessageRoleCounts,
     checkpoint_stats: CheckpointDiagnosticStats,
+    progress_distribution: ProgressDistribution,
 }
 
 fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> SessionSummary {
@@ -565,6 +632,7 @@ fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> Se
     let user_message_roles = user_message_role_counts(&session.compact_rows);
     let spacing = checkpoint_spacing(session, &sorted_checkpoints);
     let checkpoint_stats = summarize_checkpoint_diagnostics(&sorted_checkpoints);
+    let progress_distribution = summarize_progress_distribution(&sorted_checkpoints);
     let delegation_by_ordinal = checkpoint_analyses(session)
         .into_iter()
         .map(|analysis| (analysis.ordinal, analysis.delegation))
@@ -594,6 +662,7 @@ fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> Se
         session_id: session.session_id.clone(),
         metrics,
         checkpoint_stats,
+        progress_distribution,
         diagnostics,
         spacing,
         checkpoints: sorted_checkpoints,
@@ -633,6 +702,11 @@ fn aggregate_summary_metrics(sessions: &[SessionSummary]) -> OverallSummaryMetri
         .fold(CheckpointDiagnosticStats::default(), |acc, session| {
             acc + session.checkpoint_stats.clone()
         });
+    let progress_distribution = sessions
+        .iter()
+        .fold(ProgressDistribution::default(), |acc, session| {
+            acc + session.progress_distribution.clone()
+        });
     let spacing = sessions
         .iter()
         .fold(SpacingAccumulator::default(), |acc, session| {
@@ -651,7 +725,28 @@ fn aggregate_summary_metrics(sessions: &[SessionSummary]) -> OverallSummaryMetri
         longest_flagged_streak,
         user_message_roles,
         checkpoint_stats,
+        progress_distribution,
     }
+}
+
+fn summarize_progress_distribution(checkpoints: &[Checkpoint]) -> ProgressDistribution {
+    let mut distribution = ProgressDistribution::default();
+
+    for checkpoint in checkpoints {
+        let Some(progress) = checkpoint.session_progress.as_ref() else {
+            continue;
+        };
+        *distribution
+            .status_counts
+            .entry(progress.status)
+            .or_default() += 1;
+        *distribution
+            .dimension_counts
+            .entry(progress.dimension)
+            .or_default() += 1;
+    }
+
+    distribution
 }
 
 fn checkpoint_spacing(session: &BundleSession, checkpoints: &[Checkpoint]) -> SpacingAccumulator {
@@ -907,6 +1002,21 @@ fn format_checkpoint_archetype(archetype: Option<&SessionArchetype>) -> String {
     )
 }
 
+fn format_checkpoint_progress(progress: Option<&SessionProgress>) -> String {
+    let Some(progress) = progress else {
+        return "unavailable".to_string();
+    };
+
+    format!(
+        "status={} dimension={} confidence={} support[{}] counter[{}]",
+        format_progress_status(progress.status),
+        format_progress_dimension(progress.dimension),
+        format_confidence(progress.confidence),
+        format_progress_support(progress),
+        format_archetype_evidence(&progress.counter_evidence)
+    )
+}
+
 fn format_delegation_topology(topology: DelegationTopology) -> &'static str {
     match topology {
         DelegationTopology::SingleAgent => "single_agent",
@@ -930,6 +1040,26 @@ fn format_session_archetype_label(label: SessionArchetypeLabel) -> &'static str 
         SessionArchetypeLabel::Planning => "planning",
         SessionArchetypeLabel::AutonomousImplementation => "autonomous_implementation",
         SessionArchetypeLabel::VerificationCloseout => "verification_closeout",
+    }
+}
+
+fn format_progress_status(status: ProgressStatus) -> &'static str {
+    match status {
+        ProgressStatus::Advancing => "advancing",
+        ProgressStatus::Mixed => "mixed",
+        ProgressStatus::Stalled => "stalled",
+        ProgressStatus::Regressing => "regressing",
+        ProgressStatus::InsufficientEvidence => "insufficient_evidence",
+    }
+}
+
+fn format_progress_dimension(dimension: ProgressDimension) -> &'static str {
+    match dimension {
+        ProgressDimension::TroubleshootingFrontier => "troubleshooting_frontier",
+        ProgressDimension::PlanningConvergence => "planning_convergence",
+        ProgressDimension::ImplementationVerificationWall => "implementation_verification_wall",
+        ProgressDimension::VerificationCloseoutNarrowing => "verification_closeout_narrowing",
+        ProgressDimension::ParentVisibleOrchestration => "parent_visible_orchestration",
     }
 }
 
@@ -989,6 +1119,34 @@ fn format_archetype_evidence(evidence: &[crate::checkpoint::EvidenceRef]) -> Str
     }
 
     displayed.join("; ")
+}
+
+fn format_progress_support(progress: &SessionProgress) -> String {
+    const DISPLAY_LIMIT: usize = 2;
+    const SUMMARY_LIMIT: usize = 64;
+
+    let mut summaries = progress
+        .signals
+        .iter()
+        .map(|signal| truncate_for_summary(&signal.summary, SUMMARY_LIMIT))
+        .fold(Vec::<String>::new(), |mut acc, summary| {
+            if acc.iter().all(|existing| existing != &summary) {
+                acc.push(summary);
+            }
+            acc
+        });
+
+    if summaries.is_empty() {
+        return format_archetype_evidence(&progress.supporting_evidence);
+    }
+
+    let remaining = summaries.len().saturating_sub(DISPLAY_LIMIT);
+    summaries.truncate(DISPLAY_LIMIT);
+    if remaining > 0 {
+        summaries.push(format!("+{remaining} more"));
+    }
+
+    summaries.join("; ")
 }
 
 fn truncate_for_summary(text: &str, limit: usize) -> String {
@@ -1079,10 +1237,68 @@ fn format_confidence_distribution(stats: &CheckpointDiagnosticStats) -> String {
         .unwrap_or_else(|| "unavailable".to_string())
 }
 
+fn format_progress_status_distribution(distribution: &ProgressDistribution) -> String {
+    if distribution.observed_count() == 0 {
+        return "unavailable".to_string();
+    }
+
+    progress_statuses()
+        .into_iter()
+        .map(|status| {
+            format!(
+                "{}={}",
+                format_progress_status(status),
+                distribution
+                    .status_counts
+                    .get(&status)
+                    .copied()
+                    .unwrap_or(0)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn format_progress_dimension_distribution(distribution: &ProgressDistribution) -> String {
+    if distribution.observed_count() == 0 {
+        return "unavailable".to_string();
+    }
+
+    progress_dimensions()
+        .into_iter()
+        .map(|dimension| {
+            format!(
+                "{}={}",
+                format_progress_dimension(dimension),
+                distribution
+                    .dimension_counts
+                    .get(&dimension)
+                    .copied()
+                    .unwrap_or(0)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn drift_class_flagged_counts() -> BTreeMap<DriftClass, usize> {
     drift_classes()
         .into_iter()
         .map(|class| (class, 0usize))
+        .collect()
+}
+
+fn progress_status_counts() -> BTreeMap<ProgressStatus, usize> {
+    progress_statuses()
+        .into_iter()
+        .map(|status| (status, 0usize))
+        .collect()
+}
+
+fn progress_dimension_counts() -> BTreeMap<ProgressDimension, usize> {
+    progress_dimensions()
+        .into_iter()
+        .map(|dimension| (dimension, 0usize))
         .collect()
 }
 
@@ -1091,6 +1307,26 @@ fn drift_classes() -> [DriftClass; 3] {
         DriftClass::WrongPlanBranch,
         DriftClass::TruthGroundingGap,
         DriftClass::DeadEndThrash,
+    ]
+}
+
+fn progress_statuses() -> [ProgressStatus; 5] {
+    [
+        ProgressStatus::Advancing,
+        ProgressStatus::Mixed,
+        ProgressStatus::Stalled,
+        ProgressStatus::Regressing,
+        ProgressStatus::InsufficientEvidence,
+    ]
+}
+
+fn progress_dimensions() -> [ProgressDimension; 5] {
+    [
+        ProgressDimension::TroubleshootingFrontier,
+        ProgressDimension::PlanningConvergence,
+        ProgressDimension::ImplementationVerificationWall,
+        ProgressDimension::VerificationCloseoutNarrowing,
+        ProgressDimension::ParentVisibleOrchestration,
     ]
 }
 
