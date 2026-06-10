@@ -1,3 +1,4 @@
+mod attempt;
 mod export;
 mod schema;
 
@@ -12,6 +13,9 @@ use crate::{
     scoring::DriftStateHint, scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
+use attempt::{
+    build_command_attempts, build_verification_attempts, CommandAttempt, VerificationAttempt,
+};
 use camino::Utf8PathBuf;
 
 pub use export::{
@@ -53,6 +57,8 @@ pub(crate) struct IntervalSlice {
     pub archival_rows: Vec<CompactionRow>,
     pub compact_rows: Vec<CompactionRow>,
     pub command_observations: Vec<CommandObservation>,
+    pub command_attempts: Vec<CommandAttempt>,
+    pub verification_attempts: Vec<VerificationAttempt>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1585,11 +1591,15 @@ fn interval_slice(previous: Option<&CheckpointSlice>, current: &CheckpointSlice)
     let archival_rows = current.window.archival_rows[archival_start..].to_vec();
     let compact_rows = current.window.compact_rows[interval_start..].to_vec();
     let command_observations = collect_command_observations(&compact_rows);
+    let command_attempts = build_command_attempts(&compact_rows, &command_observations);
+    let verification_attempts = build_verification_attempts(&command_attempts, &compact_rows);
 
     IntervalSlice {
         archival_rows,
         compact_rows,
         command_observations,
+        command_attempts,
+        verification_attempts,
     }
 }
 
@@ -2109,6 +2119,70 @@ mod tests {
             .any(|evidence| evidence
                 .reason
                 .contains("delegation directive surface references separate child rollout")));
+    }
+
+    #[test]
+    fn checkpoints_populate_internal_interval_attempts_from_checkpoint_analysis() {
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Verify attempt wiring.",
+                ),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    "cargo test -p agent-drift-analyzer checkpoints",
+                ),
+                row(
+                    2,
+                    CompactionKind::ToolOutput,
+                    "running 1 test\nExit code: 0",
+                ),
+            ],
+            compact_rows: vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Verify attempt wiring.",
+                ),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    "cargo test -p agent-drift-analyzer checkpoints",
+                ),
+                row(
+                    2,
+                    CompactionKind::ToolOutput,
+                    "running 1 test\nExit code: 0",
+                ),
+            ],
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 1);
+
+        let interval = &analyses[0].interval;
+        assert_eq!(interval.command_attempts.len(), 1);
+        assert_eq!(
+            interval.command_attempts[0].role,
+            super::attempt::CommandAttemptRole::Test
+        );
+        assert_eq!(
+            interval.command_attempts[0].outcome,
+            super::attempt::AttemptOutcome::Clean
+        );
+        assert_eq!(interval.verification_attempts.len(), 1);
+        assert_eq!(
+            interval.verification_attempts[0].exercise_state,
+            super::attempt::ExerciseState::TargetExercised
+        );
+        assert_eq!(
+            interval.verification_attempts[0].target_scope.tests,
+            vec!["checkpoints".to_string()]
+        );
     }
 
     #[test]
