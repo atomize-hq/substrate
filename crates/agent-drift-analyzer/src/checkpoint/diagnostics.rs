@@ -824,16 +824,27 @@ fn preserve_line_column_suffix(path: &str) -> Option<String> {
 }
 
 fn extract_paths_from_lines(lines: &[String]) -> Vec<String> {
-    lines
-        .iter()
-        .flat_map(|line| {
-            line.split_whitespace()
-                .filter_map(normalize_path_token)
-                .collect::<Vec<_>>()
-        })
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect()
+    let mut paths = BTreeSet::new();
+
+    for line in lines {
+        for token in line.split_whitespace() {
+            if let Some(path) = normalize_path_token(token) {
+                paths.insert(path);
+            }
+            if let Some(path) = extract_pytest_node_id_path(token) {
+                paths.insert(path);
+            }
+        }
+    }
+
+    paths.into_iter().collect()
+}
+
+fn extract_pytest_node_id_path(token: &str) -> Option<String> {
+    let cleaned = trim_test_token(token);
+    let (path, _) = cleaned.split_once("::")?;
+    let normalized = normalize_path_token(path)?;
+    looks_like_test_path(&normalized).then_some(normalized)
 }
 
 fn extract_tests_from_lines(lines: &[String]) -> Vec<String> {
@@ -1733,6 +1744,55 @@ mod tests {
 
         let overlap = classify_edit_overlap(&previous, &current, &[sibling_module_edit]);
         assert_eq!(overlap.strength, EditOverlapStrength::Moderate);
+        assert_eq!(overlap.evidence.len(), 3);
+    }
+
+    #[test]
+    fn checkpoints_classify_edit_overlap_strong_for_pytest_node_id_file_edits() {
+        let attempt = test_attempt(
+            1,
+            10,
+            "pytest tests/checkpoints_test.py::test_progress",
+            CommandAttemptRole::Test,
+            vec!["tests/checkpoints_test.py".to_string()],
+        );
+        let scope = VerificationScope {
+            raw: attempt.raw_command.clone(),
+            paths: vec!["tests/checkpoints_test.py".to_string()],
+            tests: vec![
+                "tests/checkpoints_test.py::test_progress".to_string(),
+                "test_progress".to_string(),
+            ],
+            broad: false,
+        };
+        let signature = build_diagnostic_signatures(
+            &attempt,
+            &scope,
+            "=========================== short test summary info ============================\nFAILED tests/checkpoints_test.py::test_progress - AssertionError: expected advancing\n========================= 1 failed, 4 passed in 0.32s =========================",
+        )
+        .into_iter()
+        .next()
+        .expect("pytest failure should yield a diagnostic signature");
+
+        assert!(signature
+            .failing_paths
+            .contains(&"tests/checkpoints_test.py".to_string()));
+        assert!(signature
+            .failing_tests
+            .contains(&"tests/checkpoints_test.py::test_progress".to_string()));
+
+        let previous = verification_attempt(2, 20, signature.clone());
+        let current = verification_attempt(3, 30, signature);
+        let exact_file_edit = test_attempt(
+            4,
+            25,
+            "apply_patch <<'PATCH'\n*** Begin Patch",
+            CommandAttemptRole::Edit,
+            vec!["tests/checkpoints_test.py".to_string()],
+        );
+
+        let overlap = classify_edit_overlap(&previous, &current, &[exact_file_edit]);
+        assert_eq!(overlap.strength, EditOverlapStrength::Strong);
         assert_eq!(overlap.evidence.len(), 3);
     }
 
