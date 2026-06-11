@@ -182,6 +182,8 @@ struct ObjectiveCandidate<'a> {
     source: ObjectiveSource,
     boilerplate_class: Option<BoilerplateClass>,
     priority: u8,
+    role_priority: u8,
+    pivot_priority: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2124,8 +2126,10 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
         .iter()
         .filter_map(objective_candidate)
         .max_by(|left, right| {
-            left.priority
-                .cmp(&right.priority)
+            left.pivot_priority
+                .cmp(&right.pivot_priority)
+                .then_with(|| left.priority.cmp(&right.priority))
+                .then_with(|| left.role_priority.cmp(&right.role_priority))
                 .then_with(|| left.row.event_index.cmp(&right.row.event_index))
                 .then_with(|| left.text.len().cmp(&right.text.len()))
         })?;
@@ -2230,6 +2234,8 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             source: ObjectiveSource::ThreadGoalText,
             boilerplate_class: None,
             priority: 4,
+            role_priority: 0,
+            pivot_priority: 0,
         });
     }
 
@@ -2245,6 +2251,8 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             source: ObjectiveSource::LiteralGoalCommand,
             boilerplate_class: boilerplate_class(&row.text),
             priority: 6,
+            role_priority: objective_candidate_role_priority(row),
+            pivot_priority: objective_candidate_pivot_priority(row),
         });
     }
 
@@ -2255,6 +2263,8 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             source: ObjectiveSource::ExplicitUserRequest,
             boilerplate_class: boilerplate_class(&row.text),
             priority: 5,
+            role_priority: objective_candidate_role_priority(row),
+            pivot_priority: objective_candidate_pivot_priority(row),
         });
     }
 
@@ -2265,6 +2275,8 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             source: ObjectiveSource::AssistantRestatedGoal,
             boilerplate_class: boilerplate_class(&row.text),
             priority: 3,
+            role_priority: 0,
+            pivot_priority: 0,
         });
     }
 
@@ -2275,6 +2287,8 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             source: ObjectiveSource::NonBoilerplateUnknown,
             boilerplate_class: None,
             priority: 2,
+            role_priority: 0,
+            pivot_priority: 0,
         });
     }
 
@@ -2288,10 +2302,55 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             source: ObjectiveSource::NonBoilerplateDirective,
             boilerplate_class: boilerplate_class(&row.text),
             priority: 1,
+            role_priority: 0,
+            pivot_priority: 0,
         });
     }
 
     None
+}
+
+fn objective_candidate_role_priority(row: &CompactionRow) -> u8 {
+    match row.user_message_role.unwrap_or(UserMessageRole::Unknown) {
+        UserMessageRole::Prompt => 2,
+        UserMessageRole::Unknown => 1,
+        UserMessageRole::Steer => 0,
+    }
+}
+
+fn objective_candidate_pivot_priority(row: &CompactionRow) -> u8 {
+    objective_candidate_is_explicit_replan_pivot(row).into()
+}
+
+fn objective_candidate_is_explicit_replan_pivot(row: &CompactionRow) -> bool {
+    if !matches!(row.kind, CompactionKind::UserMessage)
+        || row.user_message_role != Some(UserMessageRole::Steer)
+    {
+        return false;
+    }
+
+    let normalized = normalize_objective_candidate_text(&row.text);
+    [
+        "replan",
+        "pivot",
+        "instead of",
+        "instead",
+        "new objective",
+        "change objective",
+        "change the objective",
+        "change scope",
+        "change the scope",
+        "different objective",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn normalize_objective_candidate_text(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
 }
 
 fn is_closeout_artifact_path(path: &str) -> bool {
@@ -2444,7 +2503,7 @@ fn row_is_pure_boilerplate(row: &CompactionRow) -> bool {
 }
 
 fn objective_text_is_pure_boilerplate(text: &str) -> bool {
-    boilerplate_class(text).is_some() && !text_preserves_boilerplate_target(text)
+    boilerplate_class(text).is_some()
 }
 
 fn preserves_user_requested_boilerplate_target(row: &CompactionRow) -> bool {
@@ -2452,10 +2511,10 @@ fn preserves_user_requested_boilerplate_target(row: &CompactionRow) -> bool {
         return false;
     }
 
-    text_preserves_boilerplate_target(&row.text)
+    user_request_targets_boilerplate_surface(&row.text)
 }
 
-fn text_preserves_boilerplate_target(text: &str) -> bool {
+fn user_request_targets_boilerplate_surface(text: &str) -> bool {
     let trimmed = text.trim_start();
     if trimmed.starts_with("# AGENTS.md instructions")
         || trimmed.starts_with("<skill>")
@@ -2465,16 +2524,16 @@ fn text_preserves_boilerplate_target(text: &str) -> bool {
     }
 
     let lower = text.to_ascii_lowercase();
-    let action = [
-        "analyze", "inspect", "review", "edit", "update", "rewrite", "tighten", "fix", "audit",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle));
+    mentions_preservable_boilerplate_target(&lower)
+}
+
+fn mentions_preservable_boilerplate_target(lower: &str) -> bool {
     let target = [
         "agents.md instructions",
         "agents.md",
         "<skill>",
         "skill block",
+        "skill file",
         "available skills",
         "codex desktop context",
         "plugin instructions",
@@ -2497,7 +2556,7 @@ fn text_preserves_boilerplate_target(text: &str) -> bool {
     .iter()
     .any(|needle| lower.contains(needle));
 
-    action && target
+    target
 }
 
 fn boilerplate_class(text: &str) -> Option<BoilerplateClass> {

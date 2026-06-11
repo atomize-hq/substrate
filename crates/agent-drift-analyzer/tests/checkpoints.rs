@@ -3681,6 +3681,90 @@ fn checkpoints_treat_steer_rows_as_explicit_user_objectives_over_boilerplate() {
 }
 
 #[test]
+fn checkpoints_keep_base_prompt_when_later_steer_stays_on_same_frontier() {
+    let goal = "/goal Debug the failing analyzer checkpoint tests without changing scope.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+        ),
+        steer_row(
+            3,
+            "turn-002",
+            "Keep the same frontier and rerun only the existing verification command.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            5,
+            "turn-002",
+            r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+        ),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints[1].task_frame.objective, goal);
+    assert!(!checkpoints[1].diagnostics.task_frame_transitioned);
+}
+
+#[test]
+fn checkpoints_allow_later_steer_to_replace_objective_on_explicit_pivot_signal() {
+    let goal = "/goal Debug the failing analyzer checkpoint tests without changing scope.";
+    let pivot =
+        "Pivot instead to documenting the checkpoint review findings only before any more debugging.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 101"),
+        steer_row(3, "turn-002", pivot),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(5, "turn-002", "Exit code: 0"),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints[1].task_frame.objective, pivot);
+    assert!(checkpoints[1].diagnostics.task_frame_transitioned);
+}
+
+#[test]
 fn checkpoints_prefer_explicit_user_requests_over_unclassified_app_plugin_scaffolding() {
     let objective = "Fix the checkpoint objective selector in checkpoint/mod.rs and add the regression in checkpoints.rs.";
     let result = analyze_custom_rows(vec![
@@ -3954,6 +4038,78 @@ fn checkpoints_preserve_user_requested_tooling_plugin_app_and_safety_targets() {
             "turn-001",
             "functions.shell_command",
             r#"{"command":"rg -n \"Codex desktop context|plugin instructions|Apps \\(Connectors\\)|safety guardrails\" AGENTS.md CLAUDE.md","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+}
+
+#[test]
+fn checkpoints_preserve_compare_style_agents_instruction_targets() {
+    let goal =
+        "/goal Compare the AGENTS.md instructions block against the current task behavior and explain the mismatches only.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+}
+
+#[test]
+fn checkpoints_preserve_explain_style_skill_targets() {
+    let goal =
+        "/goal Explain whether the <skill> block conflicts with the current packet scope and keep the answer limited to that skill boilerplate.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' /Users/me/.agents/skills/incremental-implementation/SKILL.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"<skill>|Available skills\" /tmp/session.txt","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+}
+
+#[test]
+fn checkpoints_preserve_determine_style_tooling_targets() {
+    let goal =
+        "/goal Determine whether the Codex desktop context, plugin instructions, and Apps (Connectors) scaffold should change, and explain only that tooling boilerplate decision.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"Codex desktop context|plugin instructions|Apps \\(Connectors\\)\" AGENTS.md CLAUDE.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' CLAUDE.md","workdir":"/repo"}"#,
         ),
     ]);
 
