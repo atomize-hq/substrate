@@ -141,12 +141,13 @@ pub async fn ensure_persistent_session_ready_async(ctx: &PlatformWorldContext) -
 
 #[cfg(target_os = "macos")]
 pub fn detect() -> Result<PlatformWorldContext> {
+    use world_mac_lima::transport::{
+        managed_host_socket_path, COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
+    };
     use world_mac_lima::MacLimaBackend;
 
     // Default UDS path on host for SSH UDS forwarding
-    let default_sock = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".substrate/sock/agent.sock");
+    let default_sock = managed_host_socket_path();
 
     // Auto-detect transport preference (do not start VM/tunnels here)
     let transport_pref = world_mac_lima::Transport::auto_select().unwrap_or_default();
@@ -154,11 +155,13 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let transport = match transport_pref {
         world_mac_lima::Transport::UnixSocket => WorldTransport::Unix(default_sock.clone()),
         // VSock is proxied to local TCP port by vsock-proxy (host loopback)
-        world_mac_lima::Transport::VSock => WorldTransport::Vsock { port: 17788 },
+        world_mac_lima::Transport::VSock => WorldTransport::Vsock {
+            port: COMPATIBILITY_TCP_PORT,
+        },
         // TCP fallback (if ever used) will be loopback
         world_mac_lima::Transport::TCP => WorldTransport::Tcp {
-            host: "127.0.0.1".into(),
-            port: 17788,
+            host: COMPATIBILITY_TCP_HOST.into(),
+            port: COMPATIBILITY_TCP_PORT,
         },
     };
 

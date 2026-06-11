@@ -26,6 +26,10 @@ mod limactl;
 pub mod transport;
 pub mod vm;
 
+use crate::transport::{
+    managed_host_socket_path, CANONICAL_GUEST_SOCKET_PATH, COMPATIBILITY_TCP_HOST,
+    COMPATIBILITY_TCP_PORT,
+};
 pub use forwarding::{ForwardingHandle, ForwardingKind};
 pub use transport::Transport;
 pub use vm::LimaVM;
@@ -50,9 +54,8 @@ impl MacLimaBackend {
         let vm_name = std::env::var("SUBSTRATE_LIMA_VM_NAME")
             .or_else(|_| std::env::var("LIMA_VM_NAME"))
             .unwrap_or_else(|_| "substrate".to_string());
-        let agent_socket = dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("home directory not found"))?
-            .join(".substrate/sock/agent.sock");
+        let _ = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("home directory not found"))?;
+        let agent_socket = managed_host_socket_path();
 
         // Auto-select best transport
         let transport = Transport::auto_select()?;
@@ -225,7 +228,7 @@ impl MacLimaBackend {
             }
             Transport::TCP => {
                 if forwarding_established {
-                    std::net::TcpStream::connect("127.0.0.1:7788")
+                    std::net::TcpStream::connect((COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT))
                         .context("Failed to connect to agent TCP port")?;
                 } else {
                     self.check_agent_socket_in_vm()?;
@@ -245,7 +248,7 @@ impl MacLimaBackend {
                 "-n",
                 "test",
                 "-S",
-                "/run/substrate.sock",
+                CANONICAL_GUEST_SOCKET_PATH,
             ])
             .output()
             .context("Failed to check agent socket in VM")?;

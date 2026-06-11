@@ -22,6 +22,8 @@ use transport_api_types::{
     GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1, IdentityTuple,
     PlacementExecution, PlacementPosture,
 };
+#[cfg(target_os = "macos")]
+use world_mac_lima::transport::{COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT};
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
@@ -217,7 +219,9 @@ fn build_macos_gateway_client() -> anyhow::Result<MacosGatewayClient> {
     let client = match forwarding.kind() {
         world_mac_lima::ForwardingKind::SshUds { path } => AgentClient::unix_socket(path.clone())?,
         world_mac_lima::ForwardingKind::SshTcp { port }
-        | world_mac_lima::ForwardingKind::Vsock { port } => AgentClient::tcp("127.0.0.1", *port)?,
+        | world_mac_lima::ForwardingKind::Vsock { port } => {
+            AgentClient::tcp(COMPATIBILITY_TCP_HOST, *port)?
+        }
     };
 
     Ok(MacosGatewayClient {
@@ -243,8 +247,8 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
     match resolve_macos_host_gateway_socket() {
         Some(default_sock) => MacosGatewayClientEndpoint::Unix(default_sock),
         None => MacosGatewayClientEndpoint::Tcp {
-            host: "127.0.0.1".to_string(),
-            port: 17788,
+            host: COMPATIBILITY_TCP_HOST.to_string(),
+            port: COMPATIBILITY_TCP_PORT,
         },
     }
 }
