@@ -1,7 +1,7 @@
 # Remaining Scope Consolidated View
 
 Date: `2026-06-11`  
-Provenance: originally consolidated on `2026-06-10`; refreshed on `2026-06-11` after Slice `54` Packet `4` closeout so this file remains the canonical current-state note even though the filename keeps the original consolidation date.  
+Provenance: originally consolidated on `2026-06-10`; refreshed on `2026-06-11` after Slice `55` Packet `4` closeout so this file remains the canonical current-state note even though the filename keeps the original consolidation date.  
 Validated against:
 - historical checkpoint `REMAINING-family-1-scope-2026-05-30.md` (now archived locally during cleanup)
 - historical checkpoint `REMAINING-family-1-scope-2026-05-31-post-slice-34.md` (now archived locally during cleanup)
@@ -20,10 +20,13 @@ Validated against:
 - [PLAN-52.md](./PLAN-52.md)
 - [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
 - [PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)
+- [PLAN-55-broader-caller-surface-contract-freeze.md](./PLAN-55-broader-caller-surface-contract-freeze.md)
 - [SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md](./SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md)
 - [SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
 - [SPEC-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./SPEC-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)
+- [SPEC-55-broader-caller-surface-contract-freeze.md](./SPEC-55-broader-caller-surface-contract-freeze.md)
 - [TASKS-54.md](./TASKS-54.md)
+- [TASKS-55.md](./TASKS-55.md)
 - live runtime code in:
   - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
   - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
@@ -54,7 +57,7 @@ For this note:
 1. **Family 1** means the host-orchestrator to world control-plane stack.
 2. **Host-orchestrator tool surface** means the newer Family-1 sub-seam that exposes the landed internal dispatch/runtime to the live host runtime family.
 3. **Family 2** means the durable deferred-work, obligation-ledger, auto-attach, host-targeting, and host-global ingress/materialization stack.
-4. **Current** means repo truth after the landed Slice `54` Packet `4` closeout state reflected on `2026-06-11`.
+4. **Current** means repo truth after the landed Slice `55` Packet `4` closeout state reflected on `2026-06-11`.
 
 ## How To Use This Note
 
@@ -276,8 +279,7 @@ The remaining-scope notes already identified a smaller doc-truth gap around olde
 
 1. `PLAN-44.md`,
 2. `PLAN-45.md`,
-3. `PLAN-46.md`,
-4. Packet `55` Packet `2` wording convergence for shell-wrap versus prompt-taking language and for host-rooted world-backed `start` versus deferred standalone member-root public lifecycle wording.
+3. `PLAN-46.md`.
 
 Repo-truth consequence:
 
@@ -290,7 +292,7 @@ Repo-truth consequence:
 ### Immediate next seam
 
 1. **No replacement host-tool parity seam is queued immediately**
-   - Slice `54` closed selected-host `claude_code` parity, so the next choice is between broader docs/smoke follow-through, caller/control-surface hardening, or Family-2 coordination based on product priority.
+   - Slice `54` closed selected-host `claude_code` parity and Slice `55` closed the caller-surface contract freeze, so the next choice is between read-side/strict control-surface hardening, broader docs/smoke follow-through, or Family-2 coordination based on product priority.
 
 ### After that
 

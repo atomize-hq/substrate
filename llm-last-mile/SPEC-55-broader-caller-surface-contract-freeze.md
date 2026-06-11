@@ -11,7 +11,15 @@ Companion inputs:
 - [`docs/USAGE.md`](../docs/USAGE.md)
 - [`crates/shell/tests/agent_public_control_surface_v1.rs`](../crates/shell/tests/agent_public_control_surface_v1.rs)
 Phase: `SPECIFY`  
-Status: proposed on `2026-06-11`
+Status: landed and validated on `2026-06-11`
+
+## Implementation closeout
+
+Historical note: the assumptions and repo-truth gut-check below capture the pre-landing problem statement. Current repo truth after Slice `55` validation is:
+
+1. the repo now freezes prompt-taking to exact REPL `::<backend_id> <prompt>` plus explicit public `substrate agent start|turn`, with `reattach|fork|stop` preserved as lifecycle controls rather than ambient prompt surfaces,
+2. `substrate -c`, `--command`, and piped stdin remain shell-wrap-only, and public follow-up remains exact `(--session <orchestration_session_id>, --backend <backend_id>)`,
+3. host-rooted world-backed `start` wording is reconciled across repo truth without promoting standalone member-root lifecycle, and the deferred follow-ons remain default-agent UX, broader non-REPL targeting, public member-level selectors, and richer write-side selector ergonomics.
 
 ## Assumptions
 

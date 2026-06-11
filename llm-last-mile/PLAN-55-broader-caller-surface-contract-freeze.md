@@ -6,7 +6,15 @@ Source gap matrix: [AGENT_ORCHESTRATION_GAP_MATRIX.md](../AGENT_ORCHESTRATION_GA
 Prior slice: [PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)  
 Plan type: product-contract freeze above the already-landed public caller/runtime floor  
 Phase: `PLAN`  
-Status: proposed on `2026-06-11`
+Status: landed and validated on `2026-06-11`
+
+## Closeout outcome
+
+Slice `55` is now the landed caller-surface contract baseline for the current tree:
+
+1. repo truth now distinguishes config/runtime default backend selection from implicit default-agent routing,
+2. operator-facing docs and regression-floor wording now agree on the narrow prompt-taking surfaces, shell-wrap-only boundaries, exact follow-up selectors, and host-rooted world-backed `start` wording without widening runtime behavior,
+3. remaining deferred work stays explicit: default-agent UX, broader non-REPL targeting, public member-root or member-level selector ergonomics, later read-side/control hardening, cross-platform posture decisions, and Family-2/global-ingress follow-ons.
 
 ## Objective
 
