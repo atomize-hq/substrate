@@ -227,8 +227,10 @@ Packet `2` also freezes four framing rules that later slices must inherit:
    endpoint behind the adapter layer.
 2. **Compatibility-path rule:** host TCP `17788` is not a supported operator
    target. It is only a retained degraded-but-supported compatibility
-   transport/path when hidden behind Substrate-owned transport selection and
-   command flows that already prefer the host UDS path first.
+   transport/path when hidden behind Substrate-owned transport selection:
+   doctor and gateway flows still prefer the host UDS path first, while routed
+   world operations and persistent-session flows can still select the mapped
+   VSock/TCP compatibility path directly.
 3. **Stale-constant rule:** the stale `127.0.0.1:7788` check in
    `crates/world-mac-lima/src/lib.rs` is explicit transport drift, not a
    second supported endpoint. Slice `02` records it as Slice `03` cleanup debt
