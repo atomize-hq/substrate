@@ -109,8 +109,9 @@ Live repo truth shows that ambiguity is no longer harmless:
 2. `crates/world-mac-lima/src/forwarding.rs` prefers `vsock-proxy`, falls back
    to SSH-backed UDS forwarding, and intentionally skips SSH TCP fallback.
 3. `crates/world-mac-lima/src/lib.rs` still contains a stale `127.0.0.1:7788`
-   TCP check, while shell-side macOS health and gateway logic still probe host
-   TCP `17788` as a compatibility path.
+   TCP check, while shell-side macOS transport selection plus routed command,
+   persistent-session, doctor, and gateway flows still retain host TCP
+   `17788` as a compatibility path.
 4. `docs/reference/world/platforms/macos-lima-setup.md`,
    `scripts/mac/lima-doctor.sh`, and `scripts/mac/lima-warm.sh` still normalize
    repeated `limactl shell` and direct guest administration flows.
@@ -213,7 +214,7 @@ as follows.
 | Direct guest `systemctl` administration for `substrate-world-service` or related units | `breakglass` | This is direct guest administration rather than the supported same-user control plane described by Slice `01`. It remains necessary for emergency repair and deep debugging, but it must not be the first-line operator story. | Use the Substrate-owned doctor and gateway lifecycle/status commands first; later slices can replace remaining warm/provision gaps without reclassifying guest `systemctl` as routine. |
 | Direct guest socket curls such as `curl --unix-socket /run/substrate.sock ...` used as the primary health check | `breakglass` | These probes validate the canonical guest endpoint, but they bypass the supported operator entry points and expose raw guest implementation details directly. | Use `substrate world doctor --json`, `substrate host doctor --json`, and the routed validation surfaces first; reserve direct guest curls for deep debugging and evidence collection. |
 | Host-side `SUBSTRATE_WORLD_SOCKET=<path>` override use on macOS | `breakglass` | This override bypasses the authoritative Lima-backed transport-selection path. Live repo truth already treats it as an advanced/test escape hatch rather than the normal default. | Use the default Lima-backed socket discovery and gateway/doctor commands without overrides unless emergency recovery or advanced testing requires a manual socket target. |
-| Host TCP `127.0.0.1:17788` retained compatibility transport/path when it stays behind Substrate-owned doctor/gateway logic | `degraded-but-supported` | Live repo truth in `crates/shell/src/execution/platform/macos.rs` and `crates/shell/src/builtins/world_gateway.rs` still falls back to `17788` after preferring the host UDS path: the macOS doctor path probes that TCP endpoint, and the gateway client resolves it as the fallback transport endpoint when no host UDS socket is available. That makes it a retained degraded-but-supported compatibility transport/path inside supported commands, but not the supported default contract itself. | Operators should not target `17788` directly. It remains a degraded-but-supported compatibility transport/path only when reached through `substrate host doctor`, `substrate world doctor`, or `substrate world gateway ...` while Slice `03` owns transport unification. |
+| Host TCP `127.0.0.1:17788` retained compatibility transport/path when it stays behind Substrate-owned transport selection and command flows | `degraded-but-supported` | Live repo truth is broader than doctor/gateway fallback alone. `crates/shell/src/execution/platform_world/mod.rs` maps the macOS VSock/TCP transport to `17788`, `crates/shell/src/execution/routing/dispatch/world_ops.rs` uses that transport for routed world operations, and `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs` uses it for persistent-session streaming. Doctor and gateway logic also still reach `17788` as compatibility behavior after preferring the host UDS path. That makes `17788` a retained degraded-but-supported compatibility transport/path inside Substrate-owned flows, but not the supported default contract itself. | Operators should not target `17788` directly. It remains a degraded-but-supported compatibility transport/path only when reached through Substrate-owned transport selection and commands such as doctor, gateway, routed world operations, and persistent-session flows while Slice `03` owns transport unification. |
 
 Packet `2` also freezes four framing rules that later slices must inherit:
 
@@ -225,8 +226,8 @@ Packet `2` also freezes four framing rules that later slices must inherit:
    endpoint behind the adapter layer.
 2. **Compatibility-path rule:** host TCP `17788` is not a supported operator
    target. It is only a retained degraded-but-supported compatibility
-   transport/path when hidden behind Substrate-owned commands that already
-   prefer the host UDS path first.
+   transport/path when hidden behind Substrate-owned transport selection and
+   command flows that already prefer the host UDS path first.
 3. **Stale-constant rule:** the stale `127.0.0.1:7788` check in
    `crates/world-mac-lima/src/lib.rs` is explicit transport drift, not a
    second supported endpoint. Slice `02` records it as Slice `03` cleanup debt
@@ -267,8 +268,11 @@ sed -n '1,260p' macos-hardening/macos-hardened-same-user-lima/spec/design/DESIGN
 sed -n '1,220p' scripts/mac/lima/substrate.yaml
 sed -n '1,260p' crates/world-mac-lima/src/forwarding.rs
 sed -n '210,260p' crates/world-mac-lima/src/lib.rs
+sed -n '148,166p' crates/shell/src/execution/platform_world/mod.rs
+sed -n '930,965p' crates/shell/src/execution/routing/dispatch/world_ops.rs
+sed -n '770,805p' crates/shell/src/execution/routing/dispatch/world_persistent_session.rs
 sed -n '360,460p' crates/shell/src/execution/platform/macos.rs
-sed -n '220,280p' crates/shell/src/builtins/world_gateway.rs
+sed -n '199,247p' crates/shell/src/builtins/world_gateway.rs
 
 # Inventory breakglass-sensitive wording and stale transport markers
 rg -n "limactl shell|SUBSTRATE_WORLD_SOCKET|17788|7788|vsock|vmType|mounts:|substrate.sock" \
@@ -279,6 +283,9 @@ rg -n "limactl shell|SUBSTRATE_WORLD_SOCKET|17788|7788|vsock|vmType|mounts:|subs
   scripts/mac/lima-doctor.sh \
   scripts/mac/smoke.sh \
   crates/world-mac-lima/src \
+  crates/shell/src/execution/platform_world/mod.rs \
+  crates/shell/src/execution/routing/dispatch/world_ops.rs \
+  crates/shell/src/execution/routing/dispatch/world_persistent_session.rs \
   crates/shell/src/execution/platform/macos.rs \
   crates/shell/src/builtins/world_gateway.rs
 ```
@@ -322,7 +329,13 @@ scripts/mac/
 crates/
 ├── world-mac-lima/src/forwarding.rs            → adapter selection and fallback policy
 ├── world-mac-lima/src/lib.rs                   → stale TCP compatibility proof point
-└── shell/src/execution/platform/macos.rs       → host doctor/readiness compatibility probes
+├── shell/src/execution/platform_world/mod.rs   → macOS VSock/TCP transport maps to `17788`
+├── shell/src/execution/routing/dispatch/world_ops.rs
+│   → routed world operations consume the mapped compatibility transport
+├── shell/src/execution/routing/dispatch/world_persistent_session.rs
+│   → persistent-session streaming consumes the mapped compatibility transport
+├── shell/src/execution/platform/macos.rs       → host doctor/readiness compatibility probes
+└── shell/src/builtins/world_gateway.rs         → gateway compatibility fallback
 ```
 
 Expected implementation touch surface for Slice `02` should remain feature-local

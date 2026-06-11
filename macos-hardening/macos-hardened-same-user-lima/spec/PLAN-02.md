@@ -181,8 +181,9 @@ Verification checkpoint:
 
 1. `limactl shell`, direct guest `systemctl`, direct guest socket curls, and
    host-side `SUBSTRATE_WORLD_SOCKET` override use are classified explicitly,
-2. normal operation clearly starts from Substrate-owned doctor/gateway
-   surfaces,
+2. normal operation clearly starts from Substrate-owned command surfaces,
+   with doctor/gateway called out alongside routed world execution and
+   persistent-session flows,
 3. retained host TCP `17788` behavior is framed only as compatibility behind
    Substrate-owned commands while stale `7788` remains explicit Slice `03`
    drift,
@@ -245,7 +246,8 @@ Mitigation:
 
 1. require one explicit breakglass matrix,
 2. require the supported replacement path to start from Substrate-owned
-   doctor/gateway flows.
+   command flows rather than direct operator targeting of compatibility
+   transport endpoints.
 
 ### Risk 4: The slice silently widens into repo-wide docs cutover
 

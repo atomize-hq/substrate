@@ -133,6 +133,9 @@ Session goal:
   - Verify:
     - `rg -n "17788|7788|host TCP|compatibility|Substrate-owned commands|gateway status|world doctor|host doctor" macos-hardening/macos-hardened-same-user-lima/spec`
     - manual review against `crates/world-mac-lima/src/lib.rs`,
+      `crates/shell/src/execution/platform_world/mod.rs`,
+      `crates/shell/src/execution/routing/dispatch/world_ops.rs`,
+      `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`,
       `crates/shell/src/execution/platform/macos.rs`, and
       `crates/shell/src/builtins/world_gateway.rs`
   - Files:
@@ -154,7 +157,8 @@ Packet `2` execution note:
    and host-side `SUBSTRATE_WORLD_SOCKET` override use land as `breakglass`
    under the Slice `01` taxonomy,
 2. host TCP `17788` remains only a `degraded-but-supported` compatibility path
-   when reached through Substrate-owned doctor/gateway logic,
+   when reached through Substrate-owned transport selection and command flows
+   rather than by direct operator targeting,
 3. the stale `7788` reference remains explicit Slice `03` transport drift
    rather than part of the supported contract.
 
