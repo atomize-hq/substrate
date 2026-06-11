@@ -93,7 +93,7 @@ Specific ingress guidance for current repo truth:
 - `docs/WORLD.md`
   - currently states that `/src` mirrors the active checkout
   - should be tightened to describe only the allowed ingress
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
   - currently documents the full-home mount as part of normal setup
 - `crates/world-service/src/lib.rs`
   - not a mount definition point, but a useful anchor for separating transport hardening from guest-visible filesystem scope

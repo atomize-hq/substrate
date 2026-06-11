@@ -23,11 +23,11 @@ already landed.
   remaining transport drift is stale `7788` references plus doctor/probe
   fallback use of host TCP `17788`.
 - `crates/shell/src/builtins/world_gateway.rs`,
-  `docs/contracts/substrate-gateway-operator-contract.md`, and
-  `docs/contracts/substrate-gateway-status-schema.md` already define a gateway
+  `docs/contracts/gateway/operator-contract.md`, and
+  `docs/contracts/gateway/status-schema.md` already define a gateway
   lifecycle/status contract, including `substrate world gateway sync|status|restart`
   and status JSON.
-- `docs/cross-platform/mac_world_setup.md` still teaches direct guest build,
+- `docs/reference/world/platforms/macos-lima-setup.md` still teaches direct guest build,
   install, service enablement, and raw guest probing as standard setup.
 
 Hardening cannot succeed if the supported environment and breakglass boundary remain implicit.
@@ -96,7 +96,7 @@ This milestone should produce four concrete decisions.
   - `crates/world-mac-lima/src/forwarding.rs`
   - `crates/world-mac-lima/src/transport.rs`
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
 - Must complete before later phases can safely change operator docs or remove permissive transport fallbacks.
 
 ## Concrete repo surfaces and file pointers
@@ -114,12 +114,12 @@ This milestone should produce four concrete decisions.
   - `crates/shell/src/execution/platform/macos.rs`
   - `crates/shell/src/builtins/world_gateway.rs`
 - Gateway lifecycle/status contract already landed:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
   - `crates/world-service/src/gateway_runtime.rs`
 - Operator guidance that must be reclassified:
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
 
 ## Deliverables
 
@@ -167,7 +167,7 @@ This milestone should produce four concrete decisions.
   `crates/world-service/src/gateway_runtime.rs`, and
   `scripts/mac/smoke.sh` and confirm the SOW acknowledges the already-landed
   gateway lifecycle/status contract and smoke coverage.
-- Review `docs/cross-platform/mac_world_setup.md` and `docs/WORLD.md` and
+- Review `docs/reference/world/platforms/macos-lima-setup.md` and `docs/WORLD.md` and
   enumerate every direct guest command or host-side override that should be
   labeled breakglass in later docs work.
 - Require future implementation-phase plans to cite this milestone when changing:

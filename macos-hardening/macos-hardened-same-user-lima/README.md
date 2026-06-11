@@ -25,7 +25,7 @@ The remaining macOS problem is no longer "there is no Substrate-owned surface." 
 - `scripts/mac/lima/substrate.yaml` still mounts broad host state, including a read-only `$HOME` mount that is wider than the hardened runtime contract should require.
 - `scripts/mac/lima-warm.sh` still writes `SUBSTRATE_AGENT_TCP_PORT=61337`, leaving an extra guest listener enabled by default.
 - Guest unit/socket definitions still drift between `scripts/mac/lima/substrate.yaml` and `scripts/mac/lima-warm.sh`.
-- `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` still normalize direct guest setup and troubleshooting more than the hardened same-user path should.
+- `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` still normalize direct guest setup and troubleshooting more than the hardened same-user path should.
 - `SUBSTRATE_WORLD_SOCKET` is still available as an advanced/test/breakglass bypass, but it is not the standard Lima-backed operator path and already rejects explicit shared-owner reuse on macOS.
 
 Phase 0 exists to lock that support contract before implementation work continues, because the repo still mixes three different stories:
@@ -83,7 +83,7 @@ The key design constraint is explicit: same-user Lima can match much of Linux's 
   `crates/shell/src/builtins/world_gateway.rs`
 - Lima profile and guest units: `scripts/mac/lima/substrate.yaml`
 - Provisioning and readiness workflow: `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, `scripts/mac/orchestration-smoke.sh`
-- Operator-facing architecture and setup guidance: `docs/WORLD.md`, `docs/cross-platform/mac_world_setup.md`, `docs/USAGE.md`, `docs/contracts/substrate-gateway-operator-contract.md`
+- Operator-facing architecture and setup guidance: `docs/WORLD.md`, `docs/reference/world/platforms/macos-lima-setup.md`, `docs/USAGE.md`, `docs/contracts/gateway/operator-contract.md`
 - Phase overviews: `macos-hardening/macos-hardened-same-user-lima/phase-0-security-contract-and-scope/`
 
 ## Deliverables

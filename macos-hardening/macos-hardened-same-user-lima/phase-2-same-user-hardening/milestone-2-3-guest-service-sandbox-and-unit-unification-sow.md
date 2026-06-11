@@ -93,7 +93,7 @@ The unified contract must explicitly encode:
   - should keep proving gateway lifecycle against the unified service contract
 - `docs/WORLD.md`
   - references guest unit behavior and operator verification
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
   - currently includes manual service enable/start flows that must match the unified definition
 
 ## Deliverables

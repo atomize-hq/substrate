@@ -20,7 +20,7 @@ This phase is an operational cutover, not an invention phase. The canonical CLI 
 
 The current macOS backend works, but many repo surfaces still normalize direct guest operations even though the CLI-owned path already exists:
 
-- `docs/cross-platform/mac_world_setup.md` still includes step-by-step `limactl shell substrate ...` build, install, service, and troubleshooting flows.
+- `docs/reference/world/platforms/macos-lima-setup.md` still includes step-by-step `limactl shell substrate ...` build, install, service, and troubleshooting flows.
 - `docs/WORLD.md` already names CLI doctor surfaces, shared-world support, and the `SUBSTRATE_WORLD_SOCKET` bypass, but it still preserves too much direct guest guidance for the hardened default.
 - `scripts/mac/lima-doctor.sh` remains a guest-admin-oriented diagnostic script rather than a thin wrapper around a fully Substrate-owned support story.
 - `scripts/mac/lima-warm.sh` still relies heavily on direct `limactl shell` mutation, which is functional but not the posture that operator docs should normalize.
@@ -77,11 +77,11 @@ This phase does not require hiding Lima from advanced users. It requires reclass
   - already validates shared-owner/orchestration behavior on the Lima-backed path
 - `docs/WORLD.md`
   - documents the runtime model, shared-world behavior, and `SUBSTRATE_WORLD_SOCKET` bypass
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
   - still teaches direct Lima administration too prominently
 - `docs/USAGE.md`
   - already treats `substrate world gateway sync|status|restart` as operator entrypoints
-- `docs/contracts/substrate-gateway-operator-contract.md`
+- `docs/contracts/gateway/operator-contract.md`
   - already treats `substrate world gateway status --json` as the authoritative machine-readable wiring surface
 
 ## Deliverables

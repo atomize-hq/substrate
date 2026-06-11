@@ -27,7 +27,7 @@ surfaces and still-normalized helper or guest commands.
 - `scripts/mac/lima-warm.sh` performs lifecycle repair through direct guest
   mutation rather than through a clearly productized Substrate-managed
   contract.
-- `docs/cross-platform/mac_world_setup.md` still teaches manual
+- `docs/reference/world/platforms/macos-lima-setup.md` still teaches manual
   build/install/service flows inside the guest.
 
 This milestone exists to define what “Substrate-owned operations” means in concrete command terms before the docs are cut over.
@@ -90,9 +90,9 @@ single-session happy paths.
 - `crates/shell/src/builtins/world_gateway.rs`
   - already-owned gateway lifecycle/status surface that Phase 3 should elevate,
     not reinvent
-- `docs/contracts/substrate-gateway-operator-contract.md`
+- `docs/contracts/gateway/operator-contract.md`
   - canonical operator contract for the already-landed gateway lifecycle family
-- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/gateway/status-schema.md`
   - authoritative machine-readable status contract
 - `crates/shell/src/builtins/world_enable`
   - likely owner for provisioning and enablement flows that should stop
@@ -114,7 +114,7 @@ single-session happy paths.
   - can verify the managed lifecycle path after the contract is defined
 - `docs/WORLD.md`
   - already names `substrate host doctor` and `substrate world doctor`, but still mixes them with direct guest commands
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
   - primary doc surface that will need cutover once the owned command set is frozen
 
 ## Deliverables

@@ -63,7 +63,7 @@ This phase is complete when later implementation can treat the phase docs as aut
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/lima/substrate.yaml`
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
   - `scripts/mac/lima-doctor.sh`
   - `scripts/mac/smoke.sh`
   - `scripts/mac/orchestration-smoke.sh`
@@ -78,7 +78,7 @@ This phase is complete when later implementation can treat the phase docs as aut
 - Lima guest image, mounts, and unit definitions: `scripts/mac/lima/substrate.yaml`
 - Provisioning and lifecycle commands: `scripts/mac/lima-warm.sh`
 - Troubleshooting and smoke entry points: `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, `scripts/mac/orchestration-smoke.sh`
-- Operator-facing macOS setup and world architecture docs: `docs/cross-platform/mac_world_setup.md`, `docs/WORLD.md`, `docs/USAGE.md`
+- Operator-facing macOS setup and world architecture docs: `docs/reference/world/platforms/macos-lima-setup.md`, `docs/WORLD.md`, `docs/USAGE.md`
 
 ## Deliverables
 

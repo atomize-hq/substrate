@@ -34,7 +34,7 @@ normalize direct guest entry.
   guest probes.
 - `crates/shell/src/execution/platform/macos.rs` still falls back from host UDS
   to host TCP `17788` or in-VM probing when collecting doctor evidence.
-- `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` still present
+- `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` still present
   `limactl shell`, in-guest `curl`, guest `systemctl`, and direct guest logs as
   normal operator behavior.
 
@@ -103,17 +103,17 @@ Primary readiness and docs surfaces:
 
 - `crates/shell/src/execution/platform/macos.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
-- `docs/contracts/substrate-gateway-operator-contract.md`
-- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/gateway/operator-contract.md`
+- `docs/contracts/gateway/status-schema.md`
 - `scripts/mac/lima-doctor.sh`
 - `scripts/mac/smoke.sh`
 - `scripts/mac/lima-warm.sh`
 - `docs/WORLD.md`
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
 
 Current normalization of direct guest administration:
 
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
 - `scripts/mac/lima-doctor.sh`
 - `scripts/mac/smoke.sh`
 - `scripts/mac/lima-warm.sh`

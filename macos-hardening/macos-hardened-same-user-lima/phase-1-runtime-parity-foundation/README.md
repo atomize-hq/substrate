@@ -27,7 +27,7 @@ The remaining phase-1 gaps are therefore specific and concrete:
 
 - transport behavior is still split across `crates/world-mac-lima/src/lib.rs`, `crates/world-mac-lima/src/forwarding.rs`, and `crates/world-mac-lima/src/transport.rs`, including the current `17788` versus `7788` inconsistency.
 - backend policy semantics are not actually applied on the backend-mediated Lima path because `MacLimaBackend::convert_exec_request` synthesizes a permissive snapshot and `MacLimaBackend::apply_policy` is a no-op.
-- readiness and troubleshooting evidence still normalize direct guest entry in `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, `docs/WORLD.md`, and `docs/cross-platform/mac_world_setup.md` more than the supported Lima path should.
+- readiness and troubleshooting evidence still normalize direct guest entry in `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, `docs/WORLD.md`, and `docs/reference/world/platforms/macos-lima-setup.md` more than the supported Lima path should.
 - `SUBSTRATE_WORLD_SOCKET` still bypasses Lima detection/startup and remains an advanced/test/breakglass override, not the standard macOS path. That matters because explicit shared-owner reuse already rejects under this bypass on macOS.
 
 Until those layers align, later same-user hardening work would sit on top of a backend that still proves itself using bypass-heavy workflows and still diverges from the shell-owned policy/runtime contract.
@@ -97,7 +97,7 @@ Primary scripts and operator-doc surfaces:
 - `scripts/mac/smoke.sh`
 - `scripts/mac/orchestration-smoke.sh`
 - `docs/WORLD.md`
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
 - `docs/USAGE.md`
 
 Research input anchoring this phase:

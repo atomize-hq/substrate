@@ -27,7 +27,7 @@ claims that are still too broad.
   `substrate world gateway sync|status|restart`.
   The remaining gap is to make those the supported contract first and classify
   direct guest administration and host-side overrides accordingly.
-- `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` still do not
+- `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` still do not
   sharply separate guest-local Linux-like behavior from the unresolved same-user
   host ownership limitation.
 
@@ -82,7 +82,7 @@ This milestone should lock the contract around these rules:
 - Uses evidence from:
   - `crates/world-mac-lima/src/lib.rs`
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/lima/substrate.yaml`
 - Must complete before milestone 0.2, because version-floor and breakglass rules depend on the supported-mode definition.
@@ -100,14 +100,14 @@ This milestone should lock the contract around these rules:
   - `crates/shell/src/builtins/world_gateway.rs`
 - Existing operator/gateway contract surfaces:
   - `crates/shell/src/execution/platform/macos.rs`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
 - Guest lifecycle and mount posture:
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/lima/substrate.yaml`
 - Current operator claims and normal-mode drift:
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
 
 ## Deliverables
 
@@ -151,7 +151,7 @@ This milestone should lock the contract around these rules:
   `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and
   `crates/shell/src/builtins/world_gateway.rs` and confirm the SOW correctly
   narrows the policy-drift claim to the backend-mediated macOS path.
-- Read `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` and confirm
+- Read `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` and confirm
   the SOW correctly identifies where operator language currently
   over-normalizes direct guest management and host-side overrides.
 - Use milestone review to force a binary decision on this statement:

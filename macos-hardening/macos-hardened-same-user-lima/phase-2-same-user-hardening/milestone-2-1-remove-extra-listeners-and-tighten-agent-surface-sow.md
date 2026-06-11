@@ -75,7 +75,7 @@ This milestone exists to make the listener surface match the intended contract b
   - ensure doctor fallback behavior does not get mistaken for a guest TCP contract
 - `docs/WORLD.md`
   - update macOS transport text so TCP is no longer presented as part of the default guest listener surface
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
   - remove or reframe guidance that implies the guest service normally exposes a TCP listener
 - `scripts/mac/lima-doctor.sh`
   - add or refine checks that show the UDS contract is healthy without relying on TCP
