@@ -1373,13 +1373,46 @@ impl SelectedClaudeCodeUpliftGate {
         }
     }
 
-    pub(crate) const fn allows_selected_runtime_enablement(self) -> bool {
-        matches!(
-            self.selected_start_turn_path,
-            SelectedClaudeCodePathState::Present
-        ) && matches!(self.slice_52_semantics, Slice52SemanticsState::Preserved)
+    pub(crate) const fn allows_selected_runtime_enablement(
+        self,
+        selected_claude_code_uplift_context: SelectedClaudeCodeUpliftContext,
+    ) -> bool {
+        selected_claude_code_uplift_context.is_selected_host_launch()
+            && matches!(
+                self.selected_start_turn_path,
+                SelectedClaudeCodePathState::Present
+            )
+            && matches!(self.slice_52_semantics, Slice52SemanticsState::Preserved)
             && matches!(self.targeted_validation, TargetedValidationState::Green)
             && matches!(self.hidden_fallback, HiddenFallbackState::NoHiddenFallback)
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SelectedClaudeCodeUpliftContext {
+    InventoryEntry,
+    SelectedLaunch {
+        execution_scope: AgentExecutionScope,
+    },
+}
+
+impl SelectedClaudeCodeUpliftContext {
+    pub(crate) const fn inventory_entry() -> Self {
+        Self::InventoryEntry
+    }
+
+    pub(crate) const fn selected_launch(execution_scope: AgentExecutionScope) -> Self {
+        Self::SelectedLaunch { execution_scope }
+    }
+
+    pub(crate) const fn is_selected_host_launch(self) -> bool {
+        matches!(
+            self,
+            Self::SelectedLaunch {
+                execution_scope: AgentExecutionScope::Host,
+            }
+        )
     }
 }
 
@@ -1389,19 +1422,34 @@ pub(crate) struct LiveToolSupportPosture {
     pub validation_state: LiveToolValidationState,
     pub support_state: LiveToolSupportState,
     pub selected_claude_code_uplift_gate: SelectedClaudeCodeUpliftGate,
+    pub selected_claude_code_uplift_context: SelectedClaudeCodeUpliftContext,
     pub reason: &'static str,
 }
 
 impl LiveToolSupportPosture {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn for_backend_kind(backend_kind: AgentRuntimeBackendKind) -> Self {
         Self::for_backend_kind_with_selected_claude_code_uplift_gate(
             backend_kind,
+            SelectedClaudeCodeUpliftContext::inventory_entry(),
+            SelectedClaudeCodeUpliftGate::packet_1(),
+        )
+    }
+
+    pub(crate) fn for_selected_launch_backend_kind(
+        backend_kind: AgentRuntimeBackendKind,
+        execution_scope: AgentExecutionScope,
+    ) -> Self {
+        Self::for_backend_kind_with_selected_claude_code_uplift_gate(
+            backend_kind,
+            SelectedClaudeCodeUpliftContext::selected_launch(execution_scope),
             SelectedClaudeCodeUpliftGate::packet_1(),
         )
     }
 
     fn for_backend_kind_with_selected_claude_code_uplift_gate(
         backend_kind: AgentRuntimeBackendKind,
+        selected_claude_code_uplift_context: SelectedClaudeCodeUpliftContext,
         selected_claude_code_uplift_gate: SelectedClaudeCodeUpliftGate,
     ) -> Self {
         match backend_kind {
@@ -1410,12 +1458,15 @@ impl LiveToolSupportPosture {
                 validation_state: LiveToolValidationState::SmokeValidated,
                 support_state: LiveToolSupportState::FirstSupportedFloor,
                 selected_claude_code_uplift_gate,
+                selected_claude_code_uplift_context,
                 reason:
                     "codex remains the first smoke-validated host-tool floor from Slice 53; this does not uplift claude_code until the selected claude_code host start/turn path reaches the same authoritative host-tool surface, preserves Slice 52 semantics, and passes targeted validation without hidden fallback",
             },
             AgentRuntimeBackendKind::ClaudeCode => {
                 let (validation_state, support_state, reason) =
-                    if selected_claude_code_uplift_gate.allows_selected_runtime_enablement() {
+                    if selected_claude_code_uplift_gate
+                        .allows_selected_runtime_enablement(selected_claude_code_uplift_context)
+                    {
                         (
                             LiveToolValidationState::SmokeValidated,
                             LiveToolSupportState::SelectedRuntimeSupported,
@@ -1434,6 +1485,7 @@ impl LiveToolSupportPosture {
                     validation_state,
                     support_state,
                     selected_claude_code_uplift_gate,
+                    selected_claude_code_uplift_context,
                     reason,
                 }
             }
@@ -2259,14 +2311,15 @@ mod tests {
         HostExecutionClientStart, InspectWorldWorkerOutcomeV1, LiveToolSupportPosture,
         LiveToolSupportState, LiveToolValidationState, RetainedWorkerCancelCloseoutV1,
         RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
-        SelectedClaudeCodePathState, SelectedClaudeCodeUpliftGate, Slice52SemanticsState,
-        StopWorldWorkerOutcomeV1, TargetedValidationState, TaskPayloadV1, WorkerCancelPayloadV1,
-        WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
-        WorkerContinueControlDirectivePayloadV1, WorkerContinueForkCommandPayloadV1,
-        WorkerContinuePayloadV1, WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1,
-        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
-        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
-        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
+        SelectedClaudeCodePathState, SelectedClaudeCodeUpliftContext, SelectedClaudeCodeUpliftGate,
+        Slice52SemanticsState, StopWorldWorkerOutcomeV1, TargetedValidationState, TaskPayloadV1,
+        WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
+        WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
+        WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
+        WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
+        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2449,7 +2502,9 @@ mod tests {
         );
         assert_eq!(gate.hidden_fallback, HiddenFallbackState::NotYetProven);
         assert!(
-            !gate.allows_selected_runtime_enablement(),
+            !gate.allows_selected_runtime_enablement(
+                SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::Host)
+            ),
             "Packet 1 must keep selected claude_code uplift closed until every gate criterion is satisfied"
         );
     }
@@ -2465,7 +2520,9 @@ mod tests {
         assert_eq!(gate.slice_52_semantics, Slice52SemanticsState::NotYetProven);
         assert_eq!(gate.hidden_fallback, HiddenFallbackState::NotYetProven);
         assert!(
-            !gate.allows_selected_runtime_enablement(),
+            !gate.allows_selected_runtime_enablement(
+                SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::Host)
+            ),
             "Packet 1 must fail closed until semantics preservation and no-hidden-fallback evidence are both proven in code"
         );
     }
@@ -2487,6 +2544,10 @@ mod tests {
             posture.selected_claude_code_uplift_gate,
             SelectedClaudeCodeUpliftGate::packet_1()
         );
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::inventory_entry()
+        );
     }
 
     #[test]
@@ -2506,16 +2567,78 @@ mod tests {
             posture.selected_claude_code_uplift_gate,
             SelectedClaudeCodeUpliftGate::packet_1()
         );
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::inventory_entry()
+        );
         assert!(!posture
             .selected_claude_code_uplift_gate
-            .allows_selected_runtime_enablement());
+            .allows_selected_runtime_enablement(posture.selected_claude_code_uplift_context));
     }
 
     #[test]
-    fn live_tool_support_posture_derives_claude_code_enablement_from_structured_gate() {
+    fn live_tool_support_posture_keeps_inventory_entry_context_from_overclaiming_when_gate_is_green(
+    ) {
         let posture =
             LiveToolSupportPosture::for_backend_kind_with_selected_claude_code_uplift_gate(
                 AgentRuntimeBackendKind::ClaudeCode,
+                SelectedClaudeCodeUpliftContext::inventory_entry(),
+                SelectedClaudeCodeUpliftGate {
+                    selected_start_turn_path: SelectedClaudeCodePathState::Present,
+                    slice_52_semantics: Slice52SemanticsState::Preserved,
+                    targeted_validation: TargetedValidationState::Green,
+                    hidden_fallback: HiddenFallbackState::NoHiddenFallback,
+                },
+            );
+
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::NotYetGuaranteed
+        );
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::NotYetSmokeValidated
+        );
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::inventory_entry()
+        );
+    }
+
+    #[test]
+    fn live_tool_support_posture_keeps_selected_world_scope_from_overclaiming_when_gate_is_green() {
+        let posture =
+            LiveToolSupportPosture::for_backend_kind_with_selected_claude_code_uplift_gate(
+                AgentRuntimeBackendKind::ClaudeCode,
+                SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::World),
+                SelectedClaudeCodeUpliftGate {
+                    selected_start_turn_path: SelectedClaudeCodePathState::Present,
+                    slice_52_semantics: Slice52SemanticsState::Preserved,
+                    targeted_validation: TargetedValidationState::Green,
+                    hidden_fallback: HiddenFallbackState::NoHiddenFallback,
+                },
+            );
+
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::NotYetGuaranteed
+        );
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::NotYetSmokeValidated
+        );
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::World)
+        );
+    }
+
+    #[test]
+    fn live_tool_support_posture_derives_claude_code_enablement_from_selected_host_gate_context() {
+        let posture =
+            LiveToolSupportPosture::for_backend_kind_with_selected_claude_code_uplift_gate(
+                AgentRuntimeBackendKind::ClaudeCode,
+                SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::Host),
                 SelectedClaudeCodeUpliftGate {
                     selected_start_turn_path: SelectedClaudeCodePathState::Present,
                     slice_52_semantics: Slice52SemanticsState::Preserved,
@@ -2535,7 +2658,7 @@ mod tests {
         );
         assert!(posture
             .selected_claude_code_uplift_gate
-            .allows_selected_runtime_enablement());
+            .allows_selected_runtime_enablement(posture.selected_claude_code_uplift_context));
     }
 
     #[test]

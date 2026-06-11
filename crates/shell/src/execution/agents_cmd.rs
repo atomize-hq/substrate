@@ -36,7 +36,8 @@ use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipant
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
     materialize_runtime_descriptor, member_selection_error_exit_code,
-    resolve_live_tool_support_posture, validate_member_selection, RuntimeSelectionDescriptor,
+    resolve_live_tool_support_posture, resolve_selected_orchestrator_live_tool_support_posture,
+    validate_member_selection, RuntimeSelectionDescriptor,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::StartupPromptReplayState;
@@ -2809,7 +2810,7 @@ fn build_toolbox_status_report<'a>(
         backend_id: orchestrator.derived_backend_id(),
         role: ORCHESTRATOR_ROLE,
         execution: ExecutionScopeJson { scope: "host" },
-        live_tool_support: live_tool_support_posture_json_for_entry(orchestrator),
+        live_tool_support: live_tool_support_posture_json_for_selected_orchestrator(orchestrator),
     };
 
     if !context.effective_config.agents.toolbox.enabled {
@@ -3426,10 +3427,19 @@ fn live_tool_support_posture_json(posture: LiveToolSupportPosture) -> LiveToolSu
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn live_tool_support_posture_json_for_entry(
     entry: &AgentInventoryEntryV1,
 ) -> Option<LiveToolSupportPostureJson> {
     resolve_live_tool_support_posture(entry)
+        .ok()
+        .map(live_tool_support_posture_json)
+}
+
+fn live_tool_support_posture_json_for_selected_orchestrator(
+    entry: &AgentInventoryEntryV1,
+) -> Option<LiveToolSupportPostureJson> {
+    resolve_selected_orchestrator_live_tool_support_posture(entry)
         .ok()
         .map(live_tool_support_posture_json)
 }
