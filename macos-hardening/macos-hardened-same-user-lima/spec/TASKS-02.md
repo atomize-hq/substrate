@@ -114,9 +114,9 @@ Session goal:
 
 - [x] Task 2.1: Freeze the breakglass classification for direct guest and host-bypass workflows
   - Acceptance: the slice explicitly classifies direct `limactl shell`, direct
-    guest `systemctl`, direct guest socket curls, and host-side
-    `SUBSTRATE_WORLD_SOCKET` override use, using the Slice `01` taxonomy
-    without inventing new categories.
+    guest binary build/install, direct guest `systemctl`, direct guest socket
+    curls, and host-side `SUBSTRATE_WORLD_SOCKET` override use, using the
+    Slice `01` taxonomy without inventing new categories.
   - Verify:
     - `rg -n "limactl shell|SUBSTRATE_WORLD_SOCKET|breakglass|degraded-but-supported|supported" macos-hardening/macos-hardened-same-user-lima/spec`
     - manual review against feature-local and phase-0 docs
@@ -153,9 +153,10 @@ Packet `2` is complete only when:
 
 Packet `2` execution note:
 
-1. direct `limactl shell`, direct guest `systemctl`, direct guest socket curls,
-   and host-side `SUBSTRATE_WORLD_SOCKET` override use land as `breakglass`
-   under the Slice `01` taxonomy,
+1. direct `limactl shell`, direct guest binary build/install, direct guest
+   `systemctl`, direct guest socket curls, and host-side
+   `SUBSTRATE_WORLD_SOCKET` override use land as `breakglass` under the
+   Slice `01` taxonomy,
 2. host TCP `17788` remains only a `degraded-but-supported` compatibility path
    when reached through Substrate-owned transport selection and command flows
    rather than by direct operator targeting,

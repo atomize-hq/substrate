@@ -211,6 +211,7 @@ as follows.
 | Workflow or path | Classification | Why this is the right Slice `02` classification | Supported replacement or framing |
 | --- | --- | --- | --- |
 | Direct `limactl shell substrate ...` for routine lifecycle, repair, or validation | `breakglass` | The official `limactl shell` docs describe it as an SSH-based host entry path into the Lima guest, so it is not a Substrate-owned control-plane surface. Live repo truth still uses it heavily in `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, and `docs/reference/world/platforms/macos-lima-setup.md`, but repeated use does not promote it into the hardened default. | Normal operation should start from `substrate host doctor`, `substrate world doctor`, `substrate world gateway sync|status|restart`, and routed Lima-backed CLI flows first. |
+| Direct guest binary build/install such as `limactl shell substrate ... cargo build ...` or `limactl shell substrate sudo install ...` | `breakglass` | Milestone `0.2` explicitly treats direct guest binary install as a breakglass contract item, and live repo truth still keeps that workflow available in `docs/reference/world/platforms/macos-lima-setup.md` plus the in-guest build/install fallback inside `scripts/mac/lima-warm.sh`. Those flows expose guest provisioning details directly instead of going through a Substrate-owned operator surface. | Keep manual guest build/install as transitional recovery or deep-debugging material only. Normal operation should start from Substrate-owned doctor, gateway, and routed Lima-backed command flows while later slices own the warm/provision replacement cutover. |
 | Direct guest `systemctl` administration for `substrate-world-service` or related units | `breakglass` | This is direct guest administration rather than the supported same-user control plane described by Slice `01`. It remains necessary for emergency repair and deep debugging, but it must not be the first-line operator story. | Use the Substrate-owned doctor and gateway lifecycle/status commands first; later slices can replace remaining warm/provision gaps without reclassifying guest `systemctl` as routine. |
 | Direct guest socket curls such as `curl --unix-socket /run/substrate.sock ...` used as the primary health check | `breakglass` | These probes validate the canonical guest endpoint, but they bypass the supported operator entry points and expose raw guest implementation details directly. | Use `substrate world doctor --json`, `substrate host doctor --json`, and the routed validation surfaces first; reserve direct guest curls for deep debugging and evidence collection. |
 | Host-side `SUBSTRATE_WORLD_SOCKET=<path>` override use on macOS | `breakglass` | This override bypasses the authoritative Lima-backed transport-selection path. Live repo truth already treats it as an advanced/test escape hatch rather than the normal default. | Use the default Lima-backed socket discovery and gateway/doctor commands without overrides unless emergency recovery or advanced testing requires a manual socket target. |
@@ -383,8 +384,8 @@ Validation levels:
      `scripts/mac/lima/substrate.yaml`, `crates/world-mac-lima`, and the macOS
      docs/scripts
 3. **Breakglass matrix review**
-   - confirm direct guest commands, host-side socket override use, and retained
-     compatibility probes are classified explicitly
+   - confirm direct guest shell/admin/build-install commands, host-side socket
+     override use, and retained compatibility probes are classified explicitly
 4. **Scope validation**
    - confirm Slice `02` does not absorb full transport-unification, docs
      cutover, or runtime implementation work
@@ -421,9 +422,9 @@ Slice `02` is successful when:
 
 1. the docs define one explicit supported environment contract in capability and
    lifecycle terms,
-2. the docs classify `limactl shell`, direct guest `systemctl`, direct guest
-   socket curls, and host-side `SUBSTRATE_WORLD_SOCKET` override use explicitly
-   instead of implicitly,
+2. the docs classify `limactl shell`, direct guest binary build/install,
+   direct guest `systemctl`, direct guest socket curls, and host-side
+   `SUBSTRATE_WORLD_SOCKET` override use explicitly instead of implicitly,
 3. the docs state whether `vsock-proxy` is required, optional acceleration, or
    unsupported for the hardened default,
 4. the docs explain the status of host TCP `17788` and stale `7788`

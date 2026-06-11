@@ -179,8 +179,9 @@ Why second:
 
 Verification checkpoint:
 
-1. `limactl shell`, direct guest `systemctl`, direct guest socket curls, and
-   host-side `SUBSTRATE_WORLD_SOCKET` override use are classified explicitly,
+1. `limactl shell`, direct guest binary build/install, direct guest
+   `systemctl`, direct guest socket curls, and host-side
+   `SUBSTRATE_WORLD_SOCKET` override use are classified explicitly,
 2. normal operation clearly starts from Substrate-owned command surfaces,
    with doctor/gateway called out alongside routed world execution and
    persistent-session flows,
