@@ -65,10 +65,12 @@ use crate::execution::agent_runtime::orchestration_session::{
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::tool_invocation_contract::HostToolNameV1;
 use crate::execution::agent_runtime::tool_invocation_contract::{
     authoritative_world_binding_for_session_v1, normalize_host_tool_invocation_outcome_v1,
     translate_host_tool_invocation_request_to_internal_dispatch_request_v1,
-    HostToolInvocationRequestEnvelopeV1, HostToolNameV1, HostToolRuntimeDispatchMetadataV1,
+    HostToolInvocationRequestEnvelopeV1, HostToolRuntimeDispatchMetadataV1,
 };
 #[cfg(all(test, unix))]
 use crate::execution::agent_runtime::tool_invocation_contract::{
