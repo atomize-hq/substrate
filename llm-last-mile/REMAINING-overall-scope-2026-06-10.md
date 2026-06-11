@@ -138,7 +138,7 @@ Current status:
 
 1. historical checkpoint plus detailed seam ledger for Slices `52` and `53`,
 2. still the best slice-local record of the contract-freeze and first-family landing discoveries,
-3. superseded as the **overall** remaining-scope picture now that the Codex-backed first-family landing is closed and the main remaining execution seam has narrowed to second runtime-family parity.
+3. superseded as the **overall** remaining-scope picture now that the Codex-backed first-family landing is closed, selected-host claude_code parity is landed through Slice `54`, and the live follow-through has moved to later docs/smoke or other product-priority choices.
 
 ## Current Repo Truth
 
@@ -281,7 +281,7 @@ The remaining-scope notes already identified a smaller doc-truth gap around olde
 Repo-truth consequence:
 
 1. this is real cleanup work,
-2. but it is not a production-runtime seam comparable to the remaining Family-1 parity or Family-2 coordination work.
+2. but it is not a production-runtime seam comparable to the remaining Family-1 docs/smoke follow-through or Family-2 coordination work.
 
 ## Recommended Next Slice Order
 

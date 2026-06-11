@@ -112,7 +112,7 @@ Terminology rule for this repository:
   - The remaining v1 work should now be tracked as six explicit buckets rather than a loose tail:
     - freeze the broader caller-surface contract,
     - harden the read-side and strict control surfaces,
-    - finish runtime-family host-tool parity and later reporting/docs follow-through above the already-landed first Codex-backed floor,
+    - carry only later runtime-family smoke plus reporting/docs follow-through above the already-landed Codex-backed floor and selected-host claude_code parity,
     - make the Linux/macOS/Windows parity bar explicit for v1,
     - capture the remaining Family-2 host-global ingress lifecycle / federation follow-ons clearly,
     - and clean up the remaining naming/session-handle/compatibility governance leftovers.
@@ -257,4 +257,4 @@ The thin-slice recommendation is still correct, but the remaining scope is now m
 8. Keep the landed auth-bundle handoff as the default integrated carrier so nested/in-world gateway work does not regress back to secret-bearing child env vars.
 9. Keep macOS/Lima on the same shared-owner/member-runtime path as Linux while deciding whether any future non-Linux backend should meet that same bar or stay fail-closed.
 
-At this point, the missing work is no longer basic UAA adoption, REPL targeted-turn grammar, REPL user-turn dispatch, session persistence, event modeling, gateway secret-carrier honesty, or Linux member-runtime placement. The live remaining work is broader caller-surface productization, control-plane/status hardening, second runtime-family host-tool parity plus later reporting/docs follow-through, explicit platform-parity decisions, Family-2 host-global ingress/federation follow-ons, and governance cleanup.
+At this point, the missing work is no longer basic UAA adoption, REPL targeted-turn grammar, REPL user-turn dispatch, session persistence, event modeling, gateway secret-carrier honesty, or Linux member-runtime placement. The live remaining work is broader caller-surface productization, control-plane/status hardening, later runtime-family smoke plus reporting/docs follow-through, explicit platform-parity decisions, Family-2 host-global ingress/federation follow-ons, and governance cleanup.

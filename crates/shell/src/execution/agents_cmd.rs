@@ -2810,7 +2810,10 @@ fn build_toolbox_status_report<'a>(
         backend_id: orchestrator.derived_backend_id(),
         role: ORCHESTRATOR_ROLE,
         execution: ExecutionScopeJson { scope: "host" },
-        live_tool_support: live_tool_support_posture_json_for_selected_orchestrator(orchestrator),
+        live_tool_support: live_tool_support_posture_json_for_selected_orchestrator(
+            orchestrator,
+            &context.effective_config,
+        ),
     };
 
     if !context.effective_config.agents.toolbox.enabled {
@@ -3438,7 +3441,9 @@ fn live_tool_support_posture_json_for_entry(
 
 fn live_tool_support_posture_json_for_selected_orchestrator(
     entry: &AgentInventoryEntryV1,
+    effective_config: &SubstrateConfig,
 ) -> Option<LiveToolSupportPostureJson> {
+    validate_runtime_realizability(entry, effective_config).ok()?;
     resolve_selected_orchestrator_live_tool_support_posture(entry)
         .ok()
         .map(live_tool_support_posture_json)
@@ -4436,6 +4441,56 @@ mod tests {
             assert_eq!(
                 posture.support_state,
                 LiveToolSupportState::SelectedRuntimeSupported.as_str()
+            );
+        });
+    }
+
+    #[test]
+    fn toolbox_status_hides_selected_runtime_posture_when_binary_is_unrealizable() {
+        with_state_store(|_| {
+            let agent_id = "host_orchestrator_alias";
+            let effective_config = SubstrateConfig {
+                agents: crate::execution::config_model::AgentsConfig {
+                    enabled: true,
+                    hub: crate::execution::config_model::AgentHubConfig {
+                        orchestrator_agent_id: agent_id.to_string(),
+                        ..Default::default()
+                    },
+                    toolbox: crate::execution::config_model::AgentToolboxConfig {
+                        enabled: true,
+                        bind: crate::execution::config_model::AgentToolboxBindConfig {
+                            transport: AgentToolboxBindTransport::Uds,
+                        },
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let base_policy = Policy {
+                agents_allowed_backends: vec![format!("cli:{agent_id}")],
+                ..Policy::default()
+            };
+            let mut entry =
+                inventory_entry_for_test(agent_id, "claude_code", AgentExecutionScope::Host);
+            entry.file.config.cli.as_mut().expect("cli config").binary =
+                "__definitely_missing_selected_claude_binary__".to_string();
+            let mut inventory = BTreeMap::new();
+            inventory.insert(agent_id.to_string(), entry);
+            let context = AgentCommandContext {
+                effective_config,
+                base_policy,
+                inventory,
+            };
+
+            let report =
+                build_toolbox_status_report(&context).expect("toolbox status should stay readable");
+            assert_eq!(report.eligibility.state, "dependency_unavailable");
+            let orchestrator = report
+                .orchestrator
+                .expect("selected host orchestrator should still be reported");
+            assert!(
+                orchestrator.live_tool_support.is_none(),
+                "toolbox status must not overclaim selected-runtime support when the configured binary is not runtime-realizable"
             );
         });
     }
