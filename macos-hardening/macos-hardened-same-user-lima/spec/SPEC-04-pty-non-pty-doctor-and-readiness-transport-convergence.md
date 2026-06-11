@@ -168,6 +168,62 @@ The current official Lima docs still matter for this consumer-convergence work:
 This slice should cite the exact official URLs above when those semantics drive
 its final decisions.
 
+## Packet 1 freeze: helper boundary and symbol-impact gate
+
+Packet `1` freezes the shell-side consumer contract before any PTY,
+persistent-session, or doctor/readiness implementation changes.
+
+For this repo state, the intended helper boundary is:
+
+1. `crates/shell/src/execution/platform_world/mod.rs` owns the selected
+   transport contract as the shell-side authority layer,
+2. that layer is the only acceptable home for any shared helper that turns the
+   already-selected `WorldTransport` into:
+   - a `/v1/stream` WebSocket client for PTY and persistent-session use,
+   - an `AgentClient` for non-PTY and doctor/readiness use,
+   - selected-transport metadata that later doctor/readiness code can report or
+     probe first,
+3. downstream consumers may still own request payload building, readiness
+   gating, and fallback classification, but they should stop restating their own
+   transport ladders once Packet `2` and Packet `3` land.
+
+Packet `1` also freezes the exact symbol inventory that later packets are
+allowed to converge:
+
+1. `platform_world::detect` is the selected-transport source of truth that
+   already resolves `WorldTransport`,
+2. `world_persistent_session::build_ws_and_start_session_frame` is the
+   persistent-session WebSocket consumer that still performs its own
+   per-transport branching,
+3. `world_ops::build_agent_client_and_request_impl`,
+   `world_ops::build_agent_client_and_member_dispatch_request_impl`, and
+   `world_ops::build_agent_client_and_pending_diff_request_impl` are the macOS
+   non-PTY agent-client consumers that still branch on transport locally,
+4. the PTY WebSocket branch inside
+   `crates/shell/src/execution/routing/dispatch/world_ops.rs` is the PTY
+   transport consumer that still hand-builds `/v1/stream` connection ladders,
+5. `platform/macos.rs::collect_world_doctor_assessment` is the selected-
+   transport-adjacent doctor/readiness consumer that still probes host UDS,
+   then compatibility TCP `17788`, then guest-direct `limactl shell` fallback,
+6. `crates/shell/src/builtins/world_gateway.rs` remains Packet `1` regression
+   reference only; do not widen into gateway lifecycle logic unless Packet `3`
+   proves an endpoint contradiction.
+
+GitNexus is part of the frozen Packet `1` contract for this worktree. Because
+multiple `substrate` indexes exist outside this checkout, all Packet `1`
+through Packet `4` GitNexus commands must use:
+
+```bash
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only
+```
+
+At minimum, Packet `1` must record:
+
+1. `gitnexus status` against this worktree,
+2. `gitnexus context` / `gitnexus impact` for the exact consumer symbols above
+   before editing them,
+3. `gitnexus detect-changes` before any commit later in the slice.
+
 ## Commands
 
 This is a source-driven shell-runtime convergence slice. Required commands
@@ -206,6 +262,17 @@ rg -n "17788|7788|agent.sock|SUBSTRATE_WORLD_SOCKET|doctor|readiness|WorldTransp
   crates/shell/src/execution/routing/dispatch/world_ops.rs \
   crates/shell/src/builtins/world_gateway.rs
 
+# Record GitNexus status and Packet 1 symbol-impact inputs for this checkout only
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus status
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context detect --repo substrate --file crates/shell/src/execution/platform_world/mod.rs
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context build_ws_and_start_session_frame --repo substrate --file crates/shell/src/execution/routing/dispatch/world_persistent_session.rs
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context build_agent_client_and_request_impl --repo substrate --file crates/shell/src/execution/routing/dispatch/world_ops.rs
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context collect_world_doctor_assessment --repo substrate --file crates/shell/src/execution/platform/macos.rs
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/platform_world/mod.rs:detect' --repo substrate --direction upstream --depth 3 --include-tests
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/routing/dispatch/world_persistent_session.rs:build_ws_and_start_session_frame' --repo substrate --direction upstream --depth 3 --include-tests
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/routing/dispatch/world_ops.rs:build_agent_client_and_request_impl' --repo substrate --direction upstream --depth 3 --include-tests
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/platform/macos.rs:collect_world_doctor_assessment' --repo substrate --direction upstream --depth 3 --include-tests
+
 # Targeted validation for the implementation slice
 cargo test -p shell macos_no_override_current_thread_start_uses_async_readiness_without_panic -- --nocapture
 cargo test -p shell macos_socket_override_bypasses_platform_async_readiness -- --nocapture
@@ -221,7 +288,7 @@ If GitNexus reports a stale index before symbol-impact work begins, refresh it
 first:
 
 ```bash
-npx gitnexus analyze
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus analyze
 ```
 
 ## Project structure
@@ -277,6 +344,11 @@ Required style:
 5. keep policy payload construction, world-network routing, and backend policy
    semantics unchanged unless a direct transport-consumer contradiction forces a
    tiny supporting change that is called out explicitly.
+
+For Packet `1`, this helper layer is frozen conceptually as
+`platform_world/mod.rs` plus any tiny adjacent helper surface required to keep
+`WorldTransport`-specific connection logic out of downstream consumers. Packet
+`1` should not move request-shaping or doctor policy semantics into that layer.
 
 Example shape:
 

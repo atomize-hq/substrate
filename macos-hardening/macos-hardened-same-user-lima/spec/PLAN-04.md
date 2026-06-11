@@ -99,8 +99,11 @@ drive decisions:
 ## Major components and dependencies
 
 1. **shared shell-side transport helper behavior**
-   - define one obvious shell-side way to turn the selected `WorldTransport`
-     into WebSocket, agent-client, and/or readiness connections
+   - freeze `crates/shell/src/execution/platform_world/mod.rs` as the default
+     shell-side authority layer for turning the selected `WorldTransport` into
+     shared WebSocket, agent-client, and readiness-facing connection behavior
+   - keep request payload building and doctor-policy interpretation outside that
+     helper boundary unless a direct contradiction forces a tiny adjacent export
 2. **persistent-session and PTY convergence**
    - make persistent-session and PTY code reuse that shared behavior instead of
      maintaining parallel ladders
@@ -115,10 +118,11 @@ drive decisions:
 Dependency order:
 
 1. source-backed consumer contract freeze first,
-2. shared helper extraction or reuse second,
-3. PTY and persistent-session convergence third,
-4. doctor/readiness runtime convergence fourth,
-5. tests and clear handoff last.
+2. Packet `1` symbol-impact inventory and helper-boundary freeze second,
+3. shared helper extraction or reuse third,
+4. PTY and persistent-session convergence fourth,
+5. doctor/readiness runtime convergence fifth,
+6. tests and clear handoff last.
 
 ## Locked decisions
 
@@ -154,7 +158,7 @@ Goal:
 Primary touch surface:
 
 1. `SPEC-04-pty-non-pty-doctor-and-readiness-transport-convergence.md`
-2. `crates/shell/src/execution/platform_world/mod.rs`
+2. `PLAN-04.md`
 3. possibly a tiny adjacent shell helper surface only if needed
 
 Why first:
@@ -168,7 +172,18 @@ Verification checkpoint:
 1. official Lima forwarding, SSH, `limactl shell`, VZ, environment-variable,
    and breaking-change semantics are cited for non-obvious decisions,
 2. the shared helper or consumer boundary is obvious,
-3. the slice still has not absorbed policy parity or docs/script cutover.
+3. the exact Packet `2` / Packet `3` consumer symbols are named explicitly:
+   - `platform_world::detect`
+   - `world_persistent_session::build_ws_and_start_session_frame`
+   - `world_ops::build_agent_client_and_request_impl`
+   - `world_ops::build_agent_client_and_member_dispatch_request_impl`
+   - `world_ops::build_agent_client_and_pending_diff_request_impl`
+   - the PTY `/v1/stream` connection branch in `world_ops.rs`
+   - `platform/macos.rs::collect_world_doctor_assessment`
+4. GitNexus commands are pinned to
+   `GITNEXUS_HOME=/tmp/gitnexus-ff74-only` so this checkout does not resolve
+   against sibling `substrate` indexes,
+5. the slice still has not absorbed policy parity or docs/script cutover.
 
 ### Packet 2: Converge PTY and persistent-session consumers
 
@@ -295,7 +310,10 @@ Parallelizable work:
 
 1. reviewing the official Lima source pages,
 2. inventorying consumer-side transport duplication,
-3. identifying the exact symbols that need GitNexus impact analysis.
+3. identifying the exact symbols that need GitNexus impact analysis,
+4. recording `gitnexus status`, `gitnexus context`, and `gitnexus impact`
+   results for the Packet `1` symbol set with
+   `GITNEXUS_HOME=/tmp/gitnexus-ff74-only`.
 
 Sequential work:
 
