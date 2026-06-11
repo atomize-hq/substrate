@@ -3700,6 +3700,37 @@ fn checkpoints_prefer_explicit_user_requests_over_unclassified_app_plugin_scaffo
 }
 
 #[test]
+fn checkpoints_ignore_app_plugin_scaffolding_before_activity_until_the_real_goal_arrives() {
+    let goal = "/goal Fix only the checkpoint objective selector in checkpoint/mod.rs and add the Packet R5.5-2 regression in checkpoints.rs.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Apps (Connectors) can be explicitly triggered in user messages and plugin bundles can lazy-load additional app surfaces with MCP tools. /goal Keep the app and plugin scaffolding active first.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"objective\" crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        prompt_row(3, "turn-001", goal),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '2360,2475p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_output_row(5, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(checkpoints[0].task_frame.objective, goal);
+}
+
+#[test]
 fn checkpoints_prefer_assistant_restated_goal_over_boilerplate_when_primary_sources_are_absent() {
     let objective = "I will keep debugging the same analyzer checkpoint tests.";
     let result = analyze_custom_rows(vec![
@@ -3890,6 +3921,29 @@ fn checkpoints_preserve_long_form_goal_targeting_agents_skill_and_available_skil
             "turn-001",
             "functions.shell_command",
             r#"{"command":"rg -n \"Available skills\" /tmp/session.txt","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+}
+
+#[test]
+fn checkpoints_preserve_user_requested_tooling_plugin_app_and_safety_targets() {
+    let goal = "/goal Analyze the Codex desktop context, plugin instructions, Apps (Connectors) scaffold, and safety guardrails only, then update just that boilerplate wording.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"Codex desktop context|plugin instructions|Apps \\(Connectors\\)|safety guardrails\" AGENTS.md CLAUDE.md","workdir":"/repo"}"#,
         ),
     ]);
 

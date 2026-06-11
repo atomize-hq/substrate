@@ -2125,8 +2125,10 @@ fn checkpoint_phase_boundary_objective_row(
         ObjectiveSource::ThreadGoalText => thread_goal_boundary_objective_row(rows, index, row),
         ObjectiveSource::ExplicitUserRequest
         | ObjectiveSource::AssistantRestatedGoal
-        | ObjectiveSource::NonBoilerplateUnknown
-        | ObjectiveSource::NonBoilerplateDirective => row_text_is_focusable(row),
+        | ObjectiveSource::NonBoilerplateUnknown => row_text_is_focusable(row),
+        ObjectiveSource::NonBoilerplateDirective => {
+            candidate.boilerplate_class.is_none() && row_text_is_focusable(row)
+        }
     }
 }
 
@@ -2404,9 +2406,21 @@ fn text_preserves_boilerplate_target(text: &str) -> bool {
         "<skill>",
         "skill block",
         "available skills",
+        "codex desktop context",
+        "plugin instructions",
+        "apps (connectors)",
+        "app scaffold",
+        "plugin scaffold",
+        "connector scaffold",
+        "mcp tools",
+        "mcp server",
+        "tooling capability",
         "permission block",
         "approval policy",
         "memory block",
+        "safety guardrails",
+        "security guardrails",
+        "policy block",
         "boilerplate",
         "instruction block",
     ]
@@ -2460,6 +2474,12 @@ fn boilerplate_class(text: &str) -> Option<BoilerplateClass> {
         "workspace dependencies",
         "how to use plugins",
         "plugins are enabled",
+        "plugin instructions",
+        "apps (connectors)",
+        "apps can be explicitly triggered",
+        "plugin bundles",
+        "mcp tools",
+        "app surfaces",
     ]
     .iter()
     .any(|needle| lower.contains(needle))
