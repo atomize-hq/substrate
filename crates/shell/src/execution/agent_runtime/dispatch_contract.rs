@@ -1332,7 +1332,9 @@ pub(crate) enum SelectedClaudeCodePathState {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Slice52SemanticsState {
+    #[allow(dead_code)]
     Preserved,
+    NotYetProven,
     #[allow(dead_code)]
     NotPreserved,
 }
@@ -1346,7 +1348,9 @@ pub(crate) enum TargetedValidationState {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HiddenFallbackState {
+    #[allow(dead_code)]
     NoHiddenFallback,
+    NotYetProven,
     #[allow(dead_code)]
     HiddenFallbackPresent,
 }
@@ -1363,9 +1367,9 @@ impl SelectedClaudeCodeUpliftGate {
     pub(crate) const fn packet_1() -> Self {
         Self {
             selected_start_turn_path: SelectedClaudeCodePathState::Missing,
-            slice_52_semantics: Slice52SemanticsState::Preserved,
+            slice_52_semantics: Slice52SemanticsState::NotYetProven,
             targeted_validation: TargetedValidationState::NotYetGreen,
-            hidden_fallback: HiddenFallbackState::NoHiddenFallback,
+            hidden_fallback: HiddenFallbackState::NotYetProven,
         }
     }
 
@@ -2438,15 +2442,31 @@ mod tests {
             gate.selected_start_turn_path,
             SelectedClaudeCodePathState::Missing
         );
-        assert_eq!(gate.slice_52_semantics, Slice52SemanticsState::Preserved);
+        assert_eq!(gate.slice_52_semantics, Slice52SemanticsState::NotYetProven);
         assert_eq!(
             gate.targeted_validation,
             TargetedValidationState::NotYetGreen
         );
-        assert_eq!(gate.hidden_fallback, HiddenFallbackState::NoHiddenFallback);
+        assert_eq!(gate.hidden_fallback, HiddenFallbackState::NotYetProven);
         assert!(
             !gate.allows_selected_runtime_enablement(),
             "Packet 1 must keep selected claude_code uplift closed until every gate criterion is satisfied"
+        );
+    }
+
+    #[test]
+    fn live_tool_support_posture_requires_semantics_and_fallback_evidence_before_enablement() {
+        let gate = SelectedClaudeCodeUpliftGate {
+            selected_start_turn_path: SelectedClaudeCodePathState::Present,
+            targeted_validation: TargetedValidationState::Green,
+            ..SelectedClaudeCodeUpliftGate::packet_1()
+        };
+
+        assert_eq!(gate.slice_52_semantics, Slice52SemanticsState::NotYetProven);
+        assert_eq!(gate.hidden_fallback, HiddenFallbackState::NotYetProven);
+        assert!(
+            !gate.allows_selected_runtime_enablement(),
+            "Packet 1 must fail closed until semantics preservation and no-hidden-fallback evidence are both proven in code"
         );
     }
 
