@@ -163,7 +163,7 @@ This slice does not include:
 - changing REPL ::<backend_id> <prompt> grammar,
 - adding default-agent or implicit routing,
 - fuzzy selector resolution,
-- public world-root start,
+- standalone member-root public world-root start,
 - member-level public selectors independent of orchestration_session_id,
 - daemonizing the control plane,
 - promising macOS/Lima parity for world-sensitive follow-up turns,

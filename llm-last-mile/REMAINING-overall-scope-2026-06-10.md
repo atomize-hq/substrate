@@ -276,12 +276,14 @@ The remaining-scope notes already identified a smaller doc-truth gap around olde
 
 1. `PLAN-44.md`,
 2. `PLAN-45.md`,
-3. `PLAN-46.md`.
+3. `PLAN-46.md`,
+4. Packet `55` Packet `2` wording convergence for shell-wrap versus prompt-taking language and for host-rooted world-backed `start` versus deferred standalone member-root public lifecycle wording.
 
 Repo-truth consequence:
 
 1. this is real cleanup work,
-2. but it is not a production-runtime seam comparable to the remaining Family-1 docs/smoke follow-through or Family-2 coordination work.
+2. it does not change runtime sequencing or reopen Slice `30` semantics,
+3. and it is not a production-runtime seam comparable to the remaining Family-1 docs/smoke follow-through or Family-2 coordination work.
 
 ## Recommended Next Slice Order
 
