@@ -3792,6 +3792,95 @@ PATCH","workdir":"/repo"}"#,
 }
 
 #[test]
+fn checkpoints_start_a_new_checkpoint_from_thread_goal_only_objectives() {
+    let thread_goal = "Debug the failing analyzer checkpoint tests.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", thread_goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        row(
+            3,
+            "turn-002",
+            CompactionKind::Unknown,
+            &format!(
+                r#"{{"goal":{{"objective":"{thread_goal}","status":"active"}},"threadId":"thread-123","type":"thread_goal_updated"}}"#
+            ),
+            None,
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(5, "turn-002", "Exit code: 0"),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints.len(), 2);
+    assert_eq!(checkpoints[1].task_frame.objective, thread_goal);
+    assert_eq!(
+        checkpoints[1]
+            .turn_context
+            .as_ref()
+            .and_then(|turn| turn.turn_id.as_deref()),
+        Some("turn-002")
+    );
+}
+
+#[test]
+fn checkpoints_keep_multi_turn_agents_instruction_goals_separate_and_targeted() {
+    let goal =
+        "/goal Analyze the AGENTS.md instructions block and update only that instruction text.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        prompt_row(3, "turn-002", goal),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.apply_patch",
+            r#"{"command":"apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: AGENTS.md
+*** End Patch
+PATCH","workdir":"/repo"}"#,
+        ),
+        tool_output_row(5, "turn-002", "Exit code: 0"),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints.len(), 2);
+    assert_eq!(checkpoints[0].task_frame.objective, goal);
+    assert_eq!(checkpoints[1].task_frame.objective, goal);
+    assert_eq!(
+        checkpoints[0]
+            .turn_context
+            .as_ref()
+            .and_then(|turn| turn.turn_id.as_deref()),
+        Some("turn-001")
+    );
+    assert_eq!(
+        checkpoints[1]
+            .turn_context
+            .as_ref()
+            .and_then(|turn| turn.turn_id.as_deref()),
+        Some("turn-002")
+    );
+}
+
+#[test]
 fn checkpoints_mark_closeout_reopened_scope_as_mixed() {
     let result = analyze_custom_rows(vec![
         prompt_row(

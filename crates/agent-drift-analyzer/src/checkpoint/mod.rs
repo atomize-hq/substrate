@@ -1929,10 +1929,16 @@ fn checkpoint_end_indices(rows: &[CompactionRow]) -> Vec<usize> {
     let mut saw_activity = false;
     let mut saw_objective = false;
     for (index, row) in rows.iter().enumerate() {
-        if objective_row(row) {
+        let thread_goal_boundary_objective =
+            thread_goal_boundary_objective_row(rows, index, row);
+        if objective_row(row) || thread_goal_boundary_objective {
             saw_objective = true;
         }
-        if index > 0 && row_starts_new_phase(row) && saw_activity && saw_objective {
+        if index > 0
+            && (row_starts_new_phase(row) || thread_goal_boundary_objective)
+            && saw_activity
+            && saw_objective
+        {
             phase_ends.push(index - 1);
             saw_activity = false;
         }
@@ -1965,20 +1971,22 @@ fn checkpoint_end_indices(rows: &[CompactionRow]) -> Vec<usize> {
 }
 
 fn row_starts_new_phase(row: &CompactionRow) -> bool {
-    matches!(
-        row.kind,
-        CompactionKind::UserMessage
-            | CompactionKind::AssistantMessage
-            | CompactionKind::DeveloperMessage
-            | CompactionKind::SystemMessage
-    ) && row_text_is_focusable(row)
+    preserves_user_requested_boilerplate_target(row)
+        || (matches!(
+            row.kind,
+            CompactionKind::UserMessage
+                | CompactionKind::AssistantMessage
+                | CompactionKind::DeveloperMessage
+                | CompactionKind::SystemMessage
+        ) && row_text_is_focusable(row))
 }
 
 fn objective_row(row: &CompactionRow) -> bool {
-    matches!(
-        row.kind,
-        CompactionKind::UserMessage | CompactionKind::DeveloperMessage
-    ) && row_text_is_focusable(row)
+    preserves_user_requested_boilerplate_target(row)
+        || (matches!(
+            row.kind,
+            CompactionKind::UserMessage | CompactionKind::DeveloperMessage
+        ) && row_text_is_focusable(row))
 }
 
 fn row_is_activity(row: &CompactionRow) -> bool {
@@ -2041,6 +2049,15 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
         verification_commands: extract_verification_commands(&candidate.text),
         evidence: vec![evidence_from_row(candidate.row, reason)],
     })
+}
+
+fn thread_goal_boundary_objective_row(
+    rows: &[CompactionRow],
+    index: usize,
+    row: &CompactionRow,
+) -> bool {
+    thread_goal_objective_text(row).is_some()
+        && (index == 0 || rows[index - 1].turn_id != row.turn_id)
 }
 
 fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
@@ -2226,10 +2243,18 @@ fn preserves_user_requested_boilerplate_target(row: &CompactionRow) -> bool {
 }
 
 fn text_preserves_boilerplate_target(text: &str) -> bool {
+    let trimmed = text.trim_start();
+    if trimmed.starts_with("# AGENTS.md instructions")
+        || trimmed.starts_with("<skill>")
+        || trimmed.starts_with("Available skills")
+        || text.len() > 500
+    {
+        return false;
+    }
+
     let lower = text.to_ascii_lowercase();
     let action = [
-        "analyze", "inspect", "review", "edit", "update", "rewrite", "change", "tighten", "fix",
-        "audit",
+        "analyze", "inspect", "review", "edit", "update", "rewrite", "tighten", "fix", "audit",
     ]
     .iter()
     .any(|needle| lower.contains(needle));
