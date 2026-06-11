@@ -64,18 +64,16 @@ claim:
 ## Support taxonomy
 
 Slice `01` Packet `2` inherits the exact support classes from
-[`spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md`](./spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md):
+[`spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md`](./spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md).
+That design doc is the single authoritative wording source for the taxonomy
+definitions and examples. This README intentionally references the taxonomy
+without restating it.
+
+The feature-local support classes are:
 
 1. `supported`
-   - the default same-user Lima operator path through Substrate-owned commands
-     and routed Lima-backed execution/orchestration flows
 2. `degraded-but-supported`
-   - transitional or narrower supported workflows that still remain inside the
-     supported story while later slices harden them further
 3. `breakglass`
-   - exceptional recovery, deep-debugging, or advanced-test workflows such as
-     direct guest administration or host-side `SUBSTRATE_WORLD_SOCKET` override
-     use on macOS
 
 ## In-scope
 
