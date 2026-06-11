@@ -199,9 +199,8 @@ allowed to converge:
    `world_ops::build_agent_client_and_member_dispatch_request_impl`, and
    `world_ops::build_agent_client_and_pending_diff_request_impl` are the macOS
    non-PTY agent-client consumers that still branch on transport locally,
-4. the PTY WebSocket branch inside
-   `crates/shell/src/execution/routing/dispatch/world_ops.rs` is the PTY
-   transport consumer that still hand-builds `/v1/stream` connection ladders,
+4. `world_ops::execute_world_pty_over_ws_macos` is the PTY transport consumer
+   that still hand-builds `/v1/stream` connection ladders,
 5. `platform/macos.rs::collect_world_doctor_assessment` is the selected-
    transport-adjacent doctor/readiness consumer that still probes host UDS,
    then compatibility TCP `17788`, then guest-direct `limactl shell` fallback,
@@ -267,10 +266,16 @@ GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus status
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context detect --repo substrate --file crates/shell/src/execution/platform_world/mod.rs
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context build_ws_and_start_session_frame --repo substrate --file crates/shell/src/execution/routing/dispatch/world_persistent_session.rs
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context build_agent_client_and_request_impl --repo substrate --file crates/shell/src/execution/routing/dispatch/world_ops.rs
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context build_agent_client_and_member_dispatch_request_impl --repo substrate --file crates/shell/src/execution/routing/dispatch/world_ops.rs
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context build_agent_client_and_pending_diff_request_impl --repo substrate --file crates/shell/src/execution/routing/dispatch/world_ops.rs
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context execute_world_pty_over_ws_macos --repo substrate --file crates/shell/src/execution/routing/dispatch/world_ops.rs
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus context collect_world_doctor_assessment --repo substrate --file crates/shell/src/execution/platform/macos.rs
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/platform_world/mod.rs:detect' --repo substrate --direction upstream --depth 3 --include-tests
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/routing/dispatch/world_persistent_session.rs:build_ws_and_start_session_frame' --repo substrate --direction upstream --depth 3 --include-tests
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/routing/dispatch/world_ops.rs:build_agent_client_and_request_impl' --repo substrate --direction upstream --depth 3 --include-tests
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/routing/dispatch/world_ops.rs:build_agent_client_and_member_dispatch_request_impl' --repo substrate --direction upstream --depth 3 --include-tests
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/routing/dispatch/world_ops.rs:build_agent_client_and_pending_diff_request_impl' --repo substrate --direction upstream --depth 3 --include-tests
+GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/routing/dispatch/world_ops.rs:execute_world_pty_over_ws_macos' --repo substrate --direction upstream --depth 3 --include-tests
 GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus impact 'Function:crates/shell/src/execution/platform/macos.rs:collect_world_doctor_assessment' --repo substrate --direction upstream --depth 3 --include-tests
 
 # Targeted validation for the implementation slice

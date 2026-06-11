@@ -178,7 +178,7 @@ Verification checkpoint:
    - `world_ops::build_agent_client_and_request_impl`
    - `world_ops::build_agent_client_and_member_dispatch_request_impl`
    - `world_ops::build_agent_client_and_pending_diff_request_impl`
-   - the PTY `/v1/stream` connection branch in `world_ops.rs`
+   - `world_ops::execute_world_pty_over_ws_macos`
    - `platform/macos.rs::collect_world_doctor_assessment`
 4. GitNexus commands are pinned to
    `GITNEXUS_HOME=/tmp/gitnexus-ff74-only` so this checkout does not resolve
@@ -312,7 +312,14 @@ Parallelizable work:
 2. inventorying consumer-side transport duplication,
 3. identifying the exact symbols that need GitNexus impact analysis,
 4. recording `gitnexus status`, `gitnexus context`, and `gitnexus impact`
-   results for the Packet `1` symbol set with
+   results for the full Packet `1` symbol set
+   (`platform_world::detect`,
+   `world_persistent_session::build_ws_and_start_session_frame`,
+   `world_ops::build_agent_client_and_request_impl`,
+   `world_ops::build_agent_client_and_member_dispatch_request_impl`,
+   `world_ops::build_agent_client_and_pending_diff_request_impl`,
+   `world_ops::execute_world_pty_over_ws_macos`, and
+   `platform/macos.rs::collect_world_doctor_assessment`) with
    `GITNEXUS_HOME=/tmp/gitnexus-ff74-only`.
 
 Sequential work:
