@@ -261,9 +261,10 @@ verification command for the current packet is green or the failure is documente
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
 
 - [x] Task R5-7.2: Add bounded progress acceptance tests.
-  - Acceptance: `progress_acceptance.rs` now asserts selected-checkpoint archetype, dimension, status, confidence bounds, required signal codes, and evidence minima across a committed six-case corpus that spans troubleshooting, planning, implementation, closeout, and parent-visible delegation guardrails; the legacy R2 acceptance wall stays separate and unchanged.
+  - Acceptance: `progress_acceptance.rs` now asserts selected-checkpoint archetype, dimension, status, confidence bounds, required signal codes, and evidence minima across a committed six-case corpus that spans troubleshooting, planning, implementation, closeout, and parent-visible delegation guardrails; the legacy R2 acceptance wall stays separate and unchanged; and the landed packet’s narrow `crates/agent-drift-analyzer/src/checkpoint/progress.rs` refinement records delegated child-opaque limiting evidence in `counter_evidence` for the `parent_visible_orchestration` guardrail case.
   - Verify: `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture`
   - Files:
+    - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**`
 
@@ -272,6 +273,7 @@ verification command for the current packet is green or the failure is documente
   - Verify:
     ```bash
     cargo fmt --all -- --check
+    cargo test -p agent-drift-analyzer acceptance_fixtures -- --nocapture
     cargo test -p agent-drift-analyzer -- --nocapture
     cargo test -p agent-drift-sentinel -- --nocapture
     ```

@@ -292,6 +292,10 @@ cargo test -p agent-drift-sentinel -- --nocapture
   `tests/fixtures/acceptance` wall legacy-stability-only unless intentionally widened.
 - Include at least one annotated real-rollout case for the bounded semantic acceptance claim;
   realistic bundle-shaped cases may extend supporting coverage across the core dimensions.
+- Allow the narrow delegated guardrail follow-through in
+  `crates/agent-drift-analyzer/src/checkpoint/progress.rs` so the
+  `parent_visible_orchestration` case records delegated child-opaque limiting evidence in
+  `counter_evidence` without widening R5 into positive child-progress semantics.
 - Update fixture manifest with actual fixture locations and deferrals.
 - Run focused and full test walls.
 - This is the only packet allowed to claim bounded semantic acceptance / real-rollout proof for
@@ -300,6 +304,7 @@ cargo test -p agent-drift-sentinel -- --nocapture
 ### Files
 
 ```text
+crates/agent-drift-analyzer/src/checkpoint/progress.rs
 crates/agent-drift-analyzer/tests/progress_acceptance.rs
 crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/README.md
 crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**
