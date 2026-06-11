@@ -1,9 +1,12 @@
 # Tasks: Agent Drift Analyzer Session Progress R5.5
 
-Status: draft task ledger created on 2026-06-11 from the post-landing planning-input inventory.
+Status: draft task ledger created on 2026-06-11 from the post-landing planning-input inventory;
+docs-lock `R5.5-0` and bookkeeping-only `R5.5-7` landed on 2026-06-11, while the remaining open
+tasks are implementation work for later sessions.
 
 This family is a bounded follow-up to landed `R5`. The checked `R5.5-0` tasks below cover the docs
-created in this planning pass. All remaining tasks are implementation work for later sessions.
+created in this planning pass, and the checked `R5.5-7` tasks capture the already-landed hygiene
+cleanup. All other remaining tasks are implementation work for later sessions.
 
 Keep each task as close as possible to five touched files or fewer. Do not advance from one packet
 to the next until the packet verification commands are green or the failure is explicitly
@@ -223,22 +226,24 @@ captured in the packet notes.
 
 ## R5.5-7: Cleanup And Doc Hygiene
 
-- [ ] Task R5.5-7.1: Remove or justify `#![allow(dead_code)]` in `diagnostics.rs`.
+- [x] Task R5.5-7.1: Remove or justify `#![allow(dead_code)]` in `diagnostics.rs`.
   - Acceptance: the attribute is removed after wiring/deleting dead code, or the file/documentation
     explains the remaining intentional staging clearly enough that the allow is no longer a silent
     trust gap.
   - Verify:
-    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
-    - `cargo test -p agent-drift-analyzer -- --nocapture`
+    - Manual code review of `crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs`
+    - Commit `323600c22 chore: clean r5.5 diagnostics and task doc hygiene`
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-7.2: Clean the stale unchecked legacy checklist text from the historical R5 task
+- [x] Task R5.5-7.2: Clean the stale unchecked legacy checklist text from the historical R5 task
       doc.
   - Acceptance: `docs/specs/r5/agent-drift-analyzer-session-progress-r5-tasks.md` no longer reads
     like unfinished R5 implementation work while still preserving honest history.
-  - Verify: Manual review against current landed R5 state and this R5.5 plan.
+  - Verify:
+    - Manual review against current landed R5 state and this R5.5 plan
+    - Commit `323600c22 chore: clean r5.5 diagnostics and task doc hygiene`
   - Files:
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-tasks.md`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-follow-ups.md`

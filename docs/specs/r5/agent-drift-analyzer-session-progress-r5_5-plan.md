@@ -1,6 +1,8 @@
 # Plan: Agent Drift Analyzer Session Progress R5.5
 
-Status: draft plan created on 2026-06-11 from the post-landing planning-input inventory.
+Status: draft plan created on 2026-06-11 from the post-landing planning-input inventory; the
+docs-lock packet `R5.5-0` and the bookkeeping-only cleanup packet `R5.5-7` are already landed,
+while the remaining packets stay open as implementation follow-up work.
 
 ## Objective
 
@@ -309,6 +311,9 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 Doc cleanup should happen only after the core packets are stable so the history stays honest while
 implementation is still in motion.
+
+Repo state note on 2026-06-11: this cleanup packet is already landed via commit
+`323600c22 chore: clean r5.5 diagnostics and task doc hygiene`.
 
 ## R6 Readiness Gate
 

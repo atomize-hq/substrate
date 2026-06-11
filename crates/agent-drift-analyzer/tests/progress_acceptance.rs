@@ -425,9 +425,9 @@ fn assert_selected_checkpoint_has_array_field(
     case_id: &str,
     field_name: &str,
 ) {
-    let selected_checkpoint = expected_json
-        .get("selected_checkpoint")
-        .unwrap_or_else(|| panic!("expected selected_checkpoint object in expected.json for {case_id}"));
+    let selected_checkpoint = expected_json.get("selected_checkpoint").unwrap_or_else(|| {
+        panic!("expected selected_checkpoint object in expected.json for {case_id}")
+    });
     let field_value = selected_checkpoint.get(field_name).unwrap_or_else(|| {
         panic!(
             "annotated real-rollout case {case_id} must carry selected_checkpoint.{field_name} explicitly in expected.json"
@@ -484,7 +484,10 @@ fn assert_selected_checkpoint_narrative_alignment(
             );
             assert_text_contains_all(
                 &why_not_text,
-                &["implementation verification wall", "troubleshooting frontier"],
+                &[
+                    "implementation verification wall",
+                    "troubleshooting frontier",
+                ],
                 case_id,
                 "selected_checkpoint.why_not_other_dimensions",
             );
@@ -521,7 +524,10 @@ fn assert_selected_checkpoint_narrative_alignment(
             );
             assert_text_contains_all(
                 &why_not_text,
-                &["verification closeout narrowing", "troubleshooting frontier"],
+                &[
+                    "verification closeout narrowing",
+                    "troubleshooting frontier",
+                ],
                 case_id,
                 "selected_checkpoint.why_not_other_dimensions",
             );
@@ -549,11 +555,7 @@ fn assert_selected_checkpoint_narrative_alignment(
             );
             assert_text_contains_all(
                 &decisive_text,
-                &[
-                    "earlier",
-                    "clean",
-                    "later regressing verification attempt",
-                ],
+                &["earlier", "clean", "later regressing verification attempt"],
                 case_id,
                 "selected_checkpoint.decisive_evidence",
             );
@@ -592,12 +594,12 @@ fn normalized_progress_facts(archetype: &SessionArchetype, progress: &SessionPro
         normalize_text(&format!("{:?}", progress.dimension)),
         normalize_text(&format!("{:?}", progress.status)),
     ];
-    facts.extend(
-        progress
-            .signals
-            .iter()
-            .flat_map(|signal| [normalize_text(&format!("{:?}", signal.code)), normalize_text(&signal.summary)]),
-    );
+    facts.extend(progress.signals.iter().flat_map(|signal| {
+        [
+            normalize_text(&format!("{:?}", signal.code)),
+            normalize_text(&signal.summary),
+        ]
+    }));
     facts.extend(
         progress
             .supporting_evidence
@@ -636,18 +638,10 @@ fn normalize_text(text: &str) -> String {
         }
     }
 
-    normalized
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    normalized.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn assert_text_contains_all(
-    haystack: &str,
-    needles: &[&str],
-    case_id: &str,
-    field_name: &str,
-) {
+fn assert_text_contains_all(haystack: &str, needles: &[&str], case_id: &str, field_name: &str) {
     for needle in needles {
         let normalized_needle = normalize_text(needle);
         assert!(

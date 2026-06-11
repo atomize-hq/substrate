@@ -1226,10 +1226,8 @@ fn apply_delegation_caps(
         progress.confidence = Confidence::Low;
     }
 
-    let limiting_evidence = delegation_supporting_evidence(
-        analysis,
-        DELEGATION_LIMITING_CONFIDENCE_REASON,
-    );
+    let limiting_evidence =
+        delegation_supporting_evidence(analysis, DELEGATION_LIMITING_CONFIDENCE_REASON);
     if !progress
         .signals
         .iter()
@@ -2488,14 +2486,20 @@ mod tests {
     }
 
     #[test]
-    fn delegation_limiting_counter_evidence_survives_finalization_pressure_for_partial_visibility() {
+    fn delegation_limiting_counter_evidence_survives_finalization_pressure_for_partial_visibility()
+    {
         let analysis = last_analysis(vec![
             prompt_row(
                 0,
                 "turn-001",
                 "/goal Coordinate delegated findings without claiming child execution progress.",
             ),
-            tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
+            tool_call_row(
+                1,
+                "turn-001",
+                "spawn_agent",
+                "{\"goal\":\"fix packet R5-4\"}",
+            ),
             tool_call_row(
                 2,
                 "turn-001",
@@ -2563,9 +2567,10 @@ AssertionError: expected advancing"#,
         assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
         assert_eq!(progress.counter_evidence.len(), MAX_PROGRESS_EVIDENCE_ITEMS);
         assert!(
-            progress.counter_evidence.iter().any(|evidence| {
-                evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON
-            }),
+            progress
+                .counter_evidence
+                .iter()
+                .any(|evidence| { evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON }),
             "expected delegated limiting evidence to survive finalization pressure, got {:?}",
             progress
                 .counter_evidence
@@ -2583,7 +2588,12 @@ AssertionError: expected advancing"#,
                 "turn-001",
                 "/goal Coordinate delegated work without overclaiming child progress.",
             ),
-            tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
+            tool_call_row(
+                1,
+                "turn-001",
+                "spawn_agent",
+                "{\"goal\":\"fix packet R5-4\"}",
+            ),
             tool_call_row(
                 2,
                 "turn-001",
@@ -2632,9 +2642,10 @@ AssertionError: expected advancing"#,
         assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
         assert_eq!(progress.counter_evidence.len(), MAX_PROGRESS_EVIDENCE_ITEMS);
         assert!(
-            progress.counter_evidence.iter().any(|evidence| {
-                evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON
-            }),
+            progress
+                .counter_evidence
+                .iter()
+                .any(|evidence| { evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON }),
             "expected delegated limiting evidence to survive finalization pressure, got {:?}",
             progress
                 .counter_evidence

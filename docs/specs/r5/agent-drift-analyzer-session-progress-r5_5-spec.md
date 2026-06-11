@@ -1,7 +1,9 @@
 # Spec: Agent Drift Analyzer Session Progress R5.5
 
 Status: draft spec created on 2026-06-11 from
-`docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-planning-input.md`.
+`docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-planning-input.md`; the docs-lock packet
+`R5.5-0` and bookkeeping-only cleanup packet `R5.5-7` are already landed, while the remaining
+follow-up packets stay open as implementation work.
 
 ## Assumptions I'm Making
 
