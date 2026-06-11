@@ -377,16 +377,20 @@ fn assess_troubleshooting_progress(
                 ]),
             ));
         }
-        if matches!(
+        let repeated_signature = matches!(
             match_kind,
             DiagnosticMatchKind::Exact | DiagnosticMatchKind::StrongFuzzy
-        ) && edit_overlap.strength == EditOverlapStrength::None
-        {
+        );
+        if repeated_signature {
             signals.push(progress_signal(
                 ProgressSignalCode::FailureSignatureRepeated,
                 SignalPolarity::Negative,
                 SignalStrength::Strong,
-                "the same normalized failure signature repeated without an overlapping fix edit",
+                if edit_overlap.strength >= EditOverlapStrength::Moderate {
+                    "the same normalized failure signature repeated despite an overlapping fix edit"
+                } else {
+                    "the same normalized failure signature repeated without an overlapping fix edit"
+                },
                 Some(previous_signature.preview.clone()),
                 Some(current_signature.preview.clone()),
                 merge_evidence(vec![
@@ -395,8 +399,11 @@ fn assess_troubleshooting_progress(
                         "earlier repeated failing verification attempt",
                     ),
                     attempt_evidence(current, "later repeated failing verification attempt"),
+                    edit_overlap.evidence.clone(),
                 ]),
             ));
+        }
+        if repeated_signature && edit_overlap.strength == EditOverlapStrength::None {
             signals.push(progress_signal(
                 ProgressSignalCode::FailingScopeUnchanged,
                 SignalPolarity::Negative,
@@ -412,12 +419,8 @@ fn assess_troubleshooting_progress(
         }
         if edit_overlap.strength >= EditOverlapStrength::Moderate
             && (frontier_advanced
-                || matches!(
-                    match_kind,
-                    DiagnosticMatchKind::Exact
-                        | DiagnosticMatchKind::StrongFuzzy
-                        | DiagnosticMatchKind::FrontierRelated
-                ))
+                || repeated_signature
+                || matches!(match_kind, DiagnosticMatchKind::FrontierRelated))
         {
             signals.push(progress_signal(
                 ProgressSignalCode::FailingScopeEdited,
@@ -1266,8 +1269,18 @@ fn classify_progress_outcome(
     positive_confidence: Confidence,
     nonpositive_confidence: Confidence,
 ) -> SessionProgress {
+    let direct_positive = has_direct_troubleshooting_advancement_signal(&signals);
     let positive = has_positive_signal(&signals);
     let negative = has_negative_signal(&signals);
+    if direct_positive {
+        return progress_from_signals(
+            ProgressStatus::Advancing,
+            dimension,
+            positive_confidence,
+            signals,
+            Vec::new(),
+        );
+    }
     if positive && negative {
         let counter = negative_signal_evidence(&signals);
         return progress_from_signals(
@@ -1280,9 +1293,9 @@ fn classify_progress_outcome(
     }
     if positive {
         return progress_from_signals(
-            ProgressStatus::Advancing,
+            ProgressStatus::Mixed,
             dimension,
-            positive_confidence,
+            nonpositive_confidence,
             signals,
             Vec::new(),
         );
@@ -2270,6 +2283,17 @@ fn has_direct_verifier_progress_signal(signals: &[ProgressSignal]) -> bool {
     })
 }
 
+fn has_direct_troubleshooting_advancement_signal(signals: &[ProgressSignal]) -> bool {
+    signals.iter().any(|signal| {
+        matches!(
+            signal.code,
+            ProgressSignalCode::FailureFrontierAdvanced
+                | ProgressSignalCode::FailureCountReduced
+                | ProgressSignalCode::VerificationClean
+        )
+    })
+}
+
 fn has_positive_signal(signals: &[ProgressSignal]) -> bool {
     signals
         .iter()
@@ -2391,6 +2415,61 @@ mod tests {
         assert_lacks_signal(&progress, ProgressSignalCode::FailureCountReduced);
         assert_lacks_signal(&progress, ProgressSignalCode::FailureCountIncreased);
         assert_lacks_signal(&progress, ProgressSignalCode::FailureFrontierAdvanced);
+    }
+
+    #[test]
+    fn checkpoints_troubleshooting_fail_count_reduction_with_overlap_still_advances() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot checkpoints::captures_progress without widening scope.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 2 tests\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nthread 'checkpoints::captures_progress' panicked at crates/agent-drift-analyzer/src/checkpoint/progress.rs:12:34:\nAssertionError: expected advancing\n\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 26 filtered out",
+            ),
+            prompt_row(
+                3,
+                "turn-002",
+                "/goal Re-run the same troubleshooting verifier after a focused fix edit.",
+            ),
+            tool_call_row(
+                4,
+                "turn-002",
+                "functions.apply_patch",
+                "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+            ),
+            tool_call_row(
+                5,
+                "turn-002",
+                "functions.shell_command",
+                "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+            ),
+            tool_output_row(
+                6,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nthread 'checkpoints::captures_progress' panicked at crates/agent-drift-analyzer/src/checkpoint/progress.rs:12:34:\nAssertionError: expected advancing\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out",
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Advancing);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert_has_signal(&progress, ProgressSignalCode::FailureCountReduced);
+        assert_has_signal(&progress, ProgressSignalCode::FailingScopeEdited);
     }
 
     fn last_analysis(rows: Vec<CompactionRow>) -> CheckpointAnalysis {

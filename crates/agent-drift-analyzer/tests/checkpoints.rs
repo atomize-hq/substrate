@@ -1899,6 +1899,60 @@ fn checkpoints_mark_repeated_same_troubleshooting_signature_as_stalled() {
 }
 
 #[test]
+fn checkpoints_do_not_mark_repeated_troubleshooting_signature_with_overlap_as_advancing() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot checkpoints::captures_progress without widening scope.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+        tool_call_row(
+            3,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/tests/checkpoints.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            5,
+            "turn-002",
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::Mixed);
+    assert_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert_progress_signal(progress, ProgressSignalCode::FailingScopeEdited);
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureCountReduced);
+}
+
+#[test]
 fn checkpoints_mark_planning_narrowing_as_advancing() {
     let result = analyze_custom_rows(vec![
         prompt_row(0, "turn-001", "/goal Plan Packet R5-4 conservatively."),
