@@ -32,6 +32,21 @@ feature’s first explicit support-contract slice:
 This plan should produce a narrow docs-and-contract landing that makes future
 Slice `02` through Slice `12` work safer and more mechanically consistent.
 
+## Default landing boundary
+
+Unless execution proves there is an immediate contradiction that must be fixed,
+this slice should land within:
+
+1. `macos-hardening/macos-hardened-same-user-lima/README.md`
+2. `macos-hardening/macos-hardened-same-user-lima/ROADMAP.md`
+3. `macos-hardening/macos-hardened-same-user-lima/EXECUTION-RUBRIC.md`
+4. `macos-hardening/macos-hardened-same-user-lima/phase-0-security-contract-and-scope/README.md`
+5. `macos-hardening/macos-hardened-same-user-lima/phase-0-security-contract-and-scope/milestone-0-1-target-mode-and-support-contract-sow.md`
+6. `macos-hardening/macos-hardened-same-user-lima/spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md`
+
+Top-level repo docs are follow-on scope unless explicitly approved during
+execution.
+
 ## Skill gate resolution
 
 Per [`../EXECUTION-RUBRIC.md`](../EXECUTION-RUBRIC.md):
@@ -89,6 +104,8 @@ Dependency order:
 3. no backend policy input propagation changes
 4. no mount minimization or unit unification work
 5. no operator CLI implementation or guest lifecycle implementation work
+6. no automatic widening into top-level repo-wide macOS docs without an
+   explicit contradiction and approval
 
 ## Implementation order
 
@@ -117,6 +134,7 @@ Verification checkpoint:
 1. the same-user limitation is explicit
 2. the normal operator path is explicit
 3. Linux non-parity claims are explicit
+4. the draft posture can be propagated without forcing a wider docs pass
 
 ### Packet 2: Freeze the support taxonomy and propagate it through visible feature-local authorities
 
@@ -144,6 +162,8 @@ Verification checkpoint:
 
 1. terminology is consistent across touched docs
 2. support-class examples do not overlap or contradict each other
+3. the execution rubric, roadmap, and feature README all imply the same next
+   Slice `02` handoff
 
 ### Packet 3: Validation, explicit deferrals, and next-slice handoff clarity
 
@@ -171,6 +191,7 @@ Verification checkpoint:
 1. later seams are named explicitly
 2. Slice `02` remains version-floor and breakglass-contract work rather than a
    rewrite of Slice `01`
+3. the slice can be continued from a short prompt without hidden assumptions
 
 ## Risks and mitigations
 
@@ -206,6 +227,7 @@ Parallelizable work:
 
 1. scanning existing feature-local docs for terminology drift
 2. identifying candidate docs to align
+3. drafting the packet orchestration prompts after packet boundaries are frozen
 
 Sequential work:
 
@@ -222,3 +244,5 @@ This plan is ready to hand off to `TASKS-01` only when:
 3. later seams remain explicitly deferred
 4. the next planning session could use the result without re-arguing the basic
    support posture
+5. Packet-level orchestration prompts can be written without inventing new
+   packet scope

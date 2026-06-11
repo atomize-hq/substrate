@@ -66,6 +66,25 @@ and answer, without guessing:
 4. which later slices still own the version-floor, transport, mount, unit, and
    lifecycle implementation work.
 
+## Frozen in this slice
+
+This slice freezes only:
+
+1. the supported same-user Lima posture for the current feature,
+2. the support-taxonomy vocabulary,
+3. the explicit Linux non-parity language that later slices must inherit.
+
+## Deferred by design
+
+This slice intentionally does **not** freeze:
+
+1. Lima version floor and version-sensitive breakglass rules,
+2. canonical transport semantics,
+3. backend policy input parity mechanics,
+4. ingress and mount narrowing details,
+5. guest unit/socket source-of-truth mechanics,
+6. owned lifecycle or diagnostics implementation changes.
+
 ## Why this slice exists
 
 The repo already has a credible phase structure and now also has a feature-level
@@ -157,6 +176,16 @@ docs/
 Expected implementation touch surface for Slice `01` should remain small and
 primarily documentation-oriented.
 
+Default touched-doc boundary for this slice:
+
+1. feature-local docs under `macos-hardening/macos-hardened-same-user-lima/`
+2. Phase `0` docs under the same feature directory
+
+Top-level repo docs such as `docs/WORLD.md` and
+`docs/reference/world/platforms/macos-lima-setup.md` should be treated as
+follow-on or explicitly re-approved expansion unless the slice execution proves
+they must be updated immediately to avoid contradiction.
+
 ## Code style
 
 This slice is Markdown-authority work. The style contract should be:
@@ -195,6 +224,9 @@ Validation levels:
      mount, unit, or launchd semantics that belong to later slices
 4. **Diff review**
    - confirm the touched file set remains narrowly bounded to contract docs
+5. **Deferred-seam review**
+   - confirm Slice `02` remains the next honest seam and does not need to
+     reopen Slice `01` support-language decisions
 
 ## Boundaries
 
@@ -238,14 +270,15 @@ Slice `01` is successful when:
 5. the resulting slice is narrow enough that Slice `02` can cleanly pick up the
    version-floor and breakglass-contract work without reopening Slice `01`
    language.
+6. the default touched-doc boundary remains feature-local unless an explicit
+   contradiction requires a wider documentation pass.
 
 ## Open questions
 
-1. Should Slice `01` update only feature-local docs under
-   `macos-hardening/macos-hardened-same-user-lima/`, or should it also touch
-   top-level docs like `docs/WORLD.md` and
-   `docs/reference/world/platforms/macos-lima-setup.md` where the support
-   taxonomy is currently implied rather than explicit?
+1. Is the feature-local boundary sufficient for Slice `01`, or does current
+   repo truth show an immediate contradiction that must also be resolved in
+   `docs/WORLD.md` or
+   `docs/reference/world/platforms/macos-lima-setup.md`?
 2. Does the project want a compact support matrix table in the feature
    `README.md`, the milestone `0.1` SOW, or both?
 3. Is a separate ADR expected later for the support-posture language, or should

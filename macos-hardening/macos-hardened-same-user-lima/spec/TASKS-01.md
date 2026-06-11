@@ -43,6 +43,16 @@ This slice must **not**:
 5. silently widen into top-level repo-wide macOS docs unless the scope is
    explicitly re-approved
 
+Default execution boundary:
+
+1. feature-local docs under `macos-hardening/macos-hardened-same-user-lima/`
+2. Phase `0` docs inside the same feature directory
+
+Treat edits to `docs/WORLD.md` or
+`docs/reference/world/platforms/macos-lima-setup.md` as scope expansion unless
+the orchestrator can point to a direct contradiction that the user has approved
+to fix in this slice.
+
 ## Execution packets
 
 ### Packet 1: Supported-mode contract freeze
@@ -67,6 +77,7 @@ Session goal:
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/README.md`
     - `macos-hardening/macos-hardened-same-user-lima/phase-0-security-contract-and-scope/milestone-0-1-target-mode-and-support-contract-sow.md`
+    - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-01-supported-mode-and-support-taxonomy.md` only if the wording needs slice-local clarification
     - `macos-hardening/macos-hardened-same-user-lima/spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md` only if bounded refinement is needed
 
 - [ ] Task 1.2: Make the Linux non-parity claims impossible to miss
@@ -87,7 +98,9 @@ Packet `1` is complete only when:
 
 1. the supported same-user posture is explicit,
 2. Linux non-parity claims are explicit,
-3. no version-floor or transport-specific claims were frozen by accident.
+3. no version-floor or transport-specific claims were frozen by accident,
+4. the touched-doc set stayed within the default execution boundary unless the
+   user approved an expansion.
 
 Do not start Packet `2` until Packet `1` is coherent.
 
@@ -110,6 +123,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md`
     - `macos-hardening/macos-hardened-same-user-lima/README.md`
     - `macos-hardening/macos-hardened-same-user-lima/EXECUTION-RUBRIC.md`
+    - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-01-supported-mode-and-support-taxonomy.md` only if the canonical terminology block must be synchronized there
 
 - [ ] Task 2.2: Align the roadmap and phase-local wording to the taxonomy
   - Acceptance: the roadmap and phase-local docs no longer imply conflicting
@@ -129,7 +143,8 @@ Packet `2` is complete only when:
 
 1. the support-taxonomy terms are consistent,
 2. feature-local execution docs use the same taxonomy,
-3. the slice still remains feature-local and docs-first.
+3. the slice still remains feature-local and docs-first,
+4. the next-slice handoff language still points cleanly to Slice `02`.
 
 Do not start Packet `3` until Packet `2` verification is green.
 
@@ -173,4 +188,20 @@ Packet `3` is complete only when:
 1. Slice `01` stayed bounded,
 2. Slice `02` remains legible as the next seam,
 3. the feature-local planning stack is coherent enough for a short future
-   prompt to continue the sequence.
+   prompt to continue the sequence,
+4. the packet prompt artifact for Slice `01` can be generated without guessing
+   packet scope or review/fix flow.
+
+## Prompt artifact expectation
+
+After Packet `3` planning is stable, the slice should have one ready-to-paste
+prompt artifact for fresh orchestration sessions. That prompt artifact should:
+
+1. provide one prompt per packet,
+2. require a fresh GPT-5.4 high implementation subagent using
+   `$incremental-implementation`,
+3. require a fresh GPT-5.4 high review subagent using
+   `$code-review-and-quality`,
+4. require fix subagents when review finds issues,
+5. require commits between implementation, review-driven fix rounds, and the
+   next packet boundary.
