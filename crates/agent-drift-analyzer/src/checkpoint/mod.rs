@@ -758,9 +758,19 @@ fn aggregate_session_archetype(
     let test_only_writes = i32::from(
         intent.test_or_golden_write_command_count > 0 && intent.source_write_command_count == 0,
     );
+    let closeout_ready = objective_mentions_closeout_phase(&analysis.current.context.objective.text)
+        || prior_source_write_history(analysis);
+    let review_only_objective = objective_is_review_only(&analysis.current.context.objective.text)
+        && intent.source_write_command_count == 0
+        && intent.test_or_golden_write_command_count == 0;
+    let verification_diagnosis_without_closeout = !closeout_ready
+        && intent.source_write_command_count == 0
+        && intent.verification_command_count > 0
+        && intent.exploration_like.raw_score > 0;
 
     let planning_score = (intent.exploration_like.raw_score + intent.orchestration_like.raw_score)
         + i32::from(docs_heavy) * 2
+        + i32::from(review_only_objective) * 3
         + i32::from(analysis.task_frame_delta.task_frame_transitioned)
         + i32::from(intent.verification_command_count == 0)
         - source_writes.saturating_mul(2)
@@ -778,7 +788,8 @@ fn aggregate_session_archetype(
     let no_source_write_closeout_bonus = i32::from(
         intent.source_write_command_count == 0
             && (intent.verification_like.raw_score > 0
-                || analysis.recovery.clean_verification_interval),
+                || analysis.recovery.clean_verification_interval)
+            && closeout_ready,
     ) * 2;
 
     let verification_closeout_score = intent.verification_like.raw_score
@@ -789,6 +800,9 @@ fn aggregate_session_archetype(
             analysis.turn_context.execution_mode,
             TurnExecutionMode::VerificationHeavy
         ))
+        - i32::from(!closeout_ready)
+        - i32::from(review_only_objective) * 2
+        - i32::from(verification_diagnosis_without_closeout) * 6
         - failure_pressure.saturating_mul(2)
         - source_writes;
 
@@ -796,6 +810,8 @@ fn aggregate_session_archetype(
         + intent.exploration_like.raw_score
         + failure_pressure.saturating_mul(2)
         + i32::from(!analysis.repetition.repeated_verification_loops.is_empty())
+        + i32::from(verification_diagnosis_without_closeout) * 4
+        - i32::from(review_only_objective) * 3
         - clean_verification_bonus
         - i32::from(intent.implementation_like.raw_score >= intent.verification_like.raw_score + 2);
     let troubleshooting_score =
@@ -868,6 +884,17 @@ fn aggregate_session_archetype(
             ],
         ),
     ]
+}
+
+fn prior_source_write_history(analysis: &CheckpointAnalysis) -> bool {
+    analysis.previous.as_ref().is_some_and(|previous| {
+        collect_command_observations(&previous.window.compact_rows)
+            .iter()
+            .any(|command| {
+                command.write_like
+                    && command_file_roles(command).contains(&FileRole::Source)
+            })
+    })
 }
 
 fn archetype_candidate(
@@ -1235,10 +1262,28 @@ fn is_closeout_artifact_path(path: &str) -> bool {
 
 fn objective_mentions_closeout_phase(objective: &str) -> bool {
     let lower = objective.to_ascii_lowercase();
-    lower.contains("closeout")
-        || lower.contains("handoff")
+    lower.contains("verify the existing patch")
+        || lower.contains("gather proof only")
         || lower.contains("residual proof")
+        || lower.contains("closeout proof")
+        || lower.contains("closeout handoff")
+        || lower.contains("complete closeout")
+        || lower.contains("re-check the closeout")
+        || lower.contains("handoff only")
         || lower.contains("record it")
+        || lower.contains("doc-only follow-up")
+        || lower.contains("do not widen scope")
+        || lower.contains("without widening scope")
+}
+
+fn objective_is_review_only(objective: &str) -> bool {
+    let lower = objective.to_ascii_lowercase();
+    (lower.contains("review") || lower.contains("findings-first"))
+        && (lower.contains("without making code changes")
+            || lower.contains("do not make code changes")
+            || lower.contains("no code changes")
+            || lower.contains("do not widen scope")
+            || lower.contains("without widening scope"))
 }
 
 fn command_evidence(command: &CommandObservation, reason: &str) -> Vec<EvidenceRef> {
@@ -1926,21 +1971,28 @@ fn checkpoint_end_indices(rows: &[CompactionRow]) -> Vec<usize> {
     }
 
     let mut phase_ends = Vec::new();
+    let mut phase_start_index = 0usize;
     let mut saw_activity = false;
     let mut saw_objective = false;
     for (index, row) in rows.iter().enumerate() {
-        let thread_goal_boundary_objective =
-            thread_goal_boundary_objective_row(rows, index, row);
-        if objective_row(row) || thread_goal_boundary_objective {
-            saw_objective = true;
-        }
-        if index > 0
-            && (row_starts_new_phase(row) || thread_goal_boundary_objective)
-            && saw_activity
-            && saw_objective
-        {
+        let objective_candidate = objective_candidate(row);
+        let objective_gate_row =
+            checkpoint_phase_boundary_objective_row(rows, index, row, objective_candidate.as_ref());
+        let phase_boundary_objective =
+            row_starts_new_phase(&rows[phase_start_index..index], row) || objective_gate_row;
+        if index > 0 && phase_boundary_objective && saw_activity && saw_objective {
             phase_ends.push(index - 1);
             saw_activity = false;
+            phase_start_index = index;
+        }
+        if matches!(
+            objective_candidate.as_ref().map(|candidate| candidate.source),
+            Some(ObjectiveSource::ExplicitUserRequest)
+        ) && !row_text_is_focusable(row)
+        {
+            saw_objective = false;
+        } else if objective_gate_row {
+            saw_objective = true;
         }
         if row_is_activity(row) {
             saw_activity = true;
@@ -1970,23 +2022,112 @@ fn checkpoint_end_indices(rows: &[CompactionRow]) -> Vec<usize> {
     normalized
 }
 
-fn row_starts_new_phase(row: &CompactionRow) -> bool {
+fn row_starts_new_phase(prior_rows: &[CompactionRow], row: &CompactionRow) -> bool {
     preserves_user_requested_boilerplate_target(row)
-        || (matches!(
-            row.kind,
+        || match row.kind {
+            CompactionKind::AssistantMessage => {
+                assistant_phase_boundary_text(row).is_some()
+                    && assistant_phase_boundary_allowed(prior_rows, row)
+            }
             CompactionKind::UserMessage
-                | CompactionKind::AssistantMessage
-                | CompactionKind::DeveloperMessage
-                | CompactionKind::SystemMessage
-        ) && row_text_is_focusable(row))
+            | CompactionKind::DeveloperMessage
+            | CompactionKind::SystemMessage => row_text_is_focusable(row),
+            _ => false,
+        }
 }
 
-fn objective_row(row: &CompactionRow) -> bool {
-    preserves_user_requested_boilerplate_target(row)
-        || (matches!(
-            row.kind,
-            CompactionKind::UserMessage | CompactionKind::DeveloperMessage
-        ) && row_text_is_focusable(row))
+fn assistant_phase_boundary_allowed(prior_rows: &[CompactionRow], row: &CompactionRow) -> bool {
+    if assistant_truth_grounding_phase_boundary_text(row) {
+        return true;
+    }
+
+    let commands = collect_command_observations(prior_rows);
+    if commands
+        .iter()
+        .any(|command| command.write_like || command.verification_like)
+    {
+        return true;
+    }
+
+    prior_rows.iter().any(|row| {
+        matches!(row.kind, CompactionKind::Error)
+            || matches!(row.kind, CompactionKind::ToolOutput)
+                && tool_output_is_unambiguous_failure(&row.text)
+    }) || commands.iter().filter(|command| command.read_like).count() >= 4
+        && assistant_read_heavy_phase_boundary_text(row)
+}
+
+fn assistant_read_heavy_phase_boundary_text(row: &CompactionRow) -> bool {
+    let Some(text) = assistant_phase_boundary_text(row) else {
+        return false;
+    };
+
+    let lower = text.to_ascii_lowercase();
+    lower.contains("next i’m ")
+        || lower.contains("next i'm ")
+        || lower.contains("next i am ")
+        || lower.contains("next i will ")
+        || lower.contains("remaining work is")
+}
+
+fn assistant_truth_grounding_phase_boundary_text(row: &CompactionRow) -> bool {
+    let Some(text) = assistant_phase_boundary_text(row) else {
+        return false;
+    };
+
+    let lower = text.to_ascii_lowercase();
+    lower.contains("re-ground on the spec")
+        || lower.contains("grounding is back in place")
+        || lower.contains("spec is grounded")
+        || lower.contains("moving to the next checkpoint")
+        || lower.contains("historical context only")
+}
+
+fn assistant_phase_boundary_text(row: &CompactionRow) -> Option<String> {
+    assistant_restated_goal_text(row).or_else(|| {
+        if !matches!(row.kind, CompactionKind::AssistantMessage) || !row_text_is_focusable(row) {
+            return None;
+        }
+
+        let text = row.text.trim();
+        let lower = text.to_ascii_lowercase();
+        (lower.contains("next i’m ")
+            || lower.contains("next i'm ")
+            || lower.contains("next i am ")
+            || lower.contains("next i will ")
+            || lower.starts_with("i’ve narrowed the scope")
+            || lower.starts_with("i've narrowed the scope")
+            || lower.contains("remaining work is")
+            || lower.contains("re-ground on the spec")
+            || lower.contains("grounding is back in place")
+            || lower.contains("spec is grounded")
+            || lower.contains("moving to the next checkpoint")
+            || lower.contains("verification pass")
+            || lower.contains("stood out during verification")
+            || lower.contains("historical context")
+            || lower.contains("completed successfully"))
+        .then(|| text.to_string())
+    })
+}
+
+fn checkpoint_phase_boundary_objective_row(
+    rows: &[CompactionRow],
+    index: usize,
+    row: &CompactionRow,
+    objective_candidate: Option<&ObjectiveCandidate<'_>>,
+) -> bool {
+    let Some(candidate) = objective_candidate else {
+        return false;
+    };
+
+    match candidate.source {
+        ObjectiveSource::LiteralGoalCommand => true,
+        ObjectiveSource::ThreadGoalText => thread_goal_boundary_objective_row(rows, index, row),
+        ObjectiveSource::ExplicitUserRequest
+        | ObjectiveSource::AssistantRestatedGoal
+        | ObjectiveSource::NonBoilerplateUnknown
+        | ObjectiveSource::NonBoilerplateDirective => row_text_is_focusable(row),
+    }
 }
 
 fn row_is_activity(row: &CompactionRow) -> bool {
@@ -2247,7 +2388,6 @@ fn text_preserves_boilerplate_target(text: &str) -> bool {
     if trimmed.starts_with("# AGENTS.md instructions")
         || trimmed.starts_with("<skill>")
         || trimmed.starts_with("Available skills")
-        || text.len() > 500
     {
         return false;
     }

@@ -919,6 +919,49 @@ fn checkpoints_classify_repeated_failing_verification_as_troubleshooting() {
 }
 
 #[test]
+fn checkpoints_keep_fix_goals_with_closeout_sections_in_troubleshooting() {
+    let goal = "/goal In `/repo`, land the bounded fix for the sentinel restart cursor.\n\nProblem to fix:\nRestart continuity still replays already-delivered checkpoints.\n\nVerification:\n- `cargo test -p agent-drift-sentinel real_session_live -- --nocapture`\n\nCloseout requirements:\n- Report root cause precisely.\n- Summarize the exact test evidence proving restart dedupe now works.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"rg -n 'last_delivered_cursor' crates/agent-drift-sentinel/src\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"sed -n '1,220p' crates/agent-drift-sentinel/src/real_session_live.rs\",\"workdir\":\"/repo\"}",
+        ),
+        assistant_row(
+            3,
+            "turn-001",
+            "The likely root cause is still in the restart cursor path, so I am reproducing it before editing.",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"cargo test -p agent-drift-sentinel real_session_live -- --nocapture\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            5,
+            "turn-001",
+            "Exit code: 0\nrunning 3 tests\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Troubleshooting);
+}
+
+#[test]
 fn checkpoints_cap_confidence_when_parent_visible_behavior_is_child_opaque() {
     let result = analyze_custom_rows(vec![
         prompt_row(
@@ -3784,6 +3827,69 @@ fn checkpoints_preserve_user_requested_agents_instruction_targets() {
 *** Update File: AGENTS.md
 *** End Patch
 PATCH","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+}
+
+#[test]
+fn checkpoints_anchor_first_checkpoint_to_real_goal_after_boilerplate_then_activity() {
+    let goal = "/goal Tighten the checkpoint boundary selector only after the real objective arrives.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never. /goal Follow the permission boilerplate first.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"checkpoint\" crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        prompt_row(3, "turn-001", goal),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1920,2260p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_output_row(5, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(checkpoints[0].task_frame.objective, goal);
+}
+
+#[test]
+fn checkpoints_preserve_long_form_goal_targeting_agents_skill_and_available_skills() {
+    let goal = format!(
+        "/goal Tighten only the user-requested boilerplate target preservation so the analyzer keeps long real objectives that explicitly inspect AGENTS.md instructions, the <skill> block, and Available skills while still rejecting raw injected scaffolding. Context: {}",
+        "keep the fix scoped to objective selection and preservation heuristics. ".repeat(8)
+    );
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' /Users/me/.agents/skills/incremental-implementation/SKILL.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"Available skills\" /tmp/session.txt","workdir":"/repo"}"#,
         ),
     ]);
 
