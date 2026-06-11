@@ -1309,6 +1309,7 @@ impl LiveToolValidationState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LiveToolSupportState {
     FirstSupportedFloor,
+    SelectedRuntimeSupported,
     NotYetGuaranteed,
 }
 
@@ -1316,8 +1317,61 @@ impl LiveToolSupportState {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::FirstSupportedFloor => "first_supported_floor",
+            Self::SelectedRuntimeSupported => "selected_runtime_supported",
             Self::NotYetGuaranteed => "not_yet_guaranteed",
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SelectedClaudeCodePathState {
+    Present,
+    Missing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Slice52SemanticsState {
+    Preserved,
+    NotPreserved,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TargetedValidationState {
+    Green,
+    NotYetGreen,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HiddenFallbackState {
+    NoHiddenFallback,
+    HiddenFallbackPresent,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SelectedClaudeCodeUpliftGate {
+    pub selected_start_turn_path: SelectedClaudeCodePathState,
+    pub slice_52_semantics: Slice52SemanticsState,
+    pub targeted_validation: TargetedValidationState,
+    pub hidden_fallback: HiddenFallbackState,
+}
+
+impl SelectedClaudeCodeUpliftGate {
+    pub(crate) const fn packet_1() -> Self {
+        Self {
+            selected_start_turn_path: SelectedClaudeCodePathState::Missing,
+            slice_52_semantics: Slice52SemanticsState::Preserved,
+            targeted_validation: TargetedValidationState::NotYetGreen,
+            hidden_fallback: HiddenFallbackState::NoHiddenFallback,
+        }
+    }
+
+    pub(crate) const fn allows_selected_runtime_enablement(self) -> bool {
+        matches!(
+            self.selected_start_turn_path,
+            SelectedClaudeCodePathState::Present
+        ) && matches!(self.slice_52_semantics, Slice52SemanticsState::Preserved)
+            && matches!(self.targeted_validation, TargetedValidationState::Green)
+            && matches!(self.hidden_fallback, HiddenFallbackState::NoHiddenFallback)
     }
 }
 
@@ -1326,26 +1380,55 @@ pub(crate) struct LiveToolSupportPosture {
     pub runtime_family: AgentRuntimeBackendKind,
     pub validation_state: LiveToolValidationState,
     pub support_state: LiveToolSupportState,
+    pub selected_claude_code_uplift_gate: SelectedClaudeCodeUpliftGate,
     pub reason: &'static str,
 }
 
 impl LiveToolSupportPosture {
     pub(crate) fn for_backend_kind(backend_kind: AgentRuntimeBackendKind) -> Self {
+        Self::for_backend_kind_with_selected_claude_code_uplift_gate(
+            backend_kind,
+            SelectedClaudeCodeUpliftGate::packet_1(),
+        )
+    }
+
+    fn for_backend_kind_with_selected_claude_code_uplift_gate(
+        backend_kind: AgentRuntimeBackendKind,
+        selected_claude_code_uplift_gate: SelectedClaudeCodeUpliftGate,
+    ) -> Self {
         match backend_kind {
             AgentRuntimeBackendKind::Codex => Self {
                 runtime_family: AgentRuntimeBackendKind::Codex,
                 validation_state: LiveToolValidationState::SmokeValidated,
                 support_state: LiveToolSupportState::FirstSupportedFloor,
+                selected_claude_code_uplift_gate,
                 reason:
                     "codex remains the first smoke-validated host-tool floor from Slice 53; this does not uplift claude_code until the selected claude_code host start/turn path reaches the same authoritative host-tool surface, preserves Slice 52 semantics, and passes targeted validation without hidden fallback",
             },
-            AgentRuntimeBackendKind::ClaudeCode => Self {
-                runtime_family: AgentRuntimeBackendKind::ClaudeCode,
-                validation_state: LiveToolValidationState::NotYetSmokeValidated,
-                support_state: LiveToolSupportState::NotYetGuaranteed,
-                reason:
-                    "claude_code host-tool parity target is the selected claude_code host start/turn path taking the same authoritative host-tool surface and Slice 52 semantics without hidden fallback to codex; keep reporting not_yet_smoke_validated and not_yet_guaranteed until that exact selected-runtime path exists and targeted validation is green; ordinary host-session behavior remains unchanged unless implementation truth proves an incompatibility",
-            },
+            AgentRuntimeBackendKind::ClaudeCode => {
+                let (validation_state, support_state, reason) =
+                    if selected_claude_code_uplift_gate.allows_selected_runtime_enablement() {
+                        (
+                            LiveToolValidationState::SmokeValidated,
+                            LiveToolSupportState::SelectedRuntimeSupported,
+                            "claude_code selected-runtime host-tool parity gate is open: the selected claude_code host start/turn path exists, preserves Slice 52 semantics, passed targeted validation, and proved no hidden fallback to codex",
+                        )
+                    } else {
+                        (
+                            LiveToolValidationState::NotYetSmokeValidated,
+                            LiveToolSupportState::NotYetGuaranteed,
+                            "claude_code host-tool parity target is the selected claude_code host start/turn path taking the same authoritative host-tool surface and Slice 52 semantics without hidden fallback to codex; keep reporting not_yet_smoke_validated and not_yet_guaranteed until that exact selected-runtime path exists and targeted validation is green; ordinary host-session behavior remains unchanged unless implementation truth proves an incompatibility",
+                        )
+                    };
+
+                Self {
+                    runtime_family: AgentRuntimeBackendKind::ClaudeCode,
+                    validation_state,
+                    support_state,
+                    selected_claude_code_uplift_gate,
+                    reason,
+                }
+            }
         }
     }
 }
@@ -2164,17 +2247,18 @@ mod tests {
         ContinueWorldWorkerEventClassV1, ContinueWorldWorkerOutcomeV1, ControlDirectiveKindV1,
         DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
         DispatchRejectingLayer, DispatchRequestEnvelope, DispatchResolutionErrorKind,
-        FieldBaselineOrigin, FieldValueOrigin, ForkWorldWorkerOutcomeV1, HostExecutionClientStart,
-        InspectWorldWorkerOutcomeV1, LiveToolSupportPosture, LiveToolSupportState,
-        LiveToolValidationState, RetainedWorkerCancelCloseoutV1, RetainedWorkerInspectSnapshotV1,
-        RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1, StopWorldWorkerOutcomeV1,
-        TaskPayloadV1, WorkerCancelPayloadV1, WorkerContinueApprovalResponsePayloadV1,
-        WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
-        WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
-        WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1,
-        WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
-        WorldDispatchOutcomeV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
-        WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
+        FieldBaselineOrigin, FieldValueOrigin, ForkWorldWorkerOutcomeV1, HiddenFallbackState,
+        HostExecutionClientStart, InspectWorldWorkerOutcomeV1, LiveToolSupportPosture,
+        LiveToolSupportState, LiveToolValidationState, RetainedWorkerCancelCloseoutV1,
+        RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
+        SelectedClaudeCodePathState, SelectedClaudeCodeUpliftGate, Slice52SemanticsState,
+        StopWorldWorkerOutcomeV1, TargetedValidationState, TaskPayloadV1, WorkerCancelPayloadV1,
+        WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
+        WorkerContinueControlDirectivePayloadV1, WorkerContinueForkCommandPayloadV1,
+        WorkerContinuePayloadV1, WorkerContinueProgressAckPayloadV1, WorkerForkPayloadV1,
+        WorkerInspectPayloadV1, WorkerSpawnPayloadV1, WorkerStopPayloadV1, WorldDispatchActionV1,
+        WorldDispatchModeV1, WorldDispatchOutcomeV1, WorldDispatchPayloadV1,
+        WorldDispatchRequestV1, WorldDispatchSteeringDenialV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -2343,6 +2427,26 @@ mod tests {
     }
 
     #[test]
+    fn live_tool_support_posture_freezes_packet_1_uplift_gate_in_repo_truth() {
+        let gate = SelectedClaudeCodeUpliftGate::packet_1();
+
+        assert_eq!(
+            gate.selected_start_turn_path,
+            SelectedClaudeCodePathState::Missing
+        );
+        assert_eq!(gate.slice_52_semantics, Slice52SemanticsState::Preserved);
+        assert_eq!(
+            gate.targeted_validation,
+            TargetedValidationState::NotYetGreen
+        );
+        assert_eq!(gate.hidden_fallback, HiddenFallbackState::NoHiddenFallback);
+        assert!(
+            !gate.allows_selected_runtime_enablement(),
+            "Packet 1 must keep selected claude_code uplift closed until every gate criterion is satisfied"
+        );
+    }
+
+    #[test]
     fn live_tool_support_posture_marks_codex_as_first_validated_floor() {
         let posture = LiveToolSupportPosture::for_backend_kind(AgentRuntimeBackendKind::Codex);
 
@@ -2355,20 +2459,9 @@ mod tests {
             posture.support_state,
             LiveToolSupportState::FirstSupportedFloor
         );
-        assert!(
-            posture.reason.contains("first smoke-validated"),
-            "unexpected reason: {}",
-            posture.reason
-        );
-        assert!(
-            posture.reason.contains("does not uplift claude_code"),
-            "unexpected reason: {}",
-            posture.reason
-        );
-        assert!(
-            posture.reason.contains("without hidden fallback"),
-            "unexpected reason: {}",
-            posture.reason
+        assert_eq!(
+            posture.selected_claude_code_uplift_gate,
+            SelectedClaudeCodeUpliftGate::packet_1()
         );
     }
 
@@ -2385,30 +2478,40 @@ mod tests {
             posture.support_state,
             LiveToolSupportState::NotYetGuaranteed
         );
-        assert!(
-            posture
-                .reason
-                .contains("ordinary host-session behavior remains unchanged"),
-            "unexpected reason: {}",
-            posture.reason
+        assert_eq!(
+            posture.selected_claude_code_uplift_gate,
+            SelectedClaudeCodeUpliftGate::packet_1()
         );
-        assert!(
-            posture
-                .reason
-                .contains("selected claude_code host start/turn path"),
-            "unexpected reason: {}",
-            posture.reason
+        assert!(!posture
+            .selected_claude_code_uplift_gate
+            .allows_selected_runtime_enablement());
+    }
+
+    #[test]
+    fn live_tool_support_posture_derives_claude_code_enablement_from_structured_gate() {
+        let posture =
+            LiveToolSupportPosture::for_backend_kind_with_selected_claude_code_uplift_gate(
+                AgentRuntimeBackendKind::ClaudeCode,
+                SelectedClaudeCodeUpliftGate {
+                    selected_start_turn_path: SelectedClaudeCodePathState::Present,
+                    slice_52_semantics: Slice52SemanticsState::Preserved,
+                    targeted_validation: TargetedValidationState::Green,
+                    hidden_fallback: HiddenFallbackState::NoHiddenFallback,
+                },
+            );
+
+        assert_eq!(posture.runtime_family, AgentRuntimeBackendKind::ClaudeCode);
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::SmokeValidated
         );
-        assert!(
-            posture.reason.contains("without hidden fallback to codex"),
-            "unexpected reason: {}",
-            posture.reason
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::SelectedRuntimeSupported
         );
-        assert!(
-            posture.reason.contains("targeted validation is green"),
-            "unexpected reason: {}",
-            posture.reason
-        );
+        assert!(posture
+            .selected_claude_code_uplift_gate
+            .allows_selected_runtime_enablement());
     }
 
     #[test]
