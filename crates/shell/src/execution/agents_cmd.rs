@@ -4066,6 +4066,7 @@ mod tests {
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
+    use crate::execution::agent_runtime::control::ResolvedRuntimeBackendKind;
     use crate::execution::agent_runtime::dispatch_contract::{
         LiveToolSupportState, LiveToolValidationState,
     };
@@ -4648,7 +4649,8 @@ mod tests {
 
     #[test]
     #[serial]
-    fn build_start_launch_plan_keeps_non_codex_host_prompt_truthful_without_toolbox_contract() {
+    fn build_start_launch_plan_resolves_selected_claude_code_host_backend_without_hidden_fallback()
+    {
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -4667,17 +4669,17 @@ mod tests {
         let mut args = omitted_scope_start_args("cli:claude_code");
         args.prompt_source.prompt = Some("hello from claude start".to_string());
         let plan = build_start_launch_plan(&args, &context)
-            .expect("non-Codex host launch plan should still resolve");
+            .expect("selected claude_code host launch plan should still resolve");
 
         assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
         assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code");
         assert_eq!(
+            plan.helper_plan.descriptor.backend_kind,
+            ResolvedRuntimeBackendKind::ClaudeCode
+        );
+        assert_eq!(
             plan.resolved_contract.execution_scope,
             AgentExecutionScope::Host
-        );
-        assert!(
-            plan.helper_plan.startup_prompt.is_none(),
-            "selected claude_code host starts must keep the existing prompt-turn path instead of staging the first validated Codex-backed toolbox contract"
         );
     }
 
