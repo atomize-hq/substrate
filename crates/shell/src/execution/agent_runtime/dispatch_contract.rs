@@ -1421,7 +1421,7 @@ impl LiveToolSupportPosture {
                         (
                             LiveToolValidationState::NotYetSmokeValidated,
                             LiveToolSupportState::NotYetGuaranteed,
-                            "claude_code host-tool parity target is the selected claude_code host start/turn path taking the same authoritative host-tool surface and Slice 52 semantics without hidden fallback to codex; keep reporting not_yet_smoke_validated and not_yet_guaranteed until that exact selected-runtime path exists and targeted validation is green; ordinary host-session behavior remains unchanged unless implementation truth proves an incompatibility",
+                            "claude_code host-tool parity target is the selected claude_code host start/turn path taking the same authoritative host-tool surface and Slice 52 semantics without hidden fallback to codex; keep reporting not yet smoke-validated and not yet guaranteed until that exact selected-runtime path exists and targeted validation is green; ordinary host-session behavior remains unchanged unless implementation truth proves an incompatibility",
                         )
                     };
 
