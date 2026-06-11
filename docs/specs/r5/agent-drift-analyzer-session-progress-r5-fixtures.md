@@ -196,7 +196,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: state moved backward from clean to failed
   - not `advancing`: a previous best frontier was lost
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_troubleshooting_regression_when_frontier_falls_back, checkpoints_mark_implementation_regression_when_previously_clean_scope_breaks); R5.5-4 real-rollout reopen/re-verify proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/real-reopen-regressing-019e894a-ord7/**`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_troubleshooting_regression_when_frontier_falls_back, checkpoints_mark_implementation_regression_when_previously_clean_scope_breaks); R5.5-4 real-rollout previously-clean-verifier regression proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/real-reopen-regressing-019e894a-ord7/**`
 ## Fixture: r5_planning_candidate_set_narrows_to_spec
 
 - Archetype: `planning`
@@ -509,12 +509,12 @@ Landed Packet R5-7 corpus, plus Packet R5.5-4 real-rollout additions:
 3. annotated real-rollout verification closeout narrowing: `019e8b42-42bd-7b10-baae-3265edb65f4b`,
 4. annotated real-rollout implementation verification-wall advancement: `real-implementation-advancing-019e894a-ord6`,
 5. annotated real-rollout conservative closeout/review checkpoint: `real-closeout-conservative-019e767c-ord3`,
-6. annotated real-rollout reopen/re-verify regression: `real-reopen-regressing-019e894a-ord7`,
+6. annotated real-rollout previously-clean-verifier reopen/re-verify regression: `real-reopen-regressing-019e894a-ord7`,
 7. bundle-shaped planning narrowing proof: `synthetic-planning-advancing`,
 8. bundle-shaped implementation verification-wall proof: `synthetic-implementation-advancing`,
 9. bundle-shaped delegated parent-opaque guardrail proof: `synthetic-parent-visible-opaque`.
 
-This corpus satisfies the R5-7 requirement that bounded semantic acceptance include at least one annotated real-rollout case before the family claims semantic acceptance, and R5.5-4 expands that real subset to cover implementation advancement, conservative closeout/review, and honest reopen/re-verify behavior.
+This corpus satisfies the R5-7 requirement that bounded semantic acceptance include at least one annotated real-rollout case before the family claims semantic acceptance, and R5.5-4 expands that real subset to cover implementation advancement, conservative closeout/review, and honest previously-clean-verifier regression behavior.
 
 ## Deferred Fixture Ideas
 

@@ -159,8 +159,9 @@ Packet `R5.5-4` extends that bounded corpus with three more annotated real-rollo
 
 1. one real implementation-verification-wall advancement case,
 2. one real closeout/review case that stays conservatively sparse when narrowing proof is absent,
-3. one real reopen/re-verify case that leaves closeout and regresses honestly after a previously
-   clean verifier breaks again.
+3. one real reopen/re-verify case that proves honest regression after a previously clean verifier
+   breaks again, without overclaiming closeout traversal when the bundle never entered a
+   `verification_closeout` checkpoint first.
 
 ## DoVer-Inspired Offline Checks
 

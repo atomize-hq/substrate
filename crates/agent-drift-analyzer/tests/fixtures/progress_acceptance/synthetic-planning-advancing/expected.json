@@ -15,7 +15,11 @@
       "candidate_set_narrowed",
       "working_set_concentrated"
     ],
+    "forbidden_signal_codes": [],
     "supporting_evidence_min": 1,
-    "counter_evidence_min": 0
+    "counter_evidence_min": 0,
+    "decisive_evidence": [],
+    "counter_evidence": [],
+    "why_not_other_dimensions": []
   }
 }

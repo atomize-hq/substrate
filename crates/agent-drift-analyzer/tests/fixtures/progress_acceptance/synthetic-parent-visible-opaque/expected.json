@@ -13,7 +13,11 @@
     "required_signal_codes": [
       "delegation_visibility_limited"
     ],
+    "forbidden_signal_codes": [],
     "supporting_evidence_min": 0,
-    "counter_evidence_min": 1
+    "counter_evidence_min": 1,
+    "decisive_evidence": [],
+    "counter_evidence": [],
+    "why_not_other_dimensions": []
   }
 }

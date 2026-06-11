@@ -70,17 +70,12 @@ struct SelectedCheckpointExpected {
     status: ProgressStatus,
     confidence_min: Confidence,
     confidence_max: Confidence,
-    #[serde(default)]
     required_signal_codes: Vec<ProgressSignalCode>,
-    #[serde(default)]
     forbidden_signal_codes: Vec<ProgressSignalCode>,
     supporting_evidence_min: usize,
     counter_evidence_min: usize,
-    #[serde(default)]
     decisive_evidence: Vec<String>,
-    #[serde(default)]
     counter_evidence: Vec<String>,
-    #[serde(default)]
     why_not_other_dimensions: Vec<String>,
 }
 
@@ -171,6 +166,8 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
         );
         if case.expected.fixture_kind == FixtureKind::AnnotatedRealRollout {
             annotated_real_rollout_count += 1;
+            let expected_json: serde_json::Value =
+                read_json(case.input_dir.join("expected.json").as_ref());
             assert!(
                 case.expected.source_rollout_id.is_some(),
                 "annotated real-rollout case {case_id} must record source_rollout_id"
@@ -182,6 +179,17 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
                 !screening.delegated || screening.child_visibility != ChildVisibility::NotApplicable,
                 "delegated real-rollout case {case_id} must not use not_applicable child_visibility"
             );
+            assert_selected_checkpoint_has_array_field(
+                &expected_json,
+                case_id,
+                "required_signal_codes",
+            );
+            assert_selected_checkpoint_has_array_field(
+                &expected_json,
+                case_id,
+                "forbidden_signal_codes",
+            );
+            assert_selected_checkpoint_has_array_field(&expected_json, case_id, "counter_evidence");
             assert!(
                 !case
                     .expected
@@ -398,4 +406,23 @@ fn sorted_entry_names(path: &std::path::Path) -> Vec<String> {
         .collect::<Vec<_>>();
     entries.sort();
     entries
+}
+
+fn assert_selected_checkpoint_has_array_field(
+    expected_json: &serde_json::Value,
+    case_id: &str,
+    field_name: &str,
+) {
+    let selected_checkpoint = expected_json
+        .get("selected_checkpoint")
+        .unwrap_or_else(|| panic!("expected selected_checkpoint object in expected.json for {case_id}"));
+    let field_value = selected_checkpoint.get(field_name).unwrap_or_else(|| {
+        panic!(
+            "annotated real-rollout case {case_id} must carry selected_checkpoint.{field_name} explicitly in expected.json"
+        )
+    });
+    assert!(
+        field_value.is_array(),
+        "annotated real-rollout case {case_id} must encode selected_checkpoint.{field_name} as an array in expected.json"
+    );
 }
