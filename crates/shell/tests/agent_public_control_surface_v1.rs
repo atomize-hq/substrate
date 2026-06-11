@@ -4598,6 +4598,60 @@ fn public_control_rejects_non_orchestration_session_selectors() {
 
 #[test]
 #[serial]
+fn public_help_text_keeps_exact_session_and_backend_selector_contract() {
+    let fixture = AgentControlFixture::new();
+
+    let turn_help = fixture.run(&["agent", "turn", "--help"]);
+    assert!(
+        turn_help.status.success(),
+        "agent turn --help must succeed: {turn_help:?}"
+    );
+    let turn_stdout = String::from_utf8_lossy(&turn_help.stdout);
+    assert!(
+        turn_stdout.contains("exact backend"),
+        "turn help must keep the exact-backend contract explicit: {turn_stdout}"
+    );
+    assert!(
+        turn_stdout.contains("--session <ORCHESTRATION_SESSION_ID>"),
+        "turn help must keep the exact orchestration-session selector explicit: {turn_stdout}"
+    );
+    assert!(
+        turn_stdout.contains("--backend <BACKEND_ID>"),
+        "turn help must keep the exact backend selector explicit: {turn_stdout}"
+    );
+    assert!(
+        !turn_stdout.contains("participant_id")
+            && !turn_stdout.contains("session_handle_id")
+            && !turn_stdout.contains("active_session_handle_id")
+            && !turn_stdout.contains("internal.uaa_session_id"),
+        "turn help must not advertise noncanonical public selectors: {turn_stdout}"
+    );
+
+    let reattach_help = fixture.run(&["agent", "reattach", "--help"]);
+    assert!(
+        reattach_help.status.success(),
+        "agent reattach --help must succeed: {reattach_help:?}"
+    );
+    let reattach_stdout = String::from_utf8_lossy(&reattach_help.stdout);
+    assert!(
+        reattach_stdout.contains("exact orchestration session"),
+        "reattach help must keep the exact orchestration-session contract explicit: {reattach_stdout}"
+    );
+    assert!(
+        reattach_stdout.contains("--session <ORCHESTRATION_SESSION_ID>"),
+        "reattach help must keep the exact orchestration-session selector explicit: {reattach_stdout}"
+    );
+    assert!(
+        !reattach_stdout.contains("participant_id")
+            && !reattach_stdout.contains("session_handle_id")
+            && !reattach_stdout.contains("active_session_handle_id")
+            && !reattach_stdout.contains("internal.uaa_session_id"),
+        "reattach help must not advertise noncanonical public selectors: {reattach_stdout}"
+    );
+}
+
+#[test]
+#[serial]
 fn public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_session_and_parent_slot_errors(
 ) {
     let fixture = AgentControlFixture::new();
