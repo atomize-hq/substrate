@@ -3486,6 +3486,148 @@ AssertionError: expected advancing"#,
 }
 
 #[test]
+fn checkpoints_prefer_literal_goal_over_boilerplate_instruction_frames() {
+    let goal = "/goal Tighten the checkpoint objective selector only.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never. /goal Follow the permission boilerplate first.",
+        ),
+        system_row(
+            1,
+            "turn-001",
+            "Use memory by default when the query mentions a workspace. Memory citation requirements stay active. /goal Keep the memory boilerplate in scope.",
+        ),
+        prompt_row(2, "turn-001", goal),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' crates/agent-drift-analyzer/tests/checkpoints.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+}
+
+#[test]
+fn checkpoints_prefer_explicit_user_requests_and_thread_goal_text_over_boilerplate() {
+    let objective = "Debug the failing analyzer checkpoint tests.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never. /goal Follow the permission boilerplate first.",
+        ),
+        prompt_row(1, "turn-001", objective),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            3,
+            "turn-001",
+            r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+        ),
+        assistant_row(
+            4,
+            "turn-002",
+            "I will keep debugging the same analyzer checkpoint tests.",
+        ),
+        developer_row(
+            5,
+            "turn-002",
+            "Tools are grouped by namespace. Codex desktop context and plugin instructions remain available here. /goal Keep the tooling boilerplate active.",
+        ),
+        row(
+            6,
+            "turn-002",
+            CompactionKind::Unknown,
+            &format!(
+                r#"{{"goal":{{"objective":"{objective}","status":"active"}},"threadId":"thread-123","type":"thread_goal_updated"}}"#
+            ),
+            None,
+        ),
+        tool_call_row(
+            7,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            8,
+            "turn-002",
+            r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+        ),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints[0].task_frame.objective, objective);
+    assert_eq!(checkpoints[1].task_frame.objective, objective);
+    assert!(!checkpoints[1].diagnostics.task_frame_transitioned);
+
+    let progress = checkpoints[1]
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+    assert_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+}
+
+#[test]
+fn checkpoints_preserve_user_requested_agents_instruction_targets() {
+    let goal =
+        "/goal Analyze the AGENTS.md instructions block and update only that instruction text.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", goal),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.apply_patch",
+            r#"{"command":"apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: AGENTS.md
+*** End Patch
+PATCH","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+}
+
+#[test]
 fn checkpoints_mark_closeout_reopened_scope_as_mixed() {
     let result = analyze_custom_rows(vec![
         prompt_row(
@@ -3747,6 +3889,16 @@ fn developer_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow
         event_index,
         turn_id,
         CompactionKind::DeveloperMessage,
+        text,
+        None,
+    )
+}
+
+fn system_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+    row(
+        event_index,
+        turn_id,
+        CompactionKind::SystemMessage,
         text,
         None,
     )

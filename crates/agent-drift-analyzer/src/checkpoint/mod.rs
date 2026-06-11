@@ -8,8 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::input::BundleSession;
 use crate::{
-    context::assemble_context, context::collect_command_observations,
-    context::focusable_directive_rows, context::CommandObservation, context::ContextPack,
+    context::assemble_context, context::collect_command_observations, context::evidence_from_row,
+    context::extract_verification_commands, context::focusable_directive_rows,
+    context::CommandObservation, context::ContextPack, context::ObjectiveSummary,
     inference::infer_delegation_context, inference::infer_task_frame,
     inference::ChildWorkVisibility, inference::DelegationContext, inference::DelegationTopology,
     scoring::DriftStateHint, scoring::ScoredDrift,
@@ -153,6 +154,34 @@ enum FileRole {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ObjectiveSource {
+    LiteralGoalCommand,
+    ExplicitUserRequest,
+    ThreadGoalText,
+    NonBoilerplateDirective,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BoilerplateClass {
+    PermissionBlock,
+    SkillsBlock,
+    AgentInstructionBlock,
+    MemoryOrProfileBlock,
+    ToolingCapabilityBlock,
+    SafetyOrPolicyBlock,
+    GenericScaffold,
+}
+
+#[derive(Debug, Clone)]
+struct ObjectiveCandidate<'a> {
+    row: &'a CompactionRow,
+    text: String,
+    source: ObjectiveSource,
+    boilerplate_class: Option<BoilerplateClass>,
+    priority: u8,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ArchetypeCandidate {
     label: SessionArchetypeLabel,
@@ -199,7 +228,14 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     let mut checkpoints_in_turn = BTreeMap::<TurnSliceIdentity, usize>::new();
 
     for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
-        let context = assemble_context(&window);
+        let mut context = assemble_context(&window);
+        if let Some(objective) = narrowed_objective_summary(&window.compact_rows) {
+            if context.objective.text != objective.text
+                && objective_text_is_pure_boilerplate(&context.objective.text)
+            {
+                context.objective = objective;
+            }
+        }
         let task_frame = infer_task_frame(&context);
         let delegation =
             classify_checkpoint_delegation(infer_delegation_context(&window, &context));
@@ -1971,6 +2007,223 @@ fn is_synthetic_user_message(row: &CompactionRow) -> bool {
     row.text.contains("AGENTS.md instructions")
         || row.text.contains("<skill>")
         || row.text.contains("Available skills")
+}
+
+fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary> {
+    let candidate = rows
+        .iter()
+        .filter_map(objective_candidate)
+        .max_by(|left, right| {
+            left.priority
+                .cmp(&right.priority)
+                .then_with(|| left.row.event_index.cmp(&right.row.event_index))
+                .then_with(|| left.text.len().cmp(&right.text.len()))
+        })?;
+
+    let reason = match candidate.source {
+        ObjectiveSource::LiteralGoalCommand => "literal /goal objective row",
+        ObjectiveSource::ExplicitUserRequest => "explicit user objective row",
+        ObjectiveSource::ThreadGoalText => "thread goal objective row",
+        ObjectiveSource::NonBoilerplateDirective => match candidate.boilerplate_class {
+            Some(BoilerplateClass::PermissionBlock) => "permission objective row",
+            Some(BoilerplateClass::SkillsBlock) => "skills objective row",
+            Some(BoilerplateClass::AgentInstructionBlock) => "instruction objective row",
+            Some(BoilerplateClass::MemoryOrProfileBlock) => "memory/profile objective row",
+            Some(BoilerplateClass::ToolingCapabilityBlock) => "tooling capability objective row",
+            Some(BoilerplateClass::SafetyOrPolicyBlock) => "safety/policy objective row",
+            Some(BoilerplateClass::GenericScaffold) => "scaffold objective row",
+            None => "non-boilerplate directive objective row",
+        },
+    };
+
+    Some(ObjectiveSummary {
+        text: candidate.text.clone(),
+        verification_commands: extract_verification_commands(&candidate.text),
+        evidence: vec![evidence_from_row(candidate.row, reason)],
+    })
+}
+
+fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
+    if row.text.trim().is_empty() {
+        return None;
+    }
+
+    if let Some(text) = thread_goal_objective_text(&row.text) {
+        return Some(ObjectiveCandidate {
+            row,
+            text,
+            source: ObjectiveSource::ThreadGoalText,
+            boilerplate_class: None,
+            priority: 3,
+        });
+    }
+
+    if row_is_pure_boilerplate(row) {
+        return None;
+    }
+
+    if matches!(row.kind, CompactionKind::UserMessage) && row.text.trim_start().starts_with("/goal")
+    {
+        return Some(ObjectiveCandidate {
+            row,
+            text: row.text.clone(),
+            source: ObjectiveSource::LiteralGoalCommand,
+            boilerplate_class: boilerplate_class(&row.text),
+            priority: 5,
+        });
+    }
+
+    if matches!(row.kind, CompactionKind::UserMessage)
+        && matches!(
+            row.user_message_role.unwrap_or(UserMessageRole::Unknown),
+            UserMessageRole::Prompt | UserMessageRole::Unknown
+        )
+    {
+        return Some(ObjectiveCandidate {
+            row,
+            text: row.text.clone(),
+            source: ObjectiveSource::ExplicitUserRequest,
+            boilerplate_class: boilerplate_class(&row.text),
+            priority: 4,
+        });
+    }
+
+    if matches!(
+        row.kind,
+        CompactionKind::DeveloperMessage | CompactionKind::SystemMessage
+    ) {
+        return Some(ObjectiveCandidate {
+            row,
+            text: row.text.clone(),
+            source: ObjectiveSource::NonBoilerplateDirective,
+            boilerplate_class: boilerplate_class(&row.text),
+            priority: 1,
+        });
+    }
+
+    None
+}
+
+fn thread_goal_objective_text(text: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    value
+        .get("goal")
+        .and_then(|goal| goal.get("objective"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|objective| !objective.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn row_is_pure_boilerplate(row: &CompactionRow) -> bool {
+    objective_text_is_pure_boilerplate(&row.text)
+        && !preserves_user_requested_boilerplate_target(row)
+}
+
+fn objective_text_is_pure_boilerplate(text: &str) -> bool {
+    boilerplate_class(text).is_some() && !text_preserves_boilerplate_target(text)
+}
+
+fn preserves_user_requested_boilerplate_target(row: &CompactionRow) -> bool {
+    if !matches!(row.kind, CompactionKind::UserMessage) {
+        return false;
+    }
+
+    text_preserves_boilerplate_target(&row.text)
+}
+
+fn text_preserves_boilerplate_target(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    let action = [
+        "analyze", "inspect", "review", "edit", "update", "rewrite", "change", "tighten", "fix",
+        "audit",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+    let target = [
+        "agents.md instructions",
+        "agents.md",
+        "<skill>",
+        "skill block",
+        "available skills",
+        "permission block",
+        "approval policy",
+        "memory block",
+        "boilerplate",
+        "instruction block",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+
+    action && target
+}
+
+fn boilerplate_class(text: &str) -> Option<BoilerplateClass> {
+    let lower = text.to_ascii_lowercase();
+    if [
+        "filesystem sandboxing",
+        "approval policy",
+        "permission_profile",
+        "sandbox_mode",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        Some(BoilerplateClass::PermissionBlock)
+    } else if [
+        "<skill>",
+        "available skills",
+        "skill roots",
+        "how to use skills",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        Some(BoilerplateClass::SkillsBlock)
+    } else if ["agents.md instructions", "# agents.md", "<instructions>"]
+        .iter()
+        .any(|needle| lower.contains(needle))
+    {
+        Some(BoilerplateClass::AgentInstructionBlock)
+    } else if [
+        "memory summary begins",
+        "use memory by default",
+        "memory citation requirements",
+        "<oai-mem-citation>",
+        "user profile",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        Some(BoilerplateClass::MemoryOrProfileBlock)
+    } else if [
+        "tools are grouped by namespace",
+        "codex desktop context",
+        "workspace dependencies",
+        "how to use plugins",
+        "plugins are enabled",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        Some(BoilerplateClass::ToolingCapabilityBlock)
+    } else if [
+        "safety guardrails",
+        "security guardrails",
+        "never start implementing or making code/doc changes",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        Some(BoilerplateClass::SafetyOrPolicyBlock)
+    } else if ["project-doc", "<environment_context>"]
+        .iter()
+        .any(|needle| lower.contains(needle))
+    {
+        Some(BoilerplateClass::GenericScaffold)
+    } else {
+        None
+    }
 }
 
 fn row_key(row: &CompactionRow) -> (Utf8PathBuf, usize, usize) {
