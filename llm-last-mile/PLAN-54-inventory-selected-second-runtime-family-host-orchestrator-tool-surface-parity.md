@@ -58,13 +58,13 @@ What is already landed:
 3. the frozen seven-tool Slice `52` contract,
 4. the first live Codex-backed host-tool floor from Slice `53`,
 5. the landed internal toolbox transport and world-dispatch runtime,
-6. truthful non-Codex support-posture reporting that still says `claude_code` parity is not yet proven.
+6. the Slice `54` selected-host `claude_code` parity proof plus truthful support-posture uplift that stays bounded to selected-host support.
 
-What is still missing:
+What remains bounded follow-through:
 
-1. selected `claude_code` host starts/turns taking the same authoritative live host-tool path,
-2. end-to-end `claude_code` proof that tool calls preserve Slice `52` semantics,
-3. support-posture uplift backed by actual validation instead of by planning prose.
+1. later broader runtime-family smoke coverage only if future live-surface widening changes repo truth,
+2. later docs/operator-truth refresh only when future widening or new support claims reopen this seam,
+3. the separate broader caller-surface, cross-platform, Family-2, and governance tracks already summarized elsewhere in this plan.
 
 ## Locked Decisions
 

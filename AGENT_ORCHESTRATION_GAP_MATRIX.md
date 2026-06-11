@@ -100,7 +100,7 @@ Terminology rule for this repository:
   - The broad PID-based orchestration-stamping concern is mostly retired from production event emission; the remaining authority cleanup is narrower.
 - The gateway lifecycle runtime remains separately visible for nested `status|sync|restart` work, but prompt-bearing pure-agent orchestration now shares the same gateway-owned adapter fulfillment seam.
 - The main remaining gaps are:
-  - the immediate next execution seam is no longer the first host-tool landing; that floor is already landed for the Codex-backed path, and the active remaining host-tool seam is `claude_code` parity plus later reporting/docs follow-through,
+  - the immediate next execution seam is no longer host-tool runtime-family parity; the Codex-backed floor and selected-host `claude_code` parity are both landed, and the remaining host-tool follow-through is later docs/smoke/operator-truth work only if future live-surface widening changes repo truth,
   - `substrate -c` is still shell wrap mode rather than an agent-prompt caller surface,
   - the shipped public control plane is intentionally narrow: root `start` is host-only, existing-session prompt-taking accepts only exact `orchestration_session_id` plus exact `backend_id`, there is still no default-agent routing, and there is still no public world-root start,
   - exact targeted turns now exist on both narrow caller surfaces, but they stay intentionally strict: the REPL keeps exact `::<backend_id> <prompt>`, public follow-up keeps exact `(orchestration_session_id, backend_id)`, detached world follow-up still requires `reattach`, and there is still no broader member-selector surface,

@@ -1474,7 +1474,7 @@ impl LiveToolSupportPosture {
                 selected_claude_code_uplift_gate,
                 selected_claude_code_uplift_context,
                 reason:
-                    "codex remains the first smoke-validated host-tool floor from Slice 53; this does not uplift claude_code until the selected claude_code host start/turn path reaches the same authoritative host-tool surface, preserves Slice 52 semantics, and passes targeted validation without hidden fallback",
+                    "codex remains the first smoke-validated host-tool floor from Slice 53, and Slice 54 now keeps selected-host claude_code parity landed on the same authoritative host-tool surface without widening inventory-entry or world-scope support claims",
             },
             AgentRuntimeBackendKind::ClaudeCode => {
                 let (validation_state, support_state, reason) =
