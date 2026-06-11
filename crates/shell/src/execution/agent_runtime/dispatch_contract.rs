@@ -1325,6 +1325,7 @@ impl LiveToolSupportState {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SelectedClaudeCodePathState {
+    #[allow(dead_code)]
     Present,
     Missing,
 }
@@ -1332,11 +1333,13 @@ pub(crate) enum SelectedClaudeCodePathState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Slice52SemanticsState {
     Preserved,
+    #[allow(dead_code)]
     NotPreserved,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TargetedValidationState {
+    #[allow(dead_code)]
     Green,
     NotYetGreen,
 }
@@ -1344,6 +1347,7 @@ pub(crate) enum TargetedValidationState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HiddenFallbackState {
     NoHiddenFallback,
+    #[allow(dead_code)]
     HiddenFallbackPresent,
 }
 
