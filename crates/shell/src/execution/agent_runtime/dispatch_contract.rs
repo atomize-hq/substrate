@@ -1337,14 +1337,14 @@ impl LiveToolSupportPosture {
                 validation_state: LiveToolValidationState::SmokeValidated,
                 support_state: LiveToolSupportState::FirstSupportedFloor,
                 reason:
-                    "codex is the first smoke-validated host-tool floor in Slice 53",
+                    "codex remains the first smoke-validated host-tool floor from Slice 53; this does not uplift claude_code until the selected claude_code host start/turn path reaches the same authoritative host-tool surface, preserves Slice 52 semantics, and passes targeted validation without hidden fallback",
             },
             AgentRuntimeBackendKind::ClaudeCode => Self {
                 runtime_family: AgentRuntimeBackendKind::ClaudeCode,
                 validation_state: LiveToolValidationState::NotYetSmokeValidated,
                 support_state: LiveToolSupportState::NotYetGuaranteed,
                 reason:
-                    "claude_code host-tool parity is not yet smoke-validated in Slice 53; ordinary host-session behavior remains unchanged unless implementation truth proves an incompatibility",
+                    "claude_code host-tool parity target is the selected claude_code host start/turn path taking the same authoritative host-tool surface and Slice 52 semantics without hidden fallback to codex; keep reporting not_yet_smoke_validated and not_yet_guaranteed until that exact selected-runtime path exists and targeted validation is green; ordinary host-session behavior remains unchanged unless implementation truth proves an incompatibility",
             },
         }
     }
@@ -2360,6 +2360,16 @@ mod tests {
             "unexpected reason: {}",
             posture.reason
         );
+        assert!(
+            posture.reason.contains("does not uplift claude_code"),
+            "unexpected reason: {}",
+            posture.reason
+        );
+        assert!(
+            posture.reason.contains("without hidden fallback"),
+            "unexpected reason: {}",
+            posture.reason
+        );
     }
 
     #[test]
@@ -2379,6 +2389,23 @@ mod tests {
             posture
                 .reason
                 .contains("ordinary host-session behavior remains unchanged"),
+            "unexpected reason: {}",
+            posture.reason
+        );
+        assert!(
+            posture
+                .reason
+                .contains("selected claude_code host start/turn path"),
+            "unexpected reason: {}",
+            posture.reason
+        );
+        assert!(
+            posture.reason.contains("without hidden fallback to codex"),
+            "unexpected reason: {}",
+            posture.reason
+        );
+        assert!(
+            posture.reason.contains("targeted validation is green"),
             "unexpected reason: {}",
             posture.reason
         );
