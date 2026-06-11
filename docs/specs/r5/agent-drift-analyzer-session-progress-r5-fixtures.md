@@ -102,7 +102,7 @@ dimension:
   - not `stalled`: failure class changed along a comparable target frontier
   - not `regressing`: later failure is deeper/later than compile failure
   - not `insufficient_evidence`: target was exercised by the second attempt
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e899c-453f-71f2-a99d-155848c7b081/**`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_troubleshooting_frontier_advancement_from_compile_to_test_failure); supporting R5-7 troubleshooting advancement proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e899c-453f-71f2-a99d-155848c7b081/**`
 
 ## Fixture: r5_troubleshooting_failure_count_reduced
 
@@ -130,7 +130,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: quantitative failing frontier improved
   - not `regressing`: failure count did not grow
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 bundle-shaped proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-planning-advancing/**`
+- Implementation fixture location: `Deferred R5-7 bundle-shaped re-proof: no dedicated progress_acceptance corpus case landed for this count-only troubleshooting row; coverage remains synthetic-only in crates/agent-drift-analyzer/tests/checkpoints.rs plus diagnostics/parser behavior until a troubleshooting-native bundle fixture is added in a follow-on packet.`
 - R5-4 packet-scoped deferral note: a dedicated synthetic checkpoint test for this count-only
   troubleshooting shape is deferred in R5-4 because the current synthetic broad-suite row shapes
   are still routed by R4 archetype selection as verification-closeout rather than honest
@@ -163,7 +163,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: no frontier movement or edit overlap
   - not `regressing`: no prior cleaner state was broken
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e940c-a91b-7fe0-a967-b0bdd595b581/**`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_repeated_same_troubleshooting_signature_as_stalled); R5-7 dedicated corpus: no additional real-rollout or bundle-shaped re-proof landed for this exact repeated-signature troubleshooting row.`
 
 ## Fixture: r5_troubleshooting_previous_clean_broken
 
@@ -191,7 +191,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: state moved backward from clean to failed
   - not `advancing`: a previous best frontier was lost
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_troubleshooting_regression_when_frontier_falls_back, checkpoints_mark_implementation_regression_when_previously_clean_scope_breaks); R5-7 dedicated corpus: no additional bundle-shaped re-proof landed for this previously-clean regression row.`
 ## Fixture: r5_planning_candidate_set_narrows_to_spec
 
 - Archetype: `planning`
@@ -299,7 +299,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: edits did not overlap the failing scope and diagnostics did not improve
   - not `regressing`: no previous clean/later frontier was broken
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_repeated_implementation_failure_after_unrelated_edits_as_stalled); R5-7 dedicated corpus: no additional bundle-shaped re-proof landed for this unrelated-edit implementation stall row.`
 
 ## Fixture: r5_closeout_clean_proof_no_source_churn
 
@@ -329,7 +329,7 @@ dimension:
 - Why competing statuses lose:
   - not `implementation_verification_wall`: no meaningful source churn
   - not `stalled`: clean proof and residual narrowing add new information
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_shift_to_verification_closeout_when_proof_dominates_new_source_edits); R5-7 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e8b42-42bd-7b10-baae-3265edb65f4b/**`
 
 ## Fixture: r5_closeout_scope_narrows_to_residual
 
@@ -391,7 +391,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: closeout scope reopened
   - not `stalled`: the state changed materially
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_closeout_prior_clean_proof_that_later_fails_as_regressing, checkpoints_mark_closeout_reopened_scope_as_mixed); R5-7 dedicated corpus: no additional bundle-shaped re-proof landed for this reopened closeout row.`
 
 ## Fixture: r5_sparse_no_comparable_attempt
 
@@ -415,7 +415,7 @@ dimension:
     comparable evidence exists, the fixture should move to a concrete archetype-specific row
 - Why competing statuses lose:
   - none of `advancing`, `stalled`, or `regressing` has enough comparable evidence
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_bias_sparse_neutral_prefixes_to_low_confidence_planning, checkpoints_mark_troubleshooting_target_not_exercised_as_insufficient, checkpoints_mark_closeout_prose_without_proof_as_insufficient_evidence); R5-7 dedicated corpus: no additional bundle-shaped re-proof landed for this intentionally sparse row.`
 ## Fixture: r5_delegated_parent_opaque
 
 - Archetype: any R4 label, usually `planning` or `troubleshooting`

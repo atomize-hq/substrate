@@ -101,6 +101,15 @@ fn parent_visible_orchestration_progress(
         return None;
     }
 
+    let child_opaque_limiting_evidence = analysis
+        .delegation
+        .counter_evidence
+        .iter()
+        .map(|evidence| EvidenceRef {
+            row: evidence.row.clone(),
+            reason: "child-opaque delegation limited direct child progress claims".to_string(),
+        })
+        .collect::<Vec<_>>();
     let limiting_evidence = merge_evidence(vec![
         orchestration_attempts
             .iter()
@@ -111,15 +120,7 @@ fn parent_visible_orchestration_progress(
             analysis,
             "only parent-visible orchestration evidence was available for progress assessment",
         ),
-        analysis
-            .delegation
-            .counter_evidence
-            .iter()
-            .map(|evidence| EvidenceRef {
-                row: evidence.row.clone(),
-                reason: "child-opaque delegation limited direct child progress claims".to_string(),
-            })
-            .collect(),
+        child_opaque_limiting_evidence.clone(),
     ]);
     let limiting_signal = progress_signal(
         ProgressSignalCode::DelegationVisibilityLimited,
@@ -157,7 +158,7 @@ fn parent_visible_orchestration_progress(
         } else {
             limiting_signal.evidence.clone()
         },
-        counter_evidence: Vec::new(),
+        counter_evidence: child_opaque_limiting_evidence,
         signals: vec![limiting_signal],
     })
 }

@@ -131,6 +131,7 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
     .collect::<Vec<_>>();
 
     let mut annotated_real_rollout_count = 0usize;
+    let mut synthetic_bundle_shaped_count = 0usize;
     for case_id in PROGRESS_ACCEPTANCE_CASE_IDS {
         let case = ProgressAcceptanceFixture::load(case_id);
         assert_eq!(case.expected.case_id, case_id);
@@ -141,12 +142,18 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
         );
         if case.expected.fixture_kind == FixtureKind::AnnotatedRealRollout {
             annotated_real_rollout_count += 1;
+        } else {
+            synthetic_bundle_shaped_count += 1;
         }
     }
 
-    assert!(
-        annotated_real_rollout_count >= 1,
-        "Packet R5-7 must keep at least one annotated real-rollout case before claiming bounded semantic acceptance"
+    assert_eq!(
+        annotated_real_rollout_count, 3,
+        "Packet R5-7 must keep the locked corpus shape of exactly 3 annotated real-rollout cases"
+    );
+    assert_eq!(
+        synthetic_bundle_shaped_count, 3,
+        "Packet R5-7 must keep the locked corpus shape of exactly 3 synthetic bundle-shaped support cases"
     );
 
     for (excluded_case_id, reason) in PROGRESS_ACCEPTANCE_EXCLUDED_CASES {
