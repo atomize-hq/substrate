@@ -533,6 +533,7 @@ fn assert_selected_checkpoint_narrative_alignment(
         }
         "real-reopen-regressing-019e894a-ord7" => {
             let decisive_text = normalized_join(&expected.decisive_evidence);
+            let counter_text = normalized_join(&expected.counter_evidence);
             let why_not_text = normalized_join(&expected.why_not_other_dimensions);
             let actual_facts = normalized_progress_facts(archetype, progress);
 
@@ -557,8 +558,21 @@ fn assert_selected_checkpoint_narrative_alignment(
                 "selected_checkpoint.decisive_evidence",
             );
             assert_text_contains_all(
+                &counter_text,
+                &[
+                    "never established a closeout checkpoint first",
+                    "previously clean verifier broke again",
+                ],
+                case_id,
+                "selected_checkpoint.counter_evidence",
+            );
+            assert_text_contains_all(
                 &why_not_text,
-                &["verification closeout", "implementation verification wall"],
+                &[
+                    "verification closeout",
+                    "implementation verification wall",
+                    "never established a verification closeout checkpoint before the failing re verification attempt",
+                ],
                 case_id,
                 "selected_checkpoint.why_not_other_dimensions",
             );
