@@ -958,6 +958,10 @@ fn checkpoints_keep_fix_goals_with_closeout_sections_in_troubleshooting() {
         .as_ref()
         .expect("session archetype");
 
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "/goal In `/repo`, land the bounded fix for the sentinel restart cursor."
+    );
     assert_eq!(archetype.label, SessionArchetypeLabel::Troubleshooting);
 }
 
@@ -1927,11 +1931,16 @@ fn checkpoints_mark_repeated_same_troubleshooting_signature_as_stalled() {
         ),
     ]);
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
     let progress = checkpoint
         .session_progress
         .as_ref()
         .expect("session progress");
 
+    assert_eq!(archetype.label, SessionArchetypeLabel::Troubleshooting);
     assert_eq!(
         progress.dimension,
         ProgressDimension::TroubleshootingFrontier
@@ -3867,7 +3876,8 @@ PATCH","workdir":"/repo"}"#,
 
 #[test]
 fn checkpoints_anchor_first_checkpoint_to_real_goal_after_boilerplate_then_activity() {
-    let goal = "/goal Tighten the checkpoint boundary selector only after the real objective arrives.";
+    let goal =
+        "/goal Tighten the checkpoint boundary selector only after the real objective arrives.";
     let result = analyze_custom_rows(vec![
         developer_row(
             0,
@@ -4285,12 +4295,7 @@ fn steer_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
     user_row(event_index, turn_id, text, UserMessageRole::Steer)
 }
 
-fn user_row(
-    event_index: usize,
-    turn_id: &str,
-    text: &str,
-    role: UserMessageRole,
-) -> CompactionRow {
+fn user_row(event_index: usize, turn_id: &str, text: &str, role: UserMessageRole) -> CompactionRow {
     row(
         event_index,
         turn_id,

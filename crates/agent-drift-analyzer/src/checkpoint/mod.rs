@@ -494,9 +494,9 @@ fn build_intent_evidence_profile(analysis: &CheckpointAnalysis) -> IntentEvidenc
                 } else if docs_only {
                     profile.docs_or_spec_write_command_count += 1;
                     if closeout_artifact_scope
-                        && objective_mentions_closeout_phase(
+                        && (objective_mentions_closeout_phase(
                             &analysis.current.context.objective.text,
-                        )
+                        ) || closeout_artifact_preserves_closeout_context(analysis))
                     {
                         profile.verification_like.add(
                             4,
@@ -507,11 +507,11 @@ fn build_intent_evidence_profile(analysis: &CheckpointAnalysis) -> IntentEvidenc
                         );
                         profile.exploration_like.add_counter(command_evidence(
                             command,
-                            "closeout artifact edit followed an explicit closeout objective instead of open-ended planning",
+                            "closeout artifact edit followed a prior clean proof path instead of open-ended planning",
                         ));
                         profile.orchestration_like.add_counter(command_evidence(
                             command,
-                            "closeout artifact edit followed an explicit closeout objective instead of planning-orchestration setup",
+                            "closeout artifact edit followed a prior clean proof path instead of planning-orchestration setup",
                         ));
                     } else {
                         profile.exploration_like.add(
@@ -758,19 +758,24 @@ fn aggregate_session_archetype(
     let test_only_writes = i32::from(
         intent.test_or_golden_write_command_count > 0 && intent.source_write_command_count == 0,
     );
-    let closeout_ready = objective_mentions_closeout_phase(&analysis.current.context.objective.text)
-        || prior_source_write_history(analysis);
-    let review_only_objective = objective_is_review_only(&analysis.current.context.objective.text)
-        && intent.source_write_command_count == 0
-        && intent.test_or_golden_write_command_count == 0;
+    let closeout_ready =
+        objective_mentions_closeout_phase(&analysis.current.context.objective.text)
+            || prior_source_write_history(analysis)
+            || closeout_artifact_preserves_closeout_context(analysis);
+    let explicit_no_code_review =
+        objective_is_explicit_no_code_review(&analysis.current.context.objective.text)
+            && intent.source_write_command_count == 0
+            && intent.test_or_golden_write_command_count == 0;
     let verification_diagnosis_without_closeout = !closeout_ready
+        && objective_mentions_repair_work(&analysis.current.context.objective.text)
+        && !explicit_no_code_review
         && intent.source_write_command_count == 0
         && intent.verification_command_count > 0
         && intent.exploration_like.raw_score > 0;
 
     let planning_score = (intent.exploration_like.raw_score + intent.orchestration_like.raw_score)
         + i32::from(docs_heavy) * 2
-        + i32::from(review_only_objective) * 3
+        + i32::from(explicit_no_code_review) * 3
         + i32::from(analysis.task_frame_delta.task_frame_transitioned)
         + i32::from(intent.verification_command_count == 0)
         - source_writes.saturating_mul(2)
@@ -801,7 +806,7 @@ fn aggregate_session_archetype(
             TurnExecutionMode::VerificationHeavy
         ))
         - i32::from(!closeout_ready)
-        - i32::from(review_only_objective) * 2
+        - i32::from(explicit_no_code_review) * 2
         - i32::from(verification_diagnosis_without_closeout) * 6
         - failure_pressure.saturating_mul(2)
         - source_writes;
@@ -811,7 +816,7 @@ fn aggregate_session_archetype(
         + failure_pressure.saturating_mul(2)
         + i32::from(!analysis.repetition.repeated_verification_loops.is_empty())
         + i32::from(verification_diagnosis_without_closeout) * 4
-        - i32::from(review_only_objective) * 3
+        - i32::from(explicit_no_code_review) * 3
         - clean_verification_bonus
         - i32::from(intent.implementation_like.raw_score >= intent.verification_like.raw_score + 2);
     let troubleshooting_score =
@@ -884,17 +889,6 @@ fn aggregate_session_archetype(
             ],
         ),
     ]
-}
-
-fn prior_source_write_history(analysis: &CheckpointAnalysis) -> bool {
-    analysis.previous.as_ref().is_some_and(|previous| {
-        collect_command_observations(&previous.window.compact_rows)
-            .iter()
-            .any(|command| {
-                command.write_like
-                    && command_file_roles(command).contains(&FileRole::Source)
-            })
-    })
 }
 
 fn archetype_candidate(
@@ -1249,41 +1243,6 @@ fn file_role(path: &str) -> FileRole {
     }
 
     FileRole::Unknown
-}
-
-fn is_closeout_artifact_path(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    lower.contains("handoff")
-        || lower.contains("summary")
-        || lower.contains("fixture")
-        || lower.starts_with("docs/")
-        || lower.ends_with(".md")
-}
-
-fn objective_mentions_closeout_phase(objective: &str) -> bool {
-    let lower = objective.to_ascii_lowercase();
-    lower.contains("verify the existing patch")
-        || lower.contains("gather proof only")
-        || lower.contains("residual proof")
-        || lower.contains("closeout proof")
-        || lower.contains("closeout handoff")
-        || lower.contains("complete closeout")
-        || lower.contains("re-check the closeout")
-        || lower.contains("handoff only")
-        || lower.contains("record it")
-        || lower.contains("doc-only follow-up")
-        || lower.contains("do not widen scope")
-        || lower.contains("without widening scope")
-}
-
-fn objective_is_review_only(objective: &str) -> bool {
-    let lower = objective.to_ascii_lowercase();
-    (lower.contains("review") || lower.contains("findings-first"))
-        && (lower.contains("without making code changes")
-            || lower.contains("do not make code changes")
-            || lower.contains("no code changes")
-            || lower.contains("do not widen scope")
-            || lower.contains("without widening scope"))
 }
 
 fn command_evidence(command: &CommandObservation, reason: &str) -> Vec<EvidenceRef> {
@@ -1986,7 +1945,9 @@ fn checkpoint_end_indices(rows: &[CompactionRow]) -> Vec<usize> {
             phase_start_index = index;
         }
         if matches!(
-            objective_candidate.as_ref().map(|candidate| candidate.source),
+            objective_candidate
+                .as_ref()
+                .map(|candidate| candidate.source),
             Some(ObjectiveSource::ExplicitUserRequest)
         ) && !row_text_is_focusable(row)
         {
@@ -2168,6 +2129,7 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
                 .then_with(|| left.row.event_index.cmp(&right.row.event_index))
                 .then_with(|| left.text.len().cmp(&right.text.len()))
         })?;
+    let objective_text = normalized_objective_text(&candidate.text);
 
     let reason = match candidate.source {
         ObjectiveSource::LiteralGoalCommand => "literal /goal objective row",
@@ -2188,10 +2150,63 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
     };
 
     Some(ObjectiveSummary {
-        text: candidate.text.clone(),
+        text: objective_text,
         verification_commands: extract_verification_commands(&candidate.text),
         evidence: vec![evidence_from_row(candidate.row, reason)],
     })
+}
+
+fn normalized_objective_text(text: &str) -> String {
+    if !text.contains("\n\n") {
+        return text.to_string();
+    }
+
+    let trimmed = text.trim();
+    let first_paragraph = trimmed.split("\n\n").next().unwrap_or(trimmed).trim();
+    if first_paragraph.is_empty() {
+        text.to_string()
+    } else {
+        first_paragraph.to_string()
+    }
+}
+
+fn objective_mentions_closeout_phase(objective: &str) -> bool {
+    let lower = objective.to_ascii_lowercase();
+    lower.contains("verify the existing patch")
+        || lower.contains("gather proof only")
+        || lower.contains("residual proof")
+        || lower.contains("closeout proof")
+        || lower.contains("closeout handoff")
+        || lower.contains("complete closeout")
+        || lower.contains("re-check the closeout")
+        || lower.contains("handoff only")
+        || lower.contains("record the closeout handoff")
+        || lower.contains("doc-only follow-up")
+}
+
+fn objective_mentions_repair_work(objective: &str) -> bool {
+    let lower = objective.to_ascii_lowercase();
+    [
+        "fix",
+        "debug",
+        "troubleshoot",
+        "root cause",
+        "reproduce",
+        "repair",
+        "patch",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
+fn objective_is_explicit_no_code_review(objective: &str) -> bool {
+    let lower = objective.to_ascii_lowercase();
+    let review_skill = lower.contains("code-review-and-quality");
+    (lower.contains("review") || lower.contains("findings-first") || review_skill)
+        && (lower.contains("without making code changes")
+            || lower.contains("do not make code changes")
+            || lower.contains("no code changes")
+            || review_skill)
 }
 
 fn thread_goal_boundary_objective_row(
@@ -2277,6 +2292,61 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
     }
 
     None
+}
+
+fn is_closeout_artifact_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("handoff")
+        || lower.contains("summary")
+        || lower.contains("fixture")
+        || lower.starts_with("docs/")
+        || lower.ends_with(".md")
+}
+
+fn closeout_artifact_preserves_closeout_context(analysis: &CheckpointAnalysis) -> bool {
+    interval_has_closeout_artifact_write(analysis)
+        && (analysis.recovery.clean_verification_interval
+            || prior_clean_verification_history(analysis))
+}
+
+fn interval_has_closeout_artifact_write(analysis: &CheckpointAnalysis) -> bool {
+    analysis
+        .interval
+        .command_observations
+        .iter()
+        .any(|command| {
+            command.write_like
+                && command
+                    .paths
+                    .iter()
+                    .any(|path| is_closeout_artifact_path(path))
+                && command_file_roles(command).iter().all(|role| {
+                    matches!(
+                        role,
+                        FileRole::DocsOrSpec | FileRole::TestOrGolden | FileRole::Unknown
+                    )
+                })
+        })
+}
+
+fn prior_clean_verification_history(analysis: &CheckpointAnalysis) -> bool {
+    analysis.previous.as_ref().is_some_and(|previous| {
+        let commands = collect_command_observations(&previous.window.compact_rows);
+        commands
+            .iter()
+            .any(|command| classify_command_role(command) == CommandRole::Verification)
+            && !previous.window.compact_rows.iter().any(is_failure_row)
+    })
+}
+
+fn prior_source_write_history(analysis: &CheckpointAnalysis) -> bool {
+    analysis.previous.as_ref().is_some_and(|previous| {
+        collect_command_observations(&previous.window.compact_rows)
+            .iter()
+            .any(|command| {
+                command.write_like && command_file_roles(command).contains(&FileRole::Source)
+            })
+    })
 }
 
 fn assistant_restated_goal_text(row: &CompactionRow) -> Option<String> {
