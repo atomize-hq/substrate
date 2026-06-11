@@ -137,7 +137,7 @@ This milestone should lock the contract around these rules:
   - supported same-user hardened mode
   - degraded-but-supported diagnostic mode using routed Substrate surfaces or
     compatibility wrappers around them, not raw direct guest procedures
-  - breakglass direct guest mode
+  - breakglass direct guest mode plus host-side `SUBSTRATE_WORLD_SOCKET` override use
 - A gap list that future implementation must close, at minimum:
   - remove backend-local policy synthesis from `MacLimaBackend`
   - strengthen `apply_policy(...)` semantics in the backend-mediated path

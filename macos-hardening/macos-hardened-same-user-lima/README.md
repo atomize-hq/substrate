@@ -163,7 +163,7 @@ The key design constraint is explicit: same-user Lima can match much of Linux's 
 - Treat this feature as ready for implementation only when reviewers can answer three questions from the docs alone:
   - What is the supported same-user mode?
   - What is explicitly not promised relative to Linux?
-  - Which current workflows are normal operation versus breakglass?
+  - Which current workflows are `supported`, `degraded-but-supported`, and `breakglass`?
 
 ## Risks / open questions
 

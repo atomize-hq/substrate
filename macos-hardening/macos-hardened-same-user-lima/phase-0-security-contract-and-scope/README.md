@@ -78,7 +78,7 @@ Phase 0 uses two planning milestones:
 2. `milestone-0-2-lima-version-and-breakglass-contract-sow.md`
    - defines required Lima/runtime assumptions
    - defines which direct guest workflows remain available only for breakglass
-   - defines how `SUBSTRATE_WORLD_SOCKET` is classified
+   - refines the already-frozen breakglass treatment for direct guest workflows and host-side `SUBSTRATE_WORLD_SOCKET` override use
    - defines which Substrate-owned workflows must remain the normal operator path
 
 This phase is complete when later implementation can treat the phase docs as authoritative inputs instead of rediscovering support posture from scattered code comments and setup guides.
