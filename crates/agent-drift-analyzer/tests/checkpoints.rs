@@ -1503,6 +1503,13 @@ fn checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_pa
     ));
     assert_eq!(progress.confidence, Confidence::Low);
     assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+    if progress.status == ProgressStatus::InsufficientEvidence {
+        assert!(
+            progress.supporting_evidence.is_empty(),
+            "insufficient parent-visible progress should stay conservative after normalization"
+        );
+    }
+    assert!(!progress.counter_evidence.is_empty());
 }
 
 #[test]
@@ -1566,6 +1573,8 @@ fn checkpoints_reset_parent_visible_comparability_when_delegated_objective_chang
     assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
     assert_eq!(progress.confidence, Confidence::Low);
     assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+    assert!(progress.supporting_evidence.is_empty());
+    assert!(!progress.counter_evidence.is_empty());
 }
 
 #[test]
@@ -1621,6 +1630,8 @@ AssertionError: expected advancing"#,
     assert_eq!(progress.status, ProgressStatus::Mixed);
     assert_eq!(progress.confidence, Confidence::Medium);
     assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+    assert!(!progress.supporting_evidence.is_empty());
+    assert!(progress.counter_evidence.is_empty());
     assert!(!progress.signals.iter().any(|signal| {
         matches!(
             signal.code,

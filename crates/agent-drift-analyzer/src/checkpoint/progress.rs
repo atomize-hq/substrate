@@ -27,30 +27,31 @@ pub(crate) fn build_session_progress(
     analysis: &CheckpointAnalysis,
     session_archetype: &SessionArchetype,
 ) -> SessionProgress {
-    if let Some(progress) = parent_visible_orchestration_progress(analysis, session_archetype.label)
+    let mut progress = if let Some(progress) =
+        parent_visible_orchestration_progress(analysis, session_archetype.label)
     {
-        return progress;
-    }
-
-    let mut progress = match session_archetype.label {
-        SessionArchetypeLabel::Troubleshooting => assess_troubleshooting_progress(
-            analysis,
-            default_dimension(session_archetype.label),
-            session_archetype.label,
-        ),
-        SessionArchetypeLabel::Planning => {
-            assess_planning_progress(analysis, default_dimension(session_archetype.label))
+        progress
+    } else {
+        match session_archetype.label {
+            SessionArchetypeLabel::Troubleshooting => assess_troubleshooting_progress(
+                analysis,
+                default_dimension(session_archetype.label),
+                session_archetype.label,
+            ),
+            SessionArchetypeLabel::Planning => {
+                assess_planning_progress(analysis, default_dimension(session_archetype.label))
+            }
+            SessionArchetypeLabel::AutonomousImplementation => assess_implementation_progress(
+                analysis,
+                default_dimension(session_archetype.label),
+                session_archetype.label,
+            ),
+            SessionArchetypeLabel::VerificationCloseout => assess_closeout_progress(
+                analysis,
+                default_dimension(session_archetype.label),
+                session_archetype.label,
+            ),
         }
-        SessionArchetypeLabel::AutonomousImplementation => assess_implementation_progress(
-            analysis,
-            default_dimension(session_archetype.label),
-            session_archetype.label,
-        ),
-        SessionArchetypeLabel::VerificationCloseout => assess_closeout_progress(
-            analysis,
-            default_dimension(session_archetype.label),
-            session_archetype.label,
-        ),
     };
 
     progress = apply_delegation_caps(analysis, progress);
@@ -149,17 +150,20 @@ fn parent_visible_orchestration_progress(
         ChildWorkVisibility::None => Confidence::Low,
     };
 
-    Some(SessionProgress {
-        status,
-        dimension: ProgressDimension::ParentVisibleOrchestration,
-        confidence,
-        supporting_evidence: if status == ProgressStatus::InsufficientEvidence {
-            Vec::new()
-        } else {
-            limiting_signal.evidence.clone()
-        },
-        counter_evidence: child_opaque_limiting_evidence,
-        signals: vec![limiting_signal],
+    Some(if status == ProgressStatus::InsufficientEvidence {
+        insufficient_progress(
+            ProgressDimension::ParentVisibleOrchestration,
+            Some(limiting_signal),
+            Some(child_opaque_limiting_evidence),
+        )
+    } else {
+        progress_from_signals(
+            status,
+            ProgressDimension::ParentVisibleOrchestration,
+            confidence,
+            vec![limiting_signal],
+            child_opaque_limiting_evidence,
+        )
     })
 }
 
