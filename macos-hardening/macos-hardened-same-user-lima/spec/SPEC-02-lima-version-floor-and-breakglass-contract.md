@@ -128,14 +128,18 @@ must account for:
    `v2.x` is the current supported major line,
 2. the VZ docs require Lima `>= 0.14` and macOS `>= 13.0`,
 3. the VM types docs state `vmType` is selected at instance creation time and
-   cannot be changed later,
-4. the `limactl shell` docs describe it as an SSH-based connection path into
+   cannot be changed later, and that starting with Lima `v1.0` new macOS
+   instances use VZ by default only on macOS `>= 13.5` unless the config is
+   incompatible with VZ,
+4. the VZ docs also call out an Intel-macOS `< 13.5` known issue for Linux
+   kernel `v6.2` guests on VZ, fixed in macOS `13.5`,
+5. the `limactl shell` docs describe it as an SSH-based connection path into
    the instance,
-5. the port-forwarding docs show default forwarding behavior changed across
+6. the port-forwarding docs show default forwarding behavior changed across
    Lima versions,
-6. the mount docs show `virtiofs` on macOS depends on `vmType: vz` and macOS
+7. the mount docs show `virtiofs` on macOS depends on `vmType: vz` and macOS
    `13+`,
-7. the breaking-changes docs show several transport and mount assumptions
+8. the breaking-changes docs show several transport and mount assumptions
    shifted materially in `v1.0` and `v2.0`.
 
 This slice should cite the exact official URLs above when those semantics drive
@@ -151,15 +155,20 @@ Task `1.2` freezes the supported environment contract as follows:
    - Slice `02` therefore stops using “recent Lima” wording and ties the
      supported hardened default to the currently supported major line instead of
      an older lifecycle branch.
-2. **Supported macOS / VM floor: macOS `13.0+` with `vmType: "vz"` chosen at
-   instance creation time.**
-   - The official VZ docs require Lima `>= 0.14` and macOS `>= 13.0`.
+2. **Supported macOS / VM floor: macOS `13.5+` with `vmType: "vz"` chosen at
+   instance creation time for the hardened default.**
+   - The official VZ docs require Lima `>= 0.14` and macOS `>= 13.0`, so
+     `13.0+` remains the broad minimum capability range for running VZ at all.
    - The official VM-types docs state `vmType` can only be specified when the
-     instance is created and cannot be changed later.
-   - Slice `02` therefore freezes the official minimum VZ capability floor
-     instead of tightening the support matrix beyond what the official VZ and
-     mount docs require, and this repo already pins `vmType: "vz"` in
-     `scripts/mac/lima/substrate.yaml`.
+     instance is created and cannot be changed later, and that starting with
+     Lima `v1.0` new macOS instances use VZ by default only on macOS `>= 13.5`
+     unless the config is incompatible with VZ.
+   - The official VZ docs also call out an Intel-macOS `< 13.5` known issue for
+     Linux kernel `v6.2` guests on VZ that is fixed in macOS `13.5`.
+   - Slice `02` therefore does **not** treat `macOS 13.0+` as an unqualified
+     hardened-default floor. Packet `1` freezes the hardened default on macOS
+     `13.5+` while still acknowledging the broader VZ capability minimum, and
+     this repo already pins `vmType: "vz"` in `scripts/mac/lima/substrate.yaml`.
 3. **Supported repo capability assumptions already in play: VZ-backed guest
    operation plus VZ-compatible host mount semantics.**
    - Repo truth already depends on `vmType: "vz"` and host mounts in
@@ -178,8 +187,9 @@ Task `1.2` freezes the supported environment contract as follows:
      intentionally skips SSH TCP fallback.
    - The official `limactl shell` docs describe Lima instance access as
      SSH-based by default, and the official port-forwarding docs describe SSH
-     and GRPC as supported forwarding modes while noting AF_VSOCK as a Lima
-     `>= 2.0` performance path for VZ guests.
+     and GRPC as supported forwarding modes while noting AF_VSOCK only for Lima
+     `>= 2.0` VZ guests whose guest `systemd` is `v256+` (for example,
+     Ubuntu `24.10+`).
    - Packet `1` therefore does **not** require `vsock-proxy` to satisfy the
      supported environment floor, even though later slices may still narrow the
      transport contract further.
@@ -298,8 +308,9 @@ Example of acceptable slice output style:
 ```md
 ## Supported environment contract
 
-- Supported floor: Lima v2.x on macOS 13.0+ with `vmType: "vz"` chosen at
-  instance creation for the same-user hardened default.
+- Supported floor: Lima v2.x on macOS 13.5+ with `vmType: "vz"` chosen at
+  instance creation for the same-user hardened default; `macOS 13.0+` remains
+  the broader VZ capability minimum, not the unqualified default.
 - Optional acceleration: `vsock-proxy` may improve the host-to-guest path, but
   it is not part of the environment floor.
 - Breakglass-only: direct `limactl shell` or host-side

@@ -226,10 +226,11 @@ Mitigation:
 
 1. require official Lima lifecycle and capability sources for every
    version-sensitive claim,
-2. freeze the macOS floor as `13.0+` when the official VZ and mount docs back
-   that requirement, and avoid silently tightening the support matrix beyond
-   those official minimums when the repo already pins `vmType: "vz"`
-   explicitly.
+2. freeze the hardened-default macOS floor as `13.5+` with `vmType: "vz"`
+   chosen at instance creation, while citing the official VZ docs' broader
+   `macOS >= 13.0` capability minimum, the VM-types docs' statement that new
+   macOS instances default to VZ only on `>= 13.5`, and the Intel `< 13.5` VZ
+   caveat instead of collapsing them into an unqualified `13.0+` default.
 
 ### Risk 3: The slice over-promotes breakglass flows into the normal operator story
 

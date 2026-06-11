@@ -51,7 +51,13 @@ Hardening cannot succeed if the supported environment and breakglass boundary re
 This milestone should produce four concrete decisions.
 
 1. Supported environment contract
-   - Freeze the minimum macOS and Lima capability set required for hardened mode.
+   - Freeze the supported hardened default as Lima `v2.x` on macOS `13.5+`
+     with `vmType: "vz"` chosen at instance creation time.
+   - The contract must also acknowledge the broader official VZ capability
+     minimum of `macOS >= 13.0` without treating that as the unqualified
+     hardened default, because the VM-types docs make VZ the default for new
+     macOS instances only on `>= 13.5` and the VZ docs call out an Intel
+     `< 13.5` caveat.
    - The contract must account for features already assumed by the repo:
      - `vmType: "vz"` in `scripts/mac/lima/substrate.yaml`
      - guest systemd units and socket activation
@@ -180,7 +186,8 @@ This milestone should produce four concrete decisions.
 
 - If the hardened mode requires a narrower Lima feature set than current contributors use, the support matrix may tighten before the replacement workflows are fully built.
 - Some manual `limactl` escape hatches may remain necessary longer than desired while Substrate-owned repair commands are still missing.
-- Packet `1` resolves the environment floor as Lima `v2.x` on macOS `13.0+`
-  with `vmType: "vz"` chosen at instance creation time; the remaining open work
-  is breakglass classification and compatibility-path framing rather than the
-  lifecycle floor itself.
+- Packet `1` resolves the hardened-default environment floor as Lima `v2.x`
+  on macOS `13.5+` with `vmType: "vz"` chosen at instance creation time, while
+  still acknowledging the broader official VZ capability minimum of
+  `macOS >= 13.0`; the remaining open work is breakglass classification and
+  compatibility-path framing rather than the lifecycle floor itself.
