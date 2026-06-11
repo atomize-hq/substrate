@@ -1,5 +1,9 @@
 //! Forwarding management for host-VM communication.
 
+use crate::transport::{
+    compatibility_tcp_endpoint, managed_host_socket_path, CANONICAL_GUEST_SOCKET_PATH,
+    CANONICAL_GUEST_SOCKET_URI, COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
+};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -148,7 +152,7 @@ fn probe_caps_uds(path: &Path) -> bool {
 
 fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     // Find available port
-    let port = 17788u16;
+    let port = COMPATIBILITY_TCP_PORT;
 
     // Start vsock-proxy
     let child = Command::new("vsock-proxy")
@@ -156,7 +160,7 @@ fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
             "--vm",
             vm_name,
             &port.to_string(),
-            "unix:///run/substrate.sock",
+            CANONICAL_GUEST_SOCKET_URI,
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -168,7 +172,7 @@ fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Health check
-    let url = format!("http://127.0.0.1:{}/v1/capabilities", port);
+    let url = format!("http://{}:{}/v1/capabilities", COMPATIBILITY_TCP_HOST, port);
     let response = ureq::get(&url)
         .timeout(std::time::Duration::from_secs(2))
         .call();
@@ -186,7 +190,11 @@ fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
 fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     // Create socket directory
     let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
-    let socket_dir = home_dir.join(".substrate/sock");
+    let socket_path = managed_host_socket_path();
+    let socket_dir = socket_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("managed host socket path missing parent"))?
+        .to_path_buf();
 
     debug!("Creating socket directory: {}", socket_dir.display());
     std::fs::create_dir_all(&socket_dir).context("Failed to create socket directory")?;
@@ -200,8 +208,6 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
         std::fs::set_permissions(&socket_dir, perms)?;
     }
 
-    let socket_path = socket_dir.join("agent.sock");
-
     // Remove old socket if exists
     if socket_path.exists() {
         debug!("Removing old socket file");
@@ -212,7 +218,7 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     debug!("Using SSH config: {}", ssh_config.display());
 
     let ssh_config_str = ssh_config.to_string_lossy();
-    let socket_forward = format!("{}:/run/substrate.sock", socket_path.display());
+    let socket_forward = format!("{}:{}", socket_path.display(), CANONICAL_GUEST_SOCKET_PATH);
     let vm_host = format!("lima-{}", vm_name);
     let known_hosts_path = home_dir.join(".substrate/lima_known_hosts");
 
@@ -347,11 +353,14 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
 
 #[allow(dead_code)]
 fn create_ssh_tcp_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
-    let port = 17788u16;
+    let port = COMPATIBILITY_TCP_PORT;
 
     let ssh_config = lima_ssh_config_path(vm_name)?;
     let ssh_config_str = ssh_config.to_string_lossy();
-    let port_forward = format!("127.0.0.1:{}:/run/substrate.sock", port);
+    let port_forward = format!(
+        "{}:{}:{}",
+        COMPATIBILITY_TCP_HOST, port, CANONICAL_GUEST_SOCKET_PATH
+    );
     let vm_host = format!("lima-{}", vm_name);
 
     // Start SSH TCP forwarding (note: this requires a TCP<->UDS bridge in the guest to be usable)
@@ -380,7 +389,7 @@ fn create_ssh_tcp_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     std::thread::sleep(std::time::Duration::from_millis(1000));
 
     // Try to connect
-    if let Err(e) = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)) {
+    if let Err(e) = std::net::TcpStream::connect(compatibility_tcp_endpoint()) {
         anyhow::bail!("SSH TCP forwarding failed to establish: {}", e);
     }
 
@@ -435,11 +444,15 @@ mod tests {
     #[test]
     fn test_forwarding_kind_debug() {
         let kinds = vec![
-            ForwardingKind::Vsock { port: 17788 },
+            ForwardingKind::Vsock {
+                port: COMPATIBILITY_TCP_PORT,
+            },
             ForwardingKind::SshUds {
                 path: PathBuf::from("/tmp/test.sock"),
             },
-            ForwardingKind::SshTcp { port: 17788 },
+            ForwardingKind::SshTcp {
+                port: COMPATIBILITY_TCP_PORT,
+            },
         ];
 
         for kind in kinds {
