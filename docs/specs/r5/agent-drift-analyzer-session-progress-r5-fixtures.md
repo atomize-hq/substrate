@@ -1,6 +1,6 @@
 # Fixture Manifest: Agent Drift Analyzer Session Progress R5
 
-Status: Packet R5-0 fixture-manifest direction locked on 2026-06-09; concrete tests land later.
+Status: Packet R5-7 landed on 2026-06-10; the dedicated progress-acceptance corpus now lives under `crates/agent-drift-analyzer/tests/progress_acceptance.rs` plus `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**`.
 
 ## Purpose
 
@@ -102,7 +102,7 @@ dimension:
   - not `stalled`: failure class changed along a comparable target frontier
   - not `regressing`: later failure is deeper/later than compile failure
   - not `insufficient_evidence`: target was exercised by the second attempt
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e899c-453f-71f2-a99d-155848c7b081/**`
 
 ## Fixture: r5_troubleshooting_failure_count_reduced
 
@@ -130,7 +130,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: quantitative failing frontier improved
   - not `regressing`: failure count did not grow
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 bundle-shaped proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-planning-advancing/**`
 - R5-4 packet-scoped deferral note: a dedicated synthetic checkpoint test for this count-only
   troubleshooting shape is deferred in R5-4 because the current synthetic broad-suite row shapes
   are still routed by R4 archetype selection as verification-closeout rather than honest
@@ -163,7 +163,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: no frontier movement or edit overlap
   - not `regressing`: no prior cleaner state was broken
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e940c-a91b-7fe0-a967-b0bdd595b581/**`
 
 ## Fixture: r5_troubleshooting_previous_clean_broken
 
@@ -192,7 +192,6 @@ dimension:
   - not `stalled`: state moved backward from clean to failed
   - not `advancing`: a previous best frontier was lost
 - Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
-
 ## Fixture: r5_planning_candidate_set_narrows_to_spec
 
 - Archetype: `planning`
@@ -220,8 +219,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: artifact and narrowed set show structural convergence
   - not `implementation_verification_wall`: no source/test implementation loop dominates
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
-
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 bundle-shaped proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-planning-advancing/**`
 ## Fixture: r5_planning_broad_scan_meanders
 
 - Archetype: `planning`
@@ -247,8 +245,7 @@ dimension:
 - Why competing statuses lose:
   - not `advancing`: no convergence artifact or narrowing
   - not `insufficient_evidence`: repeated broad scans are enough evidence of meander/stall
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
-
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e940c-a91b-7fe0-a967-b0bdd595b581/**`
 ## Fixture: r5_implementation_wall_advances
 
 - Archetype: `autonomous_implementation`
@@ -277,8 +274,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: verifier moved forward
   - not `verification_closeout_narrowing`: implementation edits still dominate the checkpoint
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
-
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 bundle-shaped proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-implementation-advancing/**`
 ## Fixture: r5_implementation_same_failure_unrelated_edits
 
 - Archetype: `autonomous_implementation`
@@ -368,8 +364,7 @@ dimension:
   - not `implementation_verification_wall`: closeout proof, not source churn, dominates the
     checkpoint
   - not `insufficient_evidence`: the narrowed residual scope is explicit and comparable
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
-
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019e8b42-42bd-7b10-baae-3265edb65f4b/**`
 ## Fixture: r5_closeout_reopens_source_churn
 
 - Archetype: `verification_closeout`
@@ -421,7 +416,6 @@ dimension:
 - Why competing statuses lose:
   - none of `advancing`, `stalled`, or `regressing` has enough comparable evidence
 - Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset: crates/agent-drift-analyzer/tests/progress_acceptance.rs`
-
 ## Fixture: r5_delegated_parent_opaque
 
 - Archetype: any R4 label, usually `planning` or `troubleshooting`
@@ -446,10 +440,9 @@ dimension:
 - Why competing statuses lose:
   - no child progress claim is allowed
   - parent waiting is not child implementation stall
-- Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; semantic re-proof subset in R5-7: crates/agent-drift-analyzer/tests/progress_acceptance.rs plus crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
+- Implementation fixture location: `Analyzer: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 bundle-shaped delegated guardrail proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-parent-visible-opaque/**; replay: crates/agent-drift-sentinel/tests/replay_input.rs; live: crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
 ## Schema / Compatibility Fixtures
-
 ## Fixture: r5_legacy_v0_5_still_loads
 
 - Expected: v0.5 checkpoint without `session_progress` remains replay/live compatible.
@@ -504,13 +497,16 @@ supporting coverage to show the labels remain honest on realistic traces.
 Packet `R5-0` locks that this bounded semantic corpus belongs to `R5-7`; earlier packets can prove
 deterministic behavior and compatibility, but must not overclaim semantic acceptance.
 
-Recommended first annotated real-rollout / supporting bundle-shaped cases:
+Landed Packet R5-7 corpus:
 
-1. non-subagent recovered sticky session from the R1E/R2 family,
-2. non-subagent active failure with repeated non-zero verification,
-3. planning/spec-development session,
-4. closeout/proof session that narrows from broad verification to a focused residual proof,
-5. delegated parent opaque session used only for guardrail proof.
+1. annotated real-rollout troubleshooting advancement: `019e899c-453f-71f2-a99d-155848c7b081`,
+2. annotated real-rollout planning meander/stall: `019e940c-a91b-7fe0-a967-b0bdd595b581`,
+3. annotated real-rollout verification closeout narrowing: `019e8b42-42bd-7b10-baae-3265edb65f4b`,
+4. bundle-shaped planning narrowing proof: `synthetic-planning-advancing`,
+5. bundle-shaped implementation verification-wall proof: `synthetic-implementation-advancing`,
+6. bundle-shaped delegated parent-opaque guardrail proof: `synthetic-parent-visible-opaque`.
+
+This corpus satisfies the R5-7 requirement that bounded semantic acceptance include at least one annotated real-rollout case before the family claims semantic acceptance.
 
 ## Deferred Fixture Ideas
 

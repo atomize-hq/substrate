@@ -1,0 +1,21 @@
+{
+  "case_id": "019e8b42-42bd-7b10-baae-3265edb65f4b",
+  "fixture_kind": "annotated_real_rollout",
+  "source_artifact": "target/hybrid-drift-live/019e8b42-42bd-7b10-baae-3265edb65f4b-doc-followup/compactor",
+  "notes": "Real doc-only follow-up session used to prove closeout narrowing on a bounded verification/proof pass.",
+  "selected_checkpoint": {
+    "ordinal": 2,
+    "archetype": "verification_closeout",
+    "dimension": "verification_closeout_narrowing",
+    "status": "advancing",
+    "confidence_min": "high",
+    "confidence_max": "high",
+    "required_signal_codes": [
+      "verification_clean",
+      "verification_scope_narrowed",
+      "residual_scope_shrank"
+    ],
+    "supporting_evidence_min": 1,
+    "counter_evidence_min": 0
+  }
+}

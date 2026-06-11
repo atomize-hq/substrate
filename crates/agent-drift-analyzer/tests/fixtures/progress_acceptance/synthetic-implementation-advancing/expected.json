@@ -1,0 +1,20 @@
+{
+  "case_id": "synthetic-implementation-advancing",
+  "fixture_kind": "synthetic_bundle_shaped",
+  "source_artifact": "Synthetic bundle-shaped implementation case derived from checkpoints_mark_implementation_wall_advancement_with_concentrated_edits in crates/agent-drift-analyzer/tests/checkpoints.rs.",
+  "notes": "Synthetic bundle-shaped implementation case derived from checkpoints_mark_implementation_wall_advancement_with_concentrated_edits in crates/agent-drift-analyzer/tests/checkpoints.rs.",
+  "selected_checkpoint": {
+    "ordinal": 2,
+    "archetype": "autonomous_implementation",
+    "dimension": "implementation_verification_wall",
+    "status": "advancing",
+    "confidence_min": "medium",
+    "confidence_max": "medium",
+    "required_signal_codes": [
+      "failure_frontier_advanced",
+      "working_set_concentrated"
+    ],
+    "supporting_evidence_min": 1,
+    "counter_evidence_min": 0
+  }
+}

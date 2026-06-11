@@ -1,0 +1,20 @@
+{
+  "case_id": "019e899c-453f-71f2-a99d-155848c7b081",
+  "fixture_kind": "annotated_real_rollout",
+  "source_artifact": "target/hybrid-drift-evals/019e899c-453f-71f2-a99d-155848c7b081-sample/compactor",
+  "notes": "Real substrate troubleshooting session reused as the mandatory annotated real-rollout proof point for R5-7.",
+  "selected_checkpoint": {
+    "ordinal": 3,
+    "archetype": "troubleshooting",
+    "dimension": "troubleshooting_frontier",
+    "status": "advancing",
+    "confidence_min": "high",
+    "confidence_max": "high",
+    "required_signal_codes": [
+      "verification_clean",
+      "verification_scope_broadened"
+    ],
+    "supporting_evidence_min": 1,
+    "counter_evidence_min": 0
+  }
+}

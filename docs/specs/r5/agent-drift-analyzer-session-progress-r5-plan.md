@@ -1,13 +1,13 @@
 # Plan: Agent Drift Analyzer Session Progress R5
 
-Status: Packet R5-0 landed as the doc-lock packet on 2026-06-09; R5-1 through R5-7 remain open implementation packets.
+Status: Packet R5-7 landed on 2026-06-10, closing the dedicated acceptance-fixture wall after the already-landed R5-0 through R5-6 packets.
 
-Current family state on 2026-06-09:
+Current family state on 2026-06-10:
 
-- Packet `R5-0` is the landed doc-lock packet for the family.
-- Packets `R5-1` through `R5-7` remain future implementation packets.
-- Packet `R5-7` is the first packet allowed to claim bounded semantic acceptance for `R5`, and
-  only after at least one annotated real-rollout acceptance pass.
+- Packets `R5-0` through `R5-6` were already landed before this packet.
+- Packet `R5-7` is now the landed dedicated acceptance-fixture wall for the family.
+- The bounded semantic acceptance bar is met with a committed progress corpus that includes annotated
+  real-rollout cases plus supporting bundle-shaped cases across the core progress dimensions.
 
 ## Objective
 
@@ -319,9 +319,11 @@ cargo test -p agent-drift-sentinel -- --nocapture
 ### Acceptance
 
 - A bounded semantic corpus proves R5 outputs are not only synthetic.
+- The landed corpus shape is 3 annotated real-rollout cases (`019e899c-453f-71f2-a99d-155848c7b081`, `019e940c-a91b-7fe0-a967-b0bdd595b581`, `019e8b42-42bd-7b10-baae-3265edb65f4b`) plus 3 committed bundle-shaped support cases (`synthetic-planning-advancing`, `synthetic-implementation-advancing`, `synthetic-parent-visible-opaque`).
 - Known legacy acceptance fixtures remain stable.
 - No drift scorer retuning sneaks into R5.
 - Docs match implemented behavior.
+- On 2026-06-10, the full analyzer and sentinel test walls passed; `cargo fmt --all -- --check` remained red only because tracked preexisting formatting drift still exists in `crates/agent-drift-analyzer/src/checkpoint/export.rs`, `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, and `crates/agent-drift-analyzer/tests/export_bundle.rs` outside the Packet R5-7 diff.
 
 ## Parallelization Notes
 

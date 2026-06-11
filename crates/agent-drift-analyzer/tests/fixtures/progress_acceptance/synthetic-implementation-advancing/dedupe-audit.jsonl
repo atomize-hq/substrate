@@ -1,0 +1,1 @@
+{"kind": "tool_call", "canonical_text_hash_hex": "test-dedupe", "representative": {"source_file_id": 0, "event_index": 1, "row_ordinal": 0}, "duplicates": [{"source_file_id": 0, "event_index": 4, "row_ordinal": 0}]}

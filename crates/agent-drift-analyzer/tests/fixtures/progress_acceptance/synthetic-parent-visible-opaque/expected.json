@@ -1,0 +1,19 @@
+{
+  "case_id": "synthetic-parent-visible-opaque",
+  "fixture_kind": "synthetic_bundle_shaped",
+  "source_artifact": "Synthetic bundle-shaped delegated guardrail case derived from checkpoints_reset_parent_visible_comparability_when_delegated_objective_changes in crates/agent-drift-analyzer/tests/checkpoints.rs.",
+  "notes": "Synthetic bundle-shaped delegated guardrail case derived from checkpoints_reset_parent_visible_comparability_when_delegated_objective_changes in crates/agent-drift-analyzer/tests/checkpoints.rs.",
+  "selected_checkpoint": {
+    "ordinal": 4,
+    "archetype": "planning",
+    "dimension": "parent_visible_orchestration",
+    "status": "insufficient_evidence",
+    "confidence_min": "low",
+    "confidence_max": "low",
+    "required_signal_codes": [
+      "delegation_visibility_limited"
+    ],
+    "supporting_evidence_min": 0,
+    "counter_evidence_min": 0
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "case_id": "019e940c-a91b-7fe0-a967-b0bdd595b581",
+  "fixture_kind": "annotated_real_rollout",
+  "source_artifact": "crates/agent-drift-analyzer/tests/fixtures/acceptance/019e940c-a91b-7fe0-a967-b0bdd595b581",
+  "notes": "Real review-first session used to prove bounded planning-convergence meander/stall semantics without widening the frozen R2 wall.",
+  "selected_checkpoint": {
+    "ordinal": 4,
+    "archetype": "planning",
+    "dimension": "planning_convergence",
+    "status": "stalled",
+    "confidence_min": "medium",
+    "confidence_max": "medium",
+    "required_signal_codes": [
+      "candidate_set_expanded"
+    ],
+    "supporting_evidence_min": 1,
+    "counter_evidence_min": 1
+  }
+}

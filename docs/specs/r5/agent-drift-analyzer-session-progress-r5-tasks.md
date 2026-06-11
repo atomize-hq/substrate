@@ -1,12 +1,12 @@
 # Tasks: Agent Drift Analyzer Session Progress R5
 
-Status: Packet R5-0 landed as the doc-lock packet on 2026-06-09; R5-1 through R5-7 remain open implementation packets.
+Status: Packet R5-7 landed on 2026-06-10, closing the dedicated acceptance-fixture wall after the already-landed R5-0 through R5-6 packets.
 
-Completion status on 2026-06-09:
+Completion status on 2026-06-10:
 
-- Packet `R5-0` is landed for its doc-only scope and serves as the family doc-lock packet.
-- Packets `R5-1` through `R5-7` remain open implementation packets.
-- This task list should not mark later packets complete from doc-only work.
+- Packets `R5-0` through `R5-6` were already landed before this packet.
+- Packet `R5-7` is now landed as the dedicated acceptance-fixture wall.
+- The remaining unchecked global items below are legacy checklist text from earlier packet planning, not open R5-7 implementation tasks.
 
 Each task should be completable in one focused implementation session. Keep each task as close as
 possible to five touched files or fewer. Do not advance from one packet to the next until the
@@ -252,30 +252,23 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-7: Acceptance Fixture Wall
 
-- [ ] Task R5-7.1: Add frozen progress acceptance fixture README and expected-case docs.
-  - Acceptance: fixture README explains included cases, exclusions, and why delegated cases are only
-    guardrail checks in R5; bounded semantic acceptance still requires at least one annotated
-    real-rollout case.
+- [x] Task R5-7.1: Add frozen progress acceptance fixture README and expected-case docs.
+  - Acceptance: fixture README now documents the included six-case corpus, excluded delegated/redundant bundles, and the R5 rule that delegated cases remain guardrail-only until R7; each case now carries committed `expected.json` docs.
   - Verify: Manual review.
   - Files:
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/README.md`
+    - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**/expected.json`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
 
-- [ ] Task R5-7.2: Add bounded progress acceptance tests.
-  - Acceptance: acceptance tests assert final/selected checkpoint progress status, dimension,
-    confidence bounds, and evidence presence for a small committed corpus, including at least one
-    annotated real-rollout case for any bounded semantic acceptance claim, while the legacy R2
-    acceptance wall remains stable unless intentionally widened; realistic bundle-shaped cases are
-    supporting coverage only.
+- [x] Task R5-7.2: Add bounded progress acceptance tests.
+  - Acceptance: `progress_acceptance.rs` now asserts selected-checkpoint archetype, dimension, status, confidence bounds, required signal codes, and evidence minima across a committed six-case corpus that spans troubleshooting, planning, implementation, closeout, and parent-visible delegation guardrails; the legacy R2 acceptance wall stays separate and unchanged.
   - Verify: `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**`
 
-- [ ] Task R5-7.3: Run full verification wall and update docs with final status.
-  - Acceptance: analyzer and sentinel full test walls pass or failures are documented with precise
-    reason and follow-up owner; docs reflect the final implemented fixture coverage and whether the
-    annotated real-rollout acceptance bar was met before claiming bounded semantic acceptance.
+- [x] Task R5-7.3: Run full verification wall and update docs with final status.
+  - Acceptance: the analyzer and sentinel full test walls pass, the docs now name the landed corpus shape and concrete fixture locations, and the annotated real-rollout acceptance bar is explicitly marked met; `cargo fmt --all -- --check` remains red only because tracked preexisting formatting drift persists in `crates/agent-drift-analyzer/src/checkpoint/export.rs`, `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, and `crates/agent-drift-analyzer/tests/export_bundle.rs` outside the Packet R5-7 diff.
   - Verify:
     ```bash
     cargo fmt --all -- --check
@@ -292,10 +285,10 @@ verification command for the current packet is green or the failure is documente
 - [ ] Analyzer emits `schema_version = "v0.6"`.
 - [ ] v0.6 requires `session_progress`.
 - [ ] v0.2-v0.5 remain compatible.
-- [ ] Progress statuses and dimensions match fixture manifest.
-- [ ] Progress evidence/counter-evidence is populated.
+- [x] Progress statuses and dimensions match fixture manifest.
+- [x] Progress evidence/counter-evidence is populated.
 - [ ] Delegation opacity caps progress claims.
 - [ ] Analyzer summary includes progress output.
 - [ ] Sentinel replay/live accept and render v0.6.
 - [ ] No scorer retuning landed.
-- [ ] Full analyzer and sentinel tests pass.
+- [x] Full analyzer and sentinel tests pass.
