@@ -282,6 +282,9 @@ fn operator_surface_renders_compact_progress_inspection_for_v0_6_checkpoints() {
     assert!(silent_render.contains(
         "- Progress: status=mixed dimension=verification_closeout_narrowing confidence=medium"
     ));
+    assert!(silent_render.contains("- Posture: recovered"));
+    assert!(silent_render
+        .contains("Evidence: session-progress.jsonl#2:0 explicit analyzer recovery evidence"));
     assert_progress_line_after_archetype(&visible_render);
     assert_progress_line_after_archetype(&silent_render);
 }

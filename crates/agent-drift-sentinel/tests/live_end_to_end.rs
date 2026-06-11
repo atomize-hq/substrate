@@ -447,6 +447,17 @@ fn live_end_to_end_replay_and_live_surfaces_share_progress_rendering_for_v0_6_ch
                 SessionArchetypeLabel::VerificationCloseout
             },
         ));
+        if index == 1 {
+            checkpoint.flagged = false;
+            checkpoint.drift_scores[0].state = DriftState::Recovered;
+            checkpoint.drift_scores[0].raw_score = 20;
+            checkpoint.drift_scores[0].flagged = false;
+            checkpoint.drift_scores[0].evidence = vec![EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason: "explicit analyzer recovery evidence".to_string(),
+            }];
+            checkpoint.diagnostics.evidence_item_count = 1;
+        }
         checkpoint.session_progress = Some(sample_session_progress(
             checkpoint,
             if index == 0 {
@@ -512,6 +523,13 @@ fn live_end_to_end_replay_and_live_surfaces_share_progress_rendering_for_v0_6_ch
     assert!(replay_silent_render.contains(
         "- Progress: status=mixed dimension=verification_closeout_narrowing confidence=medium"
     ));
+    assert_eq!(replay_silent.posture, Some(CheckpointPosture::Recovered));
+    assert_eq!(
+        live_silent.presentation.posture,
+        Some(CheckpointPosture::Recovered)
+    );
+    assert!(replay_silent_render.contains("- Posture: recovered"));
+    assert!(live_silent_render.contains("- Posture: recovered"));
 }
 
 #[test]
