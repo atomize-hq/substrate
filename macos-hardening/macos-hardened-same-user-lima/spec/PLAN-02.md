@@ -158,8 +158,12 @@ Verification checkpoint:
 Goal:
 
 1. classify direct guest administration and host-side bypasses explicitly,
-2. define which Substrate-owned commands remain the normal operator path,
-3. state the status of retained compatibility probes and exceptional paths.
+2. define which Substrate-owned commands remain the normal operator path
+   (`substrate host doctor`, `substrate world doctor`, and
+   `substrate world gateway sync|status|restart` first),
+3. state the status of retained compatibility probes and exceptional paths
+   without promoting host TCP `17788` or stale `7788` drift into the supported
+   default.
 
 Primary touch surface:
 
@@ -179,7 +183,10 @@ Verification checkpoint:
    host-side `SUBSTRATE_WORLD_SOCKET` override use are classified explicitly,
 2. normal operation clearly starts from Substrate-owned doctor/gateway
    surfaces,
-3. the slice still does not absorb repo-wide doc cutover.
+3. retained host TCP `17788` behavior is framed only as compatibility behind
+   Substrate-owned commands while stale `7788` remains explicit Slice `03`
+   drift,
+4. the slice still does not absorb repo-wide doc cutover.
 
 ### Packet 3: Validate scope discipline and leave a clean Slice `03` / Slice `12` handoff
 

@@ -112,7 +112,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 2.1: Freeze the breakglass classification for direct guest and host-bypass workflows
+- [x] Task 2.1: Freeze the breakglass classification for direct guest and host-bypass workflows
   - Acceptance: the slice explicitly classifies direct `limactl shell`, direct
     guest `systemctl`, direct guest socket curls, and host-side
     `SUBSTRATE_WORLD_SOCKET` override use, using the Slice `01` taxonomy
@@ -125,7 +125,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/TASKS-02.md`
     - milestone `0.2` only if alignment is required
 
-- [ ] Task 2.2: Freeze the supported replacement rule and compatibility-path framing
+- [x] Task 2.2: Freeze the supported replacement rule and compatibility-path framing
   - Acceptance: the slice states that normal lifecycle, diagnostics, and
     validation flows should start from Substrate-owned commands, and it
     classifies host TCP `17788` and stale `7788` behavior as compatibility or
@@ -147,6 +147,16 @@ Packet `2` is complete only when:
 2. the supported operator story clearly starts from Substrate-owned commands,
 3. retained compatibility probes are not mistaken for the supported default,
 4. the slice still remains feature-local and docs-first.
+
+Packet `2` execution note:
+
+1. direct `limactl shell`, direct guest `systemctl`, direct guest socket curls,
+   and host-side `SUBSTRATE_WORLD_SOCKET` override use land as `breakglass`
+   under the Slice `01` taxonomy,
+2. host TCP `17788` remains only a `degraded-but-supported` compatibility path
+   when reached through Substrate-owned doctor/gateway logic,
+3. the stale `7788` reference remains explicit Slice `03` transport drift
+   rather than part of the supported contract.
 
 Do not start Packet `3` until Packet `2` verification is green.
 

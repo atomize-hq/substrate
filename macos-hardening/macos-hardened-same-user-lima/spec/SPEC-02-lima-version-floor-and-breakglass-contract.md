@@ -202,6 +202,39 @@ Task `1.2` freezes the supported environment contract as follows:
    - Packet `1` does not absorb Slice `03` transport unification or Slice `12`
      docs-cutover work.
 
+## Packet 2 resolved breakglass matrix and supported replacement rule
+
+Tasks `2.1` and `2.2` freeze the direct-guest and compatibility-path contract
+as follows.
+
+| Workflow or path | Classification | Why this is the right Slice `02` classification | Supported replacement or framing |
+| --- | --- | --- | --- |
+| Direct `limactl shell substrate ...` for routine lifecycle, repair, or validation | `breakglass` | The official `limactl shell` docs describe it as an SSH-based host entry path into the Lima guest, so it is not a Substrate-owned control-plane surface. Live repo truth still uses it heavily in `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, and `docs/reference/world/platforms/macos-lima-setup.md`, but repeated use does not promote it into the hardened default. | Normal operation should start from `substrate host doctor`, `substrate world doctor`, `substrate world gateway sync|status|restart`, and routed Lima-backed CLI flows first. |
+| Direct guest `systemctl` administration for `substrate-world-service` or related units | `breakglass` | This is direct guest administration rather than the supported same-user control plane described by Slice `01`. It remains necessary for emergency repair and deep debugging, but it must not be the first-line operator story. | Use the Substrate-owned doctor and gateway lifecycle/status commands first; later slices can replace remaining warm/provision gaps without reclassifying guest `systemctl` as routine. |
+| Direct guest socket curls such as `curl --unix-socket /run/substrate.sock ...` used as the primary health check | `breakglass` | These probes validate the canonical guest endpoint, but they bypass the supported operator entry points and expose raw guest implementation details directly. | Use `substrate world doctor --json`, `substrate host doctor --json`, and the routed validation surfaces first; reserve direct guest curls for deep debugging and evidence collection. |
+| Host-side `SUBSTRATE_WORLD_SOCKET=<path>` override use on macOS | `breakglass` | This override bypasses the authoritative Lima-backed transport-selection path. Live repo truth already treats it as an advanced/test escape hatch rather than the normal default. | Use the default Lima-backed socket discovery and gateway/doctor commands without overrides unless emergency recovery or advanced testing requires a manual socket target. |
+| Host TCP `127.0.0.1:17788` compatibility probing when it stays behind Substrate-owned doctor/gateway logic | `degraded-but-supported` | Live repo truth in `crates/shell/src/execution/platform/macos.rs` and `crates/shell/src/builtins/world_gateway.rs` still probes `17788` after preferring the host UDS path. That makes it a retained compatibility behavior inside supported commands, but not the supported default contract itself. | Operators should not target `17788` directly. It remains a compatibility probe only when reached through `substrate host doctor`, `substrate world doctor`, or `substrate world gateway ...` while Slice `03` owns transport unification. |
+
+Packet `2` also freezes four framing rules that later slices must inherit:
+
+1. **Supported replacement rule:** normal lifecycle, diagnostics, and
+   validation flows should start from Substrate-owned commands:
+   `substrate host doctor`, `substrate world doctor`,
+   `substrate world gateway sync|status|restart`, and routed Lima-backed CLI
+   execution paths that preserve the canonical `/run/substrate.sock` guest
+   endpoint behind the adapter layer.
+2. **Compatibility-path rule:** host TCP `17788` is not a supported operator
+   target. It is only a retained compatibility probe when hidden behind
+   Substrate-owned commands that already prefer the host UDS path first.
+3. **Stale-constant rule:** the stale `127.0.0.1:7788` check in
+   `crates/world-mac-lima/src/lib.rs` is explicit transport drift, not a
+   second supported endpoint. Slice `02` records it as Slice `03` cleanup debt
+   rather than baking it into the supported contract.
+4. **Scope rule:** Packet `2` does not define the final host-adapter order,
+   remove compatibility probes, or rewrite the operator docs. It only freezes
+   how those remaining paths must be described until Slice `03` and Slice `12`
+   land.
+
 ## Tech stack
 
 - Rust workspace: `substrate` `0.2.8`
