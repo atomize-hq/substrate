@@ -54,7 +54,6 @@ impl MacLimaBackend {
         let vm_name = std::env::var("SUBSTRATE_LIMA_VM_NAME")
             .or_else(|_| std::env::var("LIMA_VM_NAME"))
             .unwrap_or_else(|_| "substrate".to_string());
-        let _ = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("home directory not found"))?;
         let agent_socket = managed_host_socket_path();
 
         // Auto-select best transport
@@ -742,6 +741,43 @@ mod tests {
         let backend = MacLimaBackend::new().expect("backend");
         assert_eq!(backend.vm_name, "substrate-arch-override");
 
+        match prev_substrate_lima_vm_name {
+            Some(value) => std::env::set_var("SUBSTRATE_LIMA_VM_NAME", value),
+            None => std::env::remove_var("SUBSTRATE_LIMA_VM_NAME"),
+        }
+        match prev_lima_vm_name {
+            Some(value) => std::env::set_var("LIMA_VM_NAME", value),
+            None => std::env::remove_var("LIMA_VM_NAME"),
+        }
+    }
+
+    #[test]
+    fn test_backend_creation_uses_substrate_home_without_home() {
+        let _env_guard = crate::test_util::lock_env();
+        let prev_home = std::env::var_os("HOME");
+        let prev_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+        let prev_substrate_lima_vm_name = std::env::var_os("SUBSTRATE_LIMA_VM_NAME");
+        let prev_lima_vm_name = std::env::var_os("LIMA_VM_NAME");
+
+        std::env::remove_var("HOME");
+        std::env::set_var("SUBSTRATE_HOME", "/tmp/substrate-home-only");
+        std::env::remove_var("SUBSTRATE_LIMA_VM_NAME");
+        std::env::remove_var("LIMA_VM_NAME");
+
+        let backend = MacLimaBackend::new().expect("backend should honor SUBSTRATE_HOME");
+        assert_eq!(
+            backend.agent_socket,
+            PathBuf::from("/tmp/substrate-home-only/sock/agent.sock")
+        );
+
+        match prev_home {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_substrate_home {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
         match prev_substrate_lima_vm_name {
             Some(value) => std::env::set_var("SUBSTRATE_LIMA_VM_NAME", value),
             None => std::env::remove_var("SUBSTRATE_LIMA_VM_NAME"),
