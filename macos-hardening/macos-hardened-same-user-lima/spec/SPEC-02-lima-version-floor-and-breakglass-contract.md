@@ -436,10 +436,15 @@ Slice `02` is successful when:
 6. a future short prompt can continue with Slice `03` without reopening Slice
    `02`.
 
-## Remaining open questions for later packets
+## Remaining open questions for later slices
 
-1. Is host TCP `17788` best classified as compatibility-only, breakglass-only,
-   or fully deprecated-but-retained pending Slice `03` cleanup?
-2. Which exact direct guest and host-bypass workflows Packet `2` should name
-   first in the explicit breakglass matrix without widening into repo-wide docs
-   cutover work.
+Packet `2` resolves the Slice `02` classification questions for the breakglass
+matrix and the retained `17788` compatibility path. The remaining follow-on
+questions are implementation and cutover questions owned by later slices:
+
+1. Which exact adapter order, endpoint cleanup sequence, and stale `7788`
+   removal steps Slice `03` should use when it replaces retained compatibility
+   behavior with the canonical transport contract.
+2. Which repo-wide operator docs, warm/doctor guidance, and breakglass
+   references Slice `12` should rewrite first once the Slice `03` transport
+   contract is settled.
