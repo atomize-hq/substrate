@@ -1,7 +1,7 @@
 # Milestone 0.2: Lima Version and Breakglass Contract SOW
 
 Status: Draft  
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / outcome
 
@@ -180,4 +180,7 @@ This milestone should produce four concrete decisions.
 
 - If the hardened mode requires a narrower Lima feature set than current contributors use, the support matrix may tighten before the replacement workflows are fully built.
 - Some manual `limactl` escape hatches may remain necessary longer than desired while Substrate-owned repair commands are still missing.
-- The exact version floor still needs a concrete selection during milestone execution; until then, this SOW names the decision and evidence required but not the final version number.
+- Packet `1` resolves the environment floor as Lima `v2.x` on macOS `13.0+`
+  with `vmType: "vz"` chosen at instance creation time; the remaining open work
+  is breakglass classification and compatibility-path framing rather than the
+  lifecycle floor itself.

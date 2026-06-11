@@ -226,8 +226,10 @@ Mitigation:
 
 1. require official Lima lifecycle and capability sources for every
    version-sensitive claim,
-2. surface unresolved macOS `13.0` versus `13.5` floor questions explicitly if
-   repo truth does not force one answer yet.
+2. freeze the macOS floor as `13.0+` when the official VZ and mount docs back
+   that requirement, and avoid silently tightening the support matrix beyond
+   those official minimums when the repo already pins `vmType: "vz"`
+   explicitly.
 
 ### Risk 3: The slice over-promotes breakglass flows into the normal operator story
 

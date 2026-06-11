@@ -34,19 +34,17 @@ absorbing the full canonical transport-unification slice.
 
 ASSUMPTIONS I'M MAKING:
 
-1. Slice `01` is now landed, and live repo truth still shows no `SPEC-02`,
-   `PLAN-02`, or `TASKS-02` files under
-   `macos-hardening/macos-hardened-same-user-lima/spec/`.
+1. Slice `01` is landed, and the current Slice `02` authority stack already
+   exists under `macos-hardening/macos-hardened-same-user-lima/spec/`.
 2. Per [`../EXECUTION-RUBRIC.md`](../EXECUTION-RUBRIC.md),
    [`../ROADMAP.md`](../ROADMAP.md), and [`TASKS-01.md`](./TASKS-01.md), the
    next honest seam is Slice `02`: Lima version floor and breakglass contract.
 3. This slice requires both `spec-driven-development` and
    `source-driven-development`, because the decision depends on current official
    Lima lifecycle, VZ, mount, forwarding, and `limactl shell` semantics.
-4. The slice should likely evaluate a Lima `v2.x` floor rather than vague
-   “recent Lima” wording, because the official Lima releases page shows `v1.x`
-   support ended on February 6, 2026. This is an inference from the source and
-   must be confirmed or rejected explicitly during slice execution.
+4. The slice must replace vague “recent Lima” wording with one explicit
+   lifecycle and capability floor, confirmed against the official Lima source
+   set during execution.
 5. The slice should freeze only the minimum transport assumptions needed to
    classify supported versus breakglass workflows. Slice `03` still owns the
    full canonical guest endpoint and transport contract.
@@ -142,6 +140,55 @@ must account for:
 
 This slice should cite the exact official URLs above when those semantics drive
 its final decisions.
+
+## Packet 1 resolved environment contract
+
+Task `1.2` freezes the supported environment contract as follows:
+
+1. **Supported Lima lifecycle floor: Lima `v2.x`.**
+   - The official Lima lifecycle page shows `v1.x` support ended on
+     February 6, 2026, while `v2.x` is the current supported major line.
+   - Slice `02` therefore stops using “recent Lima” wording and ties the
+     supported hardened default to the currently supported major line instead of
+     an older lifecycle branch.
+2. **Supported macOS / VM floor: macOS `13.0+` with `vmType: "vz"` chosen at
+   instance creation time.**
+   - The official VZ docs require Lima `>= 0.14` and macOS `>= 13.0`.
+   - The official VM-types docs state `vmType` can only be specified when the
+     instance is created and cannot be changed later.
+   - Slice `02` therefore freezes the official minimum VZ capability floor
+     instead of tightening the support matrix beyond what the official VZ and
+     mount docs require, and this repo already pins `vmType: "vz"` in
+     `scripts/mac/lima/substrate.yaml`.
+3. **Supported repo capability assumptions already in play: VZ-backed guest
+   operation plus VZ-compatible host mount semantics.**
+   - Repo truth already depends on `vmType: "vz"` and host mounts in
+     `scripts/mac/lima/substrate.yaml`.
+   - The official mount docs state `virtiofs` on macOS is supported only with
+     macOS `13+` and `vmType: vz`, and the official breaking-changes page says
+     Lima `v1.0` changed the default mount type for VZ from `reverse-sshfs` to
+     `virtiofs`.
+   - Slice `02` therefore freezes a VZ-era mount-capability baseline without
+     widening into Slice `08` mount-minimization work.
+4. **`vsock-proxy` status for Packet 1: optional acceleration, not part of the
+   environment floor.**
+   - This is an inference from live repo truth plus the official Lima docs.
+   - Live repo truth shows `crates/world-mac-lima/src/forwarding.rs` tries
+     `vsock-proxy` first, then falls back to SSH-backed UDS forwarding, and
+     intentionally skips SSH TCP fallback.
+   - The official `limactl shell` docs describe Lima instance access as
+     SSH-based by default, and the official port-forwarding docs describe SSH
+     and GRPC as supported forwarding modes while noting AF_VSOCK as a Lima
+     `>= 2.0` performance path for VZ guests.
+   - Packet `1` therefore does **not** require `vsock-proxy` to satisfy the
+     supported environment floor, even though later slices may still narrow the
+     transport contract further.
+5. **Still deferred after Packet 1.**
+   - Packet `1` does not freeze the breakglass workflow matrix.
+   - Packet `1` does not freeze the final `17788` compatibility-path wording or
+     stale `7788` cleanup strategy.
+   - Packet `1` does not absorb Slice `03` transport unification or Slice `12`
+     docs-cutover work.
 
 ## Tech stack
 
@@ -251,8 +298,10 @@ Example of acceptable slice output style:
 ```md
 ## Supported environment contract
 
-- Supported floor: Lima v2.x on macOS 13.5+ using `vmType: "vz"` for the
-  same-user hardened default.
+- Supported floor: Lima v2.x on macOS 13.0+ with `vmType: "vz"` chosen at
+  instance creation for the same-user hardened default.
+- Optional acceleration: `vsock-proxy` may improve the host-to-guest path, but
+  it is not part of the environment floor.
 - Breakglass-only: direct `limactl shell` or host-side
   `SUBSTRATE_WORLD_SOCKET` override use for routine operation.
 - Deferred: canonical adapter unification and stale TCP cleanup remain Slice 03 work.
@@ -323,14 +372,10 @@ Slice `02` is successful when:
 6. a future short prompt can continue with Slice `03` without reopening Slice
    `02`.
 
-## Open questions
+## Remaining open questions for later packets
 
-1. Should the supported floor require Lima `v2.x` now that the official
-   releases page shows `v1.x` support ended on February 6, 2026?
-2. Does the supported macOS floor need to be `13.0` because VZ requires it, or
-   `13.5` because the VM-types docs call out VZ-by-default on macOS `>= 13.5`
-   for new instances?
-3. Should `vsock-proxy` be treated as optional acceleration or as a supported
-   prerequisite for the hardened default?
-4. Is host TCP `17788` best classified as compatibility-only, breakglass-only,
+1. Is host TCP `17788` best classified as compatibility-only, breakglass-only,
    or fully deprecated-but-retained pending Slice `03` cleanup?
+2. Which exact direct guest and host-bypass workflows Packet `2` should name
+   first in the explicit breakglass matrix without widening into repo-wide docs
+   cutover work.
