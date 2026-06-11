@@ -1258,7 +1258,12 @@ fn apply_delegation_caps(
 fn finalize_progress(mut progress: SessionProgress) -> SessionProgress {
     progress.signals.sort_by(signal_sort_key);
     progress.supporting_evidence = dedupe_and_limit_evidence(progress.supporting_evidence);
-    progress.counter_evidence = dedupe_and_limit_evidence(progress.counter_evidence);
+    let required_delegation_counter_evidence =
+        required_delegation_limiting_counter_evidence(&progress);
+    progress.counter_evidence = dedupe_and_limit_counter_evidence(
+        progress.counter_evidence,
+        required_delegation_counter_evidence,
+    );
     if progress.status != ProgressStatus::InsufficientEvidence
         && progress.supporting_evidence.is_empty()
     {
@@ -2480,6 +2485,121 @@ mod tests {
         assert_has_signal(&progress, ProgressSignalCode::FailingScopeEdited);
     }
 
+    #[test]
+    fn delegation_limiting_counter_evidence_survives_finalization_pressure_for_partial_visibility() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Coordinate delegated findings without claiming child execution progress.",
+            ),
+            tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
+            tool_call_row(
+                2,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"printf 'child rollout ' && sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                4,
+                "turn-001",
+                r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+failures:
+    checkpoints::captures_progress
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out
+AssertionError: expected advancing"#,
+            ),
+        ]);
+        assert_eq!(
+            analysis.delegation.topology,
+            Some(DelegationTopology::DelegatingParent)
+        );
+        assert_eq!(
+            effective_child_work_visibility(&analysis),
+            ChildWorkVisibility::Partial
+        );
+
+        let progress = finalize_progress(apply_delegation_caps(
+            &analysis,
+            pressure_test_progress(),
+        ));
+
+        assert_eq!(progress.confidence, Confidence::Medium);
+        assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
+        assert_eq!(progress.counter_evidence.len(), MAX_PROGRESS_EVIDENCE_ITEMS);
+        assert!(
+            progress.counter_evidence.iter().any(|evidence| {
+                evidence
+                    .reason
+                    .contains("delegation visibility limited progress confidence")
+            }),
+            "expected delegated limiting evidence to survive finalization pressure, got {:?}",
+            progress
+                .counter_evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn delegation_limiting_counter_evidence_survives_finalization_pressure_for_opaque_visibility() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Coordinate delegated work without overclaiming child progress.",
+            ),
+            tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
+            tool_call_row(
+                2,
+                "turn-001",
+                "wait_agent",
+                "{\"session_id\":\"019ea333-3333-7333-8333-333333333333\"}",
+            ),
+        ]);
+        assert_eq!(
+            analysis.delegation.topology,
+            Some(DelegationTopology::DelegatingParent)
+        );
+        assert_eq!(
+            effective_child_work_visibility(&analysis),
+            ChildWorkVisibility::Opaque
+        );
+
+        let progress = finalize_progress(apply_delegation_caps(
+            &analysis,
+            pressure_test_progress(),
+        ));
+
+        assert_eq!(progress.confidence, Confidence::Low);
+        assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
+        assert_eq!(progress.counter_evidence.len(), MAX_PROGRESS_EVIDENCE_ITEMS);
+        assert!(
+            progress.counter_evidence.iter().any(|evidence| {
+                evidence
+                    .reason
+                    .contains("delegation visibility limited progress confidence")
+            }),
+            "expected delegated limiting evidence to survive finalization pressure, got {:?}",
+            progress
+                .counter_evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
     fn last_analysis(rows: Vec<CompactionRow>) -> CheckpointAnalysis {
         let session = BundleSession {
             session_id: "session-r5-4".to_string(),
@@ -2573,6 +2693,33 @@ mod tests {
                 .collect::<Vec<_>>()
         );
     }
+
+    fn pressure_test_progress() -> SessionProgress {
+        SessionProgress {
+            status: ProgressStatus::Mixed,
+            dimension: ProgressDimension::ParentVisibleOrchestration,
+            confidence: Confidence::High,
+            signals: Vec::new(),
+            supporting_evidence: vec![EvidenceRef {
+                row: RowRef {
+                    source_file: Utf8PathBuf::from("/tmp/supporting/rollout.jsonl"),
+                    event_index: 0,
+                    row_ordinal: 0,
+                },
+                reason: "supporting evidence kept progress non-empty".to_string(),
+            }],
+            counter_evidence: (0..=MAX_PROGRESS_EVIDENCE_ITEMS)
+                .map(|index| EvidenceRef {
+                    row: RowRef {
+                        source_file: Utf8PathBuf::from("/aaa/competing-counter-evidence.jsonl"),
+                        event_index: index,
+                        row_ordinal: 0,
+                    },
+                    reason: format!("competing counter evidence {index:02}"),
+                })
+                .collect(),
+        }
+    }
 }
 
 fn negative_signal_evidence(signals: &[ProgressSignal]) -> Vec<EvidenceRef> {
@@ -2593,36 +2740,93 @@ fn merge_evidence(groups: Vec<Vec<EvidenceRef>>) -> Vec<EvidenceRef> {
 }
 
 fn dedupe_and_limit_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
+    let mut deduped = dedupe_evidence(items);
+    deduped.truncate(MAX_PROGRESS_EVIDENCE_ITEMS);
+    deduped
+}
+
+fn dedupe_and_limit_counter_evidence(
+    items: Vec<EvidenceRef>,
+    required: Option<EvidenceRef>,
+) -> Vec<EvidenceRef> {
+    let mut deduped = dedupe_evidence(items);
+    if deduped.len() <= MAX_PROGRESS_EVIDENCE_ITEMS {
+        return deduped;
+    }
+    let Some(required) = required else {
+        deduped.truncate(MAX_PROGRESS_EVIDENCE_ITEMS);
+        return deduped;
+    };
+
+    let mut limited = deduped
+        .iter()
+        .take(MAX_PROGRESS_EVIDENCE_ITEMS)
+        .cloned()
+        .collect::<Vec<_>>();
+    if limited.iter().any(|evidence| *evidence == required) {
+        return limited;
+    }
+
+    limited.pop();
+    limited.push(required);
+    limited.sort_by(evidence_sort_key);
+    limited
+}
+
+fn required_delegation_limiting_counter_evidence(
+    progress: &SessionProgress,
+) -> Option<EvidenceRef> {
+    let limiting_keys = progress
+        .signals
+        .iter()
+        .filter(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited)
+        .flat_map(|signal| signal.evidence.iter())
+        .map(evidence_key)
+        .collect::<BTreeSet<_>>();
+    if limiting_keys.is_empty() {
+        return None;
+    }
+
+    dedupe_evidence(progress.counter_evidence.clone())
+        .into_iter()
+        .find(|evidence| limiting_keys.contains(&evidence_key(evidence)))
+}
+
+fn dedupe_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
     let mut deduped = items
         .into_iter()
         .fold(BTreeMap::new(), |mut acc, evidence| {
-            acc.entry((
-                evidence.row.source_file.clone(),
-                evidence.row.event_index,
-                evidence.row.row_ordinal,
-                evidence.reason.clone(),
-            ))
-            .or_insert(evidence);
+            acc.entry(evidence_key(&evidence)).or_insert(evidence);
             acc
         })
         .into_values()
         .collect::<Vec<_>>();
-    deduped.sort_by(|left, right| {
-        (
-            left.row.source_file.as_str(),
-            left.row.event_index,
-            left.row.row_ordinal,
-            left.reason.as_str(),
-        )
-            .cmp(&(
-                right.row.source_file.as_str(),
-                right.row.event_index,
-                right.row.row_ordinal,
-                right.reason.as_str(),
-            ))
-    });
-    deduped.truncate(MAX_PROGRESS_EVIDENCE_ITEMS);
+    deduped.sort_by(evidence_sort_key);
     deduped
+}
+
+fn evidence_key(evidence: &EvidenceRef) -> (camino::Utf8PathBuf, usize, usize, String) {
+    (
+        evidence.row.source_file.clone(),
+        evidence.row.event_index,
+        evidence.row.row_ordinal,
+        evidence.reason.clone(),
+    )
+}
+
+fn evidence_sort_key(left: &EvidenceRef, right: &EvidenceRef) -> Ordering {
+    (
+        left.row.source_file.as_str(),
+        left.row.event_index,
+        left.row.row_ordinal,
+        left.reason.as_str(),
+    )
+        .cmp(&(
+            right.row.source_file.as_str(),
+            right.row.event_index,
+            right.row.row_ordinal,
+            right.reason.as_str(),
+        ))
 }
 
 fn set_preview(set: &BTreeSet<String>) -> String {
