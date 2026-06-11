@@ -1,6 +1,6 @@
 # Fixture Manifest: Agent Drift Analyzer Session Progress R5
 
-Status: Packet R5-7 landed on 2026-06-10; the dedicated progress-acceptance corpus now lives under `crates/agent-drift-analyzer/tests/progress_acceptance.rs` plus `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**`.
+Status: Packet R5-7 landed on 2026-06-10, and Packet R5.5-4 deepened the dedicated progress-acceptance corpus on 2026-06-11 under `crates/agent-drift-analyzer/tests/progress_acceptance.rs` plus `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**`.
 
 ## Purpose
 
@@ -47,6 +47,11 @@ Each fixture expectation must include:
 7. comparable attempts,
 8. window/reset expectation,
 9. why nearby statuses lose.
+
+Committed `annotated_real_rollout` cases must additionally record `source_rollout_id`,
+`screening.delegated`, `screening.child_visibility`, `forbidden_signal_codes`,
+`decisive_evidence`, `counter_evidence`, and `why_not_other_dimensions` in their structured
+fixture annotation.
 
 Each required row below therefore makes the comparability contract explicit. Schema/compatibility
 rows still record `Comparable attempts` and `Window/reset expectation`, but those fields describe
@@ -191,7 +196,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: state moved backward from clean to failed
   - not `advancing`: a previous best frontier was lost
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_troubleshooting_regression_when_frontier_falls_back, checkpoints_mark_implementation_regression_when_previously_clean_scope_breaks); R5-7 dedicated corpus: no additional bundle-shaped re-proof landed for this previously-clean regression row.`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_mark_troubleshooting_regression_when_frontier_falls_back, checkpoints_mark_implementation_regression_when_previously_clean_scope_breaks); R5.5-4 real-rollout reopen/re-verify proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/real-reopen-regressing-019e894a-ord7/**`
 ## Fixture: r5_planning_candidate_set_narrows_to_spec
 
 - Archetype: `planning`
@@ -274,7 +279,7 @@ dimension:
 - Why competing statuses lose:
   - not `stalled`: verifier moved forward
   - not `verification_closeout_narrowing`: implementation edits still dominate the checkpoint
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 bundle-shaped proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-implementation-advancing/**`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs; R5-7 bundle-shaped proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-implementation-advancing/**; R5.5-4 real-rollout proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/real-implementation-advancing-019e894a-ord6/**`
 ## Fixture: r5_implementation_same_failure_unrelated_edits
 
 - Archetype: `autonomous_implementation`
@@ -415,7 +420,7 @@ dimension:
     comparable evidence exists, the fixture should move to a concrete archetype-specific row
 - Why competing statuses lose:
   - none of `advancing`, `stalled`, or `regressing` has enough comparable evidence
-- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_bias_sparse_neutral_prefixes_to_low_confidence_planning, checkpoints_mark_troubleshooting_target_not_exercised_as_insufficient, checkpoints_mark_closeout_prose_without_proof_as_insufficient_evidence); R5-7 dedicated corpus: no additional bundle-shaped re-proof landed for this intentionally sparse row.`
+- Implementation fixture location: `Synthetic: crates/agent-drift-analyzer/tests/checkpoints.rs (checkpoints_bias_sparse_neutral_prefixes_to_low_confidence_planning, checkpoints_mark_troubleshooting_target_not_exercised_as_insufficient, checkpoints_mark_closeout_prose_without_proof_as_insufficient_evidence); R5.5-4 real closeout/review proof: crates/agent-drift-analyzer/tests/progress_acceptance.rs + crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/real-closeout-conservative-019e767c-ord3/**`
 ## Fixture: r5_delegated_parent_opaque
 
 - Archetype: any R4 label, usually `planning` or `troubleshooting`
@@ -497,16 +502,19 @@ supporting coverage to show the labels remain honest on realistic traces.
 Packet `R5-0` locks that this bounded semantic corpus belongs to `R5-7`; earlier packets can prove
 deterministic behavior and compatibility, but must not overclaim semantic acceptance.
 
-Landed Packet R5-7 corpus:
+Landed Packet R5-7 corpus, plus Packet R5.5-4 real-rollout additions:
 
 1. annotated real-rollout troubleshooting advancement: `019e899c-453f-71f2-a99d-155848c7b081`,
 2. annotated real-rollout planning meander/stall: `019e940c-a91b-7fe0-a967-b0bdd595b581`,
 3. annotated real-rollout verification closeout narrowing: `019e8b42-42bd-7b10-baae-3265edb65f4b`,
-4. bundle-shaped planning narrowing proof: `synthetic-planning-advancing`,
-5. bundle-shaped implementation verification-wall proof: `synthetic-implementation-advancing`,
-6. bundle-shaped delegated parent-opaque guardrail proof: `synthetic-parent-visible-opaque`.
+4. annotated real-rollout implementation verification-wall advancement: `real-implementation-advancing-019e894a-ord6`,
+5. annotated real-rollout conservative closeout/review checkpoint: `real-closeout-conservative-019e767c-ord3`,
+6. annotated real-rollout reopen/re-verify regression: `real-reopen-regressing-019e894a-ord7`,
+7. bundle-shaped planning narrowing proof: `synthetic-planning-advancing`,
+8. bundle-shaped implementation verification-wall proof: `synthetic-implementation-advancing`,
+9. bundle-shaped delegated parent-opaque guardrail proof: `synthetic-parent-visible-opaque`.
 
-This corpus satisfies the R5-7 requirement that bounded semantic acceptance include at least one annotated real-rollout case before the family claims semantic acceptance.
+This corpus satisfies the R5-7 requirement that bounded semantic acceptance include at least one annotated real-rollout case before the family claims semantic acceptance, and R5.5-4 expands that real subset to cover implementation advancement, conservative closeout/review, and honest reopen/re-verify behavior.
 
 ## Deferred Fixture Ideas
 

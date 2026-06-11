@@ -9,6 +9,9 @@ Included cases:
 - `019e899c-453f-71f2-a99d-155848c7b081` — annotated real-rollout troubleshooting advancement.
 - `019e940c-a91b-7fe0-a967-b0bdd595b581` — annotated real-rollout planning meander/stall.
 - `019e8b42-42bd-7b10-baae-3265edb65f4b` — annotated real-rollout verification closeout narrowing.
+- `real-implementation-advancing-019e894a-ord6` — annotated real-rollout implementation verification-wall advancement.
+- `real-closeout-conservative-019e767c-ord3` — annotated real-rollout closeout/review checkpoint that stays `insufficient_evidence` instead of overclaiming narrowing.
+- `real-reopen-regressing-019e894a-ord7` — annotated real-rollout reopen/re-verify checkpoint that regresses honestly after a previously clean verifier breaks again.
 - `synthetic-planning-advancing` — committed bundle-shaped planning narrowing proof.
 - `synthetic-implementation-advancing` — committed bundle-shaped implementation verification-wall proof.
 - `synthetic-parent-visible-opaque` — committed delegated guardrail proof that limits progress claims to `parent_visible_orchestration`.
@@ -22,6 +25,7 @@ Excluded cases:
 Maintenance rules:
 
 - Every case directory must contain exactly `manifest.json`, `rows.archival.jsonl`, `rows.compact.jsonl`, `dedupe-audit.jsonl`, and `expected.json`.
+- Every `annotated_real_rollout` case must record `source_rollout_id`, screening metadata, required and forbidden signals, decisive-evidence notes, counter-evidence notes, and `why_not_other_dimensions` in `expected.json`.
 - Tests must fail closed if a committed case is missing; they must not read from `target/` or `~/.codex` at test time.
 - The legacy R2 acceptance wall remains frozen and is verified separately by `acceptance_fixtures.rs`.
 - Delegated cases are guardrail-only in R5: they may prove `parent_visible_orchestration` with limited confidence, but they must not claim positive opaque-child progress before R7.

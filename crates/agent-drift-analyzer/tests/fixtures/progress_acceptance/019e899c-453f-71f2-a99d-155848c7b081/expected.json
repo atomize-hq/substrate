@@ -15,6 +15,23 @@
       "verification_scope_broadened"
     ],
     "supporting_evidence_min": 1,
-    "counter_evidence_min": 0
+    "counter_evidence_min": 0,
+    "forbidden_signal_codes": [],
+    "decisive_evidence": [
+      "A later clean verifier broadened proof on the same troubleshooting target.",
+      "The checkpoint retained same-scope verifier comparability instead of inferring unrelated progress."
+    ],
+    "counter_evidence": [
+      "None expected; this checkpoint did not carry contradictory closeout or delegation evidence."
+    ],
+    "why_not_other_dimensions": [
+      "Not implementation_verification_wall because the checkpoint is diagnosing and re-checking a failing scope rather than pushing a source-edit-first implementation loop.",
+      "Not verification_closeout_narrowing because the evidence is frontier repair, not residual-scope retirement after source churn stopped."
+    ]
+  },
+  "source_rollout_id": "019e899c-453f-71f2-a99d-155848c7b081",
+  "screening": {
+    "delegated": false,
+    "child_visibility": "not_applicable"
   }
 }

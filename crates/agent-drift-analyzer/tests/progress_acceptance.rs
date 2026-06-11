@@ -9,10 +9,13 @@ use agent_drift_analyzer::{
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 
-const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 6] = [
+const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 9] = [
     "019e899c-453f-71f2-a99d-155848c7b081",
     "019e8b42-42bd-7b10-baae-3265edb65f4b",
     "019e940c-a91b-7fe0-a967-b0bdd595b581",
+    "real-closeout-conservative-019e767c-ord3",
+    "real-implementation-advancing-019e894a-ord6",
+    "real-reopen-regressing-019e894a-ord7",
     "synthetic-implementation-advancing",
     "synthetic-parent-visible-opaque",
     "synthetic-planning-advancing",
@@ -46,6 +49,20 @@ enum FixtureKind {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum ChildVisibility {
+    NotApplicable,
+    Opaque,
+    Visible,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+struct FixtureScreening {
+    delegated: bool,
+    child_visibility: ChildVisibility,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 struct SelectedCheckpointExpected {
     ordinal: usize,
     archetype: SessionArchetypeLabel,
@@ -55,16 +72,28 @@ struct SelectedCheckpointExpected {
     confidence_max: Confidence,
     #[serde(default)]
     required_signal_codes: Vec<ProgressSignalCode>,
+    #[serde(default)]
+    forbidden_signal_codes: Vec<ProgressSignalCode>,
     supporting_evidence_min: usize,
     counter_evidence_min: usize,
+    #[serde(default)]
+    decisive_evidence: Vec<String>,
+    #[serde(default)]
+    counter_evidence: Vec<String>,
+    #[serde(default)]
+    why_not_other_dimensions: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 struct ProgressAcceptanceExpected {
     case_id: String,
     fixture_kind: FixtureKind,
+    #[serde(default)]
+    source_rollout_id: Option<String>,
     source_artifact: String,
     notes: String,
+    #[serde(default)]
+    screening: Option<FixtureScreening>,
     selected_checkpoint: SelectedCheckpointExpected,
 }
 
@@ -142,18 +171,45 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
         );
         if case.expected.fixture_kind == FixtureKind::AnnotatedRealRollout {
             annotated_real_rollout_count += 1;
+            assert!(
+                case.expected.source_rollout_id.is_some(),
+                "annotated real-rollout case {case_id} must record source_rollout_id"
+            );
+            let screening = case.expected.screening.as_ref().unwrap_or_else(|| {
+                panic!("annotated real-rollout case {case_id} must record screening metadata")
+            });
+            assert!(
+                !screening.delegated || screening.child_visibility != ChildVisibility::NotApplicable,
+                "delegated real-rollout case {case_id} must not use not_applicable child_visibility"
+            );
+            assert!(
+                !case
+                    .expected
+                    .selected_checkpoint
+                    .decisive_evidence
+                    .is_empty(),
+                "annotated real-rollout case {case_id} must record decisive_evidence"
+            );
+            assert!(
+                !case
+                    .expected
+                    .selected_checkpoint
+                    .why_not_other_dimensions
+                    .is_empty(),
+                "annotated real-rollout case {case_id} must explain why alternative dimensions were not chosen"
+            );
         } else {
             synthetic_bundle_shaped_count += 1;
         }
     }
 
     assert_eq!(
-        annotated_real_rollout_count, 3,
-        "Packet R5-7 must keep the locked corpus shape of exactly 3 annotated real-rollout cases"
+        annotated_real_rollout_count, 6,
+        "Packet R5.5-4 must keep the committed corpus shape of exactly 6 annotated real-rollout cases"
     );
     assert_eq!(
         synthetic_bundle_shaped_count, 3,
-        "Packet R5-7 must keep the locked corpus shape of exactly 3 synthetic bundle-shaped support cases"
+        "Packet R5.5-4 must keep the committed corpus shape of exactly 3 synthetic bundle-shaped support cases"
     );
 
     for (excluded_case_id, reason) in PROGRESS_ACCEPTANCE_EXCLUDED_CASES {
@@ -174,12 +230,32 @@ fn progress_acceptance_cases_match_expected_progress_contract() {
 
 fn assert_progress_case(case_id: &str) {
     let case = ProgressAcceptanceFixture::load(case_id);
+    let expected_session_id = case
+        .expected
+        .source_rollout_id
+        .as_deref()
+        .unwrap_or(case.expected.case_id.as_str());
     let result = case.analyze();
     let session = result
         .sessions
         .iter()
-        .find(|session| session.session_id == case.expected.case_id)
-        .unwrap_or_else(|| panic!("expected session {} in {case_id}", case.expected.case_id));
+        .find(|session| session.session_id == expected_session_id)
+        .unwrap_or_else(|| panic!("expected session {expected_session_id} in {case_id}"));
+    let manifest: serde_json::Value = read_json(case.input_dir.join("manifest.json").as_ref());
+    if let Some(expected_source_rollout_id) = case.expected.source_rollout_id.as_deref() {
+        let manifest_session_ids = manifest["session_ids"]
+            .as_array()
+            .unwrap_or_else(|| panic!("manifest session_ids must be an array for {case_id}"))
+            .iter()
+            .filter_map(|value| value.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            manifest_session_ids.contains(&expected_source_rollout_id),
+            "manifest session_ids {:?} must include source_rollout_id {} for {case_id}",
+            manifest_session_ids,
+            expected_source_rollout_id
+        );
+    }
     let checkpoint = session
         .checkpoints
         .iter()
@@ -235,6 +311,22 @@ fn assert_progress_case(case_id: &str) {
                 .any(|signal| &signal.code == required_signal),
             "expected progress signal {:?} for {case_id} checkpoint {}; got {:?}",
             required_signal,
+            checkpoint.ordinal,
+            progress
+                .signals
+                .iter()
+                .map(|signal| signal.code)
+                .collect::<Vec<_>>()
+        );
+    }
+    for forbidden_signal in &case.expected.selected_checkpoint.forbidden_signal_codes {
+        assert!(
+            !progress
+                .signals
+                .iter()
+                .any(|signal| &signal.code == forbidden_signal),
+            "unexpected forbidden progress signal {:?} for {case_id} checkpoint {}; got {:?}",
+            forbidden_signal,
             checkpoint.ordinal,
             progress
                 .signals

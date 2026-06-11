@@ -1,0 +1,39 @@
+{
+  "case_id": "real-reopen-regressing-019e894a-ord7",
+  "fixture_kind": "annotated_real_rollout",
+  "source_rollout_id": "019e894a-86c9-71e3-b57b-e3d3285f0988",
+  "source_artifact": "crates/agent-drift-analyzer/tests/fixtures/acceptance/019e894a-86c9-71e3-b57b-e3d3285f0988",
+  "notes": "Real memsrc session reused as the R5.5 reopen/re-verify guardrail: a previously clean scope broke again, so the analyzer must leave closeout and report honest regression.",
+  "screening": {
+    "delegated": false,
+    "child_visibility": "not_applicable"
+  },
+  "selected_checkpoint": {
+    "ordinal": 7,
+    "archetype": "troubleshooting",
+    "dimension": "troubleshooting_frontier",
+    "status": "regressing",
+    "confidence_min": "high",
+    "confidence_max": "high",
+    "required_signal_codes": [
+      "previously_clean_scope_broken"
+    ],
+    "forbidden_signal_codes": [
+      "verification_clean",
+      "residual_scope_shrank"
+    ],
+    "supporting_evidence_min": 2,
+    "counter_evidence_min": 0,
+    "decisive_evidence": [
+      "An earlier later-stage verification attempt established a previously clean frontier.",
+      "A later regressing verification attempt on the same work product broke that clean state and reopened work."
+    ],
+    "counter_evidence": [
+      "None expected; once the previously clean scope broke again, the checkpoint should not retain a positive closeout interpretation."
+    ],
+    "why_not_other_dimensions": [
+      "Not verification_closeout_narrowing because the clean closeout state has been reopened by a failing re-verification attempt.",
+      "Not implementation_verification_wall because this checkpoint is dominated by frontier fallback on a previously clean verifier, not fresh implementation progress."
+    ]
+  }
+}

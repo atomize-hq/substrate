@@ -1,0 +1,38 @@
+{
+  "case_id": "real-closeout-conservative-019e767c-ord3",
+  "fixture_kind": "annotated_real_rollout",
+  "source_rollout_id": "019e767c-e64b-7b93-a540-7a33a90f780f",
+  "source_artifact": "target/hybrid-drift-review/019e767c-e64b-7b93-a540-7a33a90f780f/compactor",
+  "notes": "Real review-stage session committed as the R5.5 conservative verification_closeout proof that refuses to overclaim without comparable proof or residual-narrowing evidence.",
+  "screening": {
+    "delegated": false,
+    "child_visibility": "not_applicable"
+  },
+  "selected_checkpoint": {
+    "ordinal": 3,
+    "archetype": "verification_closeout",
+    "dimension": "verification_closeout_narrowing",
+    "status": "insufficient_evidence",
+    "confidence_min": "low",
+    "confidence_max": "low",
+    "required_signal_codes": [],
+    "forbidden_signal_codes": [
+      "verification_clean",
+      "verification_scope_narrowed",
+      "residual_scope_shrank"
+    ],
+    "supporting_evidence_min": 0,
+    "counter_evidence_min": 0,
+    "decisive_evidence": [
+      "The checkpoint is already in a verification_closeout archetype, so closeout framing is visible.",
+      "No comparable proof or residual-scope narrowing signal appears, forcing a conservative insufficient-evidence result."
+    ],
+    "counter_evidence": [
+      "The absence of clean proof, narrowing, or reopened-source signals blocks both positive closeout and reopen overclaims."
+    ],
+    "why_not_other_dimensions": [
+      "Not implementation_verification_wall because the checkpoint is framed as closeout/review rather than an edit-first implementation loop.",
+      "Not troubleshooting_frontier because there is no comparable failing verifier frontier being worked down; the honest result is closeout-shaped but sparse."
+    ]
+  }
+}

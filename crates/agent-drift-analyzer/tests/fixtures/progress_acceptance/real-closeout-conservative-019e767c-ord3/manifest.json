@@ -1,0 +1,23 @@
+{
+  "schema_version": "v0.2",
+  "generated_at": "2026-06-01T18:25:51.397081Z",
+  "codex_home": "/Users/spensermcconnell/.codex",
+  "output_dir": "target/hybrid-drift-review/019e767c-e64b-7b93-a540-7a33a90f780f/compactor",
+  "discovered_file_count": 1,
+  "archival_row_count": 266,
+  "compact_row_count": 209,
+  "dedupe_group_count": 15,
+  "session_ids": [
+    "019e767c-e64b-7b93-a540-7a33a90f780f"
+  ],
+  "files": [
+    {
+      "id": 0,
+      "path": "/Users/spensermcconnell/.codex/sessions/2026/05/29/rollout-2026-05-29T21-25-57-019e767c-e64b-7b93-a540-7a33a90f780f.jsonl",
+      "session_id": "019e767c-e64b-7b93-a540-7a33a90f780f",
+      "turns": [
+        "019e767c-e690-7900-868e-48c7bfa64522"
+      ]
+    }
+  ]
+}

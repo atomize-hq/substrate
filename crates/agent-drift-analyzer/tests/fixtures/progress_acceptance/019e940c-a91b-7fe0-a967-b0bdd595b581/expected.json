@@ -14,6 +14,23 @@
       "candidate_set_expanded"
     ],
     "supporting_evidence_min": 1,
-    "counter_evidence_min": 1
+    "counter_evidence_min": 1,
+    "forbidden_signal_codes": [],
+    "decisive_evidence": [
+      "The candidate set kept expanding without converging on a stable proof artifact.",
+      "Repeated broadening behavior outweighed any claim of progress."
+    ],
+    "counter_evidence": [
+      "The checkpoint still contained enough planning activity to avoid a fully empty sparse-evidence label."
+    ],
+    "why_not_other_dimensions": [
+      "Not implementation_verification_wall because there is no comparable implementation verifier progression.",
+      "Not verification_closeout_narrowing because no residual proof or scope retirement evidence appears."
+    ]
+  },
+  "source_rollout_id": "019e940c-a91b-7fe0-a967-b0bdd595b581",
+  "screening": {
+    "delegated": false,
+    "child_visibility": "not_applicable"
   }
 }

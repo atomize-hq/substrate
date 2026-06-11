@@ -127,6 +127,19 @@ crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/<case-id>/expecte
 This matches the current analyzer fixture helpers and bundle shape more closely than an invented
 single-file `bundle.json`.
 
+After Packet `R5.5-4`, every new committed `annotated_real_rollout` case must also carry:
+
+```text
+source_rollout_id
+screening.delegated
+screening.child_visibility
+selected_checkpoint.required_signal_codes
+selected_checkpoint.forbidden_signal_codes
+selected_checkpoint.decisive_evidence
+selected_checkpoint.counter_evidence
+selected_checkpoint.why_not_other_dimensions
+```
+
 The existing `crates/agent-drift-analyzer/tests/fixtures/acceptance` corpus is a frozen R2 wall
 with a fixed harness contract. R5 should prefer a dedicated progress corpus/harness instead of
 quietly mutating that older acceptance surface unless the packet explicitly chooses to widen it.
@@ -141,6 +154,13 @@ Recommended first corpus:
 
 Each annotated checkpoint should include only two or three decision points per session. Do not
 attempt to label every checkpoint in a long run at first.
+
+Packet `R5.5-4` extends that bounded corpus with three more annotated real-rollout cases:
+
+1. one real implementation-verification-wall advancement case,
+2. one real closeout/review case that stays conservatively sparse when narrowing proof is absent,
+3. one real reopen/re-verify case that leaves closeout and regresses honestly after a previously
+   clean verifier breaks again.
 
 ## DoVer-Inspired Offline Checks
 
@@ -236,3 +256,5 @@ This validation protocol does not require:
 2. `progress_debug.jsonl` is recommended only; it is not required for review-clean status.
 3. The first dedicated progress corpus includes a delegated parent opaque guardrail case, but does
    not attempt positive child-progress semantics before R7.
+4. Packet `R5.5-4` may deepen the committed real corpus and annotation rubric, but it does not
+   widen replay/live contracts or pull semantic acceptance earlier than `R5-7`.

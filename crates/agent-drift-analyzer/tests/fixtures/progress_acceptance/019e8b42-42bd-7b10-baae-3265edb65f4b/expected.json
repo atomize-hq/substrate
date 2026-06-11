@@ -16,6 +16,23 @@
       "residual_scope_shrank"
     ],
     "supporting_evidence_min": 1,
-    "counter_evidence_min": 0
+    "counter_evidence_min": 0,
+    "forbidden_signal_codes": [],
+    "decisive_evidence": [
+      "The checkpoint contains clean proof plus explicit verification-scope narrowing.",
+      "Residual scope shrank without reopening source edits."
+    ],
+    "counter_evidence": [
+      "None expected; the checkpoint contains no reopened implementation or contradictory proof churn."
+    ],
+    "why_not_other_dimensions": [
+      "Not implementation_verification_wall because proof and residual retirement dominate while source churn is absent.",
+      "Not troubleshooting_frontier because the checkpoint is closing verified scope instead of recovering from an active failure frontier."
+    ]
+  },
+  "source_rollout_id": "019e8b42-42bd-7b10-baae-3265edb65f4b",
+  "screening": {
+    "delegated": false,
+    "child_visibility": "not_applicable"
   }
 }

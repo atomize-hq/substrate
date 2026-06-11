@@ -1,0 +1,40 @@
+{
+  "case_id": "real-implementation-advancing-019e894a-ord6",
+  "fixture_kind": "annotated_real_rollout",
+  "source_rollout_id": "019e894a-86c9-71e3-b57b-e3d3285f0988",
+  "source_artifact": "crates/agent-drift-analyzer/tests/fixtures/acceptance/019e894a-86c9-71e3-b57b-e3d3285f0988",
+  "notes": "Real memsrc implementation session reused as a committed implementation_verification_wall proof point for Packet R5.5-4.",
+  "screening": {
+    "delegated": false,
+    "child_visibility": "not_applicable"
+  },
+  "selected_checkpoint": {
+    "ordinal": 6,
+    "archetype": "autonomous_implementation",
+    "dimension": "implementation_verification_wall",
+    "status": "advancing",
+    "confidence_min": "medium",
+    "confidence_max": "medium",
+    "required_signal_codes": [
+      "verification_clean",
+      "working_set_diffused"
+    ],
+    "forbidden_signal_codes": [
+      "previously_clean_scope_broken",
+      "residual_scope_shrank"
+    ],
+    "supporting_evidence_min": 2,
+    "counter_evidence_min": 0,
+    "decisive_evidence": [
+      "A comparable earlier failing implementation verifier was followed by a later clean implementation verifier on the same work product.",
+      "An overlapping edit landed before verification moved, so the improvement is grounded in active implementation work."
+    ],
+    "counter_evidence": [
+      "None expected; the checkpoint carried no contradictory closeout or reopened-scope evidence."
+    ],
+    "why_not_other_dimensions": [
+      "Not verification_closeout_narrowing because implementation edits still dominate this checkpoint and the proof is still attached to active source work.",
+      "Not troubleshooting_frontier because the decisive movement is implementation verification progress, not failure-frontier recovery after a broken clean state."
+    ]
+  }
+}
