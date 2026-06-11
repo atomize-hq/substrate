@@ -37,3 +37,8 @@ Future `SPEC-*` docs should:
 2. reuse frozen terminology from those docs,
 3. widen a design only through an explicit design update rather than ad hoc
    slice-local wording.
+
+Before drafting the next `SPEC-*`, also review
+[`../../EXECUTION-RUBRIC.md`](../../EXECUTION-RUBRIC.md) to determine whether
+the slice needs `source-driven-development` and which official external sources
+must be consulted.

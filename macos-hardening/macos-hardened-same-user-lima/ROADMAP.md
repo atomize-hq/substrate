@@ -46,10 +46,14 @@ The landing stack for this feature should be:
 2. **Roadmap**
    - this file
    - explains how the current program docs translate into repo-native execution
-3. **Design docs**
+3. **Execution rubric**
+   - [`EXECUTION-RUBRIC.md`](./EXECUTION-RUBRIC.md)
+   - defines how future short prompts should identify the next slice, required
+     skills, and required official sources
+4. **Design docs**
    - live under `spec/design/`
    - freeze cross-slice contracts and architectural direction
-4. **Slice docs**
+5. **Slice docs**
    - future `SPEC-*`, `PLAN-*`, and `TASKS-*` files under `spec/`
    - each slice should own one bounded implementation seam
 
@@ -207,4 +211,5 @@ the actual touched code paths.
 - [Phase 1: Runtime Parity Foundation](./phase-1-runtime-parity-foundation/README.md)
 - [Phase 2: Same-User Hardening](./phase-2-same-user-hardening/README.md)
 - [Phase 3: Substrate-Owned Operations](./phase-3-substrate-owned-operations/README.md)
+- [Execution Rubric](./EXECUTION-RUBRIC.md)
 - [Spec directory](./spec/README.md)

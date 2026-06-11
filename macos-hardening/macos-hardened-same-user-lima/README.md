@@ -89,6 +89,8 @@ The key design constraint is explicit: same-user Lima can match much of Linux's 
 ## Deliverables
 
 - This feature overview.
+- An execution-control rubric that future short planning prompts can rely on:
+  [`EXECUTION-RUBRIC.md`](./EXECUTION-RUBRIC.md)
 - Four phase overview documents that sequence the work from contract-setting through operator-surface replacement.
 - Milestone SOWs that focus later work on the remaining gaps:
   - same-user Lima ownership boundary
@@ -132,3 +134,6 @@ The key design constraint is explicit: same-user Lima can match much of Linux's 
 - [Phase 1: Runtime Parity Foundation](./phase-1-runtime-parity-foundation/README.md)
 - [Phase 2: Same-User Hardening](./phase-2-same-user-hardening/README.md)
 - [Phase 3: Substrate-Owned Operations](./phase-3-substrate-owned-operations/README.md)
+- [Execution Rubric](./EXECUTION-RUBRIC.md)
+- [Roadmap](./ROADMAP.md)
+- [Spec Scaffold](./spec/README.md)

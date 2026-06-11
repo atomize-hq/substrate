@@ -11,6 +11,7 @@ Provide the execution-layer document structure for landing
 The existing feature and phase docs remain the program-level authority. This
 directory is where the bounded execution artifacts should live:
 
+- execution guidance in [`../EXECUTION-RUBRIC.md`](../EXECUTION-RUBRIC.md),
 - shared `DESIGN-*` inputs,
 - numbered `SPEC-*` slices,
 - companion `PLAN-*` and `TASKS-*` docs.
@@ -86,11 +87,13 @@ This scaffold currently assumes the roadmap sequence documented in
 Before writing the first `SPEC-*`:
 
 1. review the existing phase/milestone docs,
-2. review the initial `DESIGN-*` docs in this directory,
-3. confirm whether any proposed slice needs to be split further based on live
+2. review [`../EXECUTION-RUBRIC.md`](../EXECUTION-RUBRIC.md),
+3. review the initial `DESIGN-*` docs in this directory,
+4. confirm whether any proposed slice needs to be split further based on live
    repo truth.
 
 ## Related docs
 
+- [Execution Rubric](../EXECUTION-RUBRIC.md)
 - [Roadmap](../ROADMAP.md)
 - [Design docs](./design/README.md)
