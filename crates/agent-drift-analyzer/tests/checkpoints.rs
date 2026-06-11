@@ -3600,6 +3600,76 @@ AssertionError: expected advancing"#,
 }
 
 #[test]
+fn checkpoints_treat_steer_rows_as_explicit_user_objectives_over_boilerplate() {
+    let objective =
+        "Only fix the two checkpoint objective review findings in checkpoint/mod.rs and checkpoints.rs.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never. /goal Follow the permission block first. Verify: cargo test -p checkpoint-suite -- --nocapture.",
+        ),
+        steer_row(1, "turn-001", objective),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1980,2205p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '3520,3605p' crates/agent-drift-analyzer/tests/checkpoints.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, objective);
+}
+
+#[test]
+fn checkpoints_ignore_arbitrary_goal_objective_json_from_tool_outputs() {
+    let objective = "Debug the failing analyzer checkpoint tests.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never. /goal Follow the permission block first. Verify: cargo test -p checkpoint-suite -- --nocapture.",
+        ),
+        row(
+            1,
+            "turn-001",
+            CompactionKind::Unknown,
+            &format!(
+                r#"{{"goal":{{"objective":"{objective}","status":"active"}},"threadId":"thread-123","type":"thread_goal_updated"}}"#
+            ),
+            None,
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            r#"{"goal":{"objective":"WRONG objective stolen from tool output","status":"active"}}"#,
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1980,2205p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, objective);
+}
+
+#[test]
 fn checkpoints_preserve_user_requested_agents_instruction_targets() {
     let goal =
         "/goal Analyze the AGENTS.md instructions block and update only that instruction text.";
@@ -3865,6 +3935,19 @@ fn analyze_custom_rows(rows: Vec<CompactionRow>) -> AnalyzeResult {
 }
 
 fn prompt_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+    user_row(event_index, turn_id, text, UserMessageRole::Prompt)
+}
+
+fn steer_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
+    user_row(event_index, turn_id, text, UserMessageRole::Steer)
+}
+
+fn user_row(
+    event_index: usize,
+    turn_id: &str,
+    text: &str,
+    role: UserMessageRole,
+) -> CompactionRow {
     row(
         event_index,
         turn_id,
@@ -3872,6 +3955,7 @@ fn prompt_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
         text,
         None,
     )
+    .with_user_message_role(role)
 }
 
 fn assistant_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
@@ -3943,6 +4027,17 @@ fn row(
         text: text.to_string(),
         canonical_text: text.to_string(),
         text_hash_hex: format!("hash-{}", text.split_whitespace().collect::<String>()),
+    }
+}
+
+trait TestRowExt {
+    fn with_user_message_role(self, role: UserMessageRole) -> Self;
+}
+
+impl TestRowExt for CompactionRow {
+    fn with_user_message_role(mut self, role: UserMessageRole) -> Self {
+        self.user_message_role = Some(role);
+        self
     }
 }
 

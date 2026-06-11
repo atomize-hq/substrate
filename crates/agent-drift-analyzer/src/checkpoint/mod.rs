@@ -2048,7 +2048,7 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
         return None;
     }
 
-    if let Some(text) = thread_goal_objective_text(&row.text) {
+    if let Some(text) = thread_goal_objective_text(row) {
         return Some(ObjectiveCandidate {
             row,
             text,
@@ -2073,12 +2073,7 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
         });
     }
 
-    if matches!(row.kind, CompactionKind::UserMessage)
-        && matches!(
-            row.user_message_role.unwrap_or(UserMessageRole::Unknown),
-            UserMessageRole::Prompt | UserMessageRole::Unknown
-        )
-    {
+    if matches!(row.kind, CompactionKind::UserMessage) {
         return Some(ObjectiveCandidate {
             row,
             text: row.text.clone(),
@@ -2104,8 +2099,27 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
     None
 }
 
-fn thread_goal_objective_text(text: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+fn thread_goal_objective_text(row: &CompactionRow) -> Option<String> {
+    if !matches!(row.kind, CompactionKind::Unknown) {
+        return None;
+    }
+
+    let value: serde_json::Value = serde_json::from_str(&row.text).ok()?;
+    if value
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        != Some("thread_goal_updated")
+    {
+        return None;
+    }
+
+    value
+        .get("threadId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|thread_id| !thread_id.is_empty())?;
+
     value
         .get("goal")
         .and_then(|goal| goal.get("objective"))
