@@ -6,7 +6,10 @@ Completion status on 2026-06-10:
 
 - Packets `R5-0` through `R5-6` were already landed before this packet.
 - Packet `R5-7` is now landed as the dedicated acceptance-fixture wall.
-- The remaining unchecked global items below are legacy checklist text from earlier packet planning, not open R5-7 implementation tasks.
+- The archived task entries below preserve the original packet-plan wording, but they are not a
+  live backlog after the 2026-06-10 closeout.
+- Active follow-up work now lives in the `R5` follow-up register and the separate `R5.5` spec /
+  plan / tasks docs, not in this landed `R5` ledger.
 
 Each task should be completable in one focused implementation session. Keep each task as close as
 possible to five touched files or fewer. Do not advance from one packet to the next until the
@@ -38,7 +41,7 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-1: Public Schema Skeleton And Compatibility
 
-- [ ] Task R5-1.1: Add public `SessionProgress` DTOs to analyzer schema.
+- [archived] Task R5-1.1: Add public `SessionProgress` DTOs to analyzer schema.
   - Acceptance: `SessionProgress`, `ProgressStatus`, `ProgressDimension`, `ProgressSignal`,
     `ProgressSignalCode`, `SignalPolarity`, and `SignalStrength` exist in `checkpoint/schema.rs`
     with serde `snake_case` enum serialization.
@@ -49,7 +52,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/lib.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-1.2: Add optional `Checkpoint.session_progress` with v0.6 requiredness.
+- [archived] Task R5-1.2: Add optional `Checkpoint.session_progress` with v0.6 requiredness.
   - Acceptance: v0.2-v0.5 deserialize without `session_progress`; v0.6 missing
     `session_progress` fails closed; v0.6 with progress round-trips.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
@@ -57,7 +60,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-1.3: Emit temporary low-confidence `session_progress` and bump analyzer output to
+- [archived] Task R5-1.3: Emit temporary low-confidence `session_progress` and bump analyzer output to
       v0.6.
   - Acceptance: analyzer-created checkpoints use `schema_version = "v0.6"` and contain
     `Some(session_progress)`; the temporary progress status is explicitly conservative.
@@ -68,7 +71,7 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-2: CommandAttempt / VerificationAttempt Foundation
 
-- [ ] Task R5-2.1: Add `checkpoint/attempt.rs` and wire module exports internally.
+- [archived] Task R5-2.1: Add `checkpoint/attempt.rs` and wire module exports internally.
   - Acceptance: `CommandAttempt`, `CommandAttemptRole`, `AttemptOutcome`, `VerificationAttempt`,
     `ExerciseState`, and `VerificationScope` exist as `pub(crate)` types.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
@@ -76,7 +79,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/src/checkpoint/attempt.rs`
 
-- [ ] Task R5-2.2: Implement command/output pairing.
+- [archived] Task R5-2.2: Implement command/output pairing.
   - Acceptance: each visible `ToolCall` in a checkpoint interval can produce a `CommandAttempt`
     with paired `ToolOutput`/`Error` rows until the next command or focusable phase boundary;
     ambiguous output yields `Unknown` rather than false failure/success.
@@ -85,7 +88,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/attempt.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-2.3: Implement progress-specific command role classification.
+- [archived] Task R5-2.3: Implement progress-specific command role classification.
   - Acceptance: cargo/npm/pnpm/pytest/vitest/replay/apply_patch/git/delegation commands classify
     into R5 roles deterministically.
   - Verify: focused role tests in `checkpoints.rs`.
@@ -93,7 +96,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/attempt.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-2.4: Build verification attempts and target exercise state.
+- [archived] Task R5-2.4: Build verification attempts and target exercise state.
   - Acceptance: verification-like attempts have verifier kind, target scope, and `ExerciseState`;
     compile-blocked tests can be marked `BlockedBeforeTarget`.
   - Verify: focused verification-attempt tests.
@@ -103,7 +106,7 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-3: DiagnosticSignature And Matching
 
-- [ ] Task R5-3.1: Add `checkpoint/diagnostics.rs` with signature types and canonicalization.
+- [archived] Task R5-3.1: Add `checkpoint/diagnostics.rs` with signature types and canonicalization.
   - Acceptance: diagnostic types exist; canonicalization removes ANSI, volatile whitespace,
     timestamps/durations/temp paths, and line/column volatility where appropriate.
   - Verify: diagnostic canonicalization tests.
@@ -112,7 +115,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-3.2: Parse initial cargo/test/replay diagnostic classes and fail counts.
+- [archived] Task R5-3.2: Parse initial cargo/test/replay diagnostic classes and fail counts.
   - Acceptance: parser recognizes common cargo compile/test, pytest-like, JS test-like, and replay
     contract-failure shapes; weak/unknown output yields low-confidence signatures.
   - Verify: focused parser tests.
@@ -120,7 +123,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-3.3: Implement diagnostic matching ladder.
+- [archived] Task R5-3.3: Implement diagnostic matching ladder.
   - Acceptance: exact, strong-fuzzy, frontier-related, weak-related, and unrelated matching are
     deterministic and covered by tests.
   - Verify: focused matching tests.
@@ -128,7 +131,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-3.4: Implement edit-overlap classification.
+- [archived] Task R5-3.4: Implement edit-overlap classification.
   - Acceptance: overlapping path/symbol/test edits produce strong/moderate overlap; unrelated edits
     produce none/weak; signals can cite the command and edit rows.
   - Verify: focused overlap tests.
@@ -139,7 +142,7 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-4: Progress Engine
 
-- [ ] Task R5-4.1: Add `checkpoint/progress.rs` and dimension selection.
+- [archived] Task R5-4.1: Add `checkpoint/progress.rs` and dimension selection.
   - Acceptance: dimension derives from `session_archetype.label`, with delegation allowed to
     override only the dimension to `parent_visible_orchestration`; the resulting status stays
     `insufficient_evidence`, `stalled`, or `mixed` according to the visible parent evidence.
@@ -149,7 +152,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-4.2: Implement troubleshooting frontier progress.
+- [archived] Task R5-4.2: Implement troubleshooting frontier progress.
   - Acceptance: compile-to-test advancement, fail-count reduction, repeated same signature, prior
     clean broken, and sparse evidence cases match fixture manifest expectations.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
@@ -158,7 +161,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/diagnostics.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-4.3: Implement planning convergence rules conservatively.
+- [archived] Task R5-4.3: Implement planning convergence rules conservatively.
   - Acceptance: plan/spec artifact creation/refinement and candidate-set narrowing can produce
     low/medium advancing; broad meander produces stalled/mixed/insufficient according to fixture
     manifest.
@@ -167,7 +170,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-4.4: Implement implementation verification-wall progress.
+- [archived] Task R5-4.4: Implement implementation verification-wall progress.
   - Acceptance: concentrated source/test edits plus advancing verifier produce advancing; unrelated
     churn plus same verifier failure produces stalled or mixed unless a previously clean or later
     frontier was actually broken.
@@ -176,7 +179,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-4.5: Implement verification closeout narrowing.
+- [archived] Task R5-4.5: Implement verification closeout narrowing.
   - Acceptance: closeout proof that narrows the residual scope emits
     `VerificationScopeNarrowed` plus `ResidualScopeShrank` and advances under
     `verification_closeout_narrowing`; source churn or proof break in closeout yields
@@ -186,7 +189,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5-4.6: Apply delegation caps and evidence limiting.
+- [archived] Task R5-4.6: Apply delegation caps and evidence limiting.
   - Acceptance: opaque delegated-parent checkpoints never claim child progress and never emit high
     confidence; limiting signal/evidence is present.
   - Verify: focused delegated-progress tests.
@@ -196,14 +199,14 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-5: Analyzer Export Summary
 
-- [ ] Task R5-5.1: Add progress distributions to analyzer summary.
+- [archived] Task R5-5.1: Add progress distributions to analyzer summary.
   - Acceptance: top summary includes status and dimension distributions.
   - Verify: `cargo test -p agent-drift-analyzer export_bundle -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/export.rs`
     - `crates/agent-drift-analyzer/tests/export_bundle.rs`
 
-- [ ] Task R5-5.2: Add per-checkpoint progress line to summary.
+- [archived] Task R5-5.2: Add per-checkpoint progress line to summary.
   - Acceptance: checkpoint lines include compact `progress:` inspection with status, dimension,
     confidence, support, and counter-evidence.
   - Verify: `cargo test -p agent-drift-analyzer export_bundle -- --nocapture`
@@ -211,7 +214,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-analyzer/src/checkpoint/export.rs`
     - `crates/agent-drift-analyzer/tests/export_bundle.rs`
 
-- [ ] Task R5-5.3: Preserve end-to-end analyzer artifact stability.
+- [archived] Task R5-5.3: Preserve end-to-end analyzer artifact stability.
   - Acceptance: end-to-end tests assert v0.6 checkpoints and progress summary without breaking
     existing turn/delegation/archetype summary expectations.
   - Verify: `cargo test -p agent-drift-analyzer end_to_end -- --nocapture`
@@ -220,7 +223,7 @@ verification command for the current packet is green or the failure is documente
 
 ## R5-6: Sentinel v0.6 Compatibility
 
-- [ ] Task R5-6.1: Add replay input v0.6 support and requiredness.
+- [archived] Task R5-6.1: Add replay input v0.6 support and requiredness.
   - Acceptance: replay supports v0.6; v0.6 missing `session_progress` fails with contract gap;
     v0.5 without progress still loads.
   - Verify: `cargo test -p agent-drift-sentinel replay_input -- --nocapture`
@@ -228,7 +231,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-sentinel/src/input.rs`
     - `crates/agent-drift-sentinel/tests/replay_input.rs`
 
-- [ ] Task R5-6.2: Add live input v0.6 support and requiredness.
+- [archived] Task R5-6.2: Add live input v0.6 support and requiredness.
   - Acceptance: live checkpoint compatibility supports v0.6; v0.6 missing progress fails; fixture
     validation enforces the same requiredness.
   - Verify: `cargo test -p agent-drift-sentinel live_checkpoint_compatibility -- --nocapture`
@@ -236,7 +239,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-sentinel/src/live_input.rs`
     - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 
-- [ ] Task R5-6.3: Render compact Progress line in operator surface.
+- [archived] Task R5-6.3: Render compact Progress line in operator surface.
   - Acceptance: replay/live console blocks render `Progress:` after `Archetype:`; presentation does
     not change posture/disposition/severity.
   - Verify: `cargo test -p agent-drift-sentinel operator_surface -- --nocapture`
@@ -244,7 +247,7 @@ verification command for the current packet is green or the failure is documente
     - `crates/agent-drift-sentinel/src/operator_surface.rs`
     - `crates/agent-drift-sentinel/tests/operator_surface.rs`
 
-- [ ] Task R5-6.4: Preserve replay/live parity.
+- [archived] Task R5-6.4: Preserve replay/live parity.
   - Acceptance: matching v0.6 checkpoint surfaces show the same progress line in replay and live.
   - Verify: `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`
   - Files:
@@ -282,15 +285,18 @@ verification command for the current packet is green or the failure is documente
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-tasks.md`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
 
-## Global Completion Checklist
+## Historical Global Completion Snapshot
 
-- [ ] Analyzer emits `schema_version = "v0.6"`.
-- [ ] v0.6 requires `session_progress`.
-- [ ] v0.2-v0.5 remain compatible.
-- [x] Progress statuses and dimensions match fixture manifest.
-- [x] Progress evidence/counter-evidence is populated.
-- [ ] Delegation opacity caps progress claims.
-- [ ] Analyzer summary includes progress output.
-- [ ] Sentinel replay/live accept and render v0.6.
-- [ ] No scorer retuning landed.
-- [x] Full analyzer and sentinel tests pass.
+This snapshot preserves the old plan-era checklist as historical closeout context. It is not a
+live backlog after `R5-7`; current follow-up work is tracked in `R5.5` and the follow-up register.
+
+- Archived planned outcome: Analyzer emits `schema_version = "v0.6"`.
+- Archived planned outcome: v0.6 requires `session_progress`.
+- Archived planned outcome: v0.2-v0.5 remain compatible.
+- Landed-by-closeout: Progress statuses and dimensions match fixture manifest.
+- Landed-by-closeout: Progress evidence/counter-evidence is populated.
+- Archived planned outcome: Delegation opacity caps progress claims.
+- Archived planned outcome: Analyzer summary includes progress output.
+- Archived planned outcome: Sentinel replay/live accept and render v0.6.
+- Archived planned outcome: No scorer retuning landed.
+- Landed-by-closeout: Full analyzer and sentinel tests pass.

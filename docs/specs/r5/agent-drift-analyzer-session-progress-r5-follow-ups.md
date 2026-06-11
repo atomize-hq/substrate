@@ -10,6 +10,9 @@ good place to accumulate every residual robustness note, review caveat, or futur
 
 This doc is the reusable place for those items.
 
+For active post-landing implementation work, prefer the `R5.5` spec / plan / tasks docs. The
+historical `R5` task ledger is retained for auditability, but it is no longer the live backlog.
+
 Use it for:
 
 1. non-blocking limitations confirmed against live code or tests,
