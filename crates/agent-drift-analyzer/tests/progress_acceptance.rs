@@ -57,12 +57,14 @@ enum ChildVisibility {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 struct FixtureScreening {
     delegated: bool,
     child_visibility: ChildVisibility,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 struct SelectedCheckpointExpected {
     ordinal: usize,
     archetype: SessionArchetypeLabel,
@@ -80,6 +82,7 @@ struct SelectedCheckpointExpected {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 struct ProgressAcceptanceExpected {
     case_id: String,
     fixture_kind: FixtureKind,

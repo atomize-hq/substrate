@@ -280,29 +280,46 @@ stable sorting, dedupe, and evidence limits for both supporting and counter-evid
 ## Real-Rollout Fixture Annotation Rubric
 
 Each new committed real-rollout fixture should carry a small manifest or equivalent structured
-annotation with at least:
+annotation with the landed single-checkpoint contract used by
+`crates/agent-drift-analyzer/tests/progress_acceptance.rs` and the committed
+`crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**/expected.json` corpus:
 
 ```text
 case_id
+fixture_kind
 source_rollout_id
+source_artifact
+notes
 screening:
   delegated
   child_visibility
-expected_checkpoints:
-  - ordinal
-    expected_status
-    expected_dimension
-    confidence_floor
-    confidence_ceiling
-    required_signal_codes
-    forbidden_signal_codes
-    required_supporting_evidence_count
-    required_counter_evidence_count
-    decisive_evidence
-    counter_evidence
-    why_not_other_dimensions
-notes
+selected_checkpoint:
+  ordinal
+  archetype
+  dimension
+  status
+  confidence_min
+  confidence_max
+  required_signal_codes
+  forbidden_signal_codes
+  supporting_evidence_min
+  counter_evidence_min
+  decisive_evidence
+  counter_evidence
+  why_not_other_dimensions
 ```
+
+Important clarification:
+
+- the dedicated `R5.5-4` progress corpus records exactly one explicitly reviewed decision point per
+  fixture via `selected_checkpoint`; this packet does **not** require a multi-checkpoint
+  `expected_checkpoints[]` rubric.
+- `confidence_min` / `confidence_max` are inclusive bounds around the landed analyzer confidence,
+  not a renamed free-form note field.
+- `supporting_evidence_min` / `counter_evidence_min` are lower-bound counts against the exported
+  analyzer evidence arrays.
+- future packet work should fail closed on rubric drift rather than silently accepting unknown or
+  stale field names in committed `expected.json` annotations.
 
 For reopen / re-verify cases, the expected dimension may honestly be
 `verification_closeout_narrowing`, `implementation_verification_wall`, or
