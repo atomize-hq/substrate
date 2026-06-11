@@ -1438,7 +1438,14 @@ fn format_progress_support(progress: &SessionProgress) -> String {
         return format_reasons(&progress.supporting_evidence);
     }
 
-    format_compact_items(progress.signals.iter().map(|signal| signal.summary.as_str()), 2, 64)
+    format_compact_items(
+        progress
+            .signals
+            .iter()
+            .map(|signal| signal.summary.as_str()),
+        2,
+        64,
+    )
 }
 
 fn format_reasons(evidence: &[EvidenceRef]) -> String {

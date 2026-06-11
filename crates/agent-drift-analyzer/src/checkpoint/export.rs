@@ -1130,7 +1130,10 @@ fn format_progress_support(progress: &SessionProgress) -> String {
     }
 
     format_compact_items(
-        progress.signals.iter().map(|signal| signal.summary.as_str()),
+        progress
+            .signals
+            .iter()
+            .map(|signal| signal.summary.as_str()),
         DISPLAY_LIMIT,
         SUMMARY_LIMIT,
     )

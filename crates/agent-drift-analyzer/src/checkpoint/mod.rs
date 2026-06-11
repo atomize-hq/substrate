@@ -460,7 +460,9 @@ fn build_intent_evidence_profile(analysis: &CheckpointAnalysis) -> IntentEvidenc
                 } else if docs_only {
                     profile.docs_or_spec_write_command_count += 1;
                     if closeout_artifact_scope
-                        && objective_mentions_closeout_phase(&analysis.current.context.objective.text)
+                        && objective_mentions_closeout_phase(
+                            &analysis.current.context.objective.text,
+                        )
                     {
                         profile.verification_like.add(
                             4,
