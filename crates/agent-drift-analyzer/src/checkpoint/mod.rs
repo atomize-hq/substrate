@@ -230,11 +230,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
         let mut context = assemble_context(&window);
         if let Some(objective) = narrowed_objective_summary(&window.compact_rows) {
-            if context.objective.text != objective.text
-                && objective_text_is_pure_boilerplate(&context.objective.text)
-            {
-                context.objective = objective;
-            }
+            context.objective = objective;
         }
         let task_frame = infer_task_frame(&context);
         let delegation =

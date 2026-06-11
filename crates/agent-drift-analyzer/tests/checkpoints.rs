@@ -3629,6 +3629,34 @@ fn checkpoints_treat_steer_rows_as_explicit_user_objectives_over_boilerplate() {
 }
 
 #[test]
+fn checkpoints_prefer_explicit_user_requests_over_unclassified_app_plugin_scaffolding() {
+    let objective = "Fix the checkpoint objective selector in checkpoint/mod.rs and add the regression in checkpoints.rs.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Apps (Connectors) can be explicitly triggered in user messages and may expose MCP tools for the current session. Plugin bundles can lazy-load additional app surfaces. /goal Keep the app and plugin scaffolding active first.",
+        ),
+        prompt_row(1, "turn-001", objective),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '220,250p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '3600,3665p' crates/agent-drift-analyzer/tests/checkpoints.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, objective);
+}
+
+#[test]
 fn checkpoints_ignore_arbitrary_goal_objective_json_from_tool_outputs() {
     let objective = "Debug the failing analyzer checkpoint tests.";
     let result = analyze_custom_rows(vec![
