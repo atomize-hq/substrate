@@ -4,7 +4,7 @@ use std::fs;
 
 use agent_drift_analyzer::{
     analyze_bundle, AnalyzeRequest, Confidence, ProgressDimension, ProgressSignalCode,
-    ProgressStatus, SessionArchetypeLabel,
+    ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
@@ -362,6 +362,15 @@ fn assert_progress_case(case_id: &str) {
         checkpoint.ordinal,
         progress.counter_evidence.len()
     );
+
+    if case.expected.fixture_kind == FixtureKind::AnnotatedRealRollout {
+        assert_selected_checkpoint_narrative_alignment(
+            case_id,
+            archetype,
+            progress,
+            &case.expected.selected_checkpoint,
+        );
+    }
 }
 
 fn confidence_rank(confidence: Confidence) -> u8 {
@@ -428,4 +437,210 @@ fn assert_selected_checkpoint_has_array_field(
         field_value.is_array(),
         "annotated real-rollout case {case_id} must encode selected_checkpoint.{field_name} as an array in expected.json"
     );
+}
+
+fn assert_selected_checkpoint_narrative_alignment(
+    case_id: &str,
+    archetype: &SessionArchetype,
+    progress: &SessionProgress,
+    expected: &SelectedCheckpointExpected,
+) {
+    match case_id {
+        "real-closeout-conservative-019e767c-ord3" => {
+            let decisive_text = normalized_join(&expected.decisive_evidence);
+            let counter_text = normalized_join(&expected.counter_evidence);
+            let why_not_text = normalized_join(&expected.why_not_other_dimensions);
+            let actual_facts = normalized_progress_facts(archetype, progress);
+
+            assert_text_contains_all(
+                &decisive_text,
+                &["verification closeout", "closeout"],
+                case_id,
+                "selected_checkpoint.decisive_evidence",
+            );
+            assert_text_contains_all(
+                &actual_facts,
+                &["verification closeout", "verification closeout narrowing"],
+                case_id,
+                "selected checkpoint facts",
+            );
+            assert!(
+                progress.signals.is_empty()
+                    && progress.supporting_evidence.is_empty()
+                    && progress.counter_evidence.is_empty(),
+                "expected {case_id} selected checkpoint to stay sparse so the conservative closeout narrative remains honest"
+            );
+            assert_text_contains_all(
+                &counter_text,
+                &["absence", "proof", "narrowing", "reopened"],
+                case_id,
+                "selected_checkpoint.counter_evidence",
+            );
+            assert_text_contains_all(
+                &actual_facts,
+                &["insufficient evidence"],
+                case_id,
+                "selected checkpoint facts",
+            );
+            assert_text_contains_all(
+                &why_not_text,
+                &["implementation verification wall", "troubleshooting frontier"],
+                case_id,
+                "selected_checkpoint.why_not_other_dimensions",
+            );
+            assert_eq!(
+                progress.dimension,
+                ProgressDimension::VerificationCloseoutNarrowing,
+                "{case_id} narrative alignment expects a verification_closeout_narrowing checkpoint"
+            );
+        }
+        "real-implementation-advancing-019e894a-ord6" => {
+            let decisive_text = normalized_join(&expected.decisive_evidence);
+            let why_not_text = normalized_join(&expected.why_not_other_dimensions);
+            let actual_facts = normalized_progress_facts(archetype, progress);
+
+            assert_text_contains_all(
+                &actual_facts,
+                &[
+                    "earlier failing implementation verifier",
+                    "later clean implementation verifier",
+                    "intervening edit overlapped the active implementation scope before verification moved",
+                ],
+                case_id,
+                "selected checkpoint facts",
+            );
+            assert_text_contains_all(
+                &decisive_text,
+                &[
+                    "earlier failing implementation verifier",
+                    "later clean implementation verifier",
+                    "overlapping edit",
+                ],
+                case_id,
+                "selected_checkpoint.decisive_evidence",
+            );
+            assert_text_contains_all(
+                &why_not_text,
+                &["verification closeout narrowing", "troubleshooting frontier"],
+                case_id,
+                "selected_checkpoint.why_not_other_dimensions",
+            );
+            assert_eq!(
+                progress.dimension,
+                ProgressDimension::ImplementationVerificationWall,
+                "{case_id} narrative alignment expects an implementation_verification_wall checkpoint"
+            );
+        }
+        "real-reopen-regressing-019e894a-ord7" => {
+            let decisive_text = normalized_join(&expected.decisive_evidence);
+            let why_not_text = normalized_join(&expected.why_not_other_dimensions);
+            let actual_facts = normalized_progress_facts(archetype, progress);
+
+            assert_text_contains_all(
+                &actual_facts,
+                &[
+                    "previously clean scope broken",
+                    "earlier later stage verification attempt",
+                    "later regressing verification attempt",
+                ],
+                case_id,
+                "selected checkpoint facts",
+            );
+            assert_text_contains_all(
+                &decisive_text,
+                &[
+                    "earlier",
+                    "clean",
+                    "later regressing verification attempt",
+                ],
+                case_id,
+                "selected_checkpoint.decisive_evidence",
+            );
+            assert_text_contains_all(
+                &why_not_text,
+                &["verification closeout", "implementation verification wall"],
+                case_id,
+                "selected_checkpoint.why_not_other_dimensions",
+            );
+            assert_eq!(
+                progress.dimension,
+                ProgressDimension::TroubleshootingFrontier,
+                "{case_id} narrative alignment expects a troubleshooting_frontier checkpoint"
+            );
+        }
+        _ => {}
+    }
+}
+
+fn normalized_progress_facts(archetype: &SessionArchetype, progress: &SessionProgress) -> String {
+    let mut facts = vec![
+        normalize_text(&format!("{:?}", archetype.label)),
+        normalize_text(&format!("{:?}", progress.dimension)),
+        normalize_text(&format!("{:?}", progress.status)),
+    ];
+    facts.extend(
+        progress
+            .signals
+            .iter()
+            .flat_map(|signal| [normalize_text(&format!("{:?}", signal.code)), normalize_text(&signal.summary)]),
+    );
+    facts.extend(
+        progress
+            .supporting_evidence
+            .iter()
+            .map(|evidence| normalize_text(&evidence.reason)),
+    );
+    facts.extend(
+        progress
+            .counter_evidence
+            .iter()
+            .map(|evidence| normalize_text(&evidence.reason)),
+    );
+    facts.join(" ")
+}
+
+fn normalized_join(items: &[String]) -> String {
+    normalize_text(&items.join(" "))
+}
+
+fn normalize_text(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    let mut previous_was_lower_or_digit = false;
+    for ch in text.chars() {
+        if ch.is_ascii_uppercase() {
+            if previous_was_lower_or_digit {
+                normalized.push(' ');
+            }
+            normalized.push(ch.to_ascii_lowercase());
+            previous_was_lower_or_digit = false;
+        } else if ch.is_ascii_lowercase() || ch.is_ascii_digit() {
+            normalized.push(ch);
+            previous_was_lower_or_digit = true;
+        } else {
+            normalized.push(' ');
+            previous_was_lower_or_digit = false;
+        }
+    }
+
+    normalized
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn assert_text_contains_all(
+    haystack: &str,
+    needles: &[&str],
+    case_id: &str,
+    field_name: &str,
+) {
+    for needle in needles {
+        let normalized_needle = normalize_text(needle);
+        assert!(
+            haystack.contains(&normalized_needle),
+            "{case_id} {field_name} must contain stable keyword/substrings for {:?}; got {:?}",
+            needle,
+            haystack
+        );
+    }
 }
