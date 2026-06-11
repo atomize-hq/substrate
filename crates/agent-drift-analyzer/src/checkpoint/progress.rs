@@ -22,6 +22,8 @@ use super::{
 };
 
 const MAX_PROGRESS_EVIDENCE_ITEMS: usize = 8;
+const DELEGATION_LIMITING_CONFIDENCE_REASON: &str =
+    "delegation visibility limited progress confidence";
 
 pub(crate) fn build_session_progress(
     analysis: &CheckpointAnalysis,
@@ -1226,7 +1228,7 @@ fn apply_delegation_caps(
 
     let limiting_evidence = delegation_supporting_evidence(
         analysis,
-        "delegation visibility limited progress confidence",
+        DELEGATION_LIMITING_CONFIDENCE_REASON,
     );
     if !progress
         .signals
@@ -2529,19 +2531,40 @@ AssertionError: expected advancing"#,
             ChildWorkVisibility::Partial
         );
 
-        let progress = finalize_progress(apply_delegation_caps(
+        let mut progress = parent_visible_orchestration_progress(
             &analysis,
-            pressure_test_progress(),
-        ));
+            SessionArchetypeLabel::AutonomousImplementation,
+        )
+        .expect("parent-visible orchestration progress");
+        let limiting_signal = progress
+            .signals
+            .iter()
+            .find(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited)
+            .expect("preexisting delegation limiting signal");
+        assert!(
+            limiting_signal
+                .evidence
+                .iter()
+                .all(|evidence| evidence.reason != DELEGATION_LIMITING_CONFIDENCE_REASON),
+            "expected parent-visible path to predate promoted limiting evidence, got {:?}",
+            limiting_signal
+                .evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>()
+        );
+        progress
+            .counter_evidence
+            .extend(competing_counter_evidence());
+
+        let progress = finalize_progress(apply_delegation_caps(&analysis, progress));
 
         assert_eq!(progress.confidence, Confidence::Medium);
         assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
         assert_eq!(progress.counter_evidence.len(), MAX_PROGRESS_EVIDENCE_ITEMS);
         assert!(
             progress.counter_evidence.iter().any(|evidence| {
-                evidence
-                    .reason
-                    .contains("delegation visibility limited progress confidence")
+                evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON
             }),
             "expected delegated limiting evidence to survive finalization pressure, got {:?}",
             progress
@@ -2577,19 +2600,40 @@ AssertionError: expected advancing"#,
             ChildWorkVisibility::Opaque
         );
 
-        let progress = finalize_progress(apply_delegation_caps(
+        let mut progress = parent_visible_orchestration_progress(
             &analysis,
-            pressure_test_progress(),
-        ));
+            SessionArchetypeLabel::AutonomousImplementation,
+        )
+        .expect("parent-visible orchestration progress");
+        let limiting_signal = progress
+            .signals
+            .iter()
+            .find(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited)
+            .expect("preexisting delegation limiting signal");
+        assert!(
+            limiting_signal
+                .evidence
+                .iter()
+                .all(|evidence| evidence.reason != DELEGATION_LIMITING_CONFIDENCE_REASON),
+            "expected parent-visible path to predate promoted limiting evidence, got {:?}",
+            limiting_signal
+                .evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>()
+        );
+        progress
+            .counter_evidence
+            .extend(competing_counter_evidence());
+
+        let progress = finalize_progress(apply_delegation_caps(&analysis, progress));
 
         assert_eq!(progress.confidence, Confidence::Low);
         assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
         assert_eq!(progress.counter_evidence.len(), MAX_PROGRESS_EVIDENCE_ITEMS);
         assert!(
             progress.counter_evidence.iter().any(|evidence| {
-                evidence
-                    .reason
-                    .contains("delegation visibility limited progress confidence")
+                evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON
             }),
             "expected delegated limiting evidence to survive finalization pressure, got {:?}",
             progress
@@ -2694,31 +2738,17 @@ AssertionError: expected advancing"#,
         );
     }
 
-    fn pressure_test_progress() -> SessionProgress {
-        SessionProgress {
-            status: ProgressStatus::Mixed,
-            dimension: ProgressDimension::ParentVisibleOrchestration,
-            confidence: Confidence::High,
-            signals: Vec::new(),
-            supporting_evidence: vec![EvidenceRef {
+    fn competing_counter_evidence() -> Vec<EvidenceRef> {
+        (0..=MAX_PROGRESS_EVIDENCE_ITEMS)
+            .map(|index| EvidenceRef {
                 row: RowRef {
-                    source_file: Utf8PathBuf::from("/tmp/supporting/rollout.jsonl"),
-                    event_index: 0,
+                    source_file: Utf8PathBuf::from("/aaa/competing-counter-evidence.jsonl"),
+                    event_index: index,
                     row_ordinal: 0,
                 },
-                reason: "supporting evidence kept progress non-empty".to_string(),
-            }],
-            counter_evidence: (0..=MAX_PROGRESS_EVIDENCE_ITEMS)
-                .map(|index| EvidenceRef {
-                    row: RowRef {
-                        source_file: Utf8PathBuf::from("/aaa/competing-counter-evidence.jsonl"),
-                        event_index: index,
-                        row_ordinal: 0,
-                    },
-                    reason: format!("competing counter evidence {index:02}"),
-                })
-                .collect(),
-        }
+                reason: format!("competing counter evidence {index:02}"),
+            })
+            .collect()
     }
 }
 
@@ -2776,20 +2806,30 @@ fn dedupe_and_limit_counter_evidence(
 fn required_delegation_limiting_counter_evidence(
     progress: &SessionProgress,
 ) -> Option<EvidenceRef> {
-    let limiting_keys = progress
+    let limiting_row_keys = progress
         .signals
         .iter()
         .filter(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited)
         .flat_map(|signal| signal.evidence.iter())
-        .map(evidence_key)
+        .map(evidence_row_key)
         .collect::<BTreeSet<_>>();
-    if limiting_keys.is_empty() {
+    if limiting_row_keys.is_empty() {
         return None;
     }
 
-    dedupe_evidence(progress.counter_evidence.clone())
-        .into_iter()
-        .find(|evidence| limiting_keys.contains(&evidence_key(evidence)))
+    let counter_evidence = dedupe_evidence(progress.counter_evidence.clone());
+    counter_evidence
+        .iter()
+        .find(|evidence| {
+            evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON
+                && limiting_row_keys.contains(&evidence_row_key(evidence))
+        })
+        .cloned()
+        .or_else(|| {
+            counter_evidence
+                .into_iter()
+                .find(|evidence| limiting_row_keys.contains(&evidence_row_key(evidence)))
+        })
 }
 
 fn dedupe_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
@@ -2811,6 +2851,14 @@ fn evidence_key(evidence: &EvidenceRef) -> (camino::Utf8PathBuf, usize, usize, S
         evidence.row.event_index,
         evidence.row.row_ordinal,
         evidence.reason.clone(),
+    )
+}
+
+fn evidence_row_key(evidence: &EvidenceRef) -> (camino::Utf8PathBuf, usize, usize) {
+    (
+        evidence.row.source_file.clone(),
+        evidence.row.event_index,
+        evidence.row.row_ordinal,
     )
 }
 
