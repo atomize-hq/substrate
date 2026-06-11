@@ -1510,6 +1510,10 @@ fn checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_pa
         );
     }
     assert!(!progress.counter_evidence.is_empty());
+    assert_evidence_contains(
+        &progress.counter_evidence,
+        "delegation visibility limited progress confidence",
+    );
 }
 
 #[test]
@@ -1631,7 +1635,11 @@ AssertionError: expected advancing"#,
     assert_eq!(progress.confidence, Confidence::Medium);
     assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
     assert!(!progress.supporting_evidence.is_empty());
-    assert!(progress.counter_evidence.is_empty());
+    assert!(!progress.counter_evidence.is_empty());
+    assert_evidence_contains(
+        &progress.counter_evidence,
+        "delegation visibility limited progress confidence",
+    );
     assert!(!progress.signals.iter().any(|signal| {
         matches!(
             signal.code,

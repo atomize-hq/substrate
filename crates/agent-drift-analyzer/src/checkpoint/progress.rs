@@ -1224,6 +1224,10 @@ fn apply_delegation_caps(
         progress.confidence = Confidence::Low;
     }
 
+    let limiting_evidence = delegation_supporting_evidence(
+        analysis,
+        "delegation visibility limited progress confidence",
+    );
     if !progress
         .signals
         .iter()
@@ -1241,11 +1245,11 @@ fn apply_delegation_caps(
             delegation_limiting_summary(topology, visibility),
             None,
             None,
-            delegation_supporting_evidence(
-                analysis,
-                "delegation visibility limited progress confidence",
-            ),
+            limiting_evidence.clone(),
         ));
+    }
+    if !matches!(visibility, ChildWorkVisibility::None) {
+        progress.counter_evidence.extend(limiting_evidence);
     }
 
     progress
