@@ -58,7 +58,8 @@ breakglass classification remains milestone `0.2` or later scope.
 - Define the supported deployment posture for same-user Lima.
 - Define the exact Linux parity claims macOS is allowed to make after hardening.
 - Define unsupported claims, especially around host-side ownership and multi-user separation.
-- Define the required operator story for normal mode, degraded mode, and unsupported mode.
+- Define the required operator story for `supported`,
+  `degraded-but-supported`, and `breakglass` operation.
 - Produce a concrete gap ledger that later milestones can convert into code and docs work.
 
 ## Out-of-scope
@@ -134,9 +135,9 @@ This milestone should lock the contract around these rules:
 - A written target-mode contract section in this SOW that later phases can quote directly.
 - A support matrix with three states:
   - supported same-user hardened mode
-  - degraded but supported diagnostic mode using routed Substrate surfaces or
+  - degraded-but-supported diagnostic mode using routed Substrate surfaces or
     compatibility wrappers around them, not raw direct guest procedures
-  - breakglass / unsupported direct guest mode
+  - breakglass direct guest mode
 - A gap list that future implementation must close, at minimum:
   - remove backend-local policy synthesis from `MacLimaBackend`
   - strengthen `apply_policy(...)` semantics in the backend-mediated path

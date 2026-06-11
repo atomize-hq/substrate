@@ -74,6 +74,11 @@ This design does not:
 
 ## Support taxonomy
 
+This document is the authoritative wording source for the three support classes
+used by Slice `01` and later feature-local docs. Other docs in this feature
+should reuse these exact labels rather than inventing alternates such as
+`degraded mode` or `unsupported mode`.
+
 ### 1. Supported
 
 Definition:

@@ -41,6 +41,16 @@ The same non-parity claims must remain impossible to miss throughout phase 0:
 4. host-side `SUBSTRATE_WORLD_SOCKET` override use is not the default
    Lima-backed path.
 
+Phase 0 also inherits the Slice `01` support taxonomy exactly as:
+
+1. `supported`
+2. `degraded-but-supported`
+3. `breakglass`
+
+Milestone `0.1` freezes those labels for feature-local planning and milestone
+`0.2` can refine version-floor and breakglass rules without inventing a new
+support classification scheme.
+
 ## In-scope
 
 - Define the target security posture for same-user Lima.
@@ -113,7 +123,7 @@ This phase is complete when later implementation can treat the phase docs as aut
 
 - The phase documents define one supported same-user Lima posture and reject vague "Linux parity except where different" language.
 - The phase documents treat `substrate host doctor`, `substrate world doctor`, and `substrate world gateway sync|status|restart` as already-landed operator surfaces.
-- The phase documents distinguish supported flows from breakglass flows, including `SUBSTRATE_WORLD_SOCKET` and direct guest administration.
+- The phase documents distinguish `supported`, `degraded-but-supported`, and `breakglass` flows consistently, including `SUBSTRATE_WORLD_SOCKET` and direct guest administration.
 - The phase documents scope unresolved policy parity claims to `MacLimaBackend` and backend-mediated Lima paths.
 - The milestone ordering is clear enough that a future implementation owner can start with milestone 0.1 decisions and then execute 0.2 without reopening scope.
 

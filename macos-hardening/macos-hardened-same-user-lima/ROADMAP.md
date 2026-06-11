@@ -77,6 +77,11 @@ same contract from being redefined in multiple `SPEC-*` files.
 The current milestones are useful epics, but not every milestone should map
 1:1 to a single implementation spec. The recommended initial slice map is:
 
+Slice `01` is also the terminology freeze point for the feature-local support
+taxonomy. Later slices should keep reusing the exact labels `supported`,
+`degraded-but-supported`, and `breakglass` rather than restating them with new
+categories.
+
 | Slice | Focus | Primary phase alignment |
 | --- | --- | --- |
 | 01 | supported mode and support taxonomy | Phase 0 |
@@ -101,6 +106,8 @@ even if milestone wording evolves.
 
 - milestone `0.1` maps most directly to Slice `01`
 - milestone `0.2` maps most directly to Slice `02`
+- milestone `0.1` should leave later docs with one stable vocabulary for
+  `supported`, `degraded-but-supported`, and `breakglass`
 
 ### Phase 1
 

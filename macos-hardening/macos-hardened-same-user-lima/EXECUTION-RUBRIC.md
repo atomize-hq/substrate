@@ -35,6 +35,19 @@ Use this document together with:
 This rubric does **not** replace the phase READMEs, milestone SOWs, or future
 slice docs. It defines the execution gates between them.
 
+## Inherited support taxonomy contract
+
+Once Slice `01` lands, future feature-local planning docs should reuse the
+exact support classes frozen in
+`spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md`:
+
+1. `supported`
+2. `degraded-but-supported`
+3. `breakglass`
+
+Do not reopen those labels in later slice docs unless a future slice explicitly
+owns a taxonomy change.
+
 ## Core execution model
 
 This feature should be run with two layers:
