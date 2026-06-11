@@ -11,15 +11,19 @@ records:
 - which gap is actually blocking honest analyzer and sentinel behavior now
 - the order the remaining work should land in
 
-This file is intended to be the repo-root authority for the current follow-on sequence after
-`v0.6A` / `v0.6B`.
+This file is intended to be the repo-root authority for the current follow-on sequence after the
+landed `R5` packet family.
 
 ## Ground Truth Sources
 
 - `docs/specs/hybrid-drift-sentinel-implementation-order.md`
-- `docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-spec.md`
-- `docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-plan.md`
-- `docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-tasks.md`
+- `docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md`
+- `docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md`
+- `docs/specs/r5/agent-drift-analyzer-session-progress-r5-tasks.md`
+- `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-planning-input.md`
+- `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-spec.md`
+- `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md`
+- `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md`
 - `.codex/handoffs/2026-06-04-180058-drift-sentinel-rollout-review.md`
 - `target/hybrid-drift-evals/*/analyzer/summary.md`
 - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
@@ -46,6 +50,8 @@ this worktree:
 - analyzer-owned turn context from `R3` with checkpoint schema `v0.4`
 - replay/live trigger-headline canonicalization from `R3.5`
 - the bounded analyzer-local delegation boundary from `R3.75`
+- analyzer-owned session archetype from `R4` with checkpoint schema `v0.5`
+- analyzer-owned session progress from `R5` with checkpoint schema `v0.6`
 
 That means the old recommendations to “treat generic `ToolOutput` as the top missing seam,”
 “re-open turn context,” or “finish delegation before doing any R4 planning” are now stale as
@@ -53,12 +59,14 @@ top-level architecture asks. Those foundations are already landed.
 
 ### What Is Still Open
 
-The stack no longer lacks explicit checkpoint-local session meaning.
+The stack no longer lacks explicit checkpoint-local session meaning or first-cut progress state.
 
-The current analyzer now exports deterministic, evidence-backed `session_archetype` state, and
-replay/live sentinel surfaces render the same compact archetype view for matching checkpoints.
-The next open gap is no longer archetype identification; it is progress and scorer semantics on top
-of that landed archetype layer.
+The current analyzer now exports deterministic, evidence-backed `session_archetype` and
+`session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
+progress views for matching checkpoints.
+
+The next open gap is no longer archetype identification or first-cut progress export. The next open
+gap is hardening the landed `R5` progress layer so it is safe scorer input before `R6` opens.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -66,9 +74,10 @@ The remaining gap is no longer “sentinel posture logic is missing,” “gener
 pollutes failure evidence,” or “checkpoint-local session archetype is absent.” The current honest
 next step is:
 
-1. add progress relative to archetype (`R5`)
-2. retune scorers to consume that deeper context (`R6`)
-3. extend delegated-session semantics beyond the current downgrade boundary (`R7`)
+1. keep `R5` landed as the first-cut progress layer
+2. harden that landed progress layer (`R5.5`)
+3. retune scorers to consume the hardened progress layer (`R6`)
+4. extend delegated-session semantics beyond the current downgrade boundary (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -148,54 +157,40 @@ evidence:
 The classification needed to be additive and confidence-bearing. That contract is now landed under
 checkpoint schema `v0.5`, with replay/live compatibility preserved for legacy schemas.
 
-## Gap 2: The Stack Does Not Model Progress Relative To Archetype
+## Gap 2: The Landed Progress Layer Still Needs Hardening Before Scorer Consumption
 
 ### Problem
 
-Even after archetype is identified, the stack still needs to ask whether the session is advancing
-inside that archetype. Right now repetition is over-weighted, while progress is under-modeled.
+`R5` added `session_progress`, but post-landing review showed a small number of remaining gaps that
+can still make progress unsafe scorer input if left unresolved.
 
 ### Why This Matters
 
-A troubleshooting session can fail the same command repeatedly while still making progress.
+A troubleshooting session can fail the same command repeatedly while still making real progress, but a
+scorer must not be fed false `advancing` when the same failure simply repeats after an overlapping
+edit.
 
-What matters is not “same command failed again.” What matters is whether the failure frontier is
-moving.
+The same review pass also showed that objective extraction, JS/TS verifier recognition, delegated
+parent-visible normalization, and real-rollout acceptance depth still need bounded hardening before
+`R6` cutover.
 
 ### What Needs To Exist
 
-One analyzer-owned `session_progress` module.
+One bounded post-landing hardening family (`R5.5`) that:
 
-For troubleshooting, it should capture signals such as:
-
-- identical verification command repeated
-- failing frontier stable vs advancing
-- failure class narrowing
-- earlier failure replaced by later failure
-- compile failure becoming test failure
-- many failing tests becoming fewer failing tests
-- edits overlapping the failing scope between retries
-
-For planning, it should capture:
-
-- candidate set narrowing
-- objective sharpening
-- artifact creation
-- unresolved questions shrinking
-
-For autonomous implementation, it should capture:
-
-- commentary alignment with kickoff prompt
-- verification wall progress
-- working-set concentration
-- expected-next-step stability or narrowing
+- removes the troubleshooting repeated-failure overclaim
+- prefers the real `/goal` or user objective over boilerplate
+- hardens JS/TS verifier attempt classification
+- deepens the committed real-rollout acceptance wall
+- normalizes delegated parent-visible progress and limiting evidence consistently
+- cleans the most misleading residual doc/code hygiene debt before `R6`
 
 ## Gap 3: Real Rollout Acceptance Is Too Weak
 
 ### Problem
 
-The current tests prove a lot of contract plumbing, but the review showed that green tests were not
-enough to prove semantic honesty on real completed sessions.
+The current tests prove a lot of contract plumbing and a first-cut semantic wall, but the review
+showed that green tests were still not enough to prove semantic honesty on real completed sessions.
 
 ### Why This Matters
 
@@ -593,6 +588,53 @@ session is moving the failure frontier” or “this planning session is converg
 - troubleshooting can distinguish repeated failure from advancing failure
 - planning can distinguish healthy synthesis from meandering discussion
 
+### Landing Status
+
+- `2026-06-10`: `R5` is landed in code and docs.
+- analyzer emits `schema_version = "v0.6"` checkpoints with explicit `session_progress`
+- replay/live sentinel surfaces render the same compact progress view for matching checkpoints
+- the first-cut bounded semantic wall is in place
+- the remaining work is follow-on hardening and acceptance deepening, not unfinished `R5`
+  surface-area landing
+
+## Packet R5.5: Session Progress Hardening
+
+### Objective
+
+Harden the landed `R5` `session_progress` model before `R6` scorer consumption.
+
+### Why Before R6
+
+`R5` exposed a small number of analyzer-semantic issues that can make progress unsafe scorer input,
+especially the troubleshooting repeated-failure overclaim. `R6` must not consume `advancing`
+troubleshooting progress until `R5.5` closes that gap.
+
+### Scope
+
+- troubleshooting repeated-failure overclaim fix
+- objective extraction hardening
+- JS/TS verifier-attempt hardening
+- bounded real-rollout corpus deepening
+- delegated-parent progress normalization and counter-evidence hygiene
+- `R5` doc/code hygiene
+
+### Non-goals
+
+- no public schema widening beyond `v0.6`
+- no scorer retuning
+- no scheduler or sentinel policy changes
+- no full delegated parent/child semantic linkage
+
+### Acceptance
+
+- repeated-failure troubleshooting overclaim regressions are green
+- objective extraction prefers the true `/goal` over boilerplate in the bounded repro cases
+- JS/TS verifier commands contribute checkpoint-level progress evidence
+- the committed real-rollout corpus includes implementation, closeout/review, and reopen/re-verify
+  cases
+- delegated parent-visible progress is normalized and limiting evidence remains visible
+- the stack is ready for `R6`, but `R6` is still unopened until the `R5.5` readiness gate is met
+
 ## Packet R6: Drift Scorer Cutover To Context-Aware Semantics
 
 ### Objective
@@ -600,10 +642,11 @@ session is moving the failure frontier” or “this planning session is converg
 Re-score `dead_end_thrash` and related drift classes using typed outcome evidence, turn context,
 archetype, and progress modules.
 
-### Why After R5
+### Why After R5.5
 
 This is where the earlier packets finally pay off. The scorers should become consumers of deeper
-analyzer modules rather than home-grown heuristic islands.
+analyzer modules rather than home-grown heuristic islands, but only after the landed `R5` progress
+layer has passed the `R5.5` hardening gate.
 
 ### Scope
 
@@ -687,7 +730,8 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5`, `R3.75`, and `R4` are now landed on this worktree, so the next open packet is `R5`.
+`R3.5`, `R3.75`, `R4`, and `R5` are now landed on this worktree, so the next open packet family is
+`R5.5`.
 
 The next honest implementation target is:
 
@@ -695,12 +739,13 @@ The next honest implementation target is:
 - keep `R3.5` closed as the completed replay/live trigger-headline canonicalization packet
 - keep `R3.75` closed as the completed delegation-aware analyzer boundary
 - keep `R4` closed as the completed session-archetype packet family
-- make `R5` archetype-aware progress semantics the next implementation target
-- keep `R6` scorer cutover queued behind `R5`
+- keep `R5` closed as the landed archetype-aware progress packet family
+- complete `R5.5` hardening before opening `R6`
+- keep `R6` scorer cutover queued behind `R5.5`
 - keep full delegated-session support as `R7` behind `R6`
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
-That is the current top-of-stack action after the landed `R3.5`, `R3.75`, and `R4` packets.
+That is the current top-of-stack action after the landed `R3.5`, `R3.75`, `R4`, and `R5` packets.
 
 ## Research-Informed Design Directions
 

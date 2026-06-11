@@ -12,6 +12,8 @@ Primary sources:
 - [agent-drift-sentinel-v0.2-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-v0.2-tasks.md:1)
 - [agent-drift-sentinel-live-integration-v0.3-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-sentinel-live-integration-v0.3-tasks.md:1)
 - [agent-drift-analyzer-checkpoint-state-v0.6-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-tasks.md:1)
+- [agent-drift-analyzer-session-progress-r5-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r5/agent-drift-analyzer-session-progress-r5-tasks.md:1)
+- [agent-drift-analyzer-session-progress-r5_5-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md:1)
 
 ## Task IDs
 
@@ -642,8 +644,12 @@ Packet 18 note:
     output should preserve the same whole-stream arrival ordering as live mode instead of grouping
     visible warnings before silent checkpoints. Current evidence says the ordering difference is
     presentation-only and not a checkpoint-local archetype/parity bug.
-  - with `R4-1` through `R4-5` now landed end-to-end, `R5` is the next open semantic packet
-    family on this worktree
+  - `2026-06-10`: `R5` is now landed end-to-end as the archetype-aware `session_progress` family
+    under checkpoint schema `v0.6`
+  - `2026-06-11`: `R5.5` docs are now locked as the explicit post-landing hardening family that
+    must close before `R6` scorer work opens
+  - with `R5` now landed, `R5.5` is the next open semantic packet family on this worktree, and
+    `R6` stays queued behind that hardening gate
 
 ## If You Want Fewer Packets
 
