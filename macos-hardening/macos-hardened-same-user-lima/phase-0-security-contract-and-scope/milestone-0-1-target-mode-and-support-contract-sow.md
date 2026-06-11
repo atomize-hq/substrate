@@ -135,8 +135,10 @@ This milestone should lock the contract around these rules:
 - A written target-mode contract section in this SOW that later phases can quote directly.
 - A support matrix with three states:
   - supported same-user hardened mode
-  - degraded-but-supported diagnostic mode using routed Substrate surfaces or
-    compatibility wrappers around them, not raw direct guest procedures
+  - degraded-but-supported operation that remains part of the supported story,
+    but with narrower guarantees, transitional caveats, or known UX debt while
+    still using routed Substrate surfaces or compatibility wrappers around
+    them, not raw direct guest procedures
   - breakglass direct guest mode plus host-side `SUBSTRATE_WORLD_SOCKET` override use
 - A gap list that future implementation must close, at minimum:
   - remove backend-local policy synthesis from `MacLimaBackend`
