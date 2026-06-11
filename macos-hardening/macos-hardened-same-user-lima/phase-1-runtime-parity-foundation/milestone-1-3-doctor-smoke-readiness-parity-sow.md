@@ -1,27 +1,31 @@
 # Milestone 1.3: Doctor / Smoke Readiness Parity SOW
 
-Status: Draft
+Status: Partial
 
 Owner: Substrate operator UX / macOS validation surfaces
 
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / Outcome
 
 Make the macOS readiness story prove the same routed Substrate contract that
 Linux relies on, and stop treating direct guest administration as the normal
-path for setup, diagnosis, and smoke validation.
+path for readiness validation and smoke validation on an already provisioned backend.
 
-The concrete outcome is not inventing doctors or gateway lifecycle from
-scratch. Those surfaces already exist. The outcome is to make existing CLI
-doctors, gateway lifecycle/status, and macOS smoke validation the authoritative
+The readiness cutover is partially landed already. CLI-first guidance and the
+core doctor/gateway lifecycle surfaces exist in HEAD, but guest/manual flows
+remain too prominent across helper scripts and setup/troubleshooting docs. The
+concrete outcome is not inventing doctors or gateway lifecycle from scratch.
+Those surfaces already exist. The outcome is to make existing CLI doctors,
+gateway lifecycle/status, and macOS smoke validation the authoritative
 readiness evidence, while direct `limactl shell` commands become explicitly
 breakglass-only diagnostics.
 
 ## Why This Milestone Exists
 
-Current readiness surfaces are partly landed, but the helpers and docs still
-normalize direct guest entry.
+Current readiness cutover is partially landed: CLI-first guidance already
+exists, but the helpers and docs still normalize direct guest entry strongly
+enough that guest/manual flows remain too prominent.
 
 - `substrate host doctor` and `substrate world doctor` already exist and are
   canonical CLI readiness surfaces.
@@ -34,9 +38,10 @@ normalize direct guest entry.
   guest probes.
 - `crates/shell/src/execution/platform/macos.rs` still falls back from host UDS
   to host TCP `17788` or in-VM probing when collecting doctor evidence.
-- `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` still present
-  `limactl shell`, in-guest `curl`, guest `systemctl`, and direct guest logs as
-  normal operator behavior.
+- `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` now
+  include CLI-first doctor/gateway guidance, but they still present too much
+  `limactl shell`, in-guest `curl`, guest `systemctl`, and direct guest log
+  usage as normal operator behavior.
 
 That posture undermines the same-user hardening story and also weakens parity:
 it can prove that the guest is reachable, not that Substrate’s routed path is
@@ -44,10 +49,11 @@ healthy.
 
 ## In Scope
 
-- Reframe `substrate host doctor` and `substrate world doctor` as the canonical
-  readiness interfaces for macOS.
-- Reframe `substrate world gateway sync|status|restart` and status JSON as
-  canonical readiness/support surfaces for managed gateway lifecycle.
+- Finish the cutover that reframes `substrate host doctor` and
+  `substrate world doctor` as the canonical readiness interfaces for macOS.
+- Finish the cutover that reframes `substrate world gateway
+  sync|status|restart` and status JSON as canonical readiness/support surfaces
+  for managed gateway lifecycle.
 - Align `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` to validate the
   routed Substrate path first.
 - Update readiness-oriented doc sections so direct guest commands are marked as
@@ -80,7 +86,7 @@ This milestone should make the readiness stack flow in layers:
 3. Breakglass guest introspection only when the routed path fails and deeper
    guest diagnosis is needed
 
-The docs should match that order. Setup can still mention that Lima exists, but
+The docs should match that order. Provisioning/setup docs can still mention that Lima exists, but
 the operator contract should prefer Substrate-owned commands and explain direct
 guest entry as a breakglass-only diagnostic path, not as the default workflow
 or a degraded-but-supported middle tier.
@@ -124,8 +130,8 @@ Current normalization of direct guest administration:
   transport and policy state visible.
 - A macOS smoke path that asserts routed PTY and non-PTY behavior before any
   guest-direct checks.
-- A readiness story that treats gateway lifecycle/status as a normal support
-  surface alongside doctor JSON.
+- A readiness story that completes the CLI-first cutover and treats gateway
+  lifecycle/status as a normal support surface alongside doctor JSON.
 - Updated readiness-oriented excerpts in macOS setup and world docs that
   clearly separate routed readiness validation from breakglass diagnostics.
 - A validation matrix for operator evidence capture on macOS that mirrors Linux
@@ -133,7 +139,7 @@ Current normalization of direct guest administration:
 
 ## Acceptance Criteria
 
-- The happy-path macOS validation docs for an already provisioned backend use
+- The happy-path macOS readiness-validation docs for an already provisioned backend use
   routed Substrate readiness commands first and do not require direct guest
   `curl` or `systemctl` for routine verification.
 - The happy-path docs also lead with `substrate world gateway sync|status|restart`

@@ -6,9 +6,9 @@ Draft
 
 ## Purpose / outcome
 
-Finish moving macOS Lima lifecycle, diagnostics, and operator guidance from direct guest administration toward explicit Substrate-owned commands and clearly bounded breakglass procedures. Phase 3 ends when the normal operator path no longer depends on raw `limactl shell substrate ...`, direct guest `systemctl` manipulation, or ad hoc socket probing as the primary workflow.
+Finish consolidating and productizing the macOS Lima lifecycle, diagnostics, and operator guidance surfaces that already exist in HEAD, while continuing to move the normal operator path away from direct guest administration and toward clearly bounded Substrate-owned commands plus breakglass procedures. Phase 3 ends when raw `limactl shell substrate ...`, direct guest `systemctl` manipulation, and ad hoc socket probing are no longer presented as the primary workflow.
 
-This phase is an operational cutover, not an invention phase. The canonical CLI surfaces already exist in HEAD:
+This phase is an operational cutover and contract-consolidation phase, not an invention phase. The canonical CLI surfaces already exist in HEAD:
 
 - `substrate host doctor`
 - `substrate world doctor`
@@ -18,20 +18,20 @@ This phase is an operational cutover, not an invention phase. The canonical CLI 
 
 ## Why this phase exists
 
-The current macOS backend works, but many repo surfaces still normalize direct guest operations even though the CLI-owned path already exists:
+The current macOS backend works, and substantial owned/operator-facing surfaces are already landed, but many repo surfaces still normalize direct guest operations or helper-script authority instead of presenting one consolidated operator contract:
 
 - `docs/reference/world/platforms/macos-lima-setup.md` still includes step-by-step `limactl shell substrate ...` build, install, service, and troubleshooting flows.
 - `docs/WORLD.md` already names CLI doctor surfaces, shared-world support, and the `SUBSTRATE_WORLD_SOCKET` bypass, but it still preserves too much direct guest guidance for the hardened default.
-- `scripts/mac/lima-doctor.sh` remains a guest-admin-oriented diagnostic script rather than a thin wrapper around a fully Substrate-owned support story.
-- `scripts/mac/lima-warm.sh` still relies heavily on direct `limactl shell` mutation, which is functional but not the posture that operator docs should normalize.
+- `scripts/mac/lima-doctor.sh` remains a guest-admin-oriented diagnostic script rather than a thin wrapper around the already-landed CLI-first support story.
+- `scripts/mac/lima-warm.sh` still owns most create/warm/repair automation through direct `limactl shell` mutation, which means the main gap is operator-contract consolidation/productization, not absence of automation.
 - `scripts/mac/smoke.sh` and `scripts/mac/orchestration-smoke.sh` already prove important parts of the supported path, but the top-level docs still present too much of the exception path as routine setup.
 
-That matters because a hardened same-user Lima deployment should make "what Substrate owns" legible. Phase 2 narrows the technical surface. Phase 3 narrows the operational surface.
+That matters because a hardened same-user Lima deployment should make "what Substrate owns" legible without overstating the current boundary. `scripts/mac/lima-warm.sh` still injects `SUBSTRATE_AGENT_TCP_PORT=61337` as part of the current guest contract. Phase 2 narrows the technical surface. Phase 3 narrows and clarifies the operational surface.
 
 ## In-scope
 
-- Define the normal macOS lifecycle and diagnostics actions that should be taught through Substrate commands first.
-- Define the normal macOS ingress and sync actions that should be taught through Substrate commands after Phase 2 mount minimization.
+- Consolidate the normal macOS lifecycle and diagnostics actions that should be taught through Substrate commands first.
+- Consolidate the normal macOS ingress and sync actions that should be taught through Substrate commands after Phase 2 mount minimization.
 - Reclassify direct guest administration as breakglass where it remains necessary.
 - Reclassify `SUBSTRATE_WORLD_SOCKET` as an advanced/test/breakglass bypass rather than a standard Lima operator workflow.
 - Cut documentation over so the primary operator story runs through Substrate-owned commands first.
@@ -43,12 +43,13 @@ That matters because a hardened same-user Lima deployment should make "what Subs
 - Solving the underlying same-user ownership limitation.
 - Inventing a native macOS world implementation.
 - Broad CLI redesign outside the macOS world lifecycle and diagnostics surface needed here.
+- Closing all remaining MacLimaBackend policy-parity gaps or the same-user ownership limitation; those remain background constraints, not the main Phase 3 contract-consolidation target.
 
 ## Architectural approach
 
-Phase 3 treats the Lima guest as an internal implementation detail for normal operations. The user-visible contract becomes:
+Phase 3 treats the Lima guest as an internal implementation detail for normal operations as far as repo truth already allows. The user-visible contract becomes:
 
-1. Substrate-owned commands decide when the VM must exist, start, sync, diagnose, or repair.
+1. Existing Substrate-owned commands already decide diagnosis, gateway status, and key runtime checks; the remaining create/warm/repair path must be consolidated into a clearer operator contract instead of being treated as if no lifecycle automation exists today.
 2. Remaining fallback flows are classified using the phase-0 taxonomy:
    - supported
    - degraded-but-supported
@@ -68,7 +69,7 @@ This phase does not require hiding Lima from advanced users. It requires reclass
 ## Concrete repo surfaces and file pointers
 
 - `scripts/mac/lima-warm.sh`
-  - current lifecycle/provisioning authority
+  - current lifecycle/provisioning authority, including guest unit wiring that still injects `SUBSTRATE_AGENT_TCP_PORT=61337`
 - `scripts/mac/lima-doctor.sh`
   - current diagnostic authority
 - `scripts/mac/smoke.sh`
@@ -87,8 +88,8 @@ This phase does not require hiding Lima from advanced users. It requires reclass
 ## Deliverables
 
 - One phase packet sequencing the operational cutover into milestones 3.1 and 3.2.
-- A defined Substrate-owned lifecycle and diagnostics story for hardened same-user Lima.
-- A defined Substrate-owned ingress and sync story that replaces any remaining dependence on broad convenience mounts for normal operation.
+- A consolidated/productized Substrate-owned lifecycle and diagnostics story for hardened same-user Lima.
+- A consolidated/productized Substrate-owned ingress and sync story that replaces any remaining dependence on broad convenience mounts for normal operation.
 - A breakglass policy for remaining direct guest operations and bypasses.
 - Documentation and validation aligned to the new operational boundary.
 
