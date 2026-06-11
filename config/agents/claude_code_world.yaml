@@ -1,0 +1,21 @@
+version: 1
+id: claude_code_world
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: world
+  cli:
+    runtime_family: claude_code
+    binary: claude
+    mode: persistent
+  capabilities:
+    session_start: true
+    session_resume: true
+    session_fork: true
+    session_stop: true
+    status_snapshot: true
+    event_stream: true
+    llm: true
+    mcp_client: false
