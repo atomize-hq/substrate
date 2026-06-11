@@ -134,6 +134,15 @@ Repo-truth consequence:
 
 These are the decisions Slice `55` should freeze as v1 contract truth.
 
+| Contract area | Allowed in v1 | Not allowed in v1 | Deferred follow-on |
+|---|---|---|---|
+| Default backend vs default-agent routing | config/runtime default backend resolution for runtime, policy, inventory, and adapter realization | implicit prompt routing from plain REPL input, `substrate -c`, `--command`, piped stdin, missing `--backend`, or latest-session heuristics | any future default-agent UX |
+| Prompt-taking surfaces | exact REPL `::<backend_id> <prompt>` and explicit `substrate agent start|turn` | ambient shell aliases or fuzzy “prompt from anywhere” semantics | broader non-REPL targeting beyond the current namespace |
+| Shell-wrap surfaces | `substrate -c`, `--command`, and piped stdin as shell execution only | reinterpreting shell-wrap surfaces as agent prompt entrypoints | any future one-shot explicit agent caller, if introduced deliberately |
+| Public follow-up selectors | exact `--session <orchestration_session_id> --backend <backend_id>` | `participant_id`, `session_handle_id`, `active_session_handle_id`, `internal.uaa_session_id`, recency selectors, or hidden backend inference | richer write-side discovery such as a bounded `--current` |
+| World-start wording | host-rooted world-backed `start` under a host orchestration session | implying standalone member-root public start/continuity already ships | direct member-root public lifecycle |
+| Broader ergonomics | narrow explicit caller surfaces with fail-closed routing | hidden routing convenience or broader member selector semantics | later caller-surface ergonomics/productization work |
+
 ### Decision 1: config/runtime default backend is allowed; implicit default-agent routing is not
 
 Allowed:
