@@ -987,8 +987,12 @@ mod tests {
             SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::Host)
         );
         assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::SmokeValidated
+        );
+        assert_eq!(
             posture.support_state,
-            LiveToolSupportState::NotYetGuaranteed
+            LiveToolSupportState::SelectedRuntimeSupported
         );
     }
 

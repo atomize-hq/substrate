@@ -5,7 +5,15 @@ Source tracker note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall
 Source gap matrix: [AGENT_ORCHESTRATION_GAP_MATRIX.md](../AGENT_ORCHESTRATION_GAP_MATRIX.md)  
 Prior slice: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)  
 Plan type: second runtime-family parity above the first validated Codex-backed host-tool floor  
-Status: proposed for review on `2026-06-11`
+Status: landed and validated on `2026-06-11`
+
+## Closeout outcome
+
+Slice `54` is now the landed baseline for selected-host multi-family host-tool support:
+
+1. selected `claude_code` host starts/turns reuse the same authoritative toolbox env plus prompt-contract disclosure path as the first validated family floor,
+2. selected-host reporting surfaces can publish `claude_code` as `smoke_validated` / `selected_runtime_supported` without overclaiming inventory-entry or world-scope support,
+3. remaining deferred work is later docs/smoke follow-through after future live-surface widening, plus the broader caller-surface, cross-platform, Family-2, and governance tracks already called out below.
 
 ## Objective
 

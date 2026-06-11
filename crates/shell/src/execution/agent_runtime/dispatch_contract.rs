@@ -1327,6 +1327,7 @@ impl LiveToolSupportState {
 pub(crate) enum SelectedClaudeCodePathState {
     #[allow(dead_code)]
     Present,
+    #[allow(dead_code)]
     Missing,
 }
 
@@ -1334,6 +1335,7 @@ pub(crate) enum SelectedClaudeCodePathState {
 pub(crate) enum Slice52SemanticsState {
     #[allow(dead_code)]
     Preserved,
+    #[allow(dead_code)]
     NotYetProven,
     #[allow(dead_code)]
     NotPreserved,
@@ -1343,6 +1345,7 @@ pub(crate) enum Slice52SemanticsState {
 pub(crate) enum TargetedValidationState {
     #[allow(dead_code)]
     Green,
+    #[allow(dead_code)]
     NotYetGreen,
 }
 
@@ -1350,6 +1353,7 @@ pub(crate) enum TargetedValidationState {
 pub(crate) enum HiddenFallbackState {
     #[allow(dead_code)]
     NoHiddenFallback,
+    #[allow(dead_code)]
     NotYetProven,
     #[allow(dead_code)]
     HiddenFallbackPresent,
@@ -1364,12 +1368,22 @@ pub(crate) struct SelectedClaudeCodeUpliftGate {
 }
 
 impl SelectedClaudeCodeUpliftGate {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) const fn packet_1() -> Self {
         Self {
             selected_start_turn_path: SelectedClaudeCodePathState::Missing,
             slice_52_semantics: Slice52SemanticsState::NotYetProven,
             targeted_validation: TargetedValidationState::NotYetGreen,
             hidden_fallback: HiddenFallbackState::NotYetProven,
+        }
+    }
+
+    pub(crate) const fn slice_54_validated() -> Self {
+        Self {
+            selected_start_turn_path: SelectedClaudeCodePathState::Present,
+            slice_52_semantics: Slice52SemanticsState::Preserved,
+            targeted_validation: TargetedValidationState::Green,
+            hidden_fallback: HiddenFallbackState::NoHiddenFallback,
         }
     }
 
@@ -1432,7 +1446,7 @@ impl LiveToolSupportPosture {
         Self::for_backend_kind_with_selected_claude_code_uplift_gate(
             backend_kind,
             SelectedClaudeCodeUpliftContext::inventory_entry(),
-            SelectedClaudeCodeUpliftGate::packet_1(),
+            SelectedClaudeCodeUpliftGate::slice_54_validated(),
         )
     }
 
@@ -1443,7 +1457,7 @@ impl LiveToolSupportPosture {
         Self::for_backend_kind_with_selected_claude_code_uplift_gate(
             backend_kind,
             SelectedClaudeCodeUpliftContext::selected_launch(execution_scope),
-            SelectedClaudeCodeUpliftGate::packet_1(),
+            SelectedClaudeCodeUpliftGate::slice_54_validated(),
         )
     }
 
@@ -2488,7 +2502,7 @@ mod tests {
     }
 
     #[test]
-    fn live_tool_support_posture_freezes_packet_1_uplift_gate_in_repo_truth() {
+    fn live_tool_support_posture_preserves_packet_1_pre_parity_history() {
         let gate = SelectedClaudeCodeUpliftGate::packet_1();
 
         assert_eq!(
@@ -2506,6 +2520,25 @@ mod tests {
                 SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::Host)
             ),
             "Packet 1 must keep selected claude_code uplift closed until every gate criterion is satisfied"
+        );
+    }
+
+    #[test]
+    fn live_tool_support_posture_freezes_slice_54_validated_uplift_gate_in_repo_truth() {
+        let gate = SelectedClaudeCodeUpliftGate::slice_54_validated();
+
+        assert_eq!(
+            gate.selected_start_turn_path,
+            SelectedClaudeCodePathState::Present
+        );
+        assert_eq!(gate.slice_52_semantics, Slice52SemanticsState::Preserved);
+        assert_eq!(gate.targeted_validation, TargetedValidationState::Green);
+        assert_eq!(gate.hidden_fallback, HiddenFallbackState::NoHiddenFallback);
+        assert!(
+            gate.allows_selected_runtime_enablement(
+                SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::Host)
+            ),
+            "Slice 54 must keep selected claude_code uplift open only for the selected host-runtime path"
         );
     }
 
@@ -2542,7 +2575,7 @@ mod tests {
         );
         assert_eq!(
             posture.selected_claude_code_uplift_gate,
-            SelectedClaudeCodeUpliftGate::packet_1()
+            SelectedClaudeCodeUpliftGate::slice_54_validated()
         );
         assert_eq!(
             posture.selected_claude_code_uplift_context,
@@ -2565,7 +2598,7 @@ mod tests {
         );
         assert_eq!(
             posture.selected_claude_code_uplift_gate,
-            SelectedClaudeCodeUpliftGate::packet_1()
+            SelectedClaudeCodeUpliftGate::slice_54_validated()
         );
         assert_eq!(
             posture.selected_claude_code_uplift_context,

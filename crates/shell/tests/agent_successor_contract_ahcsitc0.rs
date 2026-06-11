@@ -1617,20 +1617,20 @@ fn agent_toolbox_status_json_publishes_non_codex_live_tool_posture_without_overc
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/validation_state")
             .and_then(Value::as_str),
-        Some("not_yet_smoke_validated"),
-        "toolbox status must distinguish non-Codex posture from the first validated Codex-backed floor: {json}"
+        Some("smoke_validated"),
+        "toolbox status must publish the validated selected-host claude_code posture once Slice 54 parity is landed: {json}"
     );
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/support_state")
             .and_then(Value::as_str),
-        Some("not_yet_guaranteed"),
-        "toolbox status must not overclaim claude_code parity: {json}"
+        Some("selected_runtime_supported"),
+        "toolbox status must report selected-host claude_code parity without widening the claim beyond that scope: {json}"
     );
     assert!(
         json.pointer("/orchestrator/live_tool_support/reason")
             .and_then(Value::as_str)
-            .is_some_and(|reason| reason.contains("not yet smoke-validated")),
-        "toolbox status must explain the non-Codex posture truthfully: {json}"
+            .is_some_and(|reason| reason.contains("selected-runtime host-tool parity gate is open")),
+        "toolbox status must explain the validated selected-host claude_code posture truthfully: {json}"
     );
 }
 
@@ -5039,22 +5039,22 @@ fn agent_doctor_json_publishes_non_codex_live_tool_posture_without_overclaiming_
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/validation_state")
             .and_then(Value::as_str),
-        Some("not_yet_smoke_validated"),
-        "doctor must distinguish non-Codex posture from the first validated Codex-backed floor: {json}"
+        Some("smoke_validated"),
+        "doctor must publish the validated selected-host claude_code posture once Slice 54 parity is landed: {json}"
     );
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/support_state")
             .and_then(Value::as_str),
-        Some("not_yet_guaranteed"),
-        "doctor must not overclaim claude_code parity: {json}"
+        Some("selected_runtime_supported"),
+        "doctor must report selected-host claude_code parity without widening the claim beyond that scope: {json}"
     );
     assert!(
         json.pointer("/orchestrator/live_tool_support/reason")
             .and_then(Value::as_str)
             .is_some_and(
-                |reason| reason.contains("ordinary host-session behavior remains unchanged")
+                |reason| reason.contains("selected-runtime host-tool parity gate is open")
             ),
-        "doctor must explain the non-Codex posture truthfully: {json}"
+        "doctor must explain the validated selected-host claude_code posture truthfully: {json}"
     );
 }
 

@@ -4,18 +4,26 @@ Source spec: [SPEC-54-inventory-selected-second-runtime-family-host-orchestrator
 Source plan: [PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)
 Execution model: four sequential implementation packets  
 Phase: `TASKS`  
-Status: proposed for review on `2026-06-11`
+Status: landed and validated on `2026-06-11`
+
+## Closeout note
+
+Packet `4` aligned the Slice `54` ledger to live repo truth:
+
+1. selected-host `claude_code` parity is landed and validated,
+2. operator/reporting surfaces now publish the selected-host posture truthfully,
+3. the remaining-scope note and gap matrix no longer treat `claude_code` parity as the next open seam.
 
 ## Current tree note
 
-1. Slice `53` already landed the first validated Codex-backed host-tool floor and deliberately left selected `claude_code` host sessions on the older non-tool-staged path.
-2. Slice `54` is the next honest execution-bearing seam because the remaining-scope tracker and gap matrix both now point to runtime-family parity for `claude_code` as the main active Family-1 gap.
-3. Slice `54` should not widen into public toolbox CLI execution, MCP-first redesign, broader caller-surface productization, or Family-2 host-global ingress work.
-4. Packet `4` should update tracker/docs truth once parity is real, including any bounded stale-reference cleanup needed while aligning the repo narrative.
+1. Slice `53` landed the first validated Codex-backed host-tool floor.
+2. Slice `54` closes the selected-host `claude_code` runtime-family parity gap and aligns operator/reporting truth to that landed state.
+3. Slice `54` does not widen into public toolbox CLI execution, MCP-first redesign, broader caller-surface productization, or Family-2 host-global ingress work.
+4. Any later host-tool docs/smoke follow-through remains bounded to future live-surface widening rather than reopening parity itself.
 
 ## Task List
 
-- [ ] Task 54.1: Freeze the explicit `claude_code` parity target and support-posture uplift rules
+- [x] Task 54.1: Freeze the explicit `claude_code` parity target and support-posture uplift rules
   - Acceptance:
     - the repo defines exactly what must become true before `claude_code` stops being reported as `not_yet_smoke_validated` / `not_yet_guaranteed`
     - parity is keyed off resolved runtime family, not literal `agent_id` or hidden fallback
@@ -29,7 +37,7 @@ Status: proposed for review on `2026-06-11`
     - `crates/shell/src/execution/agent_runtime/validator.rs` (only if needed)
     - `crates/shell/src/execution/agents_cmd.rs`
 
-- [ ] Task 54.2: Land selected `claude_code` host start/turn parity for authoritative toolbox env injection plus prompt-contract disclosure
+- [x] Task 54.2: Land selected `claude_code` host start/turn parity for authoritative toolbox env injection plus prompt-contract disclosure
   - Acceptance:
     - selected `claude_code` host starts no longer keep the old non-tool-staged path
     - selected `claude_code` host turns receive the same authoritative host-tool surface architecture already used by the first family floor
@@ -45,7 +53,7 @@ Status: proposed for review on `2026-06-11`
     - `crates/shell/src/execution/agents_cmd.rs`
     - `crates/gateway/src/adapter_runtime.rs` (only if a bounded adapter change is required)
 
-- [ ] Task 54.3: Reuse Slice `52` semantics for live `claude_code` tool invocation and receipt/follow-up parity
+- [x] Task 54.3: Reuse Slice `52` semantics for live `claude_code` tool invocation and receipt/follow-up parity
   - Acceptance:
     - live `claude_code` tool calls route through `tool_invocation_contract.rs`
     - runtime-owned request/session/caller/world fields remain shell-injected
@@ -61,7 +69,7 @@ Status: proposed for review on `2026-06-11`
     - `crates/shell/src/repl/async_repl.rs`
     - focused shell tests as needed
 
-- [ ] Task 54.4: Add selected `claude_code` parity regression coverage and remove the old non-tool-staged expectation
+- [x] Task 54.4: Add selected `claude_code` parity regression coverage and remove the old non-tool-staged expectation
   - Acceptance:
     - tests now assert truthful selected `claude_code` host-tool parity instead of preserving the old startup-prompt omission
     - reporting does not overclaim more than the runtime actually proves
@@ -77,7 +85,7 @@ Status: proposed for review on `2026-06-11`
     - `crates/shell/tests/repl_world_first_routing_v1.rs`
     - `crates/shell/src/execution/agents_cmd.rs`
 
-- [ ] Task 54.5: Update operator/reporting surfaces and slice-tracker truth for second-family parity
+- [x] Task 54.5: Update operator/reporting surfaces and slice-tracker truth for second-family parity
   - Acceptance:
     - `substrate agent doctor --json` and/or `substrate agent toolbox status --json` reflect the new `claude_code` posture truthfully
     - remaining-scope docs no longer list `claude_code` parity as the active next seam once the slice is validated
@@ -95,7 +103,7 @@ Status: proposed for review on `2026-06-11`
     - `llm-last-mile/PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md`
     - `llm-last-mile/TASKS-54.md`
 
-- [ ] Task 54.6: Close the Slice `54` validation wall
+- [x] Task 54.6: Close the Slice `54` validation wall
   - Acceptance:
     - workspace fmt/clippy/targeted tests are green
     - the selected `claude_code` parity path is backed by validation evidence rather than by documentation-only uplift

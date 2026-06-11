@@ -186,40 +186,32 @@ Repo-truth consequence:
 
 ## What Is Still Honestly Remaining
 
-### 1. Family 1: second runtime-family parity is the main active execution seam
+### 1. Family 1: second runtime-family parity is now landed baseline truth
 
-The immediate next honest Family-1 implementation seam is:
+Slice `54` closed the previously active Family-1 parity seam:
 
-1. `claude_code` parity for the landed host-orchestrator tool surface.
+1. selected `claude_code` host starts and turns now take the same authoritative host-tool path already proven for the first validated family floor,
+2. the same seven-tool semantic contract, runtime-owned identity injection, and receipt/follow-up rules remain shared,
+3. operator/reporting surfaces can now publish selected-host `claude_code` posture as validated without forcing runtime selection or hard-coding orchestrator identity.
 
-That slice should preserve:
+Repo-truth consequence:
 
-1. the same seven-tool semantic contract,
-2. the same runtime-owned identity injection rules,
-3. the same receipt/follow-up semantics,
-4. the same config/inventory/policy-driven orchestrator selection model,
-5. the same separation between validated support posture and forced runtime selection.
+1. `claude_code` parity should no longer be treated as the next open seam,
+2. future host-tool work should start from multi-family parity as the landed baseline,
+3. public toolbox CLI widening, MCP-first redesign, and hidden-fallback behavior remain out of scope.
 
-What it should **not** reopen:
+### 2. Family 1: broader docs/smoke follow-through still remains, but only when later surface widening changes repo truth
 
-1. transport invention,
-2. MCP-first redesign,
-3. hard-coded orchestrator identity,
-4. public toolbox CLI widening,
-5. already-landed Codex-first validation truth.
-
-### 2. Family 1: broader docs/smoke follow-through still remains, but only after parity or other surface widening
-
-Once later parity or some other live surface widening lands, the tree will still need a bounded follow-up on:
+After Slice `54`, the remaining bounded host-tool follow-through is:
 
 1. broader runtime-family smoke coverage,
 2. broader docs alignment,
-3. operator/runtime truth for whatever the then-current multi-family live surface actually is.
+3. operator/runtime truth updates only when some later live surface widening materially changes repo truth again.
 
 Repo-truth consequence:
 
 1. this is still real remaining scope,
-2. but it is **not** the immediate next slice while parity itself is still missing.
+2. but it is no longer evidence that selected-host `claude_code` parity is missing today.
 
 ### 3. Family 1: optional richer autonomy/message widening is no longer mandatory foundation work
 
@@ -291,12 +283,13 @@ Repo-truth consequence:
 
 ### Immediate next seam
 
-1. **Family 1: second runtime-family parity for `claude_code`**
+1. **No replacement host-tool parity seam is queued immediately**
+   - Slice `54` closed selected-host `claude_code` parity, so the next choice is between broader docs/smoke follow-through, caller/control-surface hardening, or Family-2 coordination based on product priority.
 
 ### After that
 
 2. **Family 1: broader docs/smoke follow-through**
-   - but only after later parity or some other live surface widening changes repo truth.
+   - but only after later live surface widening changes repo truth again.
 
 ### If the team pivots back to Family 2
 
@@ -341,8 +334,8 @@ Current repo truth is:
 
 1. the older `REMAINING-*` notes are now best read as historical checkpoints, not the current top-level source of truth,
 2. Family 1 foundation work is landed through the first Codex-backed host-tool floor,
-3. the main active Family-1 remaining seam is second runtime-family parity for `claude_code`,
-4. broader Family-1 docs/smoke follow-through comes after that later parity or other live surface widening,
+3. selected-host `claude_code` parity is landed through Slice `54`,
+4. broader Family-1 docs/smoke follow-through is a later bounded update only when some future live surface widening changes repo truth again,
 5. Family 2 local semantics are landed through the first `host_inbox -> local obligation -> router` boundary,
 6. the next likely Family-2 seam, if still needed, is host-global ingress lifecycle coordination rather than reopening local materialization,
 7. broader cross-host delivery, federation, and public/operator UX remain later or optional work,

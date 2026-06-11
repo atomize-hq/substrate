@@ -4386,7 +4386,7 @@ mod tests {
     }
 
     #[test]
-    fn toolbox_status_keeps_non_codex_runtime_readable_while_marking_posture_unvalidated() {
+    fn toolbox_status_keeps_selected_claude_runtime_readable_while_marking_posture_validated() {
         with_state_store(|_| {
             let agent_id = "host_orchestrator_alias";
             let effective_config = SubstrateConfig {
@@ -4431,11 +4431,11 @@ mod tests {
             assert_eq!(posture.runtime_family, "claude_code");
             assert_eq!(
                 posture.validation_state,
-                LiveToolValidationState::NotYetSmokeValidated.as_str()
+                LiveToolValidationState::SmokeValidated.as_str()
             );
             assert_eq!(
                 posture.support_state,
-                LiveToolSupportState::NotYetGuaranteed.as_str()
+                LiveToolSupportState::SelectedRuntimeSupported.as_str()
             );
         });
     }
