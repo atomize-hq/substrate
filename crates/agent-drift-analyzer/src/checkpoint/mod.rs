@@ -1053,7 +1053,7 @@ fn classify_known_tool_family_role(command: &CommandObservation) -> Option<Comma
                 "--jobs",
             ],
         )?),
-        "npm" | "pnpm" => npm_like_role(args),
+        "npm" | "pnpm" | "yarn" | "bun" | "npx" => npm_like_role(args),
         "git" => role_from_git_subcommand(next_positional_token(
             args,
             &[
@@ -1071,7 +1071,10 @@ fn classify_known_tool_family_role(command: &CommandObservation) -> Option<Comma
 }
 
 fn requires_shallow_subcommand_parse(family: &str) -> bool {
-    matches!(family, "cargo" | "npm" | "pnpm" | "git")
+    matches!(
+        family,
+        "cargo" | "npm" | "pnpm" | "yarn" | "bun" | "npx" | "git"
+    )
 }
 
 fn is_verification_command_family(family: &str) -> bool {
@@ -1149,9 +1152,9 @@ fn npm_like_role(tokens: &[String]) -> Option<CommandRole> {
             "-F",
         ],
     )?;
-    if subcommand == "run" {
-        let run_index = tokens.iter().position(|token| token == "run")?;
-        return role_from_subcommand(next_positional_token(&tokens[run_index + 1..], &[])?);
+    if matches!(subcommand, "run" | "exec" | "dlx") {
+        let subcommand_index = tokens.iter().position(|token| token == subcommand)?;
+        return role_from_subcommand(next_positional_token(&tokens[subcommand_index + 1..], &[])?);
     }
     role_from_subcommand(subcommand)
 }
@@ -1159,7 +1162,16 @@ fn npm_like_role(tokens: &[String]) -> Option<CommandRole> {
 fn role_from_subcommand(subcommand: &str) -> Option<CommandRole> {
     if matches!(
         subcommand,
-        "test" | "check" | "clippy" | "fmt" | "format" | "build" | "lint"
+        "test"
+            | "check"
+            | "clippy"
+            | "fmt"
+            | "format"
+            | "build"
+            | "lint"
+            | "typecheck"
+            | "vitest"
+            | "jest"
     ) {
         return Some(CommandRole::Verification);
     }

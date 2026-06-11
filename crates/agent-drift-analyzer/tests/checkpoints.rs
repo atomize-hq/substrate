@@ -435,6 +435,121 @@ fn checkpoints_mark_single_checkpoint_verification_plurality_turns_as_verificati
 }
 
 #[test]
+fn checkpoints_count_js_verifier_matrix_commands_as_verification_like() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Exercise the JS/TS verifier matrix without broadening beyond Packet R5.5-3.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"npm test -- --runInBand\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"npm run test -- --runInBand\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"npm run lint\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"npm run typecheck\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"pnpm test -- --runInBand\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            6,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"pnpm run test -- --runInBand\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            7,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"pnpm run lint\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            8,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"pnpm exec vitest run tests/checkpoints.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            9,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"yarn test tests/checkpoints.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            10,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"yarn run test tests/checkpoints.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            11,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"yarn lint\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            12,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"yarn run lint\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            13,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"npx vitest run tests/checkpoints.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            14,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"vitest run tests/checkpoints.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            15,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"bun test tests/checkpoints.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let turn_context = checkpoint.turn_context.as_ref().expect("turn context");
+
+    assert_eq!(turn_context.activity_mix.tool_call_count, 15);
+    assert_eq!(turn_context.activity_mix.read_like_command_count, 0);
+    assert_eq!(turn_context.activity_mix.write_like_command_count, 0);
+    assert_eq!(
+        turn_context.activity_mix.verification_like_command_count,
+        15
+    );
+    assert_eq!(
+        turn_context.execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::VerificationHeavy
+    );
+}
+
+#[test]
 fn checkpoints_mark_tool_free_short_turns_as_conversational() {
     let mut bundle = load_sample_bundle();
     for row in bundle
@@ -2136,7 +2251,6 @@ fn checkpoints_mark_implementation_wall_advancement_with_concentrated_edits() {
         .session_progress
         .as_ref()
         .expect("session progress");
-
     assert_eq!(
         progress.dimension,
         ProgressDimension::ImplementationVerificationWall
@@ -2199,6 +2313,58 @@ fn checkpoints_keep_implementation_verifier_improvement_without_overlap_conserva
         ProgressStatus::InsufficientEvidence | ProgressStatus::Mixed
     ));
     assert_absent_progress_signal(progress, ProgressSignalCode::FailingScopeEdited);
+}
+
+#[test]
+fn checkpoints_use_npx_vitest_attempts_as_checkpoint_progress_evidence() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Land the Packet R5.5-3 implementation in checkpoint/attempt.rs.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            "{\"command\":\"npx vitest run tests/checkpoint-progress.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 1\nError: cannot find module './progress'\n",
+        ),
+        tool_call_row(
+            3,
+            "turn-002",
+            "functions.apply_patch",
+            "{\"command\":\"apply_patch <<'PATCH'\\n*** Begin Patch\\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/attempt.rs\\n*** End Patch\\nPATCH\",\"workdir\":\"/repo\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            "{\"command\":\"npx vitest run tests/checkpoint-progress.test.ts\",\"workdir\":\"/repo\"}",
+        ),
+        tool_output_row(
+            5,
+            "turn-002",
+            "Exit code: 1\n FAIL  tests/checkpoint-progress.test.ts > session progress > captures js verifier evidence\n AssertionError: expected advancing",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ImplementationVerificationWall
+    );
+    assert_eq!(progress.status, ProgressStatus::Mixed);
+    assert_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    assert!(!progress.supporting_evidence.is_empty());
 }
 
 #[test]

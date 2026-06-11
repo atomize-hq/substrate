@@ -201,6 +201,8 @@ pub(crate) fn verification_target_from_command(
             "jest" => VerifierKind::Jest,
             "bun" => VerifierKind::BunTest,
             "deno" => VerifierKind::DenoTest,
+            "npx" if tokens.iter().any(|token| token == "vitest") => VerifierKind::Vitest,
+            "npx" if tokens.iter().any(|token| token == "jest") => VerifierKind::Jest,
             "python" | "uv" if tokens.iter().any(|token| token == "pytest") => VerifierKind::Pytest,
             _ => VerifierKind::GenericTest,
         }),
@@ -232,7 +234,9 @@ pub(crate) fn verification_target_from_command(
             paths.extend(more_paths);
             tests.extend(more_tests);
         }
-        "npm" | "pnpm" | "vitest" | "jest" | "bun" | "deno" if role == CommandAttemptRole::Test => {
+        "npm" | "pnpm" | "yarn" | "npx" | "vitest" | "jest" | "bun" | "deno"
+            if role == CommandAttemptRole::Test =>
+        {
             let (more_paths, more_tests) = js_test_targets(&tokens, &family);
             paths.extend(more_paths);
             tests.extend(more_tests);
@@ -420,6 +424,8 @@ fn verifier_kind(attempt: &CommandAttempt) -> Option<VerifierKind> {
             "jest" => VerifierKind::Jest,
             "bun" => VerifierKind::BunTest,
             "deno" => VerifierKind::DenoTest,
+            "npx" if tokens.iter().any(|token| token == "vitest") => VerifierKind::Vitest,
+            "npx" if tokens.iter().any(|token| token == "jest") => VerifierKind::Jest,
             "python" | "uv" if tokens.iter().any(|token| token == "pytest") => VerifierKind::Pytest,
             _ => VerifierKind::GenericTest,
         }),
@@ -455,7 +461,7 @@ fn verification_scope(attempt: &CommandAttempt) -> VerificationScope {
             paths.extend(more_paths);
             tests.extend(more_tests);
         }
-        "npm" | "pnpm" | "vitest" | "jest" | "bun" | "deno"
+        "npm" | "pnpm" | "yarn" | "npx" | "vitest" | "jest" | "bun" | "deno"
             if attempt.role == CommandAttemptRole::Test =>
         {
             let (more_paths, more_tests) = js_test_targets(&tokens, &attempt.family);
@@ -687,6 +693,8 @@ fn npm_like_role(tokens: &[String], family: &str) -> Option<CommandAttemptRole> 
     Some(match command {
         "test" | "vitest" | "jest" | "lint" if subcommand == "test" => CommandAttemptRole::Test,
         "test" | "vitest" | "jest" => CommandAttemptRole::Test,
+        "lint" => CommandAttemptRole::Lint,
+        "typecheck" => CommandAttemptRole::Build,
         "install" | "add" | "i" | "ci" | "up" | "update" => CommandAttemptRole::DependencyMutation,
         "build" => CommandAttemptRole::Build,
         "fmt" | "format" => CommandAttemptRole::FormatCheck,
@@ -1182,7 +1190,27 @@ mod tests {
                 "npm install typescript",
                 CommandAttemptRole::DependencyMutation,
             ),
+            ("npm run typecheck", CommandAttemptRole::Build),
+            ("npm run lint", CommandAttemptRole::Lint),
+            ("pnpm run lint", CommandAttemptRole::Lint),
+            ("yarn lint", CommandAttemptRole::Lint),
+            ("yarn run lint", CommandAttemptRole::Lint),
+            ("npm test -- --runInBand", CommandAttemptRole::Test),
+            ("npm run test -- --runInBand", CommandAttemptRole::Test),
             ("pnpm test -- --runInBand", CommandAttemptRole::Test),
+            ("pnpm run test -- --runInBand", CommandAttemptRole::Test),
+            (
+                "pnpm exec vitest run tests/checkpoints.test.ts",
+                CommandAttemptRole::Test,
+            ),
+            (
+                "yarn test tests/checkpoints.test.ts",
+                CommandAttemptRole::Test,
+            ),
+            (
+                "yarn run test tests/checkpoints.test.ts",
+                CommandAttemptRole::Test,
+            ),
             (
                 "pytest tests/checkpoints_test.py::test_pairing",
                 CommandAttemptRole::Test,
@@ -1193,6 +1221,14 @@ mod tests {
             ),
             (
                 "vitest run tests/checkpoints.test.ts",
+                CommandAttemptRole::Test,
+            ),
+            (
+                "npx vitest run tests/checkpoints.test.ts",
+                CommandAttemptRole::Test,
+            ),
+            (
+                "bun test tests/checkpoints.test.ts",
                 CommandAttemptRole::Test,
             ),
             ("git diff --stat", CommandAttemptRole::VcsInspection),
@@ -1247,19 +1283,36 @@ mod tests {
     fn checkpoints_extract_js_verification_scope_without_treating_runner_verbs_as_targets() {
         let rows = vec![
             tool_call(0, "functions.shell_command", "npm test"),
-            tool_call(1, "functions.shell_command", "pnpm test -- --runInBand"),
+            tool_call(1, "functions.shell_command", "npm run test -- --runInBand"),
+            tool_call(2, "functions.shell_command", "pnpm test -- --runInBand"),
+            tool_call(3, "functions.shell_command", "pnpm run test -- --runInBand"),
             tool_call(
-                2,
+                4,
+                "functions.shell_command",
+                "pnpm exec vitest run tests/checkpoints.test.ts",
+            ),
+            tool_call(
+                5,
+                "functions.shell_command",
+                "yarn test tests/checkpoints.test.ts",
+            ),
+            tool_call(
+                6,
+                "functions.shell_command",
+                "yarn run test tests/checkpoints.test.ts",
+            ),
+            tool_call(
+                7,
                 "functions.shell_command",
                 "vitest run tests/checkpoints.test.ts",
             ),
             tool_call(
-                3,
+                8,
                 "functions.shell_command",
-                "jest tests/checkpoints.test.ts",
+                "npx vitest run tests/checkpoints.test.ts",
             ),
             tool_call(
-                4,
+                9,
                 "functions.shell_command",
                 "bun test tests/checkpoints.test.ts",
             ),
@@ -1267,7 +1320,7 @@ mod tests {
 
         let attempts = build_command_attempts(&rows, &command_observations(&rows));
         let verification = build_verification_attempts(&attempts, &rows);
-        assert_eq!(verification.len(), 5);
+        assert_eq!(verification.len(), 10);
 
         assert_eq!(verification[0].target_scope.paths, Vec::<String>::new());
         assert_eq!(verification[0].target_scope.tests, Vec::<String>::new());
@@ -1277,19 +1330,13 @@ mod tests {
         assert_eq!(verification[1].target_scope.tests, Vec::<String>::new());
         assert!(verification[1].target_scope.broad);
 
-        assert_eq!(
-            verification[2].target_scope.paths,
-            vec!["tests/checkpoints.test.ts".to_string()]
-        );
+        assert_eq!(verification[2].target_scope.paths, Vec::<String>::new());
         assert_eq!(verification[2].target_scope.tests, Vec::<String>::new());
-        assert!(!verification[2].target_scope.broad);
+        assert!(verification[2].target_scope.broad);
 
-        assert_eq!(
-            verification[3].target_scope.paths,
-            vec!["tests/checkpoints.test.ts".to_string()]
-        );
+        assert_eq!(verification[3].target_scope.paths, Vec::<String>::new());
         assert_eq!(verification[3].target_scope.tests, Vec::<String>::new());
-        assert!(!verification[3].target_scope.broad);
+        assert!(verification[3].target_scope.broad);
 
         assert_eq!(
             verification[4].target_scope.paths,
@@ -1297,6 +1344,41 @@ mod tests {
         );
         assert_eq!(verification[4].target_scope.tests, Vec::<String>::new());
         assert!(!verification[4].target_scope.broad);
+
+        assert_eq!(
+            verification[5].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[5].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[5].target_scope.broad);
+
+        assert_eq!(
+            verification[6].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[6].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[6].target_scope.broad);
+
+        assert_eq!(
+            verification[7].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[7].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[7].target_scope.broad);
+
+        assert_eq!(
+            verification[8].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[8].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[8].target_scope.broad);
+
+        assert_eq!(
+            verification[9].target_scope.paths,
+            vec!["tests/checkpoints.test.ts".to_string()]
+        );
+        assert_eq!(verification[9].target_scope.tests, Vec::<String>::new());
+        assert!(!verification[9].target_scope.broad);
     }
 
     #[test]
