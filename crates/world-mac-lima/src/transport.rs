@@ -7,8 +7,8 @@ use std::path::PathBuf;
 pub const CANONICAL_GUEST_SOCKET_PATH: &str = "/run/substrate.sock";
 /// URI form used by host-side helpers that forward into the guest socket.
 pub const CANONICAL_GUEST_SOCKET_URI: &str = "unix:///run/substrate.sock";
-/// Managed host-side socket directory for SSH UDS forwarding.
-pub const MANAGED_HOST_SOCKET_DIR: &str = ".substrate/sock";
+/// Managed host-side socket directory under SUBSTRATE_HOME for SSH UDS forwarding.
+pub const MANAGED_HOST_SOCKET_DIR: &str = "sock";
 /// Managed host-side socket filename for SSH UDS forwarding.
 pub const MANAGED_HOST_SOCKET_NAME: &str = "agent.sock";
 /// Host loopback used for retained compatibility TCP reachability.
@@ -18,12 +18,17 @@ pub const COMPATIBILITY_TCP_PORT: u16 = 17788;
 
 /// Managed host-side socket path for the default Lima-backed Unix socket path.
 pub fn managed_host_socket_path() -> PathBuf {
-    managed_host_socket_path_from(dirs::home_dir())
+    managed_host_socket_path_from(
+        substrate_common::paths::substrate_home().unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(substrate_common::paths::SUBSTRATE_DIR_NAME)
+        }),
+    )
 }
 
-fn managed_host_socket_path_from(home_dir: Option<PathBuf>) -> PathBuf {
-    home_dir
-        .unwrap_or_else(|| PathBuf::from("."))
+fn managed_host_socket_path_from(substrate_home: PathBuf) -> PathBuf {
+    substrate_home
         .join(MANAGED_HOST_SOCKET_DIR)
         .join(MANAGED_HOST_SOCKET_NAME)
 }
@@ -125,10 +130,10 @@ mod tests {
 
     #[test]
     fn test_managed_host_socket_path_layout() {
-        let home = PathBuf::from("/tmp/substrate-home");
+        let substrate_home = PathBuf::from("/tmp/substrate-home");
         assert_eq!(
-            managed_host_socket_path_from(Some(home)),
-            PathBuf::from("/tmp/substrate-home/.substrate/sock/agent.sock")
+            managed_host_socket_path_from(substrate_home),
+            PathBuf::from("/tmp/substrate-home/sock/agent.sock")
         );
     }
 

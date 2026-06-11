@@ -23,7 +23,9 @@ use transport_api_types::{
     PlacementExecution, PlacementPosture,
 };
 #[cfg(target_os = "macos")]
-use world_mac_lima::transport::{COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT};
+use world_mac_lima::transport::{
+    managed_host_socket_path, COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
+};
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
@@ -286,13 +288,21 @@ fn probe_gateway_caps_uds(path: &std::path::Path) -> bool {
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn macos_default_world_socket_path() -> PathBuf {
-    substrate_common::paths::substrate_home()
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".substrate")
-        })
-        .join("sock/agent.sock")
+    #[cfg(target_os = "macos")]
+    {
+        managed_host_socket_path()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        substrate_common::paths::substrate_home()
+            .unwrap_or_else(|_| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".substrate")
+            })
+            .join("sock/agent.sock")
+    }
 }
 
 fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestContext> {
