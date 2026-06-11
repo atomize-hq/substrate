@@ -155,20 +155,22 @@ Task `1.2` freezes the supported environment contract as follows:
    - Slice `02` therefore stops using “recent Lima” wording and ties the
      supported hardened default to the currently supported major line instead of
      an older lifecycle branch.
-2. **Supported macOS / VM floor: macOS `13.5+` with `vmType: "vz"` chosen at
-   instance creation time for the hardened default.**
+2. **Supported macOS / VM floor: macOS `>= 13.0` with `vmType: "vz"` chosen at
+   instance creation time, with explicit documented qualifications.**
    - The official VZ docs require Lima `>= 0.14` and macOS `>= 13.0`, so
-     `13.0+` remains the broad minimum capability range for running VZ at all.
+     `13.0+` is the supported minimum capability range for running VZ.
    - The official VM-types docs state `vmType` can only be specified when the
      instance is created and cannot be changed later, and that starting with
      Lima `v1.0` new macOS instances use VZ by default only on macOS `>= 13.5`
      unless the config is incompatible with VZ.
    - The official VZ docs also call out an Intel-macOS `< 13.5` known issue for
      Linux kernel `v6.2` guests on VZ that is fixed in macOS `13.5`.
-   - Slice `02` therefore does **not** treat `macOS 13.0+` as an unqualified
-     hardened-default floor. Packet `1` freezes the hardened default on macOS
-     `13.5+` while still acknowledging the broader VZ capability minimum, and
-     this repo already pins `vmType: "vz"` in `scripts/mac/lima/substrate.yaml`.
+   - Slice `02` therefore keeps `macOS >= 13.0` as the supported floor for the
+     hardened same-user Lima contract while carrying forward two separate
+     qualifications rather than converting either into a universal floor: the
+     pre-`13.5` Intel/Linux-kernel-`v6.2` caveat and the distinct `>= 13.5`
+     default-VZ-for-new-instances behavior. This repo already pins
+     `vmType: "vz"` in `scripts/mac/lima/substrate.yaml`.
 3. **Supported repo capability assumptions already in play: VZ-backed guest
    operation plus VZ-compatible host mount semantics.**
    - Repo truth already depends on `vmType: "vz"` and host mounts in
@@ -308,9 +310,10 @@ Example of acceptable slice output style:
 ```md
 ## Supported environment contract
 
-- Supported floor: Lima v2.x on macOS 13.5+ with `vmType: "vz"` chosen at
-  instance creation for the same-user hardened default; `macOS 13.0+` remains
-  the broader VZ capability minimum, not the unqualified default.
+- Supported floor: Lima v2.x on macOS `>= 13.0` with `vmType: "vz"` chosen at
+  instance creation for the same-user hardened default, while separately
+  carrying Lima's documented pre-`13.5` Intel/Linux-kernel-`v6.2` caveat and
+  the `>= 13.5` default-VZ-for-new-instances behavior as qualifications.
 - Optional acceleration: `vsock-proxy` may improve the host-to-guest path, but
   it is not part of the environment floor.
 - Breakglass-only: direct `limactl shell` or host-side
