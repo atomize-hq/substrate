@@ -1,6 +1,7 @@
 # Remaining Scope Consolidated View
 
-Date: `2026-06-10`  
+Date: `2026-06-11`  
+Provenance: originally consolidated on `2026-06-10`; refreshed on `2026-06-11` after Slice `54` Packet `4` closeout so this file remains the canonical current-state note even though the filename keeps the original consolidation date.  
 Validated against:
 - historical checkpoint `REMAINING-family-1-scope-2026-05-30.md` (now archived locally during cleanup)
 - historical checkpoint `REMAINING-family-1-scope-2026-05-31-post-slice-34.md` (now archived locally during cleanup)
@@ -18,8 +19,11 @@ Validated against:
 - [PLAN-51.md](./PLAN-51.md)
 - [PLAN-52.md](./PLAN-52.md)
 - [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
+- [PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)
 - [SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md](./SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md)
 - [SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
+- [SPEC-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./SPEC-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)
+- [TASKS-54.md](./TASKS-54.md)
 - live runtime code in:
   - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
   - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
@@ -50,7 +54,7 @@ For this note:
 1. **Family 1** means the host-orchestrator to world control-plane stack.
 2. **Host-orchestrator tool surface** means the newer Family-1 sub-seam that exposes the landed internal dispatch/runtime to the live host runtime family.
 3. **Family 2** means the durable deferred-work, obligation-ledger, auto-attach, host-targeting, and host-global ingress/materialization stack.
-4. **Current** means repo truth after the landed Slice `53` closeout state reflected on `2026-06-10`.
+4. **Current** means repo truth after the landed Slice `54` Packet `4` closeout state reflected on `2026-06-11`.
 
 ## How To Use This Note
 
