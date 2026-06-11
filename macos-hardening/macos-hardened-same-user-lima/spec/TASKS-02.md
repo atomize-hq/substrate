@@ -66,7 +66,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 1.1: Confirm the authority stack and source gate
+- [x] Task 1.1: Confirm the authority stack and source gate
   - Acceptance: the implementation pass explicitly grounds itself in
     `EXECUTION-RUBRIC.md`, `ROADMAP.md`, phase `0`, milestone `0.2`,
     `DESIGN-supported-mode-and-breakglass-taxonomy.md`,
@@ -80,7 +80,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-02-lima-version-floor-and-breakglass-contract.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-02.md`
 
-- [ ] Task 1.2: Freeze the supported environment contract in precise lifecycle/capability language
+- [x] Task 1.2: Freeze the supported environment contract in precise lifecycle/capability language
   - Acceptance: the slice replaces vague “recent Lima” wording with one
     explicit environment contract that accounts for `vmType: "vz"`, supported
     macOS/Lima capability assumptions, and the repo’s current forwarding/mount
@@ -175,7 +175,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Validate explicit deferrals to later slices
+- [x] Task 3.1: Validate explicit deferrals to later slices
   - Acceptance: the touched docs explicitly leave canonical transport
     unification to Slice `03`, runtime parity convergence to later phase-1
     slices, and repo-wide breakglass/docs cutover to Slice `12`.
@@ -186,7 +186,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-02.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/TASKS-02.md`
 
-- [ ] Task 3.2: Final diff and coherence review
+- [x] Task 3.2: Final diff and coherence review
   - Acceptance: the final diff is narrow, official-source-backed claims are
     visible, and a future short prompt can identify Slice `03` cleanly from the
     landed materials without reopening Slice `02`.
