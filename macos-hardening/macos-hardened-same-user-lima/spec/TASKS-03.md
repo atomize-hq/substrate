@@ -80,7 +80,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 1.1: Confirm the authority stack, source gate, and symbol-impact gate
+- [x] Task 1.1: Confirm the authority stack, source gate, and symbol-impact gate
   - Acceptance: the implementation pass explicitly grounds itself in
     `EXECUTION-RUBRIC.md`, `ROADMAP.md`, Phase `1`, milestone `1.1`,
     `DESIGN-macos-lima-transport-contract.md`,
@@ -97,7 +97,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-03-canonical-guest-endpoint-and-transport-contract.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-03.md`
 
-- [ ] Task 1.2: Centralize the canonical transport authority in `world-mac-lima`
+- [x] Task 1.2: Centralize the canonical transport authority in `world-mac-lima`
   - Acceptance: one shared authority in `world-mac-lima` defines the canonical
     guest socket path, managed host UDS path, retained compatibility TCP port
     if applicable, and transport-kind metadata. `transport.rs` no longer
@@ -131,7 +131,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 2.1: Remove backend-local transport drift
+- [x] Task 2.1: Remove backend-local transport drift
   - Acceptance: `crates/world-mac-lima/src/lib.rs` and related backend transport
     paths consume the shared authority rather than stale ad hoc literals.
     Backend probing no longer targets `7788`, and forwarding code keeps the
@@ -144,7 +144,7 @@ Session goal:
     - `crates/world-mac-lima/src/forwarding.rs`
     - `crates/world-mac-lima/src/transport.rs`
 
-- [ ] Task 2.2: Align shell-visible transport mapping without absorbing Slice `04`
+- [x] Task 2.2: Align shell-visible transport mapping without absorbing Slice `04`
   - Acceptance: `crates/shell/src/execution/platform_world/mod.rs` and
     `crates/shell/src/builtins/world_gateway.rs` no longer contradict the
     backend-owned transport contract on guest socket/host socket/compatibility
@@ -183,7 +183,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Final targeted regression and GitNexus scope check
+- [x] Task 3.1: Final targeted regression and GitNexus scope check
   - Acceptance: the final implementation passes targeted tests, formatting
     remains clean, and GitNexus detect-changes confirms the affected symbols and
     execution flows are limited to the intended transport contract surfaces.
@@ -198,7 +198,7 @@ Session goal:
   - Files:
     - all files touched by this slice only as required by final cleanup
 
-- [ ] Task 3.2: Validate explicit deferral to Slice `04`
+- [x] Task 3.2: Validate explicit deferral to Slice `04`
   - Acceptance: the touched docs and final closeout make it explicit that
     PTY/non-PTY/doctor/readiness transport convergence remains Slice `04`, and
     that top-level operator-doc cutover remains later work.
