@@ -159,6 +159,8 @@ enum ObjectiveSource {
     LiteralGoalCommand,
     ExplicitUserRequest,
     ThreadGoalText,
+    AssistantRestatedGoal,
+    NonBoilerplateUnknown,
     NonBoilerplateDirective,
 }
 
@@ -2020,6 +2022,8 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
         ObjectiveSource::LiteralGoalCommand => "literal /goal objective row",
         ObjectiveSource::ExplicitUserRequest => "explicit user objective row",
         ObjectiveSource::ThreadGoalText => "thread goal objective row",
+        ObjectiveSource::AssistantRestatedGoal => "assistant restated goal row",
+        ObjectiveSource::NonBoilerplateUnknown => "non-boilerplate unknown objective row",
         ObjectiveSource::NonBoilerplateDirective => match candidate.boilerplate_class {
             Some(BoilerplateClass::PermissionBlock) => "permission objective row",
             Some(BoilerplateClass::SkillsBlock) => "skills objective row",
@@ -2050,7 +2054,7 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             text,
             source: ObjectiveSource::ThreadGoalText,
             boilerplate_class: None,
-            priority: 3,
+            priority: 4,
         });
     }
 
@@ -2065,7 +2069,7 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             text: row.text.clone(),
             source: ObjectiveSource::LiteralGoalCommand,
             boilerplate_class: boilerplate_class(&row.text),
-            priority: 5,
+            priority: 6,
         });
     }
 
@@ -2075,7 +2079,27 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
             text: row.text.clone(),
             source: ObjectiveSource::ExplicitUserRequest,
             boilerplate_class: boilerplate_class(&row.text),
-            priority: 4,
+            priority: 5,
+        });
+    }
+
+    if let Some(text) = assistant_restated_goal_text(row) {
+        return Some(ObjectiveCandidate {
+            row,
+            text,
+            source: ObjectiveSource::AssistantRestatedGoal,
+            boilerplate_class: boilerplate_class(&row.text),
+            priority: 3,
+        });
+    }
+
+    if let Some(text) = non_boilerplate_unknown_objective_text(row) {
+        return Some(ObjectiveCandidate {
+            row,
+            text,
+            source: ObjectiveSource::NonBoilerplateUnknown,
+            boilerplate_class: None,
+            priority: 2,
         });
     }
 
@@ -2093,6 +2117,65 @@ fn objective_candidate(row: &CompactionRow) -> Option<ObjectiveCandidate<'_>> {
     }
 
     None
+}
+
+fn assistant_restated_goal_text(row: &CompactionRow) -> Option<String> {
+    if !matches!(row.kind, CompactionKind::AssistantMessage) || !row_text_is_focusable(row) {
+        return None;
+    }
+
+    let text = row.text.trim();
+    if text.is_empty() || serde_json::from_str::<serde_json::Value>(text).is_ok() {
+        return None;
+    }
+
+    let lower = text.to_ascii_lowercase();
+    let starts_like_restatement = [
+        "i will ",
+        "i'll ",
+        "i can ",
+        "i am going to ",
+        "i'm going to ",
+        "let me ",
+        "next i'll ",
+        "next, i'll ",
+    ]
+    .iter()
+    .any(|needle| lower.starts_with(needle));
+    let mentions_objective_action = [
+        "debug",
+        "fix",
+        "implement",
+        "update",
+        "review",
+        "analyze",
+        "investigate",
+        "tighten",
+        "add",
+        "remove",
+        "rerun",
+        "verify",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle));
+
+    (starts_like_restatement && mentions_objective_action).then(|| text.to_string())
+}
+
+fn non_boilerplate_unknown_objective_text(row: &CompactionRow) -> Option<String> {
+    if !matches!(row.kind, CompactionKind::Unknown) || !row_text_is_focusable(row) {
+        return None;
+    }
+
+    let text = row.text.trim();
+    if text.is_empty()
+        || boilerplate_class(text).is_some()
+        || serde_json::from_str::<serde_json::Value>(text).is_ok()
+    {
+        return None;
+    }
+
+    Some(text.to_string())
 }
 
 fn thread_goal_objective_text(row: &CompactionRow) -> Option<String> {

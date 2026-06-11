@@ -3657,6 +3657,72 @@ fn checkpoints_prefer_explicit_user_requests_over_unclassified_app_plugin_scaffo
 }
 
 #[test]
+fn checkpoints_prefer_assistant_restated_goal_over_boilerplate_when_primary_sources_are_absent() {
+    let objective = "I will keep debugging the same analyzer checkpoint tests.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never. /goal Follow the permission boilerplate first.",
+        ),
+        system_row(
+            1,
+            "turn-001",
+            "Use memory by default when the query mentions a workspace. Memory citation requirements stay active. /goal Keep the memory boilerplate in scope.",
+        ),
+        assistant_row(2, "turn-001", objective),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1980,2205p' crates/agent-drift-analyzer/src/checkpoint/mod.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, objective);
+}
+
+#[test]
+fn checkpoints_prefer_non_boilerplate_unknown_over_boilerplate_when_primary_sources_are_absent() {
+    let objective = "Continue debugging the same analyzer checkpoint tests.";
+    let result = analyze_custom_rows(vec![
+        developer_row(
+            0,
+            "turn-001",
+            "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never. /goal Follow the permission boilerplate first.",
+        ),
+        system_row(
+            1,
+            "turn-001",
+            "Use memory by default when the query mentions a workspace. Memory citation requirements stay active. /goal Keep the memory boilerplate in scope.",
+        ),
+        row(2, "turn-001", CompactionKind::Unknown, objective, None),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '3520,3605p' crates/agent-drift-analyzer/tests/checkpoints.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, objective);
+}
+
+#[test]
 fn checkpoints_ignore_arbitrary_goal_objective_json_from_tool_outputs() {
     let objective = "Debug the failing analyzer checkpoint tests.";
     let result = analyze_custom_rows(vec![
