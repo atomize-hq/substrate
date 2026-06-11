@@ -1,7 +1,7 @@
 # Milestone 0.1: Target Mode and Support Contract SOW
 
 Status: Draft  
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / outcome
 
@@ -32,6 +32,26 @@ claims that are still too broad.
   host ownership limitation.
 
 Without a target-mode contract, later fixes will remain local patches instead of a coherent hardening program.
+
+## Target-mode contract
+
+This milestone is the quotable contract for the supported same-user Lima mode:
+
+1. one macOS host user owns the Substrate process, the Lima VM lifecycle, and
+   the host-side forwarding artifacts,
+2. the world executes inside the Lima guest and keeps guest-local Linux socket
+   ACL semantics inside that guest,
+3. Substrate-owned commands are the supported control plane, starting with
+   `substrate host doctor`, `substrate world doctor`, and
+   `substrate world gateway sync|status|restart`,
+4. shared-world/orchestration behavior remains part of the supported runtime
+   story on the Lima-backed path,
+5. this contract does not claim Linux host-side ownership parity, a privilege
+   boundary against the owning host user, or direct guest administration as the
+   normal operator path.
+
+Everything version-sensitive about Lima, transport specifics, and deeper
+breakglass classification remains milestone `0.2` or later scope.
 
 ## In-scope
 

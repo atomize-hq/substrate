@@ -1,7 +1,7 @@
 # Phase 0: Security Contract and Scope
 
 Status: Draft  
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / outcome
 
@@ -18,6 +18,28 @@ The current macOS backend is already close enough to Linux behavior that impleme
 - The repo already supports shared-world/orchestration flows on the Lima-backed path, while `SUBSTRATE_WORLD_SOCKET` remains an advanced/test/breakglass bypass rather than the normal same-user operator path.
 
 If phase 0 is skipped, later work risks hardening one layer while another layer keeps the older, looser support story.
+
+## Phase 0 contract, stated plainly
+
+Milestone `0.1` freezes the supported same-user Lima posture before milestone
+`0.2` adds version-floor and breakglass-contract detail:
+
+1. one macOS host user owns the Substrate process, the Lima VM lifecycle, and
+   the host forwarding artifacts,
+2. the supported operator path starts with Substrate-owned commands, especially
+   `substrate host doctor`, `substrate world doctor`, and
+   `substrate world gateway sync|status|restart`,
+3. guest-local Linux-like execution behavior remains an implementation goal,
+   but the host-side ownership model stays explicitly non-equivalent to Linux.
+
+The same non-parity claims must remain impossible to miss throughout phase 0:
+
+1. same-user Lima is not a privilege boundary against the owning host user,
+2. host-side ownership is not equivalent to Linux multi-user socket ownership,
+3. direct guest administration and direct `limactl shell` use are not the
+   normal operator path,
+4. host-side `SUBSTRATE_WORLD_SOCKET` override use is not the default
+   Lima-backed path.
 
 ## In-scope
 

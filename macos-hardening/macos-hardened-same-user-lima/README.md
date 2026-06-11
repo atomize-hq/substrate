@@ -4,7 +4,7 @@ Status: Draft
 
 Owner: Substrate world backend / macOS hardening
 
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / outcome
 
@@ -33,6 +33,33 @@ Phase 0 exists to lock that support contract before implementation work continue
 - a real Substrate-owned CLI surface that already exists
 - same-user Lima implementation shortcuts that are still tolerated
 - direct guest administration that is still too prominent in docs and troubleshooting
+
+## Supported mode contract
+
+Slice `01` Packet `1` freezes the supported posture for this feature as:
+
+1. one macOS host user owns the Substrate process, the Lima VM lifecycle, and
+   the host-side forwarding artifacts,
+2. the world still executes inside the Lima guest and keeps guest-local socket
+   ACL semantics inside Linux,
+3. Substrate-owned commands are the normal operator path, starting with:
+   - `substrate host doctor`
+   - `substrate world doctor`
+   - `substrate world gateway sync|status|restart`
+   - routed Lima-backed execution and shared-world/orchestration flows
+4. later slices may harden or narrow those paths, but Slice `01` does not
+   widen into version-floor, transport, mount, unit, or lifecycle semantics.
+
+## Linux non-parity boundary
+
+This feature is intentionally explicit about what same-user Lima does **not**
+claim:
+
+1. it is not Linux host-side ownership parity for `root:substrate 0660`,
+2. it is not a privilege boundary against the owning host user,
+3. direct guest administration is not the normal operator path,
+4. host-side `SUBSTRATE_WORLD_SOCKET` override use remains an
+   advanced/test/breakglass bypass rather than the default Lima-backed path.
 
 ## In-scope
 
