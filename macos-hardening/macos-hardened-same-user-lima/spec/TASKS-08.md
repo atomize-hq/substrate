@@ -136,11 +136,12 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 2.1: Build the ingress classification matrix
+- [x] Task 2.1: Build the ingress classification matrix
   - Acceptance: the slice contains a plain-language decision matrix covering
     workspace source input, auth/credential input, runtime artifacts, and
     troubleshooting/convenience input, with each class mapped to its intended
-    hardened posture.
+    hardened posture and with each current input called out path-by-path rather
+    than left as an implicit “currently mounted” default.
   - Verify:
     - `rg -n "workspace|auth|runtime|troubleshooting|direct mount|sync/copy|breakglass" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md`
     - manual matrix review
@@ -148,11 +149,12 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md`
 
-- [ ] Task 2.2: Freeze the narrowed default decision for host-home visibility and `/src`
+- [x] Task 2.2: Freeze the narrowed default decision for host-home visibility and `/src`
   - Acceptance: the slice makes it explicit that broad host-home visibility is
     not preserved by default without path-by-path justification and that `/src`
     is decomposed into actual supported needs rather than retained as an
-    undifferentiated convenience mount.
+    undifferentiated convenience mount; no host-home subpath remains implicitly
+    supported just because Lima currently mounts it.
   - Verify:
     - `rg -n "\\$HOME|/src|path-by-path|justif|sync/copy|breakglass" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-08.md`
     - manual scope review
@@ -168,6 +170,9 @@ Packet `2` is complete only when:
 1. every ingress class has an intended hardened posture,
 2. broad host-home visibility is no longer implicit,
 3. `/src` has been decomposed into concrete needs.
+
+Packet `2` is classification-complete and narrowed-contract-complete for this
+landing; Packet `3` validation/doc-consumer work remains pending.
 
 Do not start Packet `3` until Packet `2` verification is green.
 

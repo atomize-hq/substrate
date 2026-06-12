@@ -92,6 +92,31 @@ Frozen Packet `1` decision:
 4. Slice `09` owns actual mount and sync/copy implementation; Slice `10` owns
    the unit/sandbox consumer of the final ingress contract.
 
+## Packet 2 frozen classification matrix
+
+Packet `2` converts the Packet `1` inventory into an explicit path-by-path
+decision matrix so Slice `09` inherits a real contract instead of vague mount
+intuition.
+
+| Input/path | Class | Frozen posture in Slice `08` | Reason the posture is constrained this way |
+| --- | --- | --- | --- |
+| host `$HOME/**` as ambient credential/config visibility | auth | breakglass / not part of the hardened default | supported gateway auth already uses request-provided integrated auth handoff, so Packet `2` found no supported need for broad mounted host-home credential visibility |
+| host `$HOME/**` as manual guest browsing or convenience troubleshooting | troubleshooting | breakglass / not part of the hardened default | currently mounted is not the same as hardened default, and Packet `1` found only post-failure/manual value here |
+| `/src` for checkout identity proof during warm/repair | workspace | temporary direct mount allowance | `scripts/mac/lima-warm.sh` still verifies that the intended checkout is mounted at `/src`, so Slice `08` can only narrow this to the concrete identity-proof need, not remove it yet |
+| `/src` for optional in-guest source builds when Linux binaries are absent | workspace | future sync/copy or staged-artifact ingress | current repo truth proves this is a real consumer today, but it is an implementation seam for Slice `09`, not a permanent default-mount justification |
+| request-provided integrated auth handoff | auth | supported explicit ingress | this is the supported auth contract already enforced by shell/runtime code and should remain narrower than host-home visibility |
+| `/run/substrate.sock` and `/run/substrate/substrate-gateway-runtime/` | runtime | supported guest-local runtime surface | these are the runtime artifacts later sandbox work must preserve, but they do not justify any host mount |
+
+Frozen Packet `2` planning consequences:
+
+1. Broad host-home visibility is fully classified and is no longer implicit.
+2. No host-home subpath survives as a frozen hardened-default exception in this
+   slice.
+3. `/src` is decomposed into checkout-identity and optional-build ingress
+   rather than preserved as a single convenience blob.
+4. Packet `2` still does not authorize any actual mount rewrite or sync/copy
+   implementation; it only narrows the contract Slice `09` must implement.
+
 ## Default landing boundary
 
 Unless execution proves there is an immediate contradiction that must be fixed,
@@ -249,6 +274,8 @@ Verification checkpoint:
 2. broad host-home visibility is no longer left unclassified,
 3. `/src` is decomposed into actual needs instead of preserved as a single
    convenience blob.
+4. the matrix distinguishes temporary direct-mount allowance from future
+   sync/copy work path-by-path.
 
 ### Packet 3: Freeze validation and documentation expectations
 

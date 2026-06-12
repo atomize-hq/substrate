@@ -163,6 +163,40 @@ Frozen Packet `1` ingress decision:
 6. Slice `10` still consumes the final ingress contract when locking guest-unit
    sandbox settings such as `ProtectHome=` and `ReadWritePaths=`.
 
+## Packet 2 classification matrix and narrowed default decision
+
+Packet `2` makes the intended hardened posture explicit path-by-path instead of
+letting the current Lima mounts stand in as the default contract.
+
+| Current guest-visible input | Current source of visibility | Ingress class | Live supported need proven in Packet `1` | Frozen Slice `08` posture | Deferred consumer |
+| --- | --- | --- | --- | --- | --- |
+| host `$HOME/**` (broad read-only mount) | `scripts/mac/lima/substrate.yaml` default `location: "$HOME"` mount | auth/credential input | no supported gateway/runtime path currently proves a need for ambient host-home credential/config visibility; request-provided integrated auth already covers the supported auth path | **breakglass / not part of the hardened default** until a later slice can justify a narrower retained subpath explicitly | if a real supported auth path appears later, it must be justified path-by-path before Slice `09` or Slice `10` consumes it |
+| host `$HOME/**` (manual browsing, guest shell convenience, ad hoc troubleshooting) | same read-only host-home mount | troubleshooting/convenience input | manual guest access may be useful after failure, but Packet `1` found no supported steady-state requirement for broad host-home visibility | **breakglass / not part of the hardened default**; convenience alone is not justification | Slice `12` can update operator/docs cutover language after the default contract is implemented |
+| `/src` as checkout identity proof (`ensure_repo_mount`, sentinel check) | writable `location: "$PROJECT"` mount at `/src` | workspace source input | `scripts/mac/lima-warm.sh` still requires `/src` to exist and match the intended checkout before it proceeds | **temporary direct mount only for the currently required checkout-identity proof**; this is a narrow temporary allowance, not blanket approval for a mounted repo workflow | Slice `09` should replace this with a narrower Substrate-managed ingress or equivalently explicit staging flow if possible |
+| `/src` as source/build ingress for optional in-guest Cargo builds | same writable `/src` mount | workspace source input | `scripts/mac/lima-warm.sh` still reads `/src/Cargo.lock`, `cd /src`, and builds guest binaries there only when suitable Linux binaries are not already supplied from the host | **future sync/copy or staged-artifact ingress**, not a permanently justified default mount | Slice `09` owns the actual replacement path or the explicit decision to keep a narrowly scoped temporary mount while that replacement lands |
+| request-provided integrated auth handoff (no mounted host path) | gateway request payload, validated by `crates/shell/src/builtins/world_gateway.rs` and `crates/world-service/src/gateway_runtime.rs` | auth/credential input | supported gateway lifecycle/runtime already depends on request-provided auth handoff rather than guest reads from mounted host-home material | **supported explicit ingress**; keep auth request-scoped instead of home-mount-scoped | Slice `09` must preserve this narrower auth contract while changing mounts |
+| `/run/substrate.sock` and `/run/substrate/substrate-gateway-runtime/` | guest-local runtime artifacts, not host mounts | runtime input | supported world/gateway runtime already centers on these guest-local artifacts | **supported guest-local runtime surface**; these paths do not justify any host-home mount | Slice `10` consumes these exact runtime paths when finalizing guest-unit sandbox policy |
+
+Frozen Packet `2` conclusions:
+
+1. Broad host-home visibility is now explicitly classified twice: it is neither
+   a supported auth requirement nor a supported troubleshooting default, and it
+   should stop shaping the hardened default contract.
+2. No host-home subpath is frozen as part of the hardened default in Slice
+   `08`; any future exception must be justified path-by-path instead of
+   inherited from Lima convenience behavior.
+3. `/src` is no longer treated as one undifferentiated mount. Slice `08`
+   freezes only two concrete current needs:
+   - checkout identity proof during warm/repair, and
+   - optional in-guest build ingress when Linux binaries are not already
+     staged from the host.
+4. The first `/src` need is only a temporary direct-mount allowance; the
+   second is a deferred sync/copy or staged-artifact consumer owned by Slice
+   `09`, not a reason to preserve a broad mounted checkout indefinitely.
+5. Supported auth/runtime ingress stays anchored in request-provided auth plus
+   guest-local runtime paths, which means the hardened contract is already
+   narrower than the current `$HOME` mount.
+
 ## Objective
 
 Make the Phase `2.2` ingress story inspectable before implementation narrowing
