@@ -116,13 +116,16 @@ docs/specs/r5/R5_75/agent-drift-analyzer-session-progress-r5_75-0-tasks.md
   Discrete implementation checklist for this packet only.
 
 docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md
-  Main R5.5 planning authority that currently needs landed-status reconciliation.
+  Main R5.5 planning authority preserved as the landed closeout record for that packet family.
 
 docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md
-  Task ledger that still needs open-vs-landed cleanup.
+  Task ledger preserved as the landed closeout checklist for the completed R5.5 packet family.
 
 HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md
   Root landing-order authority that must stay synchronized with the active packet family.
+
+docs/specs/hybrid-drift-sentinel-implementation-order.md
+  Companion packet-order authority touched and audited in this packet for final R5.75/R6 routing.
 ```
 
 ## Code Style
