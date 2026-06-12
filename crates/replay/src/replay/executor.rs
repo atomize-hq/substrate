@@ -16,6 +16,12 @@ use substrate_common::FsDiff;
 use substrate_common::{log_schema, WorldRootMode};
 use substrate_trace::append_to_trace;
 use transport_api_types::{ExecuteRequest, PolicySnapshotV3};
+use world_api::{
+    BackendPolicyInputV1, BackendPolicySnapshotV3, BackendPolicySnapshotWorldFsDimensionV3,
+    BackendPolicySnapshotWorldFsFailClosedV3, BackendPolicySnapshotWorldFsV3,
+    BackendPolicySnapshotWorldFsWriteV3, BackendWorldFsDenyEnforcementV3,
+    BackendWorldNetworkRoutingV1, WorldReuseMode,
+};
 
 #[cfg(target_os = "linux")]
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -28,18 +34,17 @@ use std::sync::OnceLock;
 #[cfg(target_os = "linux")]
 use transport_api_client::AgentClient;
 #[cfg(target_os = "linux")]
+use transport_api_types::ExecuteResponse;
 use transport_api_types::{
-    ExecuteResponse, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
-    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
+    PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+    PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
 };
 #[cfg(target_os = "linux")]
 use world::{copydiff, overlayfs};
-use world_api::WorldReuseMode;
 
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
 
-#[cfg(target_os = "linux")]
 fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
     let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
         .map_err(|e| anyhow!("failed to resolve effective policy for snapshot: {e}"))?;
@@ -105,6 +110,63 @@ fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
     snapshot
         .canonicalize()
         .map_err(|err| anyhow!("invalid PolicySnapshotV3 derived from broker policy: {err}"))
+}
+
+fn backend_policy_input_for_snapshot(
+    policy_snapshot: &PolicySnapshotV3,
+    world_net_filter: bool,
+) -> Result<BackendPolicyInputV1> {
+    let world_network = policy_snapshot
+        .resolve_world_network_routing(world_net_filter)
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
+
+    Ok(BackendPolicyInputV1 {
+        schema_version: 1,
+        policy_snapshot: BackendPolicySnapshotV3 {
+            schema_version: policy_snapshot.schema_version,
+            net_allowed: policy_snapshot.net_allowed.clone(),
+            world_fs: BackendPolicySnapshotWorldFsV3 {
+                host_visible: policy_snapshot.world_fs.host_visible,
+                fail_closed: BackendPolicySnapshotWorldFsFailClosedV3 {
+                    routing: policy_snapshot.world_fs.fail_closed.routing,
+                },
+                deny_enforcement: policy_snapshot
+                    .world_fs
+                    .deny_enforcement
+                    .map(|mode| match mode {
+                        WorldFsDenyEnforcementV3::Strict => {
+                            BackendWorldFsDenyEnforcementV3::Strict
+                        }
+                        WorldFsDenyEnforcementV3::PreferStrict => {
+                            BackendWorldFsDenyEnforcementV3::PreferStrict
+                        }
+                        WorldFsDenyEnforcementV3::Weak => BackendWorldFsDenyEnforcementV3::Weak,
+                    }),
+                caged_required: policy_snapshot.world_fs.caged_required,
+                discover: policy_snapshot.world_fs.discover.as_ref().map(|dimension| {
+                    BackendPolicySnapshotWorldFsDimensionV3 {
+                        allow_list: dimension.allow_list.clone(),
+                        deny_list: dimension.deny_list.clone(),
+                    }
+                }),
+                read: policy_snapshot.world_fs.read.as_ref().map(|dimension| {
+                    BackendPolicySnapshotWorldFsDimensionV3 {
+                        allow_list: dimension.allow_list.clone(),
+                        deny_list: dimension.deny_list.clone(),
+                    }
+                }),
+                write: BackendPolicySnapshotWorldFsWriteV3 {
+                    enabled: policy_snapshot.world_fs.write.enabled,
+                    allow_list: policy_snapshot.world_fs.write.allow_list.clone(),
+                    deny_list: policy_snapshot.world_fs.write.deny_list.clone(),
+                },
+            },
+        },
+        world_network: BackendWorldNetworkRoutingV1 {
+            isolate_network: world_network.isolate_network,
+            allowed_domains: world_network.allowed_domains,
+        },
+    })
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -329,16 +391,32 @@ async fn try_world_backend(
     if let Ok(backend) = world_backend_factory::factory() {
         use world_api::{ExecRequest, ResourceLimits, WorldSpec};
         let start = Instant::now();
+        let backend_policy = resolve_policy_snapshot_v3_for_cwd(&state.cwd)
+            .and_then(|snapshot| {
+                world_net_filter_from_process_env().and_then(|world_net_filter| {
+                    backend_policy_input_for_snapshot(&snapshot, world_net_filter)
+                })
+            })
+            .ok();
+        let isolate_network = backend_policy
+            .as_ref()
+            .map(|policy| policy.world_network.isolate_network)
+            .unwrap_or(true);
+        let allowed_domains = backend_policy
+            .as_ref()
+            .map(|policy| policy.world_network.allowed_domains.clone())
+            .unwrap_or_else(substrate_broker::allowed_domains);
         let spec = WorldSpec {
             reuse_session: true,
             reuse_mode: WorldReuseMode::GenericCompatible,
-            isolate_network: true,
+            isolate_network,
             limits: ResourceLimits::default(),
             enable_preload: false,
-            allowed_domains: substrate_broker::allowed_domains(),
+            allowed_domains,
             project_dir: project_dir.to_path_buf(),
             always_isolate: true,
             fs_mode: substrate_broker::world_fs_mode(),
+            backend_policy,
         };
         match backend.ensure_session(&spec) {
             Ok(handle) => {
