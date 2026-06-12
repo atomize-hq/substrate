@@ -83,7 +83,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 1.1: Confirm the authority stack, source gate, and live listener drift
+- [x] Task 1.1: Confirm the authority stack, source gate, and live listener drift
   - Acceptance: the implementation pass explicitly grounds itself in
     `EXECUTION-RUBRIC.md`, `ROADMAP.md`, Phase `2`, milestone `2.1`,
     `DESIGN-macos-lima-transport-contract.md`,
@@ -103,7 +103,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-07-remove-default-extra-listener-surface.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-07.md`
 
-- [ ] Task 1.2: Freeze the canonical listener decision and scope boundary
+- [x] Task 1.2: Freeze the canonical listener decision and scope boundary
   - Acceptance: the slice makes it explicit that `/run/substrate.sock` is the
     only hardened default guest listener on macOS, default
     `SUBSTRATE_AGENT_TCP_PORT=61337` injection must be removed from the warm/
