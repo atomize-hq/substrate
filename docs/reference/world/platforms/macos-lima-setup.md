@@ -139,8 +139,9 @@ post-failure diagnostics rather than the normal readiness proof for an already p
 Listener posture summary for same-user Lima:
 
 - the hardened guest listener is `/run/substrate.sock` only,
-- any SSH UDS forwarding or retained host loopback TCP reachability is a host-side compatibility
-  adapter back to that guest socket, not a second guest listener,
+- supported host-side adapters such as VSock and SSH UDS forwarding route back to that guest
+  socket, while retained host loopback TCP reachability at `127.0.0.1:17788` remains the
+  compatibility adapter rather than a second guest listener,
 - Lima documents `limactl shell` as SSH-backed and documents plain SSH as an interoperability path,
   so direct `limactl shell` and raw SSH remain guest-access / breakglass evidence here rather than
   the supported listener contract.
