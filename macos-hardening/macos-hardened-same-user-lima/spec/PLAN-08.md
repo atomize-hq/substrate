@@ -117,6 +117,48 @@ Frozen Packet `2` planning consequences:
 4. Packet `2` still does not authorize any actual mount rewrite or sync/copy
    implementation; it only narrows the contract Slice `09` must implement.
 
+## Frozen Packet 3 validation and downstream-consumer expectations
+
+Packet `3` turns the narrowed contract into an explicit “what must stay green”
+and “who must consume this later” handoff without widening into the downstream
+edits themselves.
+
+Frozen validation expectations:
+
+1. `scripts/mac/lima-warm.sh` remains the warm/repair proof surface for the
+   current temporary `/src` checkout-identity allowance until Slice `09`
+   replaces that ingress path with something narrower.
+2. `scripts/mac/smoke.sh` remains the authoritative supported proof harness for
+   later ingress minimization:
+   - routed gateway lifecycle proof via `substrate world gateway sync`,
+     `substrate world gateway status --json`, and
+     `substrate world gateway restart`
+   - routed readiness diagnostics via `substrate host doctor --json` and
+     `substrate world doctor --json`
+3. Guest-direct diagnostics stay breakglass-only evidence. Later mount work
+   must keep the routed proof path green rather than silently shifting support
+   back toward `limactl shell`, guest `curl`, guest `journalctl`, or other
+   post-failure checks.
+4. Guest-local runtime paths that later slices must preserve are
+   `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`, and the
+   guest-local `SUBSTRATE_HOME`/`/tmp` surfaces already wired through the warm
+   script and world docs.
+
+Frozen downstream consumers:
+
+1. `docs/WORLD.md` and
+   `docs/reference/world/platforms/macos-lima-setup.md` are named doc
+   consumers because they still describe mounted-project convenience flows that
+   Slice `09` must later cut over to the narrowed default.
+2. Slice `09` consumes the contract as the actual mount/sync implementation
+   seam and must preserve all warm, smoke, routed gateway, and routed
+   diagnostics proofs while removing unsupported ambient ingress.
+3. Slice `10` consumes the contract as the guest-unit sandbox seam and must
+   preserve only the approved guest-local runtime paths when finalizing
+   `ProtectHome=` and `ReadWritePaths=`.
+4. Slice `12` still owns the broader operator/docs cutover after the narrower
+   contract has been implemented for real.
+
 ## Default landing boundary
 
 Unless execution proves there is an immediate contradiction that must be fixed,

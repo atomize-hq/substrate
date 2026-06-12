@@ -197,6 +197,69 @@ Frozen Packet `2` conclusions:
    guest-local runtime paths, which means the hardened contract is already
    narrower than the current `$HOME` mount.
 
+## Packet 3 frozen validation surfaces and downstream consumers
+
+Packet `3` freezes what later ingress minimization must prove and who consumes
+that proof, without widening Slice `08` into any real mount rewrite or docs
+cutover.
+
+Frozen Packet `3` validation surfaces:
+
+1. `scripts/mac/lima-warm.sh` remains the first same-user Lima proof surface
+   for VM create/start/repair and for the currently temporary `/src`
+   checkout-identity allowance. Slice `09` may replace the underlying ingress
+   mechanic, but it must preserve an equally explicit warm/repair proof that
+   the intended checkout or staged workspace input is the one the guest uses.
+2. `scripts/mac/smoke.sh` remains the authoritative end-to-end proof harness
+   for supported ingress consumers. Later mount minimization must keep the
+   routed gateway lifecycle proof green:
+   - `substrate world gateway sync`
+   - `substrate world gateway status --json`
+   - `substrate world gateway restart`
+   - `substrate world gateway status --json` after restart
+3. The same smoke harness must keep routed readiness diagnostics green:
+   - `substrate host doctor --json`
+   - `substrate world doctor --json`
+   These are supported diagnostics proofs; guest-direct checks remain fallback
+   and breakglass evidence rather than the default success path.
+4. Guest-direct compatibility and readiness checks (`limactl shell`, guest
+   `systemctl`, guest `curl --unix-socket`, guest `journalctl`, and the
+   compatibility/readiness helpers in `scripts/mac/smoke.sh`) remain
+   post-failure or breakglass-only evidence. Slice `09` must not accidentally
+   promote them back into the supported default proof path while narrowing
+   mounts.
+5. Supported runtime artifacts that later validation must continue to preserve
+   are still `/run/substrate.sock`,
+   `/run/substrate/substrate-gateway-runtime/`, and the guest-local
+   `SUBSTRATE_HOME` flow already described by `docs/WORLD.md` and the warm
+   script. Later ingress work may change how workspace input arrives, but it
+   must not break these guest-local runtime surfaces.
+
+Frozen Packet `3` downstream consumers:
+
+1. `docs/WORLD.md` is a downstream consumer because it still teaches the
+   current same-user Lima proof order and still mentions `/src` mirroring.
+   Slice `08` records that this doc must be updated after Slice `09` lands the
+   real ingress change, but does not perform that cutover here.
+2. `docs/reference/world/platforms/macos-lima-setup.md` is another downstream
+   consumer because it still documents mounted-project build/install examples
+   under `/src` plus the current routed-vs-breakglass diagnostics order. Slice
+   `09` must leave this doc with a more honest default-ingress story, but
+   Slice `08` only names the dependency.
+3. Slice `09` consumes this contract operationally: it may change the actual
+   mount profile and/or introduce staged sync/copy ingress, but it must keep
+   the warm proof, routed gateway lifecycle proof, and routed diagnostics proof
+   green while removing broad `$HOME` visibility from the hardened default.
+4. Slice `10` consumes this contract at the guest-unit sandbox seam. When it
+   finalizes `ProtectHome=` and `ReadWritePaths=`, it must preserve the
+   approved guest-local runtime paths (`/run/substrate.sock`,
+   `/run/substrate/substrate-gateway-runtime/`, guest `SUBSTRATE_HOME`, and
+   `/tmp` where already required) without re-introducing ambient host-home
+   visibility as a supported default.
+5. Slice `12` remains the broader docs/breakglass cutover seam: it can update
+   operator-facing wording once Slice `09` and Slice `10` make the narrowed
+   contract real, but that downstream cutover is not part of Slice `08`.
+
 ## Objective
 
 Make the Phase `2.2` ingress story inspectable before implementation narrowing

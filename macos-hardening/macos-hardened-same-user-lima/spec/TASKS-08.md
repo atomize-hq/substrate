@@ -186,7 +186,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Define the later validation surfaces explicitly
+- [x] Task 3.1: Define the later validation surfaces explicitly
   - Acceptance: the slice names the warm, smoke, routed gateway, and
     diagnostics proofs that later mount minimization must preserve.
   - Verify:
@@ -196,7 +196,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md`
 
-- [ ] Task 3.2: Record the future doc and sandbox consumers without widening into them
+- [x] Task 3.2: Record the future doc and sandbox consumers without widening into them
   - Acceptance: the slice identifies `docs/WORLD.md`,
     `docs/reference/world/platforms/macos-lima-setup.md`, and the future
     guest-unit sandbox consumer seam as downstream consumers, while keeping
@@ -217,6 +217,10 @@ Packet `3` is complete only when:
 2. downstream docs/sandbox consumers are named,
 3. the slice still has not widened into actual mount minimization or docs
    cutover work.
+
+Packet `3` is validation-consumer-complete for this landing once those
+verification checks are green; Packet `4` remains the final scope/handoff
+closeout seam.
 
 Do not start Packet `4` until Packet `3` verification is green.
 
