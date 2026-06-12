@@ -190,22 +190,19 @@ Selected-host runtime-family host-tool parity for `claude_code` is now landed ba
 2. Keep runtime-family host-tool follow-through bounded above the existing toolbox transport.
 - The current visible toolbox surface remains intentionally introspection-only for operators, and the selected-host multi-family floor is now landed: the Slice `52`/`53`/`54` path froze the shared seven-tool contract and validated both the Codex-backed floor and selected-host `claude_code` parity.
 - The remaining host-tool work is later follow-through only: broader runtime-family smoke coverage plus docs/operator-truth alignment if some future live-surface widening materially changes repo truth again.
+- Slice `54` already closed the current reporting/docs parity wall; the remaining reporting/docs follow-through stays bundled inside this later smoke-and-truth bucket rather than as a sixth standalone seam.
 - Internal MCP/auth/audit work and any mutating public toolbox verbs remain deferred so toolbox does not become a second execution plane.
 
-3. Do the bounded host-tool reporting/docs follow-through only when future live-surface widening changes repo truth.
-- Slice `54` already closed the current reporting/docs parity wall.
-- The remaining follow-through is later broader runtime-family smoke coverage plus docs/operator-truth alignment after some future live-surface widening, not a missing `claude_code` parity slice.
-
-4. Make the v1 parity call explicitly.
+3. Make the v1 parity call explicitly.
 - Linux remains the factual source-of-truth path.
 - macOS/Lima is supported on the forwarded shared-owner/member-runtime seam.
 - Windows/WSL remains fail-closed today, so the repo needs an explicit product decision on whether that stays intentionally deferred for v1.
 
-5. Capture the remaining Family-2 host-global ingress and federation follow-ons clearly.
+4. Capture the remaining Family-2 host-global ingress and federation follow-ons clearly.
 - The local `host_inbox -> local obligation -> router` boundary is already landed.
 - The remaining Family-2 scope is the later host-global ingress lifecycle/federation layer: receive-cursor and sync-state coordination if still needed, broader remote delivery/materialization, lease/lock coordination, and later public/operator host-inbox UX.
 
-6. Clean up the governance leftovers.
+5. Clean up the governance leftovers.
 - These are lower-level than caller semantics or dispatch/router work, but they are still real remaining scope.
 - The concrete items are local `agent-api-*` versus external `agent_api` naming deconfliction, a cleaner public session-handle contract, and eventual retirement of flat compatibility outputs after the current cutover is complete.
 

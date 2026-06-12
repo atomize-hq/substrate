@@ -14,7 +14,7 @@ Slice `55` is now the landed caller-surface contract baseline for the current tr
 
 1. repo truth now distinguishes config/runtime default backend selection from implicit default-agent routing,
 2. operator-facing docs and regression-floor wording now agree on the narrow prompt-taking surfaces, shell-wrap-only boundaries, exact follow-up selectors, and host-rooted world-backed `start` wording without widening runtime behavior,
-3. remaining deferred work stays explicit: default-agent UX, broader non-REPL targeting, public member-root or member-level selector ergonomics, later read-side/control hardening, cross-platform posture decisions, and Family-2/global-ingress follow-ons.
+3. remaining deferred work stays explicit in five repo-wide buckets: read-side/control hardening, later runtime-family smoke/reporting/docs follow-through above the landed multi-family floor, explicit cross-platform parity posture, Family-2/global-ingress follow-ons, and governance cleanup.
 
 ## Objective
 
@@ -42,7 +42,7 @@ The running repo-truth sources for this slice remain:
 
 During implementation:
 
-1. use the gap matrix as the product-truth wording source for the six remaining v1 buckets,
+1. use the gap matrix as the product-truth wording source for the five remaining v1 buckets,
 2. use the remaining-scope note as the sequencing source so Slice `55` does not accidentally re-open host-tool parity work,
 3. keep wording updates bounded to the caller-surface freeze rather than broad repo cleanup.
 
