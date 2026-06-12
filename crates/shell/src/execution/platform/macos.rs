@@ -175,10 +175,34 @@ mod world_doctor_macos {
         }
     }
 
+    fn probe_caps_via_vm(runner: &dyn CommandRunner, vm_name: &str) -> bool {
+        runner
+            .run(
+                "limactl",
+                &[
+                    "shell",
+                    "--workdir=/",
+                    vm_name,
+                    "sudo",
+                    "-n",
+                    "timeout",
+                    "5",
+                    "curl",
+                    "-sS",
+                    "--fail",
+                    "--unix-socket",
+                    "/run/substrate.sock",
+                    "http://localhost/v1/capabilities",
+                ],
+            )
+            .success
+    }
+
     struct WorldServiceReachability {
         host_visible_transports: Vec<HostVisibleTransport>,
         service_active: bool,
         agent_caps_ok: bool,
+        guest_direct_caps_ok: bool,
     }
 
     fn assess_world_service_reachability(
@@ -192,20 +216,25 @@ mod world_doctor_macos {
                 host_visible_transports,
                 service_active: false,
                 agent_caps_ok: false,
+                guest_direct_caps_ok: false,
             };
         }
 
         let service_active = guest_service_active(runner, vm_name);
         // Preserve guest service-status truth separately from routed reachability:
-        // selected transport proves endpoint behavior, while guest-direct access
-        // remains fallback-only for later doctor report collection.
+        // prove the selected host-visible transport contract first, and only
+        // fall back to guest-direct breakglass access when those routed probes
+        // fail.
         let agent_caps_ok = host_visible_transports
             .iter()
             .any(probe_caps_over_transport);
+        let guest_direct_caps_ok =
+            !agent_caps_ok && service_active && probe_caps_via_vm(runner, vm_name);
         WorldServiceReachability {
             host_visible_transports,
             service_active,
             agent_caps_ok,
+            guest_direct_caps_ok,
         }
     }
 
@@ -464,6 +493,7 @@ echo pass
             host_visible_transports,
             service_active,
             agent_caps_ok,
+            guest_direct_caps_ok,
         } = assess_world_service_reachability(vm_running, &vm_name, runner);
 
         let host_ok = world_enabled
@@ -495,7 +525,7 @@ echo pass
             json!({"status": "disabled", "ok": false})
         } else if !(lima_installed && lima_virtualization && vm_running && service_active) {
             json!({"status": "not_provisioned", "ok": false})
-        } else if !agent_caps_ok {
+        } else if !(agent_caps_ok || guest_direct_caps_ok) {
             exit_code = 3;
             json!({"status": "unreachable", "ok": false})
         } else {
@@ -1318,6 +1348,114 @@ echo pass
                     Some("not_provisioned")
                 );
             });
+        }
+
+        #[test]
+        #[serial]
+        fn reachability_uses_guest_direct_fallback_after_host_transport_failure() {
+            let vm_json = r#"{"status":"Running"}"#;
+            let world_report = r#"{"schema_version":2,"ok":true,"collected_at_utc":"2026-01-08T00:00:00Z","policy_snapshot_v1_supported":true,"policy_resolution_mode":null,"landlock":{"supported":true,"abi":3,"reason":null},"world_fs_strategy":{"primary":"overlay","fallback":"fuse","probe":{"id":"enumeration_v1","probe_file":".substrate_enum_probe","result":"pass","failure_reason":null}}}"#;
+
+            with_env_var(
+                "SUBSTRATE_WORLD_SOCKET",
+                Some("/tmp/substrate-missing.sock"),
+                || {
+                    let responses = vec![
+                        (
+                            "limactl".into(),
+                            vec!["--version".into()],
+                            success_out("Lima v1"),
+                        ),
+                        (
+                            "sysctl".into(),
+                            vec!["-n".into(), "kern.hv_support".into()],
+                            success_out("1\n"),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec!["list".into(), "substrate".into(), "--json".into()],
+                            success_out(vm_json),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec![
+                                "shell".into(),
+                                "--workdir=/".into(),
+                                "substrate".into(),
+                                "systemctl".into(),
+                                "is-active".into(),
+                                "substrate-world-service".into(),
+                            ],
+                            success_out("active\n"),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec![
+                                "shell".into(),
+                                "--workdir=/".into(),
+                                "substrate".into(),
+                                "sudo".into(),
+                                "-n".into(),
+                                "timeout".into(),
+                                "5".into(),
+                                "curl".into(),
+                                "-sS".into(),
+                                "--fail".into(),
+                                "--unix-socket".into(),
+                                "/run/substrate.sock".into(),
+                                "http://localhost/v1/capabilities".into(),
+                            ],
+                            success_out(r#"{"version":"v1","features":["execute"]}"#),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec![
+                                "shell".into(),
+                                "--workdir=/".into(),
+                                "substrate".into(),
+                                "sudo".into(),
+                                "-n".into(),
+                                "timeout".into(),
+                                "5".into(),
+                                "curl".into(),
+                                "-sS".into(),
+                                "--fail".into(),
+                                "--unix-socket".into(),
+                                "/run/substrate.sock".into(),
+                                "http://localhost/v1/doctor/world".into(),
+                            ],
+                            success_out(world_report),
+                        ),
+                    ];
+                    let runner = MockRunner::new(responses);
+                    let assessment = collect_world_doctor_assessment(true, true, None, &runner);
+                    assert_eq!(assessment.exit_code, 4);
+                    assert!(assessment.service_active);
+                    assert!(!assessment.agent_caps_ok);
+                    assert_eq!(
+                        assessment
+                            .out
+                            .pointer("/host/lima/agent_caps_ok")
+                            .and_then(Value::as_bool),
+                        Some(false)
+                    );
+                    assert_eq!(
+                        assessment
+                            .out
+                            .pointer("/world/status")
+                            .and_then(Value::as_str),
+                        Some("ok")
+                    );
+                    assert_eq!(
+                        assessment.out.pointer("/world/ok").and_then(Value::as_bool),
+                        Some(true)
+                    );
+                    assert_eq!(
+                        assessment.out.pointer("/ok").and_then(Value::as_bool),
+                        Some(false)
+                    );
+                },
+            );
         }
 
         #[test]
