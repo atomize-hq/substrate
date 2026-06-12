@@ -212,9 +212,6 @@ pub struct ResourceLimits {
     pub cpu: Option<String>,
     /// Memory limit (e.g., "2Gi" for 2GB).
     pub memory: Option<String>,
-    /// Authoritative backend-facing policy and routing inputs nested under WorldSpec.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backend_policy: Option<BackendPolicyInputV1>,
 }
 
 impl Default for ResourceLimits {
@@ -222,7 +219,6 @@ impl Default for ResourceLimits {
         Self {
             cpu: Some("2".to_string()),
             memory: Some("2Gi".to_string()),
-            backend_policy: None,
         }
     }
 }
@@ -356,7 +352,7 @@ mod tests {
         assert!(spec.allowed_domains.contains(&"github.com".to_string()));
         assert!(!spec.always_isolate);
         assert_eq!(spec.fs_mode, WorldFsMode::Writable);
-        assert!(spec.limits.backend_policy.is_none());
+        assert!(spec.backend_policy.is_none());
     }
 
     #[test]
@@ -364,7 +360,6 @@ mod tests {
         let limits = ResourceLimits::default();
         assert_eq!(limits.cpu, Some("2".to_string()));
         assert_eq!(limits.memory, Some("2Gi".to_string()));
-        assert!(limits.backend_policy.is_none());
     }
 
     #[test]
@@ -440,10 +435,7 @@ mod tests {
         };
         let spec = WorldSpec {
             reuse_mode: mode.clone(),
-            limits: ResourceLimits {
-                backend_policy: Some(backend_policy_input.clone()),
-                ..ResourceLimits::default()
-            },
+            backend_policy: Some(backend_policy_input.clone()),
             ..WorldSpec::default()
         };
         let decoded: WorldSpec =
@@ -452,7 +444,6 @@ mod tests {
         assert_eq!(decoded.reuse_mode, mode);
         assert_eq!(
             decoded
-                .limits
                 .backend_policy
                 .expect("backend policy should deserialize"),
             backend_policy_input
