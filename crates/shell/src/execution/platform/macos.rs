@@ -44,6 +44,9 @@ mod world_doctor_macos {
     use std::process::Command;
     use std::time::Duration;
     use transport_api_client::AgentClient;
+    use world_mac_lima::transport::{
+        managed_host_socket_path, Transport, COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
+    };
 
     pub(super) trait CommandRunner {
         fn run(&self, program: &str, args: &[&str]) -> CommandOutput;
@@ -79,6 +82,33 @@ mod world_doctor_macos {
         std::env::var("SUBSTRATE_LIMA_VM_NAME")
             .or_else(|_| std::env::var("LIMA_VM_NAME"))
             .unwrap_or_else(|_| "substrate".to_string())
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum HostVisibleTransport {
+        Unix(PathBuf),
+        Tcp { host: String, port: u16 },
+    }
+
+    fn host_visible_transports_for(selected_transport: Transport) -> Vec<HostVisibleTransport> {
+        let managed_socket = HostVisibleTransport::Unix(managed_host_socket_path());
+        let compatibility_tcp = HostVisibleTransport::Tcp {
+            host: COMPATIBILITY_TCP_HOST.to_string(),
+            port: COMPATIBILITY_TCP_PORT,
+        };
+
+        match selected_transport {
+            Transport::UnixSocket => vec![managed_socket, compatibility_tcp],
+            Transport::VSock | Transport::TCP => vec![compatibility_tcp, managed_socket],
+        }
+    }
+
+    fn selected_host_visible_transports() -> Vec<HostVisibleTransport> {
+        if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+            return vec![HostVisibleTransport::Unix(PathBuf::from(socket_path))];
+        }
+
+        host_visible_transports_for(Transport::auto_select().unwrap_or_default())
     }
 
     fn probe_caps_uds(path: &Path) -> bool {
@@ -122,6 +152,13 @@ mod world_doctor_macos {
         }
     }
 
+    fn probe_caps_over_transport(transport: &HostVisibleTransport) -> bool {
+        match transport {
+            HostVisibleTransport::Unix(path) => probe_caps_uds(path),
+            HostVisibleTransport::Tcp { host, port } => probe_caps_tcp(host, *port),
+        }
+    }
+
     fn probe_caps_in_vm(runner: &dyn CommandRunner, vm_name: &str) -> bool {
         runner
             .run(
@@ -143,6 +180,53 @@ mod world_doctor_macos {
                 ],
             )
             .success
+    }
+
+    async fn doctor_world_report_over_transport(transport: &HostVisibleTransport) -> Option<Value> {
+        match transport {
+            HostVisibleTransport::Unix(path) => {
+                let client = AgentClient::unix_socket(path).ok()?;
+                client
+                    .doctor_world()
+                    .await
+                    .ok()
+                    .and_then(|report| serde_json::to_value(report).ok())
+            }
+            HostVisibleTransport::Tcp { host, port } => {
+                let client = AgentClient::tcp(host, *port).ok()?;
+                client
+                    .doctor_world()
+                    .await
+                    .ok()
+                    .and_then(|report| serde_json::to_value(report).ok())
+            }
+        }
+    }
+
+    fn doctor_world_report_via_vm(runner: &dyn CommandRunner, vm_name: &str) -> Option<Value> {
+        let output = runner.run(
+            "limactl",
+            &[
+                "shell",
+                "--workdir=/",
+                vm_name,
+                "sudo",
+                "-n",
+                "timeout",
+                "5",
+                "curl",
+                "-sS",
+                "--fail",
+                "--unix-socket",
+                "/run/substrate.sock",
+                "http://localhost/v1/doctor/world",
+            ],
+        );
+        if output.success {
+            serde_json::from_str(&output.stdout).ok()
+        } else {
+            None
+        }
     }
 
     fn fallback_world_report_v1_via_vm(runner: &dyn CommandRunner, vm_name: &str) -> Value {
@@ -350,6 +434,7 @@ echo pass
 
         let vm_running = vm_status == "Running";
         let can_probe_vm = world_enabled && vm_running;
+        let host_visible_transports = selected_host_visible_transports();
         let service_active = if can_probe_vm {
             runner
                 .run(
@@ -371,14 +456,10 @@ echo pass
         let agent_caps_ok = if !can_probe_vm || !service_active {
             false
         } else {
-            let sock = dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".substrate/sock/agent.sock");
-            if sock.exists() && probe_caps_uds(&sock) {
-                true
-            } else {
-                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner, &vm_name)
-            }
+            host_visible_transports
+                .iter()
+                .any(probe_caps_over_transport)
+                || probe_caps_in_vm(runner, &vm_name)
         };
 
         let host_ok = world_enabled
@@ -414,49 +495,18 @@ echo pass
             exit_code = 3;
             json!({"status": "unreachable", "ok": false})
         } else {
-            let sock = dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".substrate/sock/agent.sock");
             let report = match tokio::runtime::Runtime::new() {
                 Ok(rt) => {
-                    let sock_clone = sock.clone();
+                    let host_visible_transports = host_visible_transports.clone();
                     Some(rt.block_on(async {
-                        if sock_clone.exists() {
-                            if let Ok(client) = AgentClient::unix_socket(&sock_clone) {
-                                if let Ok(report) = client.doctor_world().await {
-                                    return Some(report);
-                                }
-                            }
-                        }
-                        if let Ok(client) = AgentClient::tcp("127.0.0.1", 17788) {
-                            if let Ok(report) = client.doctor_world().await {
+                        for transport in &host_visible_transports {
+                            if let Some(report) = doctor_world_report_over_transport(transport).await
+                            {
                                 return Some(report);
                             }
                         }
-                        let output = runner.run(
-                            "limactl",
-                            &[
-                                "shell",
-                                "--workdir=/",
-                                &vm_name,
-                                "sudo",
-                                "-n",
-                                "timeout",
-                                "5",
-                                "curl",
-                                "-sS",
-                                "--fail",
-                                "--unix-socket",
-                                "/run/substrate.sock",
-                                "http://localhost/v1/doctor/world",
-                            ],
-                        );
-                        if output.success {
-                            if let Ok(report) = serde_json::from_str(&output.stdout) {
-                                return Some(report);
-                            }
-                        }
-                        None
+
+                        doctor_world_report_via_vm(runner, &vm_name)
                     }))
                 }
                 Err(err) => {
@@ -1068,6 +1118,50 @@ echo pass
                     assert_eq!(resolve_lima_vm_name(), "substrate-arch");
                 })
             });
+        }
+
+        #[test]
+        fn host_visible_transports_follow_selected_transport_order() {
+            let unix_first = host_visible_transports_for(Transport::UnixSocket);
+            assert_eq!(
+                unix_first,
+                vec![
+                    HostVisibleTransport::Unix(managed_host_socket_path()),
+                    HostVisibleTransport::Tcp {
+                        host: COMPATIBILITY_TCP_HOST.to_string(),
+                        port: COMPATIBILITY_TCP_PORT,
+                    },
+                ]
+            );
+
+            let tcp_first = host_visible_transports_for(Transport::VSock);
+            assert_eq!(
+                tcp_first,
+                vec![
+                    HostVisibleTransport::Tcp {
+                        host: COMPATIBILITY_TCP_HOST.to_string(),
+                        port: COMPATIBILITY_TCP_PORT,
+                    },
+                    HostVisibleTransport::Unix(managed_host_socket_path()),
+                ]
+            );
+        }
+
+        #[test]
+        #[serial]
+        fn selected_host_visible_transports_honor_socket_override() {
+            let override_path = PathBuf::from("/tmp/substrate-override.sock");
+            let override_path_string = override_path.to_str().expect("override path").to_string();
+            with_env_var(
+                "SUBSTRATE_WORLD_SOCKET",
+                Some(&override_path_string),
+                || {
+                    assert_eq!(
+                        selected_host_visible_transports(),
+                        vec![HostVisibleTransport::Unix(override_path.clone())]
+                    );
+                },
+            );
         }
 
         #[test]
