@@ -133,6 +133,8 @@ Manual smoke review rule:
 
 - Do not treat green commands alone as promotion proof.
 - Inspect `summary.md` plus the first checkpoints and confirm the issue-specific expectation below.
+- `R5.75-0` is the docs-only exception: it may intentionally skip native control smoke when its
+  packet closeout notes record the cross-doc audit plus baseline `agent-drift-analyzer` test run.
 - Do not advance if the current issue appears fixed but any earlier landed issue regresses on its named smoke sessions.
 
 ## Sequential Landing Map
@@ -171,7 +173,9 @@ cargo test -p agent-drift-analyzer -- --nocapture
   - landed `R5.5` work is not still presented as unchecked implementation work
   - remaining issues now point at `R5.75`, not back at stale `R5.5` wording
   - `R6` is not named as current/next until `R5.75` is complete
-- Optional control smoke: rerun one native session (`019eb430-6f9a-7a03-9a63-cb451b654795`) to confirm the doc-only landing did not accidentally require code changes.
+- Optional control smoke is intentionally skippable for this docs-only packet. If skipped, record
+  the skip explicitly in the packet closeout notes together with the cross-doc audit and baseline
+  `cargo test -p agent-drift-analyzer -- --nocapture` result.
 
 ### Promotion Gate
 

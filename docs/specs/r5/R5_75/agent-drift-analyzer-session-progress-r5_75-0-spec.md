@@ -1,7 +1,8 @@
 # Spec: Agent Drift Analyzer Session Progress R5.75-0
 
-Status: draft spec created on 2026-06-12 from
-`docs/specs/r5/R5_75/MAP.md` for the first sequential pre-`R6` landing only.
+Status: landed/closed on 2026-06-12. Original spec created from
+`docs/specs/r5/R5_75/MAP.md` for the first sequential pre-`R6` landing only; see the packet
+plan/tasks closeout notes for the preserved verification record.
 
 ## Assumptions I'm Making
 

@@ -1,6 +1,6 @@
 # Plan: Agent Drift Analyzer Session Progress R5.75-0
 
-Status: draft plan created on 2026-06-12 from
+Status: landed/closed on 2026-06-12. Original draft created from
 `docs/specs/r5/R5_75/MAP.md` and
 `docs/specs/r5/R5_75/agent-drift-analyzer-session-progress-r5_75-0-spec.md`.
 
@@ -9,7 +9,7 @@ Status: draft plan created on 2026-06-12 from
 Land a bounded docs/authority reconciliation packet that makes the `R5.5` and root landing-order
 docs honest about what already landed, what remains, and why `R5.75` must complete before `R6`.
 
-## Planning Decisions Locked For This Draft
+## Planning Decisions Locked For This Packet
 
 1. `R5.75-0` is docs-only. It does not include analyzer-semantic edits, scorer retuning, fixture
    growth, or compactor changes.
@@ -138,3 +138,13 @@ Do not promote to `R5.75-1` until:
 - no touched authority doc presents `R6` as currently open
 - baseline analyzer validation is green
 - any optional skipped smoke is explicitly recorded rather than silently omitted
+
+## Packet Closeout Note (2026-06-12)
+
+`R5.75-0` landed as a docs-only packet once the following closeout evidence was recorded:
+
+- cross-doc authority audit run with
+  `rg -n "R5\\.5|R5\\.75|R6" docs/specs/r5/R5_75/MAP.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
+- `cargo test -p agent-drift-analyzer -- --nocapture`
+- optional native control smoke intentionally skipped because `R5.75-0` is docs-only and did not
+  change analyzer/runtime behavior
