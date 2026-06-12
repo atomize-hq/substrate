@@ -138,7 +138,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 2.1: Remove default `SUBSTRATE_AGENT_TCP_PORT` injection from `scripts/mac/lima-warm.sh`
+- [x] Task 2.1: Remove default `SUBSTRATE_AGENT_TCP_PORT` injection from `scripts/mac/lima-warm.sh`
   - Acceptance: `scripts/mac/lima-warm.sh` no longer writes
     `Environment=SUBSTRATE_AGENT_TCP_PORT=61337` into the guest service unit by
     default. The script still writes the intended socket-centered service state
@@ -151,7 +151,7 @@ Session goal:
   - Files:
     - `scripts/mac/lima-warm.sh`
 
-- [ ] Task 2.2: Keep listener evidence honest after the warm/repair cutover
+- [x] Task 2.2: Keep listener evidence honest after the warm/repair cutover
   - Acceptance: if `scripts/mac/lima-doctor.sh` or `scripts/mac/smoke.sh` still
     imply that a guest TCP listener is required, update them so the tightened
     socket-only guest default is reflected honestly. If they already remain
@@ -184,7 +184,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Update `docs/WORLD.md` to describe the tightened listener posture honestly
+- [x] Task 3.1: Update `docs/WORLD.md` to describe the tightened listener posture honestly
   - Acceptance: the macOS/Lima sections of `docs/WORLD.md` no longer imply that
     guest TCP is part of the hardened default. Any mention of retained host
     compatibility routing, `SUBSTRATE_WORLD_SOCKET`, or guest-direct diagnostics
@@ -195,7 +195,7 @@ Session goal:
   - Files:
     - `docs/WORLD.md`
 
-- [ ] Task 3.2: Update macOS setup docs to stop normalizing guest TCP
+- [x] Task 3.2: Update macOS setup docs to stop normalizing guest TCP
   - Acceptance:
     `docs/reference/world/platforms/macos-lima-setup.md` no longer reads as if
     guest TCP is a normal hardened default. Any remaining references to TCP
@@ -228,7 +228,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 4.1: Final targeted regression and scope check
+- [x] Task 4.1: Final targeted regression and scope check
   - Acceptance: syntax checks pass for touched shell scripts, final doc/script
     diffs remain limited to the intended listener-oriented surfaces, and any
     optional runtime fallout remains absent or tightly justified.
@@ -240,7 +240,7 @@ Session goal:
   - Files:
     - touched files only
 
-- [ ] Task 4.2: Record the handoff boundary honestly
+- [x] Task 4.2: Record the handoff boundary honestly
   - Acceptance: the final closeout states explicitly that Slice `07` landed the
     listener-default removal seam only, Slice `08` / `09` still own
     ingress/mount hardening, Slice `10` still owns guest-unit source-of-truth
@@ -256,6 +256,10 @@ Packet `4` closeout note:
 2. Slice `08` / `09` remain the ingress and mount seams.
 3. Slice `10` remains the guest-unit source-of-truth seam.
 4. Slice `12` remains the broader breakglass and docs-cutover seam.
+5. Final 2026-06-12 validation confirmed Packets `1`–`3` were already green in
+   live repo truth; Packet `4` closed the stale task ledger without widening
+   into ingress, mount, transport redesign, guest-unit unification, or broad
+   docs-cutover work.
 
 ### Packet 4 checkpoint
 
