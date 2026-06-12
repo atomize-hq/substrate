@@ -35,12 +35,14 @@ Status: draft on `2026-06-12`
     - `llm-last-mile/TASKS-56.md`
     - `AGENT_ORCHESTRATION_GAP_MATRIX.md` (only if bounded truth alignment is needed)
 
-- [ ] Task 56.2: Normalize degraded `agent status` rendering without weakening strict control helpers
+- [x] Task 56.2: Normalize degraded `agent status` rendering without weakening strict control helpers
   - Acceptance:
     - `substrate agent status --json` returns warning-bearing output for the targeted torn/degraded cases rather than aborting the whole read surface
     - the degraded warnings explain the specific missing/ambiguous condition instead of silently dropping truth
     - strict control-plane helpers remain fail-closed and are not relaxed to share status permissiveness
     - no touched code turns degraded status into a control selector source
+  - Checkpoint note:
+    - Packet `2` verified green on `2026-06-12` in the current workspace: the targeted degraded/torn `agent status` cases already render warning-bearing output, the paired fail-closed toolbox/control assertions already hold, GitNexus impact review stayed low-risk and bounded to the status path, and no additional production-symbol edits were required
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`

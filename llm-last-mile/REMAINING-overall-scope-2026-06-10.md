@@ -1,7 +1,7 @@
 # Remaining Scope Consolidated View
 
-Date: `2026-06-11`  
-Provenance: originally consolidated on `2026-06-10`; refreshed on `2026-06-11` after Slice `55` Packet `4` closeout so this file remains the canonical current-state note even though the filename keeps the original consolidation date.  
+Date: `2026-06-12`  
+Provenance: originally consolidated on `2026-06-10`; refreshed on `2026-06-11` after Slice `55` Packet `4` closeout and refreshed again on `2026-06-12` after Slice `56` Packet `2` verified green so this file remains the canonical current-state note even though the filename keeps the original consolidation date.  
 Validated against:
 - historical checkpoint `REMAINING-family-1-scope-2026-05-30.md` (now archived locally during cleanup)
 - historical checkpoint `REMAINING-family-1-scope-2026-05-31-post-slice-34.md` (now archived locally during cleanup)
@@ -291,8 +291,10 @@ Repo-truth consequence:
 
 ### Immediate next seam
 
-1. **No replacement host-tool parity seam is queued immediately**
-   - Slice `54` closed selected-host `claude_code` parity and Slice `55` closed the caller-surface contract freeze, so the next choice is between read-side/strict control-surface hardening, broader docs/smoke follow-through, or Family-2 coordination based on product priority.
+1. **Slice `56` remains the active immediate seam, but Packet `2` is now checkpoint-green**
+   - Slice `54` closed selected-host `claude_code` parity and Slice `55` closed the caller-surface contract freeze.
+   - Slice `56` Packet `1` froze the read-side vs strict-control contract, and Packet `2` is now verified green in the current tree for the targeted degraded-status rendering cases.
+   - The immediate next seam inside that active slice is therefore Packet `3` participant-aware fallback plus legacy-handle de-canonicalization, not a return to caller-surface parity work.
 
 ### After that
 
@@ -343,8 +345,9 @@ Current repo truth is:
 1. the older `REMAINING-*` notes are now best read as historical checkpoints, not the current top-level source of truth,
 2. Family 1 foundation work is landed through the first Codex-backed host-tool floor,
 3. selected-host `claude_code` parity is landed through Slice `54`,
-4. broader Family-1 docs/smoke follow-through is a later bounded update only when some future live surface widening changes repo truth again,
-5. Family 2 local semantics are landed through the first `host_inbox -> local obligation -> router` boundary,
-6. the next likely Family-2 seam, if still needed, is host-global ingress lifecycle coordination rather than reopening local materialization,
-7. broader cross-host delivery, federation, and public/operator UX remain later or optional work,
-8. this document now contains the current overall picture and is the best candidate to keep at top level when the older `REMAINING-*` notes are archived.
+4. Slice `56` Packet `2` is checkpoint-green in the current tree, so the next bounded Family-1 runtime seam is Packet `3` rather than another degraded-status normalization pass,
+5. broader Family-1 docs/smoke follow-through is a later bounded update only when some future live surface widening changes repo truth again,
+6. Family 2 local semantics are landed through the first `host_inbox -> local obligation -> router` boundary,
+7. the next likely Family-2 seam, if still needed, is host-global ingress lifecycle coordination rather than reopening local materialization,
+8. broader cross-host delivery, federation, and public/operator UX remain later or optional work,
+9. this document now contains the current overall picture and is the best candidate to keep at top level when the older `REMAINING-*` notes are archived.
