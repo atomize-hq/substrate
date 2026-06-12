@@ -3,6 +3,7 @@
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[allow(dead_code)]
 mod imp {
+    use crate::execution::platform_world::WorldTransportWsIo;
     use super::super::shim_ops::build_world_env_map_for_cwd;
     use crate::execution::policy_snapshot;
     use crate::execution::pty;
@@ -361,7 +362,7 @@ mod imp {
         }
     }
 
-    type WsIo = pw::WorldTransportWsIo;
+    type WsIo = WorldTransportWsIo;
 
     #[derive(Debug, Serialize)]
     #[serde(tag = "type", rename_all = "snake_case")]
