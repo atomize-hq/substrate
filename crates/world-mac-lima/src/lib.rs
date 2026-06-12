@@ -46,10 +46,16 @@ pub struct MacLimaBackend {
     session_cache: std::sync::Mutex<Option<WorldHandle>>,
     shared_owner_cache: std::sync::Mutex<std::collections::HashMap<String, WorldHandle>>,
     shared_owner_mutex: std::sync::Mutex<()>,
-    fs_mode: std::sync::Mutex<WorldFsMode>,
-    backend_policy: std::sync::Mutex<Option<BackendPolicyInputV1>>,
+    world_policy_state:
+        std::sync::Mutex<std::collections::HashMap<String, MacWorldPolicyState>>,
     #[cfg(test)]
     session_setup_override: Option<std::sync::Arc<dyn SessionSetupMock>>,
+}
+
+#[derive(Clone)]
+struct MacWorldPolicyState {
+    fs_mode: WorldFsMode,
+    backend_policy: Option<BackendPolicyInputV1>,
 }
 
 impl MacLimaBackend {
@@ -74,8 +80,7 @@ impl MacLimaBackend {
             session_cache: std::sync::Mutex::new(None),
             shared_owner_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
             shared_owner_mutex: std::sync::Mutex::new(()),
-            fs_mode: std::sync::Mutex::new(WorldFsMode::Writable),
-            backend_policy: std::sync::Mutex::new(None),
+            world_policy_state: std::sync::Mutex::new(std::collections::HashMap::new()),
             #[cfg(test)]
             session_setup_override: None,
         })
@@ -422,11 +427,15 @@ impl MacLimaBackend {
     fn convert_exec_request(
         &self,
         req: &ExecRequest,
-        fs_mode: WorldFsMode,
+        world_state: &MacWorldPolicyState,
     ) -> Result<ExecuteRequest> {
-        let backend_policy = self.effective_backend_policy()?;
+        let backend_policy = world_state.backend_policy.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "macOS backend missing authoritative backend_policy; refusing synthetic fallback"
+            )
+        })?;
         let policy_snapshot = convert_backend_policy_snapshot(&backend_policy.policy_snapshot)?;
-        let world_network = convert_backend_world_network(&backend_policy);
+        let world_network = convert_backend_world_network(backend_policy);
 
         Ok(ExecuteRequest {
             profile: None,
@@ -439,7 +448,7 @@ impl MacLimaBackend {
             policy_snapshot,
             shared_world: req.shared_world.clone(),
             world_network: Some(world_network),
-            world_fs_mode: Some(fs_mode),
+            world_fs_mode: Some(world_state.fs_mode),
             member_dispatch: req.member_dispatch.as_ref().map(convert_member_dispatch),
         })
     }
@@ -466,47 +475,64 @@ impl MacLimaBackend {
         }
     }
 
-    fn store_fs_mode(&self, fs_mode: WorldFsMode) -> Result<()> {
-        let mut guard = self
-            .fs_mode
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
-        *guard = fs_mode;
-        Ok(())
-    }
-
-    fn effective_fs_mode(&self) -> Result<WorldFsMode> {
+    fn effective_fs_mode(&self, fs_mode: WorldFsMode) -> WorldFsMode {
         if let Ok(raw) = std::env::var("SUBSTRATE_WORLD_FS_MODE") {
             if let Some(mode) = WorldFsMode::parse(&raw) {
-                return Ok(mode);
+                return mode;
             }
         }
-        let guard = self
-            .fs_mode
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
-        Ok(*guard)
+        fs_mode
     }
 
-    fn store_backend_policy(&self, backend_policy: Option<BackendPolicyInputV1>) -> Result<()> {
+    fn store_world_policy_state(
+        &self,
+        world_id: &str,
+        fs_mode: WorldFsMode,
+        backend_policy: Option<BackendPolicyInputV1>,
+    ) -> Result<()> {
         let mut guard = self
-            .backend_policy
+            .world_policy_state
             .lock()
             .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
-        *guard = backend_policy;
+        guard.insert(
+            world_id.to_string(),
+            MacWorldPolicyState {
+                fs_mode,
+                backend_policy,
+            },
+        );
         Ok(())
     }
 
-    fn effective_backend_policy(&self) -> Result<BackendPolicyInputV1> {
+    fn effective_world_policy_state(&self, world: &WorldHandle) -> Result<MacWorldPolicyState> {
         let guard = self
-            .backend_policy
+            .world_policy_state
             .lock()
             .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
-        guard.clone().ok_or_else(|| {
+        let mut state = guard.get(&world.id).cloned().ok_or_else(|| {
             anyhow::anyhow!(
-                "macOS backend missing authoritative backend_policy; refusing synthetic fallback"
+                "macOS backend missing policy state for world {}; ensure_session/apply_policy must establish it before exec",
+                world.id
             )
-        })
+        })?;
+        state.fs_mode = self.effective_fs_mode(state.fs_mode);
+        Ok(state)
+    }
+
+    fn cache_world_policy_state(&self, world: &WorldHandle, spec: &WorldSpec) -> Result<()> {
+        self.store_world_policy_state(&world.id, spec.fs_mode, spec.backend_policy.clone())
+    }
+
+    fn new_generic_world_handle(&self, reuse_session: bool) -> WorldHandle {
+        let id = if reuse_session {
+            format!("vm:{}", self.vm_name)
+        } else {
+            format!("vm:{}:{}", self.vm_name, uuid::Uuid::now_v7())
+        };
+        WorldHandle {
+            id,
+            shared_binding: None,
+        }
     }
 
     /// Build an AgentClient based on current forwarding.
@@ -540,11 +566,10 @@ impl WorldBackend for MacLimaBackend {
     fn ensure_session(&self, spec: &WorldSpec) -> Result<WorldHandle> {
         self.ensure_agent_ready()?;
 
-        self.store_fs_mode(spec.fs_mode)?;
-        self.store_backend_policy(spec.backend_policy.clone())?;
-
         if let Some(owner) = spec.reuse_mode.shared_owner() {
-            return self.ensure_shared_owner_session(owner);
+            let handle = self.ensure_shared_owner_session(owner)?;
+            self.cache_world_policy_state(&handle, spec)?;
+            return Ok(handle);
         }
 
         // Cache session if requested
@@ -555,17 +580,12 @@ impl WorldBackend for MacLimaBackend {
                 .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
             if let Some(ref handle) = *cache {
                 tracing::debug!("Reusing cached world session: {}", handle.id);
+                self.cache_world_policy_state(handle, spec)?;
                 return Ok(handle.clone());
             }
         }
 
-        // Generate world ID
-        let world_id = format!("vm:{}", self.vm_name);
-
-        let handle = WorldHandle {
-            id: world_id.clone(),
-            shared_binding: None,
-        };
+        let handle = self.new_generic_world_handle(spec.reuse_session);
 
         if spec.reuse_session {
             let mut cache = self
@@ -575,16 +595,17 @@ impl WorldBackend for MacLimaBackend {
             *cache = Some(handle.clone());
         }
 
+        self.cache_world_policy_state(&handle, spec)?;
         Ok(handle)
     }
 
-    fn exec(&self, _world: &WorldHandle, req: ExecRequest) -> Result<ExecResult> {
+    fn exec(&self, world: &WorldHandle, req: ExecRequest) -> Result<ExecResult> {
         // Build agent client
         let client = self.build_agent_client()?;
 
         // Convert request
-        let fs_mode = self.effective_fs_mode()?;
-        let agent_req = self.convert_exec_request(&req, fs_mode)?;
+        let world_state = self.effective_world_policy_state(world)?;
+        let agent_req = self.convert_exec_request(&req, &world_state)?;
 
         // Execute via agent
         let resp = self.block_on_compat(async { client.execute(agent_req).await })?;
@@ -613,14 +634,12 @@ impl WorldBackend for MacLimaBackend {
     }
 
     fn apply_policy(&self, world: &WorldHandle, spec: &WorldSpec) -> Result<()> {
-        let Some(backend_policy) = spec.backend_policy.clone() else {
-            self.store_backend_policy(None)?;
+        self.store_world_policy_state(&world.id, spec.fs_mode, spec.backend_policy.clone())?;
+        let Some(_backend_policy) = spec.backend_policy.clone() else {
             anyhow::bail!(
                 "macOS backend requires authoritative backend_policy when applying policy"
             );
         };
-        self.store_fs_mode(spec.fs_mode)?;
-        self.store_backend_policy(Some(backend_policy))?;
         tracing::debug!(
             world_id = %world.id,
             has_backend_policy = true,
@@ -975,9 +994,11 @@ mod tests {
                     },
                 }),
             };
-            let fs_mode = backend.effective_fs_mode().expect("fs_mode");
+            let world_state = backend
+                .effective_world_policy_state(&world)
+                .expect("world policy state");
             let agent_req = backend
-                .convert_exec_request(&req, fs_mode)
+                .convert_exec_request(&req, &world_state)
                 .expect("convert exec request");
             assert_eq!(
                 agent_req.world_fs_mode,
@@ -1064,8 +1085,11 @@ mod tests {
             backend
                 .apply_policy(&world, &first)
                 .expect("apply first policy");
+            let first_state = backend
+                .effective_world_policy_state(&world)
+                .expect("first world state");
             let first_agent_req = backend
-                .convert_exec_request(&req, WorldFsMode::Writable)
+                .convert_exec_request(&req, &first_state)
                 .expect("convert first request");
             assert_eq!(
                 first_agent_req.policy_snapshot.net_allowed,
@@ -1091,8 +1115,11 @@ mod tests {
             backend
                 .apply_policy(&world, &second)
                 .expect("apply second policy");
+            let second_state = backend
+                .effective_world_policy_state(&world)
+                .expect("second world state");
             let second_agent_req = backend
-                .convert_exec_request(&req, WorldFsMode::Writable)
+                .convert_exec_request(&req, &second_state)
                 .expect("convert second request");
             assert_eq!(
                 second_agent_req.policy_snapshot.net_allowed,
@@ -1137,8 +1164,11 @@ mod tests {
                 "unexpected error: {err}"
             );
 
+            let world_state = backend
+                .effective_world_policy_state(&world)
+                .expect("world state should be recorded fail-closed");
             let err = backend
-                .convert_exec_request(&req, WorldFsMode::Writable)
+                .convert_exec_request(&req, &world_state)
                 .expect_err("missing policy state must remain fail-closed");
             assert!(
                 err.to_string()
@@ -1146,6 +1176,177 @@ mod tests {
                 "unexpected conversion error: {err}"
             );
         }
+    }
+
+    #[test]
+    fn world_policy_state_is_scoped_per_world_handle() {
+        let _env_guard = crate::test_util::lock_env();
+
+        if let Ok(backend) = MacLimaBackend::new() {
+            let first_world = WorldHandle {
+                id: "vm:substrate:first".to_string(),
+                shared_binding: None,
+            };
+            let second_world = WorldHandle {
+                id: "vm:substrate:second".to_string(),
+                shared_binding: None,
+            };
+            let req = ExecRequest {
+                cmd: "echo hi".to_string(),
+                cwd: PathBuf::from("/tmp"),
+                env: std::collections::HashMap::new(),
+                pty: false,
+                span_id: None,
+                shared_world: None,
+                member_dispatch: None,
+            };
+
+            backend
+                .apply_policy(
+                    &first_world,
+                    &WorldSpec {
+                        fs_mode: WorldFsMode::ReadOnly,
+                        backend_policy: Some(sample_backend_policy(
+                            &["https://first.example.com"],
+                            &["first.example.com"],
+                            false,
+                            true,
+                        )),
+                        ..WorldSpec::default()
+                    },
+                )
+                .expect("apply first policy");
+            backend
+                .apply_policy(
+                    &second_world,
+                    &WorldSpec {
+                        fs_mode: WorldFsMode::Writable,
+                        backend_policy: Some(sample_backend_policy(
+                            &["https://second.example.com"],
+                            &["second.example.com"],
+                            true,
+                            false,
+                        )),
+                        ..WorldSpec::default()
+                    },
+                )
+                .expect("apply second policy");
+
+            let first_agent_req = backend
+                .convert_exec_request(
+                    &req,
+                    &backend
+                        .effective_world_policy_state(&first_world)
+                        .expect("first world state"),
+                )
+                .expect("convert first request");
+            let second_agent_req = backend
+                .convert_exec_request(
+                    &req,
+                    &backend
+                        .effective_world_policy_state(&second_world)
+                        .expect("second world state"),
+                )
+                .expect("convert second request");
+
+            assert_eq!(
+                first_agent_req.policy_snapshot.net_allowed,
+                vec!["https://first.example.com".to_string()]
+            );
+            assert_eq!(
+                second_agent_req.policy_snapshot.net_allowed,
+                vec!["https://second.example.com".to_string()]
+            );
+            assert_eq!(first_agent_req.world_fs_mode, Some(WorldFsMode::ReadOnly));
+            assert_eq!(second_agent_req.world_fs_mode, Some(WorldFsMode::Writable));
+            assert_eq!(
+                first_agent_req.world_network,
+                Some(WorldNetworkRoutingV1 {
+                    isolate_network: true,
+                    allowed_domains: vec!["first.example.com".to_string()],
+                })
+            );
+            assert_eq!(
+                second_agent_req.world_network,
+                Some(WorldNetworkRoutingV1 {
+                    isolate_network: false,
+                    allowed_domains: vec!["second.example.com".to_string()],
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn ensure_session_without_reuse_gets_distinct_world_scoped_policy_state() {
+        let _env_guard = crate::test_util::lock_env();
+        let session_setup = Arc::new(AlwaysReadySessionSetup::new());
+        let backend =
+            MacLimaBackend::with_session_setup_mock(session_setup.clone()).expect("backend");
+
+        let first_spec = WorldSpec {
+            reuse_session: false,
+            fs_mode: WorldFsMode::ReadOnly,
+            backend_policy: Some(sample_backend_policy(
+                &["https://first.example.com"],
+                &["first.example.com"],
+                false,
+                true,
+            )),
+            ..WorldSpec::default()
+        };
+        let second_spec = WorldSpec {
+            reuse_session: false,
+            fs_mode: WorldFsMode::Writable,
+            backend_policy: Some(sample_backend_policy(
+                &["https://second.example.com"],
+                &["second.example.com"],
+                true,
+                false,
+            )),
+            ..WorldSpec::default()
+        };
+
+        let first_world = backend.ensure_session(&first_spec).expect("first world");
+        let second_world = backend.ensure_session(&second_spec).expect("second world");
+        assert_ne!(first_world.id, second_world.id);
+
+        let req = ExecRequest {
+            cmd: "echo hi".to_string(),
+            cwd: PathBuf::from("/tmp"),
+            env: std::collections::HashMap::new(),
+            pty: false,
+            span_id: None,
+            shared_world: None,
+            member_dispatch: None,
+        };
+
+        let first_agent_req = backend
+            .convert_exec_request(
+                &req,
+                &backend
+                    .effective_world_policy_state(&first_world)
+                    .expect("first world state"),
+            )
+            .expect("convert first request");
+        let second_agent_req = backend
+            .convert_exec_request(
+                &req,
+                &backend
+                    .effective_world_policy_state(&second_world)
+                    .expect("second world state"),
+            )
+            .expect("convert second request");
+
+        assert_eq!(first_agent_req.world_fs_mode, Some(WorldFsMode::ReadOnly));
+        assert_eq!(second_agent_req.world_fs_mode, Some(WorldFsMode::Writable));
+        assert_eq!(
+            first_agent_req.policy_snapshot.net_allowed,
+            vec!["https://first.example.com".to_string()]
+        );
+        assert_eq!(
+            second_agent_req.policy_snapshot.net_allowed,
+            vec!["https://second.example.com".to_string()]
+        );
     }
 
     #[test]
