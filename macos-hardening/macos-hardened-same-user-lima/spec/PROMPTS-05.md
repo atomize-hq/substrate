@@ -144,9 +144,13 @@ Mission:
 - Land Packet 2 only: Widen the shared backend contract.
 - Do not start Packet 3.
 - Keep the slice bounded to adding the minimum shared parity carrier and aligning authoritative builders to feed it.
+- Packet 2 is unblocked only on the `WorldSpec`-owned parity-carrier path. Do not widen `ExecRequest` first unless live repo proof forces it and you surface that contradiction explicitly before editing.
 
 Before editing:
 1. Read SPEC-05, PLAN-05, TASKS-05 and verify Packet 1 is already landed, committed, and checkpoint-green on the current tree.
+   Confirm explicitly from SPEC-05 / PLAN-05 that Packet 2 is frozen to the
+   `WorldSpec`-owned carrier path and that `ExecRequest` remains command-scoped
+   unless later proof forces a contradiction.
 2. Re-read the Phase 1 README, milestone 1.2, milestone 1.3, and DESIGN-macos-policy-input-parity.md.
 3. Inspect the current shared-contract and builder surfaces in:
    - /Users/spensermcconnell/.codex/worktrees/ff74/substrate/crates/world-api/src/lib.rs
@@ -203,7 +207,7 @@ Packet 2 checkpoint:
 - no macOS-only hidden side channel was introduced
 
 Implementation subagent prompt:
-/goal Land Slice 05 Packet 2 only in /Users/spensermcconnell/.codex/worktrees/ff74/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/SPEC-05-backend-policy-input-parity.md, /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/PLAN-05.md, and /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/TASKS-05.md first. Verify Packet 1 is already green. Work only on Task 2.1 and Task 2.2. Keep the work bounded to widening the minimum shared parity carrier and feeding it from authoritative shell/broker-resolved inputs. Do not widen into Packet 3 backend implementation or Slice 06 readiness/docs work. Re-run the Packet 2 verification commands and finish by stating whether Packet 2 is checkpoint-green, what files changed, what verification ran, and whether Packet 3 is unblocked.
+/goal Land Slice 05 Packet 2 only in /Users/spensermcconnell/.codex/worktrees/ff74/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/SPEC-05-backend-policy-input-parity.md, /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/PLAN-05.md, and /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/TASKS-05.md first. Verify Packet 1 is already green. Packet 2 is unblocked only on the `WorldSpec`-owned parity-carrier path; do not widen `ExecRequest` first unless live repo proof forces it and you surface that contradiction explicitly before editing. Work only on Task 2.1 and Task 2.2. Keep the work bounded to widening the minimum shared parity carrier and feeding it from authoritative shell/broker-resolved inputs. Do not widen into Packet 3 backend implementation or Slice 06 readiness/docs work. Re-run the Packet 2 verification commands and finish by stating whether Packet 2 is checkpoint-green, what files changed, what verification ran, and whether Packet 3 is unblocked.
 
 Review subagent prompt:
 Review the committed Slice 05 Packet 2 change in /Users/spensermcconnell/.codex/worktrees/ff74/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/SPEC-05-backend-policy-input-parity.md, /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/PLAN-05.md, /Users/spensermcconnell/.codex/worktrees/ff74/substrate/macos-hardening/macos-hardened-same-user-lima/spec/TASKS-05.md, the live diff, and the relevant GitNexus outputs. Review only Packet 2. Report findings first with explicit severities. State clearly whether Packet 2 is review-clean or requires changes.
