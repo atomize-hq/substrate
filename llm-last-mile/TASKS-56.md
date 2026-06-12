@@ -19,12 +19,14 @@ Status: draft on `2026-06-12`
 
 ## Task List
 
-- [ ] Task 56.1: Freeze the read-side vs strict-control contract and canonical naming
+- [x] Task 56.1: Freeze the read-side vs strict-control contract and canonical naming
   - Acceptance:
     - the slice docs explicitly distinguish warning-bearing readable `agent status` from fail-closed control surfaces
     - the slice docs explicitly freeze `orchestration_session_id` as the only forward public session handle
     - the slice docs explicitly state that `session_handle_id` and `active_session_handle_id` are not forward public contract and, if retained, are compatibility/storage artifacts only
     - no updated doc implies selector widening, fuzzy lookup, or control authorization from degraded status
+  - Checkpoint note:
+    - Packet `1` landed as a docs-only contract freeze on `2026-06-12`; no Rust production-symbol edits or GitNexus impact run were required
   - Verify:
     - `rg -n "orchestration_session_id|session_handle_id|active_session_handle_id|fail-closed|degraded|warning" /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md`
   - Files:
