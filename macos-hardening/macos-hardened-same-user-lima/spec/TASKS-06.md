@@ -144,7 +144,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 2.1: Reframe `scripts/mac/lima-doctor.sh` around owned doctor proof
+- [x] Task 2.1: Reframe `scripts/mac/lima-doctor.sh` around owned doctor proof
   - Acceptance: `scripts/mac/lima-doctor.sh` no longer reads as a guest-first
     health script. It now leads with owned CLI doctor surfaces for readiness
     validation, and any remaining guest-direct checks are clearly labeled
@@ -157,7 +157,7 @@ Session goal:
   - Files:
     - `scripts/mac/lima-doctor.sh`
 
-- [ ] Task 2.2: Reframe `scripts/mac/smoke.sh` around routed smoke proof first
+- [x] Task 2.2: Reframe `scripts/mac/smoke.sh` around routed smoke proof first
   - Acceptance: `scripts/mac/smoke.sh` proves routed doctor/gateway/PTY/non-PTY
     readiness before any direct guest `curl`, binary checks, or guest
     `systemctl` checks participate in the proof story. Any remaining

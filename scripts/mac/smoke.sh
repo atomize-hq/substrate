@@ -9,6 +9,8 @@ fi
 SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_ROOT}/../.." && pwd)"
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-${REPO_ROOT}/target/debug/substrate}"
+VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-${LIMA_VM_NAME:-substrate}}"
+RUN_GUEST_DIRECT_BREAKGLASS="${SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT:-0}"
 
 MODE="generic"
 LOG_DIR=""
@@ -70,6 +72,20 @@ done
 
 log() {
   printf '[mac-smoke] %s\n' "$*"
+}
+
+run_guest_direct_gateway_compatibility_check() {
+  local port="$1"
+  log "Running guest-direct gateway compatibility check (breakglass only)"
+  limactl shell "${VM_NAME}" curl --fail --silent "http://127.0.0.1:${port}/health" \
+    | jq -e '.status == "ok" and .service == "substrate-gateway"' >/dev/null
+}
+
+run_guest_direct_readiness_diagnostics() {
+  log "Running guest-direct readiness diagnostics (fallback/breakglass only)"
+  limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-world-service
+  limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-gateway
+  limactl shell "${VM_NAME}" systemctl is-active --quiet substrate-world-service
 }
 
 require_cmd() {
@@ -240,16 +256,20 @@ run_gateway_lifecycle_proof() {
     exit 1
   fi
 
-  limactl shell substrate curl --fail --silent "http://127.0.0.1:${port}/health" \
-    | jq -e '.status == "ok" and .service == "substrate-gateway"' >/dev/null
+  if [[ "${RUN_GUEST_DIRECT_BREAKGLASS}" == "1" ]]; then
+    run_guest_direct_gateway_compatibility_check "${port}"
+  else
+    log "Skipping guest-direct gateway compatibility check; set SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT=1 to run it as breakglass evidence."
+  fi
 }
 
 run_dev_install_readiness_proof() {
   local install_prefix="$1"
   local install_bin="${install_prefix%/}/bin/substrate"
+  local host_doctor_json=""
   local doctor_json=""
 
-  log "Running macOS dev-install readiness proof"
+  log "Running macOS dev-install routed readiness proof"
   "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" --prefix "${install_prefix}" --profile debug
 
   if [[ ! -x "${install_bin}" ]]; then
@@ -257,18 +277,45 @@ run_dev_install_readiness_proof() {
     exit 1
   fi
 
-  limactl shell substrate sudo test -x /usr/local/bin/substrate-world-service
-  limactl shell substrate sudo test -x /usr/local/bin/substrate-gateway
-  limactl shell substrate systemctl is-active --quiet substrate-world-service
+  if ! host_doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+    "${install_bin}" host doctor --json)"; then
+    echo "ERROR: substrate host doctor --json failed during routed readiness proof" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
+  if ! printf '%s\n' "${host_doctor_json}" | jq -e '
+    .ok == true and
+    .host.ok == true
+  ' >/dev/null; then
+    echo "ERROR: substrate host doctor --json reported host readiness failure" >&2
+    printf '%s\n' "${host_doctor_json}" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
 
-  doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
-    "${install_bin}" world doctor --json)"
-  printf '%s\n' "${doctor_json}" | jq -e '
+  if ! doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+    "${install_bin}" world doctor --json)"; then
+    echo "ERROR: substrate world doctor --json failed during routed readiness proof" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
+  if ! printf '%s\n' "${doctor_json}" | jq -e '
     .ok == true and
     .host.ok == true and
     .world.ok == true and
     .world.status == "ok"
-  ' >/dev/null
+  ' >/dev/null; then
+    echo "ERROR: substrate world doctor --json reported world readiness failure" >&2
+    printf '%s\n' "${doctor_json}" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
+
+  if [[ "${RUN_GUEST_DIRECT_BREAKGLASS}" == "1" ]]; then
+    run_guest_direct_readiness_diagnostics
+  else
+    log "Skipping guest-direct readiness diagnostics; set SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT=1 to run them as breakglass evidence."
+  fi
 }
 
 default_netfilter_log_dir() {
