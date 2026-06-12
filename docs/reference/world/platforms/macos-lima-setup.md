@@ -261,14 +261,14 @@ readiness flow.
 |-------|-----------|----------|
 | Virtualization not available | `sysctl kern.hv_support` returns 0 | Enable virtualization in System Settings → Privacy & Security → Developer Tools |
 | Lima VM fails to start | Check `limactl start substrate` output | Ensure sufficient disk space; check `~/Library/Logs/lima/` for detailed logs |
-| SSH connection fails | `limactl shell substrate` fails | Run `limactl shell substrate` once to accept host key |
+| SSH connection fails | `limactl shell substrate` fails | For the supported Substrate-routed SSH UDS path, no manual host-key acceptance step should be needed: the managed forwarding flow already uses `StrictHostKeyChecking=accept-new` with a Substrate-scoped `known_hosts` file. If `limactl shell substrate` itself fails, inspect Lima SSH state and the generated SSH config instead of treating a one-time manual shell login as a setup prerequisite. |
 | Agent not responding | `substrate host doctor` or `substrate world gateway status --json` reports the routed path as unavailable | Breakglass: check systemd with `limactl shell substrate systemctl status substrate-world-service.socket` and `.service`, then probe directly in-guest with `limactl shell substrate sudo -n curl --fail --unix-socket /run/substrate.sock http://localhost/v1/doctor/world | jq .` |
 | Agent binary missing | Service fails to start | Rebuild and copy binary as shown in Step 2 |
 | Permission errors | Socket operations fail | Ensure directories exist with correct permissions: `/run/substrate` (0750) |
 | DNS resolution issues | Network operations fail in VM | Breakglass: check dnsmasq with `limactl shell substrate systemctl status dnsmasq` |
 | `sudo: unable to resolve host lima-substrate` | Sudo emits warning due to missing host mapping | `limactl shell substrate sudo bash -lc "grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts"` |
 | `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-service --release` → copy to `/usr/local/bin/substrate-world-service` |
-| SSH UDS not creating local socket | SSH ControlMaster multiplexing interferes | Disable ControlMaster: add `-o ControlMaster=no -o ControlPath=none` |
+| SSH UDS not creating local socket | The routed SSH forward is unhealthy or guest reachability is failing | The managed Substrate forwarding command already forces `-o ControlMaster=no -o ControlPath=none`. Troubleshoot the routed SSH forward / Lima SSH config rather than adding extra ControlMaster overrides for the supported path. |
 | TCP forwarding resets | The selected host-side adapter at `127.0.0.1:17788` is unhealthy or unavailable, or a retained compatibility reference is stale | Do not treat `127.0.0.1:17788` as proof of a guest TCP listener. Prefer the routed CLI proof or SSH UDS first. If VSock should be active, debug the VSock proxy/VM state. Retained compatibility references to `127.0.0.1:17788` do not mean the backend automatically fell through to raw TCP, because the default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly. |
 
 ### Viewing Logs
