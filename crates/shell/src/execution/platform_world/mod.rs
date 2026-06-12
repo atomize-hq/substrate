@@ -71,14 +71,13 @@ pub type PersistentSessionReadyFuture =
 pub type PersistentSessionReadyFn = dyn Fn() -> PersistentSessionReadyFuture + Send + Sync;
 
 #[cfg(not(target_os = "windows"))]
-pub(crate) trait WorldTransportStreamIo: tokio::io::AsyncRead + tokio::io::AsyncWrite {}
-
-#[cfg(not(target_os = "windows"))]
-impl<T> WorldTransportStreamIo for T
-where
-    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + ?Sized,
+pub(crate) trait WorldTransportStreamIo:
+    tokio::io::AsyncRead + tokio::io::AsyncWrite
 {
 }
+
+#[cfg(not(target_os = "windows"))]
+impl<T> WorldTransportStreamIo for T where T: tokio::io::AsyncRead + tokio::io::AsyncWrite + ?Sized {}
 
 #[cfg(not(target_os = "windows"))]
 pub(crate) type WorldTransportWsIo = Box<dyn WorldTransportStreamIo + Unpin + Send>;
@@ -188,9 +187,9 @@ pub(crate) async fn connect_transport_stream_ws(
             let host = "127.0.0.1";
             let ws_url = format!("ws://{host}:{port}/v1/stream");
             let url = url::Url::parse(&ws_url).context("invalid ws URL")?;
-            let stream = TcpStream::connect((host, *port))
-                .await
-                .with_context(|| format!("connect world-service VSock proxy TCP ({host}:{port})"))?;
+            let stream = TcpStream::connect((host, *port)).await.with_context(|| {
+                format!("connect world-service VSock proxy TCP ({host}:{port})")
+            })?;
             let io: WorldTransportWsIo = Box::new(stream);
             let (ws, _resp) = tungs::client_async(url, io)
                 .await
