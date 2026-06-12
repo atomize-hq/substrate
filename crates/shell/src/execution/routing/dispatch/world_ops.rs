@@ -23,8 +23,6 @@ use std::io;
 use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 use substrate_common::WorldRootMode;
-#[cfg(unix)]
-use tokio::net::UnixStream;
 #[cfg(target_os = "linux")]
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -936,33 +934,8 @@ pub(super) fn execute_world_pty_over_ws_macos(
             })
         }
 
-        // Connect according to transport and delegate to generic handler
-        let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
-        match &ctx.transport {
-            pw::WorldTransport::Unix(path) => {
-                let stream = UnixStream::connect(path)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
-                let (ws, _resp) = tungs::client_async(url, stream)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("ws handshake: {}", e))?;
-                handle_ws(ws, cmd, span_id).await
-            }
-            pw::WorldTransport::Tcp { host, port } => {
-                let ws_url = format!("ws://{}:{}/v1/stream", host, port);
-                let (ws, _resp) = tungs::connect_async(&ws_url)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
-                handle_ws(ws, cmd, span_id).await
-            }
-            pw::WorldTransport::Vsock { port } => {
-                let ws_url = format!("ws://127.0.0.1:{}/v1/stream", port);
-                let (ws, _resp) = tungs::connect_async(&ws_url)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
-                handle_ws(ws, cmd, span_id).await
-            }
-        }
+        let ws = pw::connect_transport_stream_ws(&ctx.transport).await?;
+        handle_ws(ws, cmd, span_id).await
     })?;
 
     Ok(code)

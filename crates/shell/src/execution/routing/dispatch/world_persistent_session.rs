@@ -19,9 +19,6 @@ mod imp {
     use tokio::sync::{Mutex, OnceCell};
     use tokio_tungstenite as tungs;
 
-    #[cfg(unix)]
-    use tokio::net::UnixStream;
-
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(crate) enum ReplStdinMode {
         Eof,
@@ -364,11 +361,7 @@ mod imp {
         }
     }
 
-    trait WsStreamIo: tokio::io::AsyncRead + tokio::io::AsyncWrite {}
-
-    impl<T> WsStreamIo for T where T: tokio::io::AsyncRead + tokio::io::AsyncWrite {}
-
-    type WsIo = Box<dyn WsStreamIo + Unpin + Send>;
+    type WsIo = pw::WorldTransportWsIo;
 
     #[derive(Debug, Serialize)]
     #[serde(tag = "type", rename_all = "snake_case")]
@@ -742,14 +735,8 @@ mod imp {
         // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
         if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
             let socket_path = std::path::PathBuf::from(socket_path);
-            let stream = UnixStream::connect(&socket_path).await.with_context(|| {
-                format!("connect world-service UDS ({})", socket_path.display())
-            })?;
-            let url = url::Url::parse("ws://localhost/v1/stream").expect("static ws URL");
-            let io: WsIo = Box::new(stream);
-            let (ws, _resp) = tungs::client_async(url, io)
-                .await
-                .context("ws handshake /v1/stream")?;
+            let transport = pw::WorldTransport::Unix(socket_path);
+            let ws = pw::connect_transport_stream_ws(&transport).await?;
             let start = ClientFrame::StartSession {
                 cwd,
                 env,
@@ -774,37 +761,7 @@ mod imp {
         };
         pw::ensure_persistent_session_ready_async(&ctx).await?;
 
-        let (ws, _resp) = match &ctx.transport {
-            pw::WorldTransport::Unix(path) => {
-                let stream = UnixStream::connect(path)
-                    .await
-                    .with_context(|| format!("connect world-service UDS ({})", path.display()))?;
-                let url = url::Url::parse("ws://localhost/v1/stream").expect("static ws URL");
-                let io: WsIo = Box::new(stream);
-                tungs::client_async(url, io).await?
-            }
-            pw::WorldTransport::Tcp { host, port } => {
-                let ws_url = format!("ws://{}:{}/v1/stream", host, port);
-                let url = url::Url::parse(&ws_url).context("invalid ws URL")?;
-                let tcp = tokio::net::TcpStream::connect(format!("{host}:{port}"))
-                    .await
-                    .with_context(|| format!("connect world-service TCP ({host}:{port})"))?;
-                let io: WsIo = Box::new(tcp);
-                tungs::client_async(url, io).await?
-            }
-            pw::WorldTransport::Vsock { port } => {
-                let host = "127.0.0.1";
-                let ws_url = format!("ws://{host}:{port}/v1/stream");
-                let url = url::Url::parse(&ws_url).context("invalid ws URL")?;
-                let tcp = tokio::net::TcpStream::connect(format!("{host}:{port}"))
-                    .await
-                    .with_context(|| {
-                        format!("connect world-service VSock proxy TCP ({host}:{port})")
-                    })?;
-                let io: WsIo = Box::new(tcp);
-                tungs::client_async(url, io).await?
-            }
-        };
+        let ws = pw::connect_transport_stream_ws(&ctx.transport).await?;
 
         let start = ClientFrame::StartSession {
             cwd,
