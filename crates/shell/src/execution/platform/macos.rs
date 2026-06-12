@@ -175,29 +175,6 @@ mod world_doctor_macos {
         }
     }
 
-    fn probe_caps_in_vm(runner: &dyn CommandRunner, vm_name: &str) -> bool {
-        runner
-            .run(
-                "limactl",
-                &[
-                    "shell",
-                    "--workdir=/",
-                    vm_name,
-                    "sudo",
-                    "-n",
-                    "timeout",
-                    "5",
-                    "curl",
-                    "-sS",
-                    "--fail",
-                    "--unix-socket",
-                    "/run/substrate.sock",
-                    "http://localhost/v1/capabilities",
-                ],
-            )
-            .success
-    }
-
     struct WorldServiceReachability {
         host_visible_transports: Vec<HostVisibleTransport>,
         service_active: bool,
@@ -205,13 +182,12 @@ mod world_doctor_macos {
     }
 
     fn assess_world_service_reachability(
-        world_enabled: bool,
         vm_running: bool,
         vm_name: &str,
         runner: &dyn CommandRunner,
     ) -> WorldServiceReachability {
         let host_visible_transports = selected_host_visible_transports();
-        if !(world_enabled && vm_running) {
+        if !vm_running {
             return WorldServiceReachability {
                 host_visible_transports,
                 service_active: false,
@@ -219,19 +195,13 @@ mod world_doctor_macos {
             };
         }
 
-        if host_visible_transports
-            .iter()
-            .any(probe_caps_over_transport)
-        {
-            return WorldServiceReachability {
-                host_visible_transports,
-                service_active: true,
-                agent_caps_ok: true,
-            };
-        }
-
         let service_active = guest_service_active(runner, vm_name);
-        let agent_caps_ok = service_active && probe_caps_in_vm(runner, vm_name);
+        // Preserve guest service-status truth separately from routed reachability:
+        // selected transport proves endpoint behavior, while guest-direct access
+        // remains fallback-only for later doctor report collection.
+        let agent_caps_ok = host_visible_transports
+            .iter()
+            .any(probe_caps_over_transport);
         WorldServiceReachability {
             host_visible_transports,
             service_active,
@@ -494,7 +464,7 @@ echo pass
             host_visible_transports,
             service_active,
             agent_caps_ok,
-        } = assess_world_service_reachability(world_enabled, vm_running, &vm_name, runner);
+        } = assess_world_service_reachability(vm_running, &vm_name, runner);
 
         let host_ok = world_enabled
             && lima_installed
@@ -704,7 +674,7 @@ echo pass
             service_active,
             agent_caps_ok,
             ..
-        } = assess_world_service_reachability(world_enabled, can_probe_vm, &vm_name, runner);
+        } = assess_world_service_reachability(can_probe_vm, &vm_name, runner);
 
         if !json_mode && can_probe_vm {
             if service_active {
@@ -836,7 +806,7 @@ echo pass
             }
         }
 
-        let can_probe_vm = world_enabled && assessment.vm_status == "Running";
+        let can_probe_vm = assessment.vm_status == "Running";
 
         if !json_mode && can_probe_vm {
             if assessment.service_active {
@@ -1090,6 +1060,18 @@ echo pass
                     vec!["list".into(), "substrate".into(), "--json".into()],
                     success_out(vm_json),
                 ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "--workdir=/".into(),
+                        "substrate".into(),
+                        "systemctl".into(),
+                        "is-active".into(),
+                        "substrate-world-service".into(),
+                    ],
+                    success_out("active\n"),
+                ),
             ];
             let runner = MockRunner::new(responses);
             let exit = run(true, true, None, &runner);
@@ -1189,6 +1171,18 @@ echo pass
                                     vec!["list".into(), vm_name.into(), "--json".into()],
                                     success_out(vm_json),
                                 ),
+                                (
+                                    "limactl".into(),
+                                    vec![
+                                        "shell".into(),
+                                        "--workdir=/".into(),
+                                        vm_name.into(),
+                                        "systemctl".into(),
+                                        "is-active".into(),
+                                        "substrate-world-service".into(),
+                                    ],
+                                    success_out("active\n"),
+                                ),
                             ];
                             let runner = MockRunner::new(responses);
                             let exit = run(true, true, None, &runner);
@@ -1232,6 +1226,18 @@ echo pass
                                 vec!["list".into(), vm_name.into(), "--json".into()],
                                 success_out(vm_json),
                             ),
+                            (
+                                "limactl".into(),
+                                vec![
+                                    "shell".into(),
+                                    "--workdir=/".into(),
+                                    vm_name.into(),
+                                    "systemctl".into(),
+                                    "is-active".into(),
+                                    "substrate-world-service".into(),
+                                ],
+                                success_out("active\n"),
+                            ),
                         ];
                         let runner = MockRunner::new(responses);
                         let exit = run_host(true, true, None, &runner);
@@ -1258,6 +1264,128 @@ echo pass
             let runner = MockRunner::new(responses);
             let exit = run(false, true, None, &runner);
             assert_eq!(exit, 4);
+        }
+
+        #[test]
+        #[serial]
+        fn reachability_preserves_guest_service_status_when_host_transport_is_reachable() {
+            let vm_json = r#"{"status":"Running"}"#;
+            let temp = tempfile::tempdir().expect("tempdir");
+            let home = temp.path();
+            let sock = home.join(".substrate/sock/agent.sock");
+            let _sock_guard = AgentSocketGuard::start(&sock);
+
+            with_env_var("HOME", Some(home.to_str().expect("home path")), || {
+                let responses = vec![
+                    (
+                        "limactl".into(),
+                        vec!["--version".into()],
+                        success_out("Lima v1"),
+                    ),
+                    (
+                        "sysctl".into(),
+                        vec!["-n".into(), "kern.hv_support".into()],
+                        success_out("1\n"),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec!["list".into(), "substrate".into(), "--json".into()],
+                        success_out(vm_json),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "systemctl".into(),
+                            "is-active".into(),
+                            "substrate-world-service".into(),
+                        ],
+                        failure_out(),
+                    ),
+                ];
+                let runner = MockRunner::new(responses);
+                let assessment = collect_world_doctor_assessment(true, true, None, &runner);
+                assert_eq!(assessment.exit_code, 4);
+                assert!(!assessment.service_active);
+                assert!(assessment.agent_caps_ok);
+                assert_eq!(
+                    assessment
+                        .out
+                        .pointer("/world/status")
+                        .and_then(Value::as_str),
+                    Some("not_provisioned")
+                );
+            });
+        }
+
+        #[test]
+        #[serial]
+        fn reachability_reports_best_effort_host_facts_when_world_is_disabled() {
+            let vm_json = r#"{"status":"Running"}"#;
+            let temp = tempfile::tempdir().expect("tempdir");
+            let home = temp.path();
+            let sock = home.join(".substrate/sock/agent.sock");
+            let _sock_guard = AgentSocketGuard::start(&sock);
+
+            with_env_var("HOME", Some(home.to_str().expect("home path")), || {
+                let responses = vec![
+                    (
+                        "limactl".into(),
+                        vec!["--version".into()],
+                        success_out("Lima v1"),
+                    ),
+                    (
+                        "sysctl".into(),
+                        vec!["-n".into(), "kern.hv_support".into()],
+                        success_out("1\n"),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec!["list".into(), "substrate".into(), "--json".into()],
+                        success_out(vm_json),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "systemctl".into(),
+                            "is-active".into(),
+                            "substrate-world-service".into(),
+                        ],
+                        success_out("active\n"),
+                    ),
+                ];
+                let runner = MockRunner::new(responses);
+                let assessment = collect_world_doctor_assessment(true, false, None, &runner);
+                assert_eq!(assessment.exit_code, 4);
+                assert!(assessment.service_active);
+                assert!(assessment.agent_caps_ok);
+                assert_eq!(
+                    assessment
+                        .out
+                        .pointer("/world/status")
+                        .and_then(Value::as_str),
+                    Some("disabled")
+                );
+                assert_eq!(
+                    assessment
+                        .out
+                        .pointer("/host/lima/service_active")
+                        .and_then(Value::as_bool),
+                    Some(true)
+                );
+                assert_eq!(
+                    assessment
+                        .out
+                        .pointer("/host/lima/agent_caps_ok")
+                        .and_then(Value::as_bool),
+                    Some(true)
+                );
+            });
         }
 
         #[test]
