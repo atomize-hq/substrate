@@ -266,7 +266,7 @@ readiness flow.
 | `sudo: unable to resolve host lima-substrate` | Sudo emits warning due to missing host mapping | `limactl shell substrate sudo bash -lc "grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts"` |
 | `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-service --release` → copy to `/usr/local/bin/substrate-world-service` |
 | SSH UDS not creating local socket | SSH ControlMaster multiplexing interferes | Disable ControlMaster: add `-o ControlMaster=no -o ControlPath=none` |
-| TCP forwarding resets | The retained host loopback TCP compatibility path is unhealthy or unavailable | Do not treat host loopback TCP as the hardened default. Lima’s localhost port-forwarding mode and defaults vary by version (`SSH` vs `GRPC`), so prefer the routed CLI proof or SSH UDS; debug the TCP path only as compatibility evidence after checking the active forwarder mode. |
+| TCP forwarding resets | The retained host loopback TCP compatibility path is unhealthy or unavailable | Do not treat `127.0.0.1:17788` as the hardened default. Prefer the routed CLI proof or SSH UDS first, then debug `17788` only as a retained compatibility endpoint. Do not assume flipping Lima localhost-forwarder modes (`SSH` vs `GRPC`) will restore it, because the default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly. |
 
 ### Viewing Logs
 

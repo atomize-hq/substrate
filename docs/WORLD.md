@@ -210,7 +210,7 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
   3. retained host loopback TCP compatibility routing (`127.0.0.1:17788`)
   - The backend attempts transports in that order; failure logs include remediation hints and the shell degrades to host execution after a single warning if all transports fail.
   - These are host-side adapters back to the same guest socket at `/run/substrate.sock`; they are not additional hardened guest listeners.
-  - Lima’s localhost port forwarding defaults are version-sensitive (`SSH` vs `GRPC`), so successful host loopback TCP reachability is compatibility evidence only and must not be treated as the stable guest-listener contract.
+  - The retained `127.0.0.1:17788` path is a Substrate-owned host compatibility endpoint, not a second hardened guest listener. The current default stack stops at SSH UDS and intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly, so treat any `17788` reachability as secondary compatibility evidence rather than as Lima localhost-forwarder truth or the stable guest-listener contract.
   - For async persistent-session startup on macOS, the shell now awaits the backend-owned async
     readiness path before opening `/v1/stream` unless `SUBSTRATE_WORLD_SOCKET` is explicitly
     overriding the transport.
