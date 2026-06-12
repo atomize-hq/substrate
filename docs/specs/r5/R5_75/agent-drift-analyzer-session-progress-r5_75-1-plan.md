@@ -135,6 +135,14 @@ Pass when:
 - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` is green
 - `cargo test -p agent-drift-analyzer -- --nocapture` is green
 
+Closeout note for Task `R5.75-1.5` on 2026-06-12:
+
+- `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+- `cargo test -p agent-drift-analyzer -- --nocapture`
+- both commands passed on 2026-06-12
+- this was a verification-only rerun; no additional implementation file changes and no commit were
+  required beyond recording this authority note
+
 ### Checkpoint E: Smoke review proves live correctness
 
 Pass when:

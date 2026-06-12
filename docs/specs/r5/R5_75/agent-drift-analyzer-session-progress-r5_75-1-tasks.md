@@ -53,7 +53,7 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.75-1.5: Run the packet’s automated validation gates.
+- [x] Task R5.75-1.5: Run the packet’s automated validation gates.
   - Acceptance:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` is green
     - `cargo test -p agent-drift-analyzer -- --nocapture` is green
@@ -62,6 +62,12 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
     - `cargo test -p agent-drift-analyzer -- --nocapture`
   - Files:
     - no additional implementation files; verification-only step
+  - Closeout note (2026-06-12):
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+    - both commands passed on 2026-06-12
+    - this was a verification-only rerun; no additional implementation file changes and no commit
+      were required beyond recording this authority note
 
 - [ ] Task R5.75-1.6: Run the named native and adapted smoke sessions and inspect the first
       checkpoint objective manually.
