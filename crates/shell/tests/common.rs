@@ -75,6 +75,7 @@ impl BuildLock {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&path)
             .expect("failed to open build lock file");
         let lock_result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
