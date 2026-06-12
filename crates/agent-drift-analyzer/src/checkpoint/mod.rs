@@ -2137,14 +2137,7 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
     let candidate = rows
         .iter()
         .filter_map(objective_candidate)
-        .max_by(|left, right| {
-            left.pivot_priority
-                .cmp(&right.pivot_priority)
-                .then_with(|| left.priority.cmp(&right.priority))
-                .then_with(|| left.role_priority.cmp(&right.role_priority))
-                .then_with(|| left.row.event_index.cmp(&right.row.event_index))
-                .then_with(|| left.text.len().cmp(&right.text.len()))
-        })?;
+        .max_by(|left, right| objective_sort_key(left).cmp(&objective_sort_key(right)))?;
     let objective_text = normalized_objective_text(&candidate.text);
 
     let reason = match candidate.source {
@@ -2172,18 +2165,213 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
     })
 }
 
+fn objective_sort_key(
+    candidate: &ObjectiveCandidate<'_>,
+) -> (u8, u8, u8, u8, usize, std::cmp::Reverse<usize>) {
+    let normalized = normalized_objective_text(&candidate.text);
+    (
+        candidate.pivot_priority,
+        candidate.priority,
+        objective_text_specificity_priority(&candidate.text, &normalized),
+        candidate.role_priority,
+        candidate.row.event_index,
+        std::cmp::Reverse(normalized.len()),
+    )
+}
+
+fn objective_text_specificity_priority(original: &str, normalized: &str) -> u8 {
+    if normalized.trim_start().starts_with("/goal") {
+        3
+    } else if extract_labeled_concrete_objective_text(original).is_some() {
+        2
+    } else if normalized.len() < original.trim().len() && objective_line_looks_concrete(normalized)
+    {
+        1
+    } else {
+        0
+    }
+}
+
 fn normalized_objective_text(text: &str) -> String {
-    if !text.contains("\n\n") {
+    if !text.contains('\n') {
         return text.to_string();
     }
 
     let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if let Some(goal_line) = extract_embedded_goal_line(trimmed) {
+        return goal_line;
+    }
+
+    if let Some(concrete) = extract_labeled_concrete_objective_text(trimmed) {
+        return concrete;
+    }
+
+    if let Some(imperative_line) = extract_concrete_imperative_objective_line(trimmed) {
+        return imperative_line;
+    }
+
+    if !text.contains("\n\n") {
+        return trimmed.to_string();
+    }
+
     let first_paragraph = trimmed.split("\n\n").next().unwrap_or(trimmed).trim();
     if first_paragraph.is_empty() {
-        text.to_string()
+        trimmed.to_string()
     } else {
         first_paragraph.to_string()
     }
+}
+
+fn extract_embedded_goal_line(text: &str) -> Option<String> {
+    text.lines()
+        .filter_map(objective_candidate_line_text)
+        .find(|line| line.starts_with("/goal"))
+}
+
+fn extract_labeled_concrete_objective_text(text: &str) -> Option<String> {
+    const LABELS: &[&str] = &[
+        "concrete task ask:",
+        "concrete workspace action request:",
+        "concrete workspace ask:",
+        "concrete ask:",
+        "true concrete ask:",
+        "workspace action request:",
+        "task ask:",
+        "concrete request:",
+    ];
+
+    let lines = text.lines().collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        let Some(label) = LABELS.iter().find(|label| lower.starts_with(**label)) else {
+            continue;
+        };
+
+        let inline = trimmed[label.len()..].trim();
+        if let Some(candidate) = cleaned_objective_candidate_text(inline) {
+            return Some(candidate);
+        }
+
+        for next in &lines[index + 1..] {
+            let next = next.trim();
+            if next.is_empty() {
+                break;
+            }
+
+            if let Some(candidate) = cleaned_objective_candidate_text(next) {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+fn extract_concrete_imperative_objective_line(text: &str) -> Option<String> {
+    text.lines()
+        .filter_map(objective_candidate_line_text)
+        .find(|line| objective_line_looks_concrete(line))
+}
+
+fn objective_candidate_line_text(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    cleaned_objective_candidate_text(trimmed)
+}
+
+fn cleaned_objective_candidate_text(text: &str) -> Option<String> {
+    let stripped = strip_markdown_list_prefix(text.trim());
+    (!stripped.is_empty()).then(|| stripped.to_string())
+}
+
+fn strip_markdown_list_prefix(text: &str) -> &str {
+    let trimmed = text.trim_start();
+    for prefix in ["- ", "* ", "+ "] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            return rest.trim_start();
+        }
+    }
+
+    let digit_count = trimmed.chars().take_while(|ch| ch.is_ascii_digit()).count();
+    if digit_count > 0 {
+        let rest = &trimmed[digit_count..];
+        if let Some(rest) = rest.strip_prefix(". ").or_else(|| rest.strip_prefix(") ")) {
+            return rest.trim_start();
+        }
+    }
+
+    trimmed
+}
+
+fn objective_line_looks_concrete(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    if objective_line_is_metadata(&lower) || line.len() > 280 {
+        return false;
+    }
+
+    [
+        "/goal ",
+        "implement ",
+        "add ",
+        "fix ",
+        "update ",
+        "debug ",
+        "investigate ",
+        "analyze ",
+        "inspect ",
+        "compare ",
+        "explain ",
+        "determine ",
+        "review ",
+        "plan ",
+        "land ",
+        "tighten ",
+        "condense ",
+        "preserve ",
+        "refine ",
+        "run ",
+        "rerun ",
+        "re-run ",
+        "only ",
+    ]
+    .iter()
+    .any(|prefix| lower.starts_with(prefix))
+}
+
+fn objective_line_is_metadata(lower: &str) -> bool {
+    [
+        "# ",
+        "read first:",
+        "return with:",
+        "primary files:",
+        "project guidance:",
+        "context from prior attempt:",
+        "execution rules:",
+        "gitnexus requirements:",
+        "bundle scope only:",
+        "stop before:",
+        "verify:",
+        "files:",
+        "acceptance:",
+        "status:",
+        "problem:",
+        "required change:",
+        "manual smoke check",
+        "promotion gate",
+        "after that,",
+    ]
+    .iter()
+    .any(|prefix| lower.starts_with(prefix))
+        || lower.starts_with("<")
+        || lower == "---"
 }
 
 fn objective_mentions_closeout_phase(objective: &str) -> bool {
@@ -2511,6 +2699,9 @@ fn thread_goal_objective_text(row: &CompactionRow) -> Option<String> {
 
 fn row_is_pure_boilerplate(row: &CompactionRow) -> bool {
     objective_text_is_pure_boilerplate(&row.text)
+        && extract_embedded_goal_line(&row.text).is_none()
+        && extract_labeled_concrete_objective_text(&row.text).is_none()
+        && extract_concrete_imperative_objective_line(&row.text).is_none()
         && !preserves_user_requested_boilerplate_target(row)
 }
 
