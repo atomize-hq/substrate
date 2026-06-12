@@ -185,6 +185,8 @@ pub(crate) fn bootstrap_world_spec(project_dir: PathBuf, fs_mode: WorldFsMode) -
             project_dir,
             always_isolate: false,
             fs_mode,
+            // Keep the widened carrier empty instead of inventing non-authoritative
+            // backend policy inputs when broker resolution fails.
             backend_policy: None,
         },
     }
@@ -559,6 +561,34 @@ mod tests {
 
         assert!(resolved.isolate_network);
         assert!(resolved.allowed_domains.is_empty());
+    }
+
+    #[test]
+    fn world_spec_for_network_policy_populates_backend_policy_from_authoritative_inputs() {
+        let resolved = resolve_world_network_policy(
+            snapshot_with_net_allowed(&[" Example.COM. ", "api.example.com"]),
+            true,
+        )
+        .expect("resolve");
+
+        let spec = world_spec_for_network_policy(
+            std::path::PathBuf::from("/tmp/substrate-policy-snapshot"),
+            WorldFsMode::Writable,
+            &resolved,
+        );
+        let backend_policy = spec
+            .backend_policy
+            .as_ref()
+            .expect("backend policy should be attached to WorldSpec");
+
+        assert!(spec.isolate_network);
+        assert_eq!(
+            spec.allowed_domains,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
+        assert_eq!(backend_policy.policy_snapshot.net_allowed, resolved.snapshot.net_allowed);
+        assert_eq!(backend_policy.world_network.allowed_domains, spec.allowed_domains);
+        assert_eq!(backend_policy.world_network.isolate_network, spec.isolate_network);
     }
 
     #[test]

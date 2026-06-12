@@ -394,7 +394,7 @@ async fn try_world_backend(
     verbose: bool,
 ) -> Result<Option<ExecutionResult>> {
     if let Ok(backend) = world_backend_factory::factory() {
-        use world_api::{ExecRequest, ResourceLimits, WorldSpec};
+        use world_api::ExecRequest;
         let start = Instant::now();
         let backend_policy = resolve_policy_snapshot_v3_for_cwd(&state.cwd)
             .and_then(|snapshot| {
@@ -403,26 +403,7 @@ async fn try_world_backend(
                 })
             })
             .ok();
-        let isolate_network = backend_policy
-            .as_ref()
-            .map(|policy| policy.world_network.isolate_network)
-            .unwrap_or(true);
-        let allowed_domains = backend_policy
-            .as_ref()
-            .map(|policy| policy.world_network.allowed_domains.clone())
-            .unwrap_or_else(substrate_broker::allowed_domains);
-        let spec = WorldSpec {
-            reuse_session: true,
-            reuse_mode: WorldReuseMode::GenericCompatible,
-            isolate_network,
-            limits: ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains,
-            project_dir: project_dir.to_path_buf(),
-            always_isolate: true,
-            fs_mode: substrate_broker::world_fs_mode(),
-            backend_policy,
-        };
+        let spec = world_spec_for_replay_backend(project_dir, backend_policy);
         match backend.ensure_session(&spec) {
             Ok(handle) => {
                 let req = ExecRequest {
@@ -469,6 +450,35 @@ async fn try_world_backend(
     }
 
     Ok(None)
+}
+
+fn world_spec_for_replay_backend(
+    project_dir: &Path,
+    backend_policy: Option<BackendPolicyInputV1>,
+) -> world_api::WorldSpec {
+    use world_api::{ResourceLimits, WorldSpec};
+
+    let isolate_network = backend_policy
+        .as_ref()
+        .map(|policy| policy.world_network.isolate_network)
+        .unwrap_or(true);
+    let allowed_domains = backend_policy
+        .as_ref()
+        .map(|policy| policy.world_network.allowed_domains.clone())
+        .unwrap_or_else(substrate_broker::allowed_domains);
+
+    WorldSpec {
+        reuse_session: true,
+        reuse_mode: WorldReuseMode::GenericCompatible,
+        isolate_network,
+        limits: ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains,
+        project_dir: project_dir.to_path_buf(),
+        always_isolate: true,
+        fs_mode: substrate_broker::world_fs_mode(),
+        backend_policy,
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1255,6 +1265,27 @@ mod tests {
                 std::env::remove_var("SUBSTRATE_AGENT_ID");
             }
         }
+    }
+
+    #[test]
+    fn world_spec_for_replay_backend_attaches_backend_policy() {
+        let snapshot = snapshot_with_net_allowed(&[" Example.COM. ", "api.example.com"])
+            .canonicalize()
+            .expect("canonicalize snapshot");
+        let backend_policy =
+            backend_policy_input_for_snapshot(&snapshot, true).expect("build backend policy");
+
+        let spec = world_spec_for_replay_backend(
+            std::path::Path::new("/tmp/substrate-replay-policy"),
+            Some(backend_policy.clone()),
+        );
+
+        assert!(spec.isolate_network);
+        assert_eq!(
+            spec.allowed_domains,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
+        assert_eq!(spec.backend_policy, Some(backend_policy));
     }
 
     #[test]
