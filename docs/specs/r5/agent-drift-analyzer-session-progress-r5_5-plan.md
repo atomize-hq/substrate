@@ -1,14 +1,37 @@
 # Plan: Agent Drift Analyzer Session Progress R5.5
 
-Status: draft plan created on 2026-06-11 from the post-landing planning-input inventory; the
-docs-lock packet `R5.5-0` and the bookkeeping-only cleanup packet `R5.5-7` are already landed,
-while the remaining packets stay open as implementation follow-up work.
+Status: draft plan created on 2026-06-11 from the post-landing planning-input inventory. The
+original `R5.5` packet family is now historically landed on this worktree, but follow-on
+validation kept `R6` closed and moved the remaining pre-`R6` hardening into the active `R5.75`
+family on 2026-06-12.
 
 ## Objective
 
 Land a bounded post-`R5` hardening family that fixes the highest-confidence analyzer-semantic
 issues, deepens the real acceptance wall where it is still thin, and cleans up the most misleading
 residual hygiene debt without reopening the full `R5` design space.
+
+## Landed Status Reconciliation (2026-06-12)
+
+Historical `R5.5` landings preserved by this plan:
+
+- `R5.5-0` docs lock and root authority update
+- `R5.5-1` troubleshooting repeated-failure hardening
+- `R5.5-2` objective extraction hardening
+- `R5.5-3` JS/TS verifier-role hardening
+- `R5.5-4` real-rollout acceptance corpus deepening
+- `R5.5-5` parent-visible progress normalization consistency
+- `R5.5-6` delegation limiting evidence promotion
+- `R5.5-7` cleanup and doc hygiene
+
+Remaining pre-`R6` work is no longer tracked as open `R5.5` packet debt. The active follow-on
+family is now `R5.75`, which carries the narrower post-validation gaps:
+
+- `R5.75-1` objective condensation / target extraction
+- `R5.75-2` sparse readable session fail-open
+- `R5.75-3` delegated parent-visible stabilization
+- `R5.75-4` zero-verifier anti-flap gating for long exploratory sessions
+- `R5.75-5` adapted external robustness fixture family
 
 ## Planning Decisions Locked For This Draft
 
@@ -109,7 +132,10 @@ Notes:
   not need to block real implementation/review corpus growth unless a delegated case is chosen for
   the added real fixture set.
 
-## Packet Split
+## Historical Packet Split
+
+The packet descriptions below preserve what `R5.5` landed. They are no longer the active
+pre-`R6` implementation queue; later remaining work now routes through `docs/specs/r5/R5_75/`.
 
 ## R5.5-0: Docs Lock And Root Authority Update
 
@@ -319,15 +345,11 @@ Repo state note on 2026-06-11: this cleanup packet is already landed via commit
 
 Do not open `R6` scorer work until:
 
-- `R5.5-1` repeated-failure overclaim regressions are green
-- objective extraction repros prefer the true `/goal`
-- JS/TS verifier commands contribute checkpoint-level progress evidence
-- the committed real-rollout corpus includes implementation, closeout/review, and reopen/re-verify
-  cases
-- delegated parent-visible progress is normalized and limiting evidence remains visible
+- the landed `R5.5` hardening baseline remains green and historically intact
+- `R5.75` closes the remaining pre-`R6` follow-on gaps
 - `cargo test -p agent-drift-analyzer -- --nocapture` is green
 - any touched sentinel spot-checks are green
-- the root landing-order authority names `R6` as next only after `R5.5`
+- the root landing-order authority names `R6` as next only after `R5.75`
 
 ## Deferred / Ask-First Packet: ProgressWindow Named Seam
 

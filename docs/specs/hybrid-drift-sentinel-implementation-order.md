@@ -14,6 +14,7 @@ Primary sources:
 - [agent-drift-analyzer-checkpoint-state-v0.6-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/agent-drift-analyzer-checkpoint-state-v0.6-tasks.md:1)
 - [agent-drift-analyzer-session-progress-r5-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r5/agent-drift-analyzer-session-progress-r5-tasks.md:1)
 - [agent-drift-analyzer-session-progress-r5_5-tasks.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md:1)
+- [R5.75/MAP.md](/Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r5/R5_75/MAP.md:1)
 
 ## Task IDs
 
@@ -646,10 +647,11 @@ Packet 18 note:
     presentation-only and not a checkpoint-local archetype/parity bug.
   - `2026-06-10`: `R5` is now landed end-to-end as the archetype-aware `session_progress` family
     under checkpoint schema `v0.6`
-  - `2026-06-11`: `R5.5` docs are now locked as the explicit post-landing hardening family that
-    must close before `R6` scorer work opens
-  - with `R5` now landed, `R5.5` is the next open semantic packet family on this worktree, and
-    `R6` stays queued behind that hardening gate
+  - `2026-06-11`: `R5.5` landed as the first post-`R5` hardening pass across objective selection,
+    JS/TS verifier coverage, real-rollout acceptance deepening, delegated normalization, limiting
+    evidence visibility, and cleanup/doc hygiene
+  - `2026-06-12`: post-validation reconciliation moved the remaining pre-`R6` work into `R5.75`,
+    so `R5.75` is now the active follow-on family and `R6` stays queued behind that narrower gate
 
 ## If You Want Fewer Packets
 

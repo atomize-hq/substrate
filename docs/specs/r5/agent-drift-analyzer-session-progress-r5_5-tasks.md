@@ -1,16 +1,36 @@
 # Tasks: Agent Drift Analyzer Session Progress R5.5
 
-Status: draft task ledger created on 2026-06-11 from the post-landing planning-input inventory;
-docs-lock `R5.5-0` and bookkeeping-only `R5.5-7` landed on 2026-06-11, while the remaining open
-tasks are implementation work for later sessions.
+Status: draft task ledger created on 2026-06-11 from the post-landing planning-input inventory.
+The original `R5.5` packet family is now historically landed on this worktree; later validation on
+2026-06-12 kept `R6` closed and moved the remaining pre-`R6` work into the active `R5.75` family.
 
-This family is a bounded follow-up to landed `R5`. The checked `R5.5-0` tasks below cover the docs
-created in this planning pass, and the checked `R5.5-7` tasks capture the already-landed hygiene
-cleanup. All other remaining tasks are implementation work for later sessions.
+This ledger remains as the historical record of what `R5.5` landed. It should not be read as the
+active next-packet queue; the remaining pre-`R6` work now belongs to `docs/specs/r5/R5_75/`.
 
 Keep each task as close as possible to five touched files or fewer. Do not advance from one packet
 to the next until the packet verification commands are green or the failure is explicitly
 captured in the packet notes.
+
+## Landed Status Reconciliation (2026-06-12)
+
+Landed under `R5.5` on this worktree:
+
+- `R5.5-0` docs lock and root authority update
+- `R5.5-1` troubleshooting repeated-failure hardening
+- `R5.5-2` objective extraction hardening
+- `R5.5-3` JS/TS verifier-role hardening
+- `R5.5-4` real-rollout acceptance corpus deepening
+- `R5.5-5` parent-visible progress normalization consistency
+- `R5.5-6` delegation limiting evidence promotion
+- `R5.5-7` cleanup and doc hygiene
+
+Active remaining pre-`R6` work moved to `R5.75`:
+
+- `R5.75-1` objective condensation / target extraction
+- `R5.75-2` sparse readable session fail-open
+- `R5.75-3` delegated parent-visible stabilization
+- `R5.75-4` zero-verifier anti-flap gating for long exploratory sessions
+- `R5.75-5` adapted external robustness fixture family
 
 ## R5.5-0: Docs Lock And Root Authority Update
 
@@ -42,14 +62,14 @@ captured in the packet notes.
 
 ## R5.5-1: Troubleshooting Repeated-Failure Overclaim Fix
 
-- [ ] Task R5.5-1.1: Add a regression for repeated signature plus overlapping edit.
+- [x] Task R5.5-1.1: Add a regression for repeated signature plus overlapping edit.
   - Acceptance: a checkpoint regression proves the sequence “same failure -> overlapping edit ->
     same failure” is not classified as `advancing` by itself.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-1.2: Prevent `FailingScopeEdited` from independently authorizing troubleshooting
+- [x] Task R5.5-1.2: Prevent `FailingScopeEdited` from independently authorizing troubleshooting
       advancement.
   - Acceptance: the troubleshooting progress builder still emits `FailingScopeEdited` as
     supporting evidence, but repeated exact or strong-fuzzy signatures with overlapping edits and
@@ -61,7 +81,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-1.3: Add no-overcorrection guardrail regressions.
+- [x] Task R5.5-1.3: Add no-overcorrection guardrail regressions.
   - Acceptance: focused checkpoint regressions prove that:
     - same failure -> overlapping edit -> fewer failing tests => `advancing`
     - compile failure -> overlapping edit -> focused test failure on the same target => `advancing`
@@ -73,7 +93,7 @@ captured in the packet notes.
 
 ## R5.5-2: Objective Extraction Hardening
 
-- [ ] Task R5.5-2.1: Tighten objective-row filtering for boilerplate classes.
+- [x] Task R5.5-2.1: Tighten objective-row filtering for boilerplate classes.
   - Acceptance: objective selection filters out more developer/system boilerplate categories than
     the current `AGENTS.md instructions`, `<skill>`, and `Available skills` exclusions while still
     preserving real task objectives.
@@ -82,7 +102,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-2.2: Prefer `/goal`, explicit user requests, and thread-goal text.
+- [x] Task R5.5-2.2: Prefer `/goal`, explicit user requests, and thread-goal text.
   - Acceptance: when boilerplate appears before the true objective, first-checkpoint objective
     selection resolves to the real task goal and comparability stays anchored to that goal.
   - Verify:
@@ -92,7 +112,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-2.3: Preserve user-requested boilerplate targets.
+- [x] Task R5.5-2.3: Preserve user-requested boilerplate targets.
   - Acceptance: when the user’s actual task is to edit or analyze an `AGENTS.md` block, skill
     block, or similar instruction scaffold, objective selection preserves that requested target
     instead of filtering it away as boilerplate.
@@ -105,7 +125,7 @@ captured in the packet notes.
 
 ## R5.5-3: JS/TS Verifier-Role Hardening
 
-- [ ] Task R5.5-3.1: Expand top-level command-role coverage for npm-like verifier commands.
+- [x] Task R5.5-3.1: Expand top-level command-role coverage for npm-like verifier commands.
   - Acceptance: the checkpoint command-role layer classifies the agreed JS/TS verifier matrix
     deterministically, including `npm run lint`, `pnpm run lint`, `yarn lint`, `npm test`,
     `pnpm test`, `vitest ...`, `npx vitest`, and `bun test`.
@@ -114,7 +134,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-3.2: Expand attempt-role coverage for npm-like verifier commands.
+- [x] Task R5.5-3.2: Expand attempt-role coverage for npm-like verifier commands.
   - Acceptance: the attempt classifier treats the same agreed JS/TS verifier matrix as verifier
     attempts instead of generic shell noise.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
@@ -122,7 +142,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/attempt.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-3.3: Prove JS/TS verifier attempts affect checkpoint progress.
+- [x] Task R5.5-3.3: Prove JS/TS verifier attempts affect checkpoint progress.
   - Acceptance: at least one checkpoint-level progress regression shows the improved JS/TS
     classifier contributes comparable verifier evidence rather than leaving the progress result
     underfit.
@@ -136,7 +156,7 @@ captured in the packet notes.
 
 ## R5.5-4: Real-Rollout Acceptance Corpus Deepening
 
-- [ ] Task R5.5-4.1: Add the real-fixture annotation rubric.
+- [x] Task R5.5-4.1: Add the real-fixture annotation rubric.
   - Acceptance: new committed real-rollout cases carry a structured annotation or manifest that
     names expected status, expected dimension, confidence bounds, required and forbidden signals,
     required evidence counts, decisive evidence, counter-evidence, and why alternative dimensions
@@ -148,7 +168,7 @@ captured in the packet notes.
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
     - `docs/specs/r5/DESIGN-r5-validation-and-rollout-protocol.md`
 
-- [ ] Task R5.5-4.2: Add one real implementation-progress acceptance case.
+- [x] Task R5.5-4.2: Add one real implementation-progress acceptance case.
   - Acceptance: the committed corpus includes one annotated real rollout fixture expected to hit
     `implementation_verification_wall`.
   - Verify: `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture`
@@ -157,7 +177,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/<implementation-case>/**`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
 
-- [ ] Task R5.5-4.3: Add one real closeout/review acceptance case.
+- [x] Task R5.5-4.3: Add one real closeout/review acceptance case.
   - Acceptance: the committed corpus includes one annotated real rollout fixture for
     `verification_closeout_narrowing` or a deliberately conservative closeout status.
   - Verify: `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture`
@@ -166,7 +186,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/<closeout-case>/**`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
 
-- [ ] Task R5.5-4.4: Add one real reopen/re-verify acceptance case.
+- [x] Task R5.5-4.4: Add one real reopen/re-verify acceptance case.
   - Acceptance: the committed corpus includes one annotated real rollout fixture that proves
     review findings can reopen work honestly without being forced to remain in closeout; the
     expected dimension may be `verification_closeout_narrowing`,
@@ -184,7 +204,7 @@ captured in the packet notes.
 
 ## R5.5-5: Parent-Visible Progress Normalization Consistency
 
-- [ ] Task R5.5-5.1: Route parent-visible progress through the shared normalization order.
+- [x] Task R5.5-5.1: Route parent-visible progress through the shared normalization order.
   - Acceptance: the `parent_visible_orchestration_progress(...)` path no longer returns a raw
     pre-finalized result, and the shared order is: build candidate -> apply delegation caps and
     limiting counter-evidence -> finalize exactly once.
@@ -193,7 +213,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-5.2: Prove delegated-parent normalization stays conservative.
+- [x] Task R5.5-5.2: Prove delegated-parent normalization stays conservative.
   - Acceptance: delegated-parent tests show status conservatism is preserved while signal sorting,
     dedupe, and normalized shape match the non-parent-visible hygiene rules.
   - Verify:
@@ -205,7 +225,7 @@ captured in the packet notes.
 
 ## R5.5-6: Delegation Limiting Evidence Promotion
 
-- [ ] Task R5.5-6.1: Promote limiting evidence into `counter_evidence` when caps suppress claims.
+- [x] Task R5.5-6.1: Promote limiting evidence into `counter_evidence` when caps suppress claims.
   - Acceptance: when `apply_delegation_caps(...)` lowers confidence or denies a stronger status,
     the same limiting context becomes visible as `counter_evidence` in addition to limiting signals.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
@@ -213,7 +233,7 @@ captured in the packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.5-6.2: Add delegated-partial and delegated-opaque regressions.
+- [x] Task R5.5-6.2: Add delegated-partial and delegated-opaque regressions.
   - Acceptance: tests assert capped confidence, visible limiting signal, and visible limiting
     evidence in `counter_evidence` for delegated partial/opaque cases, and the finalizer does not
     remove that counter-evidence.
@@ -248,7 +268,7 @@ captured in the packet notes.
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-tasks.md`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-follow-ups.md`
 
-## Deferred / Ask-First
+## Deferred / Ask-First (Historical, Not Active Pre-`R6` Debt)
 
 - [ ] Task R5.5-X.1: Introduce a named `ProgressWindow` seam only if the primary packets cannot be
       expressed cleanly in the current structure.
@@ -263,11 +283,8 @@ captured in the packet notes.
 
 Do not open `R6` scorer cutover until:
 
-- `R5.5-1` repeated-failure overclaim regressions are green
-- objective extraction repros prefer the true `/goal` over boilerplate
-- JS/TS verifier commands contribute checkpoint-level progress evidence
-- the real-rollout corpus includes implementation, closeout/review, and reopen/re-verify cases
-- delegated parent-visible progress is normalized and limiting evidence remains visible
+- the landed `R5.5` hardening baseline remains green and historically intact
+- `R5.75` closes the remaining pre-`R6` follow-on gaps
 - `cargo test -p agent-drift-analyzer -- --nocapture` is green
 - any touched sentinel spot-checks are green
-- `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md` identifies `R6` as next only after `R5.5`
+- `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md` identifies `R6` as next only after `R5.75`

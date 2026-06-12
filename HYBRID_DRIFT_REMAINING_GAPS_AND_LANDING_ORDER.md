@@ -65,8 +65,9 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The next open gap is no longer archetype identification or first-cut progress export. The next open
-gap is hardening the landed `R5` progress layer so it is safe scorer input before `R6` opens.
+The next open gap is no longer archetype identification or first-cut progress export. `R5.5`
+landed the first hardening pass; the active pre-`R6` gap is the narrower `R5.75` follow-on family
+that reconciles post-validation remaining issues before scorer cutover opens.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -75,9 +76,10 @@ pollutes failure evidence,” or “checkpoint-local session archetype is absent
 next step is:
 
 1. keep `R5` landed as the first-cut progress layer
-2. harden that landed progress layer (`R5.5`)
-3. retune scorers to consume the hardened progress layer (`R6`)
-4. extend delegated-session semantics beyond the current downgrade boundary (`R7`)
+2. keep `R5.5` landed as the first hardening pass
+3. close the adopted post-validation follow-on family (`R5.75`)
+4. retune scorers to consume the hardened progress layer (`R6`)
+5. extend delegated-session semantics beyond the current downgrade boundary (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -176,14 +178,21 @@ parent-visible normalization, and real-rollout acceptance depth still need bound
 
 ### What Needs To Exist
 
-One bounded post-landing hardening family (`R5.5`) that:
+One bounded post-landing hardening sequence that now spans:
 
-- removes the troubleshooting repeated-failure overclaim
-- prefers the real `/goal` or user objective over boilerplate
-- hardens JS/TS verifier attempt classification
-- deepens the committed real-rollout acceptance wall
-- normalizes delegated parent-visible progress and limiting evidence consistently
-- cleans the most misleading residual doc/code hygiene debt before `R6`
+- landed `R5.5` baseline work:
+  - troubleshooting repeated-failure hardening
+  - objective extraction hardening
+  - JS/TS verifier attempt classification hardening
+  - committed real-rollout acceptance deepening
+  - delegated parent-visible normalization and limiting-evidence hygiene
+  - the most misleading residual doc/code hygiene cleanup
+- active `R5.75` follow-on work:
+  - objective condensation / target extraction for giant pasted prompts
+  - sparse readable-session fail-open instead of analyzer hard-abort
+  - delegated parent-visible stabilization under validation pressure
+  - zero-verifier anti-flap gating for long exploratory sessions
+  - adapted external robustness fixtures before `R6`
 
 ## Gap 3: Real Rollout Acceptance Is Too Weak
 
@@ -633,7 +642,42 @@ troubleshooting progress until `R5.5` closes that gap.
 - the committed real-rollout corpus includes implementation, closeout/review, and reopen/re-verify
   cases
 - delegated parent-visible progress is normalized and limiting evidence remains visible
-- the stack is ready for `R6`, but `R6` is still unopened until the `R5.5` readiness gate is met
+- the stack exits `R5.5` with a stronger baseline, but `R6` stays unopened until the narrower
+  `R5.75` follow-on family closes
+
+### Landing Status
+
+- `R5.5` is historically landed on this worktree as the first post-`R5` hardening pass
+- its remaining post-validation gaps no longer live as open `R5.5` packet debt
+- the active pre-`R6` family is now `R5.75`
+
+## Packet R5.75: Sequential Pre-`R6` Hardening And Validation
+
+### Objective
+
+Close the narrower post-validation gaps that remained after the landed `R5.5` hardening pass,
+while keeping `R6` closed until those follow-on issues are test-green and smoke-proven.
+
+### Why Before `R6`
+
+Validation after `R5.5` showed the repo no longer needed a broad open-ended hardening family, but
+it still needed a smaller sequence of fixes before scorer cutover could be called honest.
+
+### Scope
+
+- reconcile stale `R5.5` landed-vs-remaining authority wording
+- objective condensation / target extraction for giant pasted prompts
+- sparse readable-session fail-open instead of analyzer hard-abort
+- delegated parent-visible stabilization under the known repro sessions
+- zero-verifier anti-flap gating for long exploratory sessions
+- adapted external robustness fixtures as secondary pre-`R6` evidence
+
+### Acceptance
+
+- landed `R5.5` work is not still presented as open implementation debt
+- the active pre-`R6` authority stack consistently names `R5.75` as current and keeps `R6` closed
+- the narrower objective, sparse-session, delegated, anti-flap, and adapted-fixture gaps are
+  closed under the `R5.75` map
 
 ## Packet R6: Drift Scorer Cutover To Context-Aware Semantics
 
@@ -642,11 +686,11 @@ troubleshooting progress until `R5.5` closes that gap.
 Re-score `dead_end_thrash` and related drift classes using typed outcome evidence, turn context,
 archetype, and progress modules.
 
-### Why After R5.5
+### Why After R5.75
 
 This is where the earlier packets finally pay off. The scorers should become consumers of deeper
 analyzer modules rather than home-grown heuristic islands, but only after the landed `R5` progress
-layer has passed the `R5.5` hardening gate.
+layer has passed the landed `R5.5` baseline and the narrower `R5.75` follow-on gate.
 
 ### Scope
 
@@ -730,8 +774,8 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5`, `R3.75`, `R4`, and `R5` are now landed on this worktree, so the next open packet family is
-`R5.5`.
+`R3.5`, `R3.75`, `R4`, `R5`, and `R5.5` are now landed on this worktree, so the active pre-`R6`
+packet family is `R5.75`.
 
 The next honest implementation target is:
 
@@ -740,12 +784,14 @@ The next honest implementation target is:
 - keep `R3.75` closed as the completed delegation-aware analyzer boundary
 - keep `R4` closed as the completed session-archetype packet family
 - keep `R5` closed as the landed archetype-aware progress packet family
-- complete `R5.5` hardening before opening `R6`
-- keep `R6` scorer cutover queued behind `R5.5`
+- keep `R5.5` closed as the landed first hardening pass
+- complete `R5.75` before opening `R6`
+- keep `R6` scorer cutover queued behind `R5.75`
 - keep full delegated-session support as `R7` behind `R6`
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
-That is the current top-of-stack action after the landed `R3.5`, `R3.75`, `R4`, and `R5` packets.
+That is the current top-of-stack action after the landed `R3.5`, `R3.75`, `R4`, `R5`, and `R5.5`
+packets.
 
 ## Research-Informed Design Directions
 
