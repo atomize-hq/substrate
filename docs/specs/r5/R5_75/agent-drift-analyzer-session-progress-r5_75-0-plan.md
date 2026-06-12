@@ -144,7 +144,7 @@ Do not promote to `R5.75-1` until:
 `R5.75-0` landed as a docs-only packet once the following closeout evidence was recorded:
 
 - cross-doc authority audit run with
-  `rg -n "R5\\.5|R5\\.75|R6" docs/specs/r5/R5_75/MAP.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
+  `rg -n "R5\\.5|R5\\.75|R6" docs/specs/r5/R5_75/MAP.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md docs/specs/hybrid-drift-sentinel-implementation-order.md`
 - `cargo test -p agent-drift-analyzer -- --nocapture`
 - optional native control smoke intentionally skipped because `R5.75-0` is docs-only and did not
   change analyzer/runtime behavior

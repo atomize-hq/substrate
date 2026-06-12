@@ -45,7 +45,7 @@ packets start landing. Keep each task reviewable and avoid widening into code ch
     - what remains under `R5.75`
     - why `R6` is still gated
   - Verify:
-    - `rg -n "R5\\.5|R5\\.75|R6" docs/specs/r5/R5_75/MAP.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
+    - `rg -n "R5\\.5|R5\\.75|R6" docs/specs/r5/R5_75/MAP.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md docs/specs/hybrid-drift-sentinel-implementation-order.md`
   - Files:
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md`
@@ -75,7 +75,7 @@ open.
 Closeout evidence preserved for this packet:
 
 - cross-doc authority audit:
-  `rg -n "R5\\.5|R5\\.75|R6" docs/specs/r5/R5_75/MAP.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
+  `rg -n "R5\\.5|R5\\.75|R6" docs/specs/r5/R5_75/MAP.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md docs/specs/hybrid-drift-sentinel-implementation-order.md`
 - baseline analyzer validation:
   `cargo test -p agent-drift-analyzer -- --nocapture`
 - optional native control smoke intentionally skipped because Packet `R5.75-0` is docs-only

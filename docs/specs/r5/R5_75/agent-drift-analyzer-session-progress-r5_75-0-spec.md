@@ -66,7 +66,8 @@ rg -n "R5\\.5|R5\\.75|R6" \
   docs/specs/r5/R5_75/MAP.md \
   docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md \
   docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md \
-  HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md
+  HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md \
+  docs/specs/hybrid-drift-sentinel-implementation-order.md
 ```
 
 Baseline analyzer validation:
@@ -160,6 +161,8 @@ This packet uses three validation layers:
    - confirm touched docs agree on what landed and what remains
    - confirm `R5.75` is the current pre-`R6` family
    - confirm `R6` is not prematurely opened
+   - confirm `docs/specs/hybrid-drift-sentinel-implementation-order.md` matches the final
+     `R5.75`/`R6` routing because it was touched in this packet
 2. **Baseline analyzer sanity**
    - `cargo test -p agent-drift-analyzer -- --nocapture`
    - proves doc-only edits did not accidentally rely on broken current code/test state
@@ -197,10 +200,11 @@ This packet does not require new fixtures or replay-contract changes.
 4. Touched authority docs consistently route remaining work into the `R5.75` sequence.
 5. `cargo test -p agent-drift-analyzer -- --nocapture` is green after the edits.
 
-## Open Questions
+## Historical Resolution Notes
 
-1. Should `docs/specs/hybrid-drift-sentinel-implementation-order.md` also be updated in this
-   packet if it still declares the active next family, or should `R5.75-0` stay strictly on the
-   already-confirmed root authority docs?
-2. Do we want the `R5.5` docs to enumerate exactly which packets landed, or is a narrower
-   “landed vs remaining” reconciliation sufficient for this packet?
+1. Resolved on 2026-06-12: `docs/specs/hybrid-drift-sentinel-implementation-order.md` was
+   touched in this packet and is part of the preserved companion authority set, so its
+   `R5.75`-before-`R6` routing must stay synchronized with the root landing-order doc.
+2. Resolved on 2026-06-12: a narrower landed-vs-remaining reconciliation was sufficient for this
+   packet; the authority docs preserve honest landed examples without expanding `R5.75-0` into a
+   packet-by-packet historical rewrite.
