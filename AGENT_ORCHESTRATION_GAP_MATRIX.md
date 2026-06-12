@@ -109,8 +109,7 @@ Terminology rule for this repository:
   - Family-2 local semantics are no longer the open question: the bounded `host_inbox -> local obligation -> router` path is landed, and the remaining Family-2 scope has moved outward to host-global ingress coordination, broader federation/delivery, and later public/operator inbox UX,
   - macOS/Lima now uses the same shared-owner/member-runtime backend seam as Linux for the supported forwarded path, with regression coverage for shared-owner proof, member dispatch, targeted follow-up reuse, and guest-owned cancel.
   - Linux remains the source-of-truth ownership implementation and still has the broadest platform maturity; Windows/WSL remains fail-closed outside the supported contract.
-  - The remaining v1 work should now be tracked as six explicit buckets rather than a loose tail:
-    - freeze the broader caller-surface contract,
+  - The remaining v1 work should now be tracked as five explicit buckets rather than a loose tail:
     - harden the read-side and strict control surfaces,
     - carry only later runtime-family smoke plus reporting/docs follow-through above the already-landed Codex-backed floor and selected-host claude_code parity,
     - make the Linux/macOS/Windows parity bar explicit for v1,
@@ -182,35 +181,31 @@ The remaining work after the current dispatch/control/lifecycle design stack sho
 
 Selected-host runtime-family host-tool parity for `claude_code` is now landed baseline truth. The list below tracks the remaining repo-wide v1 productization, hardening, docs/smoke follow-through, cross-platform, Family-2, and governance work without treating parity itself as the next open seam.
 
-1. Freeze the broader caller-surface contract.
-- The main open product question is still caller-surface breadth.
-- This includes default-agent routing, any broader non-REPL targeting contract, whether `substrate -c` remains shell-wrap-only, and whether public follow-up remains exact `(orchestration_session_id, backend_id)` only.
-
-2. Do read-side and strict control-surface hardening.
+1. Do read-side and strict control-surface hardening.
 - The next concrete runtime hardening gap is status/session-handle clarity.
 - This includes participant-less trace fallback, partial session-handle truth, and the operator-facing split between readable degraded `agent status` output versus fail-closed `toolbox` / doctor / control-plane selectors.
 - This also includes better session-selector and remediation ergonomics without widening selector aliases: keep `orchestration_session_id` as the only public handle, but make current-session discovery, stale-owner diagnostics, and bounded repair/reap/invalidate workflows less hostile.
 - Tuple-axis policy narrowing and tuple projection are already landed in policy, trace, and `agent status`; the remaining follow-on here is contract normalization for strict status surfaces such as gateway status, where code/tests already publish tuple metadata that the current schema contract does not yet own.
 
-3. Keep runtime-family host-tool follow-through bounded above the existing toolbox transport.
+2. Keep runtime-family host-tool follow-through bounded above the existing toolbox transport.
 - The current visible toolbox surface remains intentionally introspection-only for operators, and the selected-host multi-family floor is now landed: the Slice `52`/`53`/`54` path froze the shared seven-tool contract and validated both the Codex-backed floor and selected-host `claude_code` parity.
 - The remaining host-tool work is later follow-through only: broader runtime-family smoke coverage plus docs/operator-truth alignment if some future live-surface widening materially changes repo truth again.
 - Internal MCP/auth/audit work and any mutating public toolbox verbs remain deferred so toolbox does not become a second execution plane.
 
-4. Do the bounded host-tool reporting/docs follow-through only when future live-surface widening changes repo truth.
+3. Do the bounded host-tool reporting/docs follow-through only when future live-surface widening changes repo truth.
 - Slice `54` already closed the current reporting/docs parity wall.
 - The remaining follow-through is later broader runtime-family smoke coverage plus docs/operator-truth alignment after some future live-surface widening, not a missing `claude_code` parity slice.
 
-5. Make the v1 parity call explicitly.
+4. Make the v1 parity call explicitly.
 - Linux remains the factual source-of-truth path.
 - macOS/Lima is supported on the forwarded shared-owner/member-runtime seam.
 - Windows/WSL remains fail-closed today, so the repo needs an explicit product decision on whether that stays intentionally deferred for v1.
 
-6. Capture the remaining Family-2 host-global ingress and federation follow-ons clearly.
+5. Capture the remaining Family-2 host-global ingress and federation follow-ons clearly.
 - The local `host_inbox -> local obligation -> router` boundary is already landed.
 - The remaining Family-2 scope is the later host-global ingress lifecycle/federation layer: receive-cursor and sync-state coordination if still needed, broader remote delivery/materialization, lease/lock coordination, and later public/operator host-inbox UX.
 
-7. Clean up the governance leftovers.
+6. Clean up the governance leftovers.
 - These are lower-level than caller semantics or dispatch/router work, but they are still real remaining scope.
 - The concrete items are local `agent-api-*` versus external `agent_api` naming deconfliction, a cleaner public session-handle contract, and eventual retirement of flat compatibility outputs after the current cutover is complete.
 
