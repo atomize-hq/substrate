@@ -187,10 +187,19 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 
 - Provisioning & lifecycle
 - `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
-  - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` reports health (virtualization, agent socket, service status, forwarding tools).
+  - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` remains the deeper troubleshooting helper once the routed CLI proof below has already failed.
   - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
     `limactl shell substrate systemctl show substrate-world-service.service -p CapabilityBoundingSet -p AmbientCapabilities`
+
+- Routed readiness order for an already provisioned backend
+  1. `substrate host doctor [--json]`
+  2. `substrate world doctor [--json]`
+  3. `substrate world gateway sync|status|restart` (`status --json` is the authoritative machine-readable gateway posture)
+  4. `scripts/mac/smoke.sh` for routed PTY, non-PTY, and replay proof
+  5. `scripts/mac/lima-doctor.sh`, `substrate sudo journalctl ...`, `limactl shell ...`, in-guest `systemctl`, and in-guest `curl` only after routed checks fail or when explicitly doing breakglass diagnosis
+  - This preserves the same-user limitation: Lima still does not provide the Linux ownership boundary even when the routed readiness path is healthy.
+  - `SUBSTRATE_WORLD_SOCKET` stays advanced/test/breakglass on macOS; it is not the default readiness path.
 
 - Transport selection (host ⇄ guest)
   1. VSock via `vsock-proxy` (preferred when Virtualization.framework exposes VSock)
@@ -202,8 +211,8 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
     overriding the transport.
 
 - Logs & diagnostics
-  - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-service -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`.
-  - Forwarding issues surface in shell `DEBUG` logs with the selected transport. `scripts/mac/lima-doctor.sh` mirrors doctor CLI checks.
+  - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-service -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`. Treat both as post-failure/breakglass diagnosis rather than the normal readiness proof.
+  - Forwarding issues surface in shell `DEBUG` logs with the selected transport. `scripts/mac/lima-doctor.sh` mirrors doctor CLI checks after the routed proof path has already been attempted.
 
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
@@ -388,10 +397,15 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
   - From agent logs: use `world_id` to inspect `/sys/fs/cgroup/substrate/<WORLD_ID>`
 
 - macOS quick validation
-  - `scripts/mac/lima-doctor.sh`
+  - `target/debug/substrate host doctor --json | jq .`
+  - `target/debug/substrate world doctor --json | jq .`
+  - `target/debug/substrate world gateway sync`
+  - `target/debug/substrate world gateway status --json | jq .`
+  - `target/debug/substrate world gateway restart` when validating managed lifecycle recovery after routed proof is already established
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non‑PTY, PTY, replay + fs_diff assertion)
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/orchestration-smoke.sh` (Lima warm + live backend reachability + shared-owner/member-runtime orchestration contract regressions)
-  - `substrate sudo journalctl -u substrate-world-service -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`) to review guest logs
+  - `scripts/mac/lima-doctor.sh` for deeper post-failure diagnosis after routed checks fail
+  - `substrate sudo journalctl -u substrate-world-service -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`) only when guest-level diagnosis is needed
 
 ---
 
