@@ -92,12 +92,16 @@ on 2026-06-12 before any Slice `05` code edits:
      `world-service`, `world`, `world-mac-lima`, and shell bootstrap helpers.
    - `ExecRequest` came back `HIGH` with 7 upstream impacts centered on replay,
      the macOS smoke example, and Windows WSL tests.
-   - the required exact function-level impact commands for
+   - the initial file/name-targeted function impact lookups for
      `convert_exec_request` and `apply_policy` returned target-not-found even
      though `gitnexus context` resolved both symbols. Treat that as a lookup
      quirk, not as permission to skip the broader contract blast-radius gate.
    - a follow-up impact check using the exact UIDs returned by `gitnexus
-     context` showed `convert_exec_request` at `LOW` risk with only its local
+     context`
+     (`Function:crates/world-mac-lima/src/lib.rs:MacLimaBackend.convert_exec_request#2`
+     and
+     `Function:crates/world-mac-lima/src/lib.rs:MacLimaBackend.apply_policy#2`)
+     showed `convert_exec_request` at `LOW` risk with only its local
      regression test upstream, and `apply_policy` at `LOW` risk with no
      discovered upstream callers. The meaningful Packet `2` / `3` blast radius
      therefore sits on the shared contract types, not the current helper

@@ -59,11 +59,14 @@ Live 2026-06-12 repo-truth confirmation before Slice `05` code edits:
 3. The required exact impact commands surfaced the contract blast radius:
    - `WorldSpec` = `CRITICAL`, 52 upstream impacts
    - `ExecRequest` = `HIGH`, 7 upstream impacts
-   - the exact required function-level impact commands for
+   - the initial file/name-targeted function impact lookups for
      `convert_exec_request` and `apply_policy` returned target-not-found, so
      the packet should record that lookup quirk explicitly instead of treating
      it as a clean bill of health
 4. Follow-up impact checks using the exact UIDs returned by `gitnexus context`
+   (`Function:crates/world-mac-lima/src/lib.rs:MacLimaBackend.convert_exec_request#2`
+   and
+   `Function:crates/world-mac-lima/src/lib.rs:MacLimaBackend.apply_policy#2`)
    showed `convert_exec_request` at `LOW` risk and `apply_policy` at `LOW`
    risk, confirming that the real Packet `2` / `3` blast radius lives on the
    shared contract seam rather than those local methods alone.
@@ -254,10 +257,22 @@ Recorded Packet `1` GitNexus gate results:
    - 7 upstream impacts
    - direct fallout centers on replay, the macOS smoke example, and Windows
      WSL tests
-3. the required exact function-level impact commands for
+3. the initial file/name-targeted function impact lookups for
    `convert_exec_request` and `apply_policy` returned target-not-found while
    `gitnexus context` resolved both symbols; treat that as a lookup quirk and
-   keep Packet `1` bounded to seam freezing plus blast-radius documentation.
+   keep Packet `1` bounded to seam freezing plus blast-radius documentation
+   until the exact UID-based follow-up checks are run
+4. the follow-up UID-based impacts using
+   `Function:crates/world-mac-lima/src/lib.rs:MacLimaBackend.convert_exec_request#2`
+   and
+   `Function:crates/world-mac-lima/src/lib.rs:MacLimaBackend.apply_policy#2`
+   both came back `LOW`
+   - `convert_exec_request` has 1 upstream impact: its local regression test
+     `convert_exec_request_propagates_env_fs_mode`
+   - `apply_policy` has 0 discovered upstream callers
+   - the real Packet `2` / `3` blast radius therefore lives on `WorldSpec` /
+     `ExecRequest` and the shared carrier seam, not on those helper methods
+     alone
 
 ### Packet 2: Widen the shared backend contract
 
