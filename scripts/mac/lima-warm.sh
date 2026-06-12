@@ -695,7 +695,6 @@ ExecStart=/usr/local/bin/substrate-world-service
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
-Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
 Environment=SUBSTRATE_HOME=${SUBSTRATE_GUEST_HOME}
 ${netfilter_env}
