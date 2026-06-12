@@ -66,8 +66,9 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
     - both commands passed on 2026-06-12
-    - this was a verification-only rerun; no additional implementation file changes and no commit
-      were required beyond recording this authority note
+    - no implementation/code changes were required for this closeout rerun
+    - docs-only packet-local closeout evidence was recorded in commit `47b3ab467`
+      (`docs: record r5.75-1.5 closeout evidence`)
 
 - [ ] Task R5.75-1.6: Run the named native and adapted smoke sessions and inspect the first
       checkpoint objective manually.
