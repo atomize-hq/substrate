@@ -207,7 +207,7 @@ Session goal:
     `ReadWritePaths=` contract, while keeping the actual cutover out of this
     slice.
   - Verify:
-    - `rg -n "docs/WORLD.md|macos-lima-setup|Slice 09|Slice 10|ProtectHome|ReadWritePaths|/var/lib/substrate|/run/substrate|/sys/fs/cgroup|SUBSTRATE_HOME" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-08.md`
+    - `rg -n "docs/WORLD.md|macos-lima-setup|Slice 09|Slice 10|ProtectHome|ReadWritePaths|/var/lib/substrate|/run|/run/substrate|/sys/fs/cgroup|SUBSTRATE_HOME" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-08.md`
     - manual handoff review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md`
