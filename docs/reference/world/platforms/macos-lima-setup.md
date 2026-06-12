@@ -140,8 +140,10 @@ Listener posture summary for same-user Lima:
 
 - the hardened guest listener is `/run/substrate.sock` only,
 - supported host-side adapters such as VSock and SSH UDS forwarding route back to that guest
-  socket, while retained host loopback TCP reachability at `127.0.0.1:17788` remains the
-  compatibility adapter rather than a second guest listener,
+  socket,
+- the host loopback port `127.0.0.1:17788` may be either the VSock host-side endpoint or the
+  retained TCP compatibility adapter depending on transport selection, but it is not by itself
+  proof of a second guest listener,
 - Lima documents `limactl shell` as SSH-backed and documents plain SSH as an interoperability path,
   so direct `limactl shell` and raw SSH remain guest-access / breakglass evidence here rather than
   the supported listener contract.
@@ -267,7 +269,7 @@ readiness flow.
 | `sudo: unable to resolve host lima-substrate` | Sudo emits warning due to missing host mapping | `limactl shell substrate sudo bash -lc "grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts"` |
 | `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-service --release` → copy to `/usr/local/bin/substrate-world-service` |
 | SSH UDS not creating local socket | SSH ControlMaster multiplexing interferes | Disable ControlMaster: add `-o ControlMaster=no -o ControlPath=none` |
-| TCP forwarding resets | The retained host loopback TCP compatibility path is unhealthy or unavailable | Do not treat `127.0.0.1:17788` as the hardened default. Prefer the routed CLI proof or SSH UDS first, then debug `17788` only as a retained compatibility endpoint. Do not assume flipping Lima localhost-forwarder modes (`SSH` vs `GRPC`) will restore it, because the default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly. |
+| TCP forwarding resets | The selected host-side adapter at `127.0.0.1:17788` is unhealthy or unavailable (either VSock proxying or the retained TCP compatibility path) | Do not treat `127.0.0.1:17788` as proof of a guest TCP listener. Prefer the routed CLI proof or SSH UDS first. If VSock should be active, debug the VSock proxy/VM state; if transport fell through to TCP, debug it as the retained compatibility path. Do not assume flipping Lima localhost-forwarder modes (`SSH` vs `GRPC`) will restore it, because the default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly. |
 
 ### Viewing Logs
 
