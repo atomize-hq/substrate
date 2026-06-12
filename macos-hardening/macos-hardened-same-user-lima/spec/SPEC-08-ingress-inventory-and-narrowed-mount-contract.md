@@ -230,10 +230,10 @@ Frozen Packet `3` validation surfaces:
    mounts.
 5. Supported runtime artifacts and required guest write paths that later
    validation must continue to preserve are still `/var/lib/substrate`,
-   `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`, and the
-   guest-local `SUBSTRATE_HOME`/`/tmp` flow already described by
-   `docs/WORLD.md` and the warm script. Later ingress work may change how
-   workspace input arrives, but it must not break these guest-local
+   `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`,
+   `/sys/fs/cgroup`, and the guest-local `SUBSTRATE_HOME`/`/tmp` flow already
+   described by `docs/WORLD.md` and the warm script. Later ingress work may
+   change how workspace input arrives, but it must not break these guest-local
    runtime/sandbox surfaces.
 
 Frozen Packet `3` downstream consumers:
@@ -254,9 +254,10 @@ Frozen Packet `3` downstream consumers:
 4. Slice `10` consumes this contract at the guest-unit sandbox seam. When it
    finalizes `ProtectHome=` and `ReadWritePaths=`, it must preserve the
    approved guest-local runtime/write paths (`/var/lib/substrate`,
-   `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`, guest
-   `SUBSTRATE_HOME`, and `/tmp` where already required) without
-   re-introducing ambient host-home visibility as a supported default.
+   `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`,
+   `/sys/fs/cgroup`, guest `SUBSTRATE_HOME`, and `/tmp` where already
+   required) without re-introducing ambient host-home visibility as a
+   supported default.
 5. Slice `12` remains the broader docs/breakglass cutover seam: it can update
    operator-facing wording once Slice `09` and Slice `10` make the narrowed
    contract real, but that downstream cutover is not part of Slice `08`.
