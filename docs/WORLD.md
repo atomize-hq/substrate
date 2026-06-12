@@ -182,11 +182,13 @@ Deliberate boundary for later lanes:
 
 ## 3) macOS Architecture (Lima)
 
-Substrate on macOS uses a Lima VM (“substrate”) to host the world-service. The shell guarantees the VM, agent, and forwarding layer are ready before routing commands.
+Substrate on macOS uses a Lima VM (“substrate”) to host the world-service. The hardened guest
+listener remains `/run/substrate.sock`; the shell guarantees the VM, agent, and whichever
+host-side forwarding adapter is available are ready before routing commands.
 Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-service path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
-- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
+- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` as the only hardened default guest listener plus managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` remains the deeper troubleshooting helper once the routed CLI proof below has already failed.
   - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
@@ -199,13 +201,16 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
   4. `scripts/mac/smoke.sh` for routed PTY, non-PTY, and replay proof
   5. `scripts/mac/lima-doctor.sh`, `substrate sudo journalctl ...`, `limactl shell ...`, in-guest `systemctl`, and in-guest `curl` only after routed checks fail or when explicitly doing breakglass diagnosis
   - This preserves the same-user limitation: Lima still does not provide the Linux ownership boundary even when the routed readiness path is healthy.
+  - Lima documents `limactl shell` as an SSH-backed guest access path and documents plain SSH as an interoperability path for software that expects SSH connectivity; in this slice both remain guest access / breakglass evidence rather than the supported listener contract.
   - `SUBSTRATE_WORLD_SOCKET` stays advanced/test/breakglass on macOS; it is not the default readiness path.
 
 - Transport selection (host ⇄ guest)
   1. VSock via `vsock-proxy` (preferred when Virtualization.framework exposes VSock)
   2. SSH Unix domain socket forwarding (`~/.substrate/sock/agent.sock`)
-  3. SSH TCP forwarding (`127.0.0.1:<port>`)
+  3. retained host loopback TCP compatibility routing (`127.0.0.1:17788`)
   - The backend attempts transports in that order; failure logs include remediation hints and the shell degrades to host execution after a single warning if all transports fail.
+  - These are host-side adapters back to the same guest socket at `/run/substrate.sock`; they are not additional hardened guest listeners.
+  - Lima’s localhost port forwarding defaults are version-sensitive (`SSH` vs `GRPC`), so successful host loopback TCP reachability is compatibility evidence only and must not be treated as the stable guest-listener contract.
   - For async persistent-session startup on macOS, the shell now awaits the backend-owned async
     readiness path before opening `/v1/stream` unless `SUBSTRATE_WORLD_SOCKET` is explicitly
     overriding the transport.

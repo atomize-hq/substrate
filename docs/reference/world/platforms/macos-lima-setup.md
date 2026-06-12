@@ -145,6 +145,15 @@ Use `scripts/mac/lima-doctor.sh` only for deeper post-failure troubleshooting. D
 `limactl shell`, guest `systemctl`, guest `curl`, and guest `journalctl` remain breakglass or
 post-failure diagnostics rather than the normal readiness proof for an already provisioned backend.
 
+Listener posture summary for same-user Lima:
+
+- the hardened guest listener is `/run/substrate.sock` only,
+- any SSH UDS forwarding or retained host loopback TCP reachability is a host-side compatibility
+  adapter back to that guest socket, not a second guest listener,
+- Lima documents `limactl shell` as SSH-backed and documents plain SSH as an interoperability path,
+  so direct `limactl shell` and raw SSH remain guest-access / breakglass evidence here rather than
+  the supported listener contract.
+
 ## Testing the Setup
 
 ### Breakglass guest-level probe
@@ -250,7 +259,7 @@ readiness flow.
 | `sudo: unable to resolve host lima-substrate` | Sudo emits warning due to missing host mapping | `limactl shell substrate sudo bash -lc "grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts"` |
 | `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-service --release` → copy to `/usr/local/bin/substrate-world-service` |
 | SSH UDS not creating local socket | SSH ControlMaster multiplexing interferes | Disable ControlMaster: add `-o ControlMaster=no -o ControlPath=none` |
-| TCP forwarding resets | SSH cannot forward TCP→UDS directly | Use SSH UDS; TCP fallback requires a guest TCP↔UDS bridge (e.g., `socat`) |
+| TCP forwarding resets | The retained host loopback TCP compatibility path is unhealthy or unavailable | Do not treat host loopback TCP as the hardened default. Lima’s localhost port-forwarding mode and defaults vary by version (`SSH` vs `GRPC`), so prefer the routed CLI proof or SSH UDS; debug the TCP path only as compatibility evidence after checking the active forwarder mode. |
 
 ### Viewing Logs
 
