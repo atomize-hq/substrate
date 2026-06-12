@@ -4286,6 +4286,64 @@ Return with: changed files, tests run, residual risk."#,
 }
 
 #[test]
+fn checkpoints_preserve_first_paragraph_for_realistic_multiline_goal_review_prompts() {
+    let goal = concat!(
+        "/goal Review Candidate 3 Packet 2: Canonical Artifact Migration\n",
+        "Use $code-review-and-quality from /Users/spensermcconnell/.agents/skills/code-review-and-quality/SKILL.md."
+    );
+    let pasted_prompt = r#"/goal Review Candidate 3 Packet 2: Canonical Artifact Migration
+Use $code-review-and-quality from /Users/spensermcconnell/.agents/skills/code-review-and-quality/SKILL.md.
+
+Review the current Packet 2 implementation in /Users/spensermcconnell/__Active_Code/system. This review is for the committed change at HEAD (commit f7296f2), not for unrelated unstaged worktree changes such as crates/cli/tests/cli_surface.rs.
+
+Authoritative docs:
+- /Users/spensermcconnell/__Active_Code/system/docs/specs/candidate-3-workspace-access-spec.md
+- /Users/spensermcconnell/__Active_Code/system/docs/specs/candidate-3-workspace-access-plan.md
+- /Users/spensermcconnell/__Active_Code/system/docs/specs/candidate-3-workspace-access-tasks.md
+- /Users/spensermcconnell/__Active_Code/system/docs/contracts/C-03-canonical-artifact-manifest-contract.md
+
+Required review scope:
+- Findings-first review.
+- Special attention to correctness, architecture depth, path/discovery semantics, and regression coverage.
+
+Verification context already run by the implementer:
+- cargo test -p handbook-compiler canonical_artifacts
+- cargo test -p handbook-compiler --test resolver_core
+
+Output requirements:
+- If you find issues, list only actionable findings ordered by severity, with file/line references.
+- If clean, say explicitly that you found no actionable issues and mention any residual risk or testing gap briefly.
+- Do not make code changes."#;
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", pasted_prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"git show --stat --oneline HEAD","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p handbook-compiler --test resolver_core","workdir":"/repo"}"#,
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, goal);
+    assert_ne!(
+        checkpoint.task_frame.objective,
+        "/goal Review Candidate 3 Packet 2: Canonical Artifact Migration findings-first review without making code changes."
+    );
+    assert_eq!(
+        checkpoint.session_archetype.as_ref().map(|a| a.label),
+        Some(SessionArchetypeLabel::Planning)
+    );
+}
+
+#[test]
 fn checkpoints_preserve_user_requested_agents_instruction_targets() {
     let goal =
         "/goal Analyze the AGENTS.md instructions block and update only that instruction text.";

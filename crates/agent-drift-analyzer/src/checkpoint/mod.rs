@@ -2202,12 +2202,21 @@ fn normalized_objective_text(text: &str) -> String {
         return String::new();
     }
 
+    if let Some(concrete) = extract_labeled_concrete_objective_text(trimmed) {
+        return concrete;
+    }
+
     if let Some(goal_line) = extract_embedded_goal_line(trimmed) {
         return goal_line;
     }
 
-    if let Some(concrete) = extract_labeled_concrete_objective_text(trimmed) {
-        return concrete;
+    if contains_embedded_goal_line(trimmed) {
+        let first_paragraph = trimmed.split("\n\n").next().unwrap_or(trimmed).trim();
+        return if first_paragraph.is_empty() {
+            trimmed.to_string()
+        } else {
+            first_paragraph.to_string()
+        };
     }
 
     if let Some(imperative_line) = extract_concrete_imperative_objective_line(trimmed) {
@@ -2227,9 +2236,40 @@ fn normalized_objective_text(text: &str) -> String {
 }
 
 fn extract_embedded_goal_line(text: &str) -> Option<String> {
+    let goal_line = text
+        .lines()
+        .filter_map(objective_candidate_line_text)
+        .find(|line| line.starts_with("/goal"))?;
+
+    embedded_goal_line_overrides_first_paragraph(text, &goal_line).then_some(goal_line)
+}
+
+fn contains_embedded_goal_line(text: &str) -> bool {
     text.lines()
         .filter_map(objective_candidate_line_text)
-        .find(|line| line.starts_with("/goal"))
+        .any(|line| line.starts_with("/goal"))
+}
+
+fn embedded_goal_line_overrides_first_paragraph(text: &str, goal_line: &str) -> bool {
+    let first_paragraph = text.trim().split("\n\n").next().unwrap_or(text).trim();
+    if first_paragraph == goal_line {
+        return true;
+    }
+
+    let mut saw_non_goal_line = false;
+    for line in first_paragraph.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if line == goal_line {
+            continue;
+        }
+
+        saw_non_goal_line = true;
+        let lower = line.to_ascii_lowercase();
+        if boilerplate_class(line).is_none() && !objective_line_is_metadata(&lower) {
+            return false;
+        }
+    }
+
+    saw_non_goal_line
 }
 
 fn extract_labeled_concrete_objective_text(text: &str) -> Option<String> {
@@ -2701,7 +2741,6 @@ fn row_is_pure_boilerplate(row: &CompactionRow) -> bool {
     objective_text_is_pure_boilerplate(&row.text)
         && extract_embedded_goal_line(&row.text).is_none()
         && extract_labeled_concrete_objective_text(&row.text).is_none()
-        && extract_concrete_imperative_objective_line(&row.text).is_none()
         && !preserves_user_requested_boilerplate_target(row)
 }
 
