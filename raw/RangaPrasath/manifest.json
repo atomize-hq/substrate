@@ -1,0 +1,15 @@
+{
+  "hash": "f70eb1bc78893d14cb67635b80597214c47b11ac8df2bf273f5b4ba6f9577ab3",
+  "createdAt": "2026-05-16T15:47:47.054Z",
+  "metadata": {
+    "sessionCount": 73,
+    "messageCount": 22528,
+    "formats": [
+      "sessions"
+    ],
+    "source": "codex"
+  },
+  "files": [
+    "sessions.jsonl"
+  ]
+}
