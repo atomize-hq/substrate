@@ -191,7 +191,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Update readiness-oriented macOS docs to lead with owned CLI proof
+- [x] Task 3.1: Update readiness-oriented macOS docs to lead with owned CLI proof
   - Acceptance: the relevant readiness sections in `docs/WORLD.md` and
     `docs/reference/world/platforms/macos-lima-setup.md` lead with
     `substrate host doctor`, `substrate world doctor`, and gateway
@@ -209,7 +209,7 @@ Session goal:
     - `docs/contracts/gateway/operator-contract.md` only if alignment is required
     - `docs/contracts/gateway/status-schema.md` only if alignment is required
 
-- [ ] Task 3.2: Make small owned-doctor clarity changes only if the cutover requires them
+- [x] Task 3.2: Make small owned-doctor clarity changes only if the cutover requires them
   - Acceptance: `crates/shell/src/execution/platform/macos.rs` changes only if
     the script/docs cutover proves that the current owned doctor surfaces are
     too unclear about routed versus guest-direct fallback evidence. If no such
@@ -246,7 +246,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 4.1: Final targeted regression and scope check
+- [x] Task 4.1: Final targeted regression and scope check
   - Acceptance: script syntax checks pass, targeted shell tests remain green,
     and the final diff remains limited to the intended readiness-oriented
     scripts/docs plus any tightly justified doctor-output clarity change.
@@ -262,7 +262,7 @@ Session goal:
   - Files:
     - touched files only
 
-- [ ] Task 4.2: Record the handoff boundary honestly
+- [x] Task 4.2: Record the handoff boundary honestly
   - Acceptance: the final closeout states explicitly that Slice `06` landed the
     readiness proof-story cutover only. Listener removal remains Slice `07`,
     and broader breakglass/docs cutover remains Slice `12`.
