@@ -613,11 +613,17 @@ impl WorldBackend for MacLimaBackend {
     }
 
     fn apply_policy(&self, world: &WorldHandle, spec: &WorldSpec) -> Result<()> {
+        let Some(backend_policy) = spec.backend_policy.clone() else {
+            self.store_backend_policy(None)?;
+            anyhow::bail!(
+                "macOS backend requires authoritative backend_policy when applying policy"
+            );
+        };
         self.store_fs_mode(spec.fs_mode)?;
-        self.store_backend_policy(spec.backend_policy.clone())?;
+        self.store_backend_policy(Some(backend_policy))?;
         tracing::debug!(
             world_id = %world.id,
-            has_backend_policy = spec.backend_policy.is_some(),
+            has_backend_policy = true,
             "Updated macOS backend policy state for backend-mediated execution"
         );
         Ok(())
@@ -1100,6 +1106,45 @@ mod tests {
                 })
             );
             assert!(!second_agent_req.policy_snapshot.world_fs.write.enabled);
+        }
+    }
+
+    #[test]
+    fn apply_policy_fail_closes_without_backend_policy() {
+        let _env_guard = crate::test_util::lock_env();
+
+        if let Ok(backend) = MacLimaBackend::new() {
+            let world = WorldHandle {
+                id: "vm:substrate".to_string(),
+                shared_binding: None,
+            };
+            let req = ExecRequest {
+                cmd: "echo hi".to_string(),
+                cwd: PathBuf::from("/tmp"),
+                env: std::collections::HashMap::new(),
+                pty: false,
+                span_id: None,
+                shared_world: None,
+                member_dispatch: None,
+            };
+
+            let err = backend
+                .apply_policy(&world, &WorldSpec::default())
+                .expect_err("missing backend policy must fail-close");
+            assert!(
+                err.to_string()
+                    .contains("requires authoritative backend_policy"),
+                "unexpected error: {err}"
+            );
+
+            let err = backend
+                .convert_exec_request(&req, WorldFsMode::Writable)
+                .expect_err("missing policy state must remain fail-closed");
+            assert!(
+                err.to_string()
+                    .contains("missing authoritative backend_policy"),
+                "unexpected conversion error: {err}"
+            );
         }
     }
 
