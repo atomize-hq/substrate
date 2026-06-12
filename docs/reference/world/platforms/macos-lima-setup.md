@@ -109,18 +109,9 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    limactl shell substrate sudo systemctl enable --now substrate-world-service.socket
    limactl shell substrate sudo systemctl restart substrate-world-service.service
    ```
-
-2. **Verify service is running**:
-   ```sh
-   limactl shell substrate systemctl status substrate-world-service.socket
-   limactl shell substrate systemctl status substrate-world-service.service
-   ```
-
-3. **Test the agent API**:
-   ```sh
-   limactl shell substrate curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities
-   # Should return JSON with world backend capabilities
-   ```
+2. **Proceed to the routed readiness proof below**. Treat direct guest `systemctl`, guest
+   `curl --unix-socket`, and guest `journalctl` as breakglass/post-failure diagnostics rather
+   than the normal proof for an already provisioned backend.
 
 ### Step 4: Run routed readiness checks
 
@@ -159,7 +150,23 @@ Listener posture summary for same-user Lima:
 ### Breakglass guest-level probe
 
 If the routed checks above fail and you need direct guest diagnosis, you can probe the guest-owned
-socket manually:
+socket manually.
+
+Start with guest service status:
+
+```sh
+limactl shell substrate systemctl status substrate-world-service.socket
+limactl shell substrate systemctl status substrate-world-service.service
+```
+
+Then confirm the guest socket API is alive:
+
+```sh
+limactl shell substrate curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities
+# Should return JSON with world backend capabilities
+```
+
+If you need an in-guest execute-path probe after that:
 
 ```sh
 limactl shell substrate bash -c 'curl --unix-socket /run/substrate.sock -X POST http://localhost/v1/execute \
