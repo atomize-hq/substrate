@@ -49,6 +49,11 @@ fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
     let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
         .map_err(|e| anyhow!("failed to resolve effective policy for snapshot: {e}"))?;
 
+    snapshot_from_policy(&policy)
+}
+
+fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnapshotV3> {
+
     let dim = |dim: &substrate_broker::WorldFsDimensionPolicy| PolicySnapshotWorldFsDimensionV3 {
         allow_list: dim.allow_list.clone(),
         deny_list: dim.deny_list.clone(),
@@ -89,7 +94,7 @@ fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
 
     let snapshot = PolicySnapshotV3 {
         schema_version: 3,
-        net_allowed: Vec::new(),
+        net_allowed: policy.net_allowed.clone(),
         world_fs: PolicySnapshotWorldFsV3 {
             host_visible: policy.world_fs_host_visible,
             fail_closed: PolicySnapshotWorldFsFailClosedV3 {
@@ -1180,6 +1185,19 @@ mod tests {
             origin_reason_code: None,
             world_disable_source: None,
         }
+    }
+
+    #[test]
+    fn snapshot_from_policy_preserves_authoritative_net_allowed() {
+        let mut policy = substrate_broker::Policy::default();
+        policy.net_allowed = vec![" Example.COM. ".into(), "api.example.com".into()];
+
+        let snapshot = snapshot_from_policy(&policy).expect("build snapshot");
+
+        assert_eq!(
+            snapshot.net_allowed,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
     }
 
     #[test]
