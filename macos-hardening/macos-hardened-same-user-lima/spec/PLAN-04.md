@@ -183,7 +183,10 @@ Verification checkpoint:
 4. GitNexus commands are pinned to
    `GITNEXUS_HOME=/tmp/gitnexus-ff74-only` so this checkout does not resolve
    against sibling `substrate` indexes,
-5. the slice still has not absorbed policy parity or docs/script cutover.
+5. Packet `1` freezes the current `HIGH`-risk GitNexus consequence for
+   `world_ops::execute_world_pty_over_ws_macos`, so Packet `2` must surface
+   that warning before any PTY edit proceeds,
+6. the slice still has not absorbed policy parity or docs/script cutover.
 
 ### Packet 2: Converge PTY and persistent-session consumers
 
@@ -206,6 +209,13 @@ Why second:
 1. these are the most direct runtime consumers of the selected transport,
 2. converging them first lowers the risk that doctor/readiness logic freezes the
    wrong consumer story.
+
+Packet `2` precondition:
+
+1. before touching `world_ops::execute_world_pty_over_ws_macos`, surface the
+   Packet `1`-frozen `HIGH`-risk GitNexus warning for that symbol,
+2. do not proceed with PTY edits until the warning has been made explicit and
+   the work is reconfirmed as bounded to transport-consumer convergence only.
 
 Verification checkpoint:
 

@@ -223,6 +223,18 @@ At minimum, Packet `1` must record:
    before editing them,
 3. `gitnexus detect-changes` before any commit later in the slice.
 
+Packet `1` also freezes the current PTY impact consequence for later packets:
+
+1. in this checkout, `gitnexus impact` for
+   `world_ops::execute_world_pty_over_ws_macos` is treated as a `HIGH`-risk
+   result for Packet `2` planning purposes,
+2. that `HIGH`-risk warning is not advisory-only; any later Packet `2` PTY edit
+   touching `world_ops::execute_world_pty_over_ws_macos` must surface the
+   warning before proceeding,
+3. after surfacing the warning, Packet `2` must keep the PTY edit bounded to
+   the Packet `1`-frozen consumer-convergence contract rather than widening
+   into policy, gateway-lifecycle, or docs/script-cutover work.
+
 ## Commands
 
 This is a source-driven shell-runtime convergence slice. Required commands

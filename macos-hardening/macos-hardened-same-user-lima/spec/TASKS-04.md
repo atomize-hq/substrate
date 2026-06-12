@@ -86,7 +86,10 @@ Session goal:
     port-forwarding, SSH, `limactl shell`, VZ, environment-variable, and
     breaking-change docs. Before editing any touched symbol, run GitNexus
     impact analysis for the shell-side transport consumers that will change. If
-    GitNexus reports a stale index, refresh it first.
+    GitNexus reports a stale index, refresh it first. If
+    `world_ops::execute_world_pty_over_ws_macos` returns `HIGH` risk, Packet
+    `1` must freeze that consequence in the slice docs so Packet `2` surfaces
+    the warning before any PTY edit proceeds.
   - Verify:
     - manual authority review
     - manual official-source review
@@ -114,7 +117,10 @@ Packet `1` is complete only when:
 
 1. there is one obvious shell-side consumer contract to aim at,
 2. the affected symbols and official-source claims are explicit,
-3. the slice has not yet absorbed policy parity or docs/script cutover work.
+3. the Packet `2` PTY seam is explicitly blocked on surfacing the `HIGH`-risk
+   GitNexus warning for `world_ops::execute_world_pty_over_ws_macos` before
+   proceeding,
+4. the slice has not yet absorbed policy parity or docs/script cutover work.
 
 Do not start Packet `2` until Packet `1` is coherent.
 
@@ -145,7 +151,9 @@ Session goal:
   - Acceptance: `crates/shell/src/execution/routing/dispatch/world_ops.rs`
     reuses the same transport connection behavior for PTY operations rather than
     maintaining a parallel ladder. Request payload semantics, policy snapshot
-    content, and world-network routing remain unchanged.
+    content, and world-network routing remain unchanged. Before those PTY edits
+    begin, the implementation pass must surface the Packet `1`-frozen `HIGH`
+    GitNexus risk warning for `world_ops::execute_world_pty_over_ws_macos`.
   - Verify:
     - `cargo test -p shell unix_and_tcp_transports_format_endpoints -- --nocapture`
     - targeted `cargo test -p shell -- --list | rg "persistent|macos_"` review as needed before final command selection
