@@ -271,6 +271,12 @@ Session goal:
   - Files:
     - implementation closeout or PR description
 
+Packet `4` closeout note:
+
+1. Slice `06` landed the readiness proof-story cutover only.
+2. Slice `07` remains the deferred listener-removal seam.
+3. Slice `12` remains the deferred broader breakglass and docs-cutover seam.
+
 ### Packet 4 checkpoint
 
 Packet `4` is complete only when:
