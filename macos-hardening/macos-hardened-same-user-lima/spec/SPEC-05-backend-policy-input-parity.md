@@ -76,8 +76,11 @@ If any of these are wrong, correct them before implementation.
 Packet `1` was re-grounded from live repo truth and the required GitNexus gate
 on 2026-06-12 before any Slice `05` code edits:
 
-1. `GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus status` reported the
-   index up to date at commit `30d2934`.
+1. `GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus status` first reported a
+   stale index (`Indexed commit: 2056619`, `Current commit: 30d2934`), so
+   Packet `1` refreshed the index with
+   `GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus analyze` and then
+   re-ran `status` until it reported `30d2934` as up to date.
 2. `gitnexus context` resolved all four Packet `1` symbols:
    - `world_api::WorldSpec`
    - `world_api::ExecRequest`
@@ -93,6 +96,12 @@ on 2026-06-12 before any Slice `05` code edits:
      `convert_exec_request` and `apply_policy` returned target-not-found even
      though `gitnexus context` resolved both symbols. Treat that as a lookup
      quirk, not as permission to skip the broader contract blast-radius gate.
+   - a follow-up impact check using the exact UIDs returned by `gitnexus
+     context` showed `convert_exec_request` at `LOW` risk with only its local
+     regression test upstream, and `apply_policy` at `LOW` risk with no
+     discovered upstream callers. The meaningful Packet `2` / `3` blast radius
+     therefore sits on the shared contract types, not the current helper
+     methods alone.
 
 Frozen Packet `1` carrier decision:
 

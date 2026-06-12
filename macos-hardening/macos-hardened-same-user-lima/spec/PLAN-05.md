@@ -40,6 +40,43 @@ This plan should produce a bounded landing that:
 4. gives `apply_policy(...)` a real parity meaning,
 5. leaves routed-path-first doctor/smoke/docs truth to Slice `06`.
 
+## Packet 1 live gate and frozen carrier decision
+
+Packet `1` should treat the GitNexus gate as part of the slice contract, not as
+optional bookkeeping.
+
+Live 2026-06-12 repo-truth confirmation before Slice `05` code edits:
+
+1. `GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus status` initially came
+   back stale (`Indexed commit: 2056619`, `Current commit: 30d2934`), so the
+   required `GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus analyze`
+   refresh had to run before the symbol gate was trustworthy.
+2. After the refresh, `gitnexus context` resolved all four Packet `1` symbols:
+   - `world_api::WorldSpec`
+   - `world_api::ExecRequest`
+   - `world_mac_lima::MacLimaBackend::convert_exec_request`
+   - `world_mac_lima::MacLimaBackend::apply_policy`
+3. The required exact impact commands surfaced the contract blast radius:
+   - `WorldSpec` = `CRITICAL`, 52 upstream impacts
+   - `ExecRequest` = `HIGH`, 7 upstream impacts
+   - the exact required function-level impact commands for
+     `convert_exec_request` and `apply_policy` returned target-not-found, so
+     the packet should record that lookup quirk explicitly instead of treating
+     it as a clean bill of health
+4. Follow-up impact checks using the exact UIDs returned by `gitnexus context`
+   showed `convert_exec_request` at `LOW` risk and `apply_policy` at `LOW`
+   risk, confirming that the real Packet `2` / `3` blast radius lives on the
+   shared contract seam rather than those local methods alone.
+
+Frozen Packet `1` carrier decision:
+
+1. the backend-facing parity carrier should be `WorldSpec`-owned,
+2. if Packet `2` groups fields, it should do so through one adjacent shared
+   backend type nested under `WorldSpec`,
+3. `ExecRequest` should remain command-shaped unless later proof shows a
+   genuinely per-execution parity delta that cannot be represented through the
+   session policy seam.
+
 ## Default landing boundary
 
 Unless execution proves there is an immediate contradiction that must be fixed,
