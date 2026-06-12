@@ -12,7 +12,16 @@ Companion inputs:
 - [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](../crates/shell/src/execution/agent_runtime/orchestration_session.rs)
 - [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](../crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
 Phase: `SPECIFY`  
-Status: draft on `2026-06-12`
+Status: Packet `4` checkpoint-green closeout on `2026-06-12`
+
+## Closeout Note
+
+Slice `56` is now checkpoint-green in the current tree.
+
+1. The read-side vs strict-control split is landed and verified.
+2. Participant-aware fallback stays sibling-distinct when trace evidence exists, while participant-less fallback remains explicitly coarse and warning-bearing by design.
+3. `orchestration_session_id` remains the only forward public session handle.
+4. Retained `session_handle_id` / `active_session_handle_id` usage remains temporary compatibility/storage-only state rather than forward operator vocabulary.
 
 ## Assumptions
 

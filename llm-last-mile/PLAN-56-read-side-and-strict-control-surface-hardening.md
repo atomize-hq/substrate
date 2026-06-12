@@ -6,7 +6,15 @@ Source gap matrix: [AGENT_ORCHESTRATION_GAP_MATRIX.md](../AGENT_ORCHESTRATION_GA
 Prior slice: [PLAN-55-broader-caller-surface-contract-freeze.md](./PLAN-55-broader-caller-surface-contract-freeze.md)  
 Plan type: read-side/control-contract hardening above the landed caller-surface freeze  
 Phase: `PLAN`  
-Status: draft on `2026-06-12`
+Status: Packet `4` checkpoint-green closeout on `2026-06-12`
+
+## Closeout Note
+
+Slice `56` finished as the bounded status/control hardening seam it set out to be.
+
+1. Packets `1` through `4` are now green in the current tree.
+2. No selector ergonomics or broader governance cleanup was reopened to get there.
+3. Any retained `session_handle_id` / `active_session_handle_id` usage remains explicitly compatibility/storage-only temporary state.
 
 ## Objective
 

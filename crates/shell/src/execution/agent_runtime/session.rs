@@ -1256,7 +1256,8 @@ mod tests {
 
         let json = serde_json::to_value(&participant).expect("serialize participant");
         assert_eq!(
-            json.get("participant_id").and_then(serde_json::Value::as_str),
+            json.get("participant_id")
+                .and_then(serde_json::Value::as_str),
             Some("ash_member")
         );
         assert!(
