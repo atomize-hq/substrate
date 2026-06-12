@@ -18,7 +18,7 @@ Two cooperating components:
 - `substrate` (shell): orchestrates execution, tracing, and routing (non‑PTY via REST, PTY via WS)
 - `world-service`: runs inside the target Linux environment and exposes a small API over a Unix domain socket (`/run/substrate.sock`)
 
-On Linux the agent runs directly on the host. On macOS the agent runs inside a Lima VM; the shell ensures transport forwarding (VSock → SSH UDS → SSH TCP) back to the guest socket.
+On Linux the agent runs directly on the host. On macOS the agent runs inside a Lima VM; the shell ensures transport forwarding (prefer VSock, fall back to SSH UDS) back to the guest socket.
 
 Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima environment reproducible.
 
@@ -183,8 +183,8 @@ Deliberate boundary for later lanes:
 ## 3) macOS Architecture (Lima)
 
 Substrate on macOS uses a Lima VM (“substrate”) to host the world-service. The hardened guest
-listener remains `/run/substrate.sock`; the shell guarantees the VM, agent, and whichever
-host-side forwarding adapter is available are ready before routing commands.
+listener remains `/run/substrate.sock`; the shell guarantees the VM, agent, and a supported
+host-side forwarding adapter are ready before routing commands.
 Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-service path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
@@ -206,11 +206,11 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 
 - Transport selection (host ⇄ guest)
   1. VSock via `vsock-proxy` (preferred when Virtualization.framework exposes VSock; host-visible at `127.0.0.1:17788`)
-  2. SSH Unix domain socket forwarding (`~/.substrate/sock/agent.sock`)
-  3. retained host loopback TCP compatibility routing (`127.0.0.1:17788`) only when the backend falls past VSock and SSH UDS
-  - The backend attempts transports in that order; failure logs include remediation hints and the shell degrades to host execution after a single warning if all transports fail.
+  2. SSH Unix domain socket forwarding (`~/.substrate/sock/agent.sock`) as the supported fallback host-side adapter
+  3. retained compatibility references to `127.0.0.1:17788` may still appear, but they do not define an automatic backend fallthrough to raw TCP
+  - The backend prefers VSock and then SSH UDS; failure logs include remediation hints and the shell degrades to host execution after a single warning if the supported adapters fail.
   - These are host-side adapters back to the same guest socket at `/run/substrate.sock`; they are not additional hardened guest listeners.
-  - Host loopback reachability at `127.0.0.1:17788` is transport-dependent: it can be the supported VSock host-side endpoint or the retained TCP compatibility path, but in either case it routes back to `/run/substrate.sock` and is not proof of a guest TCP listener. The current default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly.
+  - Host loopback reachability at `127.0.0.1:17788` is transport-dependent: on the supported path it can be the VSock host-side endpoint, and retained compatibility references may still point at that loopback address, but it is not proof of a guest TCP listener or of an automatic raw TCP fallback. The current default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly.
   - For async persistent-session startup on macOS, the shell now awaits the backend-owned async
     readiness path before opening `/v1/stream` unless `SUBSTRATE_WORLD_SOCKET` is explicitly
     overriding the transport.
@@ -427,7 +427,7 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 - macOS fallback warnings every command
   - Run `scripts/mac/lima-doctor.sh` to confirm virtualization support, VM status, agent socket, and forwarding binaries. Address any `[FAIL]` entries before re-running the shell.
 - macOS vsock unavailable
-  - The backend automatically falls back to SSH UDS/TCP. If VSock is expected, confirm `vsock-proxy` exists in `$PATH` and Lima is running with `vmType: "vz"`.
+  - The backend falls back to SSH UDS; it intentionally skips automatic SSH TCP fallback. If VSock is expected, confirm `vsock-proxy` exists in `$PATH` and Lima is running with `vmType: "vz"`.
 
 ---
 
