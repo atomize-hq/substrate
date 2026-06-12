@@ -139,10 +139,11 @@ Frozen validation expectations:
    must keep the routed proof path green rather than silently shifting support
    back toward `limactl shell`, guest `curl`, guest `journalctl`, or other
    post-failure checks.
-4. Guest-local runtime paths that later slices must preserve are
-   `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`, and the
-   guest-local `SUBSTRATE_HOME`/`/tmp` surfaces already wired through the warm
-   script and world docs.
+4. Guest-local runtime/write paths that later slices must preserve are
+   `/var/lib/substrate`, `/run/substrate.sock`,
+   `/run/substrate/substrate-gateway-runtime/`, and the guest-local
+   `SUBSTRATE_HOME`/`/tmp` surfaces already wired through the warm script and
+   world docs.
 
 Frozen downstream consumers:
 
@@ -154,7 +155,9 @@ Frozen downstream consumers:
    seam and must preserve all warm, smoke, routed gateway, and routed
    diagnostics proofs while removing unsupported ambient ingress.
 3. Slice `10` consumes the contract as the guest-unit sandbox seam and must
-   preserve only the approved guest-local runtime paths when finalizing
+   preserve the approved guest-local runtime/write paths (`/var/lib/substrate`,
+   `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`, guest
+   `SUBSTRATE_HOME`, and `/tmp` where already required) when finalizing
    `ProtectHome=` and `ReadWritePaths=`.
 4. Slice `12` still owns the broader operator/docs cutover after the narrower
    contract has been implemented for real.

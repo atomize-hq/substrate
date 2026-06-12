@@ -199,10 +199,14 @@ Session goal:
 - [x] Task 3.2: Record the future doc and sandbox consumers without widening into them
   - Acceptance: the slice identifies `docs/WORLD.md`,
     `docs/reference/world/platforms/macos-lima-setup.md`, and the future
-    guest-unit sandbox consumer seam as downstream consumers, while keeping
-    their actual cutover out of this slice.
+    guest-unit sandbox consumer seam as downstream consumers; the Slice `10`
+    handoff explicitly preserves `/var/lib/substrate` alongside
+    `/run/substrate.sock`, `/run/substrate/substrate-gateway-runtime/`, guest
+    `SUBSTRATE_HOME`, and `/tmp` in the future `ProtectHome=` /
+    `ReadWritePaths=` contract, while keeping the actual cutover out of this
+    slice.
   - Verify:
-    - `rg -n "docs/WORLD.md|macos-lima-setup|Slice 09|Slice 10|ProtectHome|ReadWritePaths" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-08.md`
+    - `rg -n "docs/WORLD.md|macos-lima-setup|Slice 09|Slice 10|ProtectHome|ReadWritePaths|/var/lib/substrate|SUBSTRATE_HOME" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-08.md`
     - manual handoff review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md`
