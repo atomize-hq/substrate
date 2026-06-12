@@ -46,8 +46,7 @@ pub struct MacLimaBackend {
     session_cache: std::sync::Mutex<Option<WorldHandle>>,
     shared_owner_cache: std::sync::Mutex<std::collections::HashMap<String, WorldHandle>>,
     shared_owner_mutex: std::sync::Mutex<()>,
-    world_policy_state:
-        std::sync::Mutex<std::collections::HashMap<String, MacWorldPolicyState>>,
+    world_policy_state: std::sync::Mutex<std::collections::HashMap<String, MacWorldPolicyState>>,
     #[cfg(test)]
     session_setup_override: Option<std::sync::Arc<dyn SessionSetupMock>>,
 }

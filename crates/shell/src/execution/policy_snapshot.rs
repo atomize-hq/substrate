@@ -307,9 +307,7 @@ fn backend_world_fs_deny_enforcement(
 ) -> BackendWorldFsDenyEnforcementV3 {
     match deny_enforcement {
         WorldFsDenyEnforcementV3::Strict => BackendWorldFsDenyEnforcementV3::Strict,
-        WorldFsDenyEnforcementV3::PreferStrict => {
-            BackendWorldFsDenyEnforcementV3::PreferStrict
-        }
+        WorldFsDenyEnforcementV3::PreferStrict => BackendWorldFsDenyEnforcementV3::PreferStrict,
         WorldFsDenyEnforcementV3::Weak => BackendWorldFsDenyEnforcementV3::Weak,
     }
 }
@@ -586,9 +584,18 @@ mod tests {
             spec.allowed_domains,
             vec!["example.com".to_string(), "api.example.com".to_string()]
         );
-        assert_eq!(backend_policy.policy_snapshot.net_allowed, resolved.snapshot.net_allowed);
-        assert_eq!(backend_policy.world_network.allowed_domains, spec.allowed_domains);
-        assert_eq!(backend_policy.world_network.isolate_network, spec.isolate_network);
+        assert_eq!(
+            backend_policy.policy_snapshot.net_allowed,
+            resolved.snapshot.net_allowed
+        );
+        assert_eq!(
+            backend_policy.world_network.allowed_domains,
+            spec.allowed_domains
+        );
+        assert_eq!(
+            backend_policy.world_network.isolate_network,
+            spec.isolate_network
+        );
     }
 
     #[test]

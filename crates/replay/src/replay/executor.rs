@@ -53,7 +53,6 @@ fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
 }
 
 fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnapshotV3> {
-
     let dim = |dim: &substrate_broker::WorldFsDimensionPolicy| PolicySnapshotWorldFsDimensionV3 {
         allow_list: dim.allow_list.clone(),
         deny_list: dim.deny_list.clone(),
@@ -135,18 +134,15 @@ fn backend_policy_input_for_snapshot(
                 fail_closed: BackendPolicySnapshotWorldFsFailClosedV3 {
                     routing: policy_snapshot.world_fs.fail_closed.routing,
                 },
-                deny_enforcement: policy_snapshot
-                    .world_fs
-                    .deny_enforcement
-                    .map(|mode| match mode {
-                        WorldFsDenyEnforcementV3::Strict => {
-                            BackendWorldFsDenyEnforcementV3::Strict
-                        }
+                deny_enforcement: policy_snapshot.world_fs.deny_enforcement.map(
+                    |mode| match mode {
+                        WorldFsDenyEnforcementV3::Strict => BackendWorldFsDenyEnforcementV3::Strict,
                         WorldFsDenyEnforcementV3::PreferStrict => {
                             BackendWorldFsDenyEnforcementV3::PreferStrict
                         }
                         WorldFsDenyEnforcementV3::Weak => BackendWorldFsDenyEnforcementV3::Weak,
-                    }),
+                    },
+                ),
                 caged_required: policy_snapshot.world_fs.caged_required,
                 discover: policy_snapshot.world_fs.discover.as_ref().map(|dimension| {
                     BackendPolicySnapshotWorldFsDimensionV3 {
