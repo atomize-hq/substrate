@@ -6304,6 +6304,83 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
 }
 
 #[test]
+fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mismatches_run_sibling()
+{
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    let mismatched_parent_run_id = "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "participant_id": "ash_parent_one",
+            "run_id": mismatched_parent_run_id,
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "substrate.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "first pure-agent sibling is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "participant_id": "ash_parent_two",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "substrate.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "second pure-agent sibling is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+            "parent_run_id": mismatched_parent_run_id,
+            "parent_participant_id": "ash_parent_two",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested row must fail instead of coarse-matching the wrong sibling" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_parent_correlation_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+        mismatched_parent_run_id,
+    );
+}
+
+#[test]
 fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
     let fixture = AgentSuccessorFixture::new();
     seed_nested_gateway_status_fixture(&fixture);

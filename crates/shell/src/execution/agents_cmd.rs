@@ -3311,6 +3311,9 @@ fn selected_parent_run_candidates<'a>(
     if let Some(selected) = exact.get(&projection.source.parent_identity) {
         return selected.iter().collect();
     }
+    if projection.source.parent_participant_id.is_some() {
+        return Vec::new();
+    }
 
     coarse
         .get(&projection.source.parent_identity.coarse())
@@ -3325,9 +3328,14 @@ fn historical_parent_run_matches(
     coarse: &BTreeMap<StatusIdentityKey, BTreeSet<String>>,
 ) -> bool {
     parent_run_id.is_some_and(|candidate| {
-        exact
+        let exact_match = exact
             .get(parent_identity)
-            .is_some_and(|runs| runs.contains(candidate))
+            .is_some_and(|runs| runs.contains(candidate));
+        if parent_identity.participant_id.is_some() {
+            return exact_match;
+        }
+
+        exact_match
             || coarse
                 .get(&parent_identity.coarse())
                 .is_some_and(|runs| runs.contains(candidate))

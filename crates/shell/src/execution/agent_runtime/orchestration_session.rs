@@ -283,7 +283,9 @@ pub(crate) struct OrchestrationSessionRecord {
     pub orchestrator_agent_id: String,
     pub orchestrator_backend_id: String,
     pub orchestrator_protocol: String,
-    // Compatibility storage name retained; the value is the active orchestrator participant_id.
+    // Compatibility-only temporary storage alias retained without widening the persisted schema.
+    // The value is the active orchestrator participant_id; orchestration_session_id remains the
+    // only public session selector.
     pub active_session_handle_id: Option<String>,
     pub latest_run_id: Option<String>,
     pub world_id: Option<String>,
@@ -404,6 +406,7 @@ impl OrchestrationSessionRecord {
         self.last_active_at = Utc::now();
     }
 
+    // Canonical accessor over the compatibility-only active_session_handle_id storage alias.
     pub(crate) fn active_participant_id(&self) -> Option<&str> {
         self.active_session_handle_id.as_deref()
     }
@@ -453,6 +456,7 @@ impl OrchestrationSessionRecord {
         Some(contract)
     }
 
+    // Canonical participant binding routed through the compatibility-only storage alias.
     pub(crate) fn bind_active_session_handle(&mut self, participant_id: impl Into<String>) {
         let participant_id = participant_id.into();
         self.active_session_handle_id = Some(participant_id.clone());
