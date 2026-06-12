@@ -71,6 +71,58 @@ ASSUMPTIONS I'M MAKING:
 
 If any of these are wrong, correct them before implementation.
 
+## Packet 1 live confirmation and frozen carrier decision
+
+Packet `1` was re-grounded from live repo truth and the required GitNexus gate
+on 2026-06-12 before any Slice `05` code edits:
+
+1. `GITNEXUS_HOME=/tmp/gitnexus-ff74-only npx gitnexus status` reported the
+   index up to date at commit `30d2934`.
+2. `gitnexus context` resolved all four Packet `1` symbols:
+   - `world_api::WorldSpec`
+   - `world_api::ExecRequest`
+   - `world_mac_lima::MacLimaBackend::convert_exec_request`
+   - `world_mac_lima::MacLimaBackend::apply_policy`
+3. The required exact `gitnexus impact` commands surfaced the shared-contract
+   blast radius clearly enough to freeze the seam:
+   - `WorldSpec` came back `CRITICAL` with 52 upstream impacts spanning replay,
+     `world-service`, `world`, `world-mac-lima`, and shell bootstrap helpers.
+   - `ExecRequest` came back `HIGH` with 7 upstream impacts centered on replay,
+     the macOS smoke example, and Windows WSL tests.
+   - the required exact function-level impact commands for
+     `convert_exec_request` and `apply_policy` returned target-not-found even
+     though `gitnexus context` resolved both symbols. Treat that as a lookup
+     quirk, not as permission to skip the broader contract blast-radius gate.
+
+Frozen Packet `1` carrier decision:
+
+1. the backend-facing parity carrier should live on `WorldSpec`, not on
+   `ExecRequest`,
+2. if Packet `2` needs field grouping, that grouping should be one adjacent
+   shared backend type nested under `WorldSpec` rather than duplicated across
+   both `WorldSpec` and `ExecRequest`,
+3. `ExecRequest` should remain command-specific (`cmd`, `cwd`, `env`, `pty`,
+   `shared_world`, `member_dispatch`) unless later proof shows a genuinely
+   per-execution parity delta that cannot be represented through the session
+   policy seam.
+
+Reasoning from live repo truth:
+
+1. `apply_policy(...)` already accepts `WorldSpec`, so a `WorldSpec`-owned
+   carrier gives Packet `3` one honest place to reapply, reconcile, or
+   fail-close policy state.
+2. `MacLimaBackend` already caches `fs_mode` from `WorldSpec`, so widening the
+   backend-held session state is the straightest extension of the current
+   contract.
+3. widening `ExecRequest` first would give `convert_exec_request(...)` a
+   per-command carrier, but it would still leave `apply_policy(...)` without an
+   honest shared source of truth unless Slice `05` introduced a second policy
+   store.
+4. shell direct routed paths already compute `policy_snapshot` and
+   `world_network`; Packet `2` should feed those authoritative values into the
+   `WorldSpec`-owned carrier rather than teaching `world-mac-lima` to infer
+   them locally.
+
 ## Objective
 
 Make backend-mediated macOS Lima execution consume one typed policy/world-input
@@ -273,17 +325,23 @@ Example shape:
 ```rust
 pub struct WorldSpec {
     // existing fields...
-    pub policy_snapshot: Option<transport_api_types::PolicySnapshotV3>,
-    pub world_network: Option<transport_api_types::WorldNetworkRoutingV1>,
+    pub backend_policy_inputs: Option<BackendPolicyInputs>,
+}
+
+pub struct BackendPolicyInputs {
+    pub policy_snapshot: transport_api_types::PolicySnapshotV3,
+    pub world_network: transport_api_types::WorldNetworkRoutingV1,
 }
 
 fn convert_exec_request(&self, req: &ExecRequest, spec: &WorldSpec) -> ExecuteRequest {
-    // consume carried policy/world-input truth instead of synthesizing it
+    // consume carried policy/world-input truth from spec/backend state instead
+    // of synthesizing it
 }
 ```
 
-The exact carrier shape may differ, but the slice should leave one obvious
-backend-facing place where resolved parity inputs live.
+The exact nested type name may differ, but Packet `1` freezes the location:
+there should be one obvious `WorldSpec`-owned backend-facing place where
+resolved parity inputs live.
 
 ## Testing strategy
 

@@ -172,6 +172,24 @@ Why first:
 2. shared-contract widening affects multiple crates, so the blast radius has to
    be explicit before code edits begin.
 
+Frozen Packet `1` decision from the required live gate:
+
+1. default Packet `2` to a `WorldSpec`-owned parity carrier,
+2. keep `ExecRequest` command-scoped unless later proof shows an unavoidable
+   per-execution parity delta,
+3. if field grouping is needed, use one adjacent shared backend type nested
+   under `WorldSpec` rather than duplicating top-level parity fields across
+   both structs.
+
+Why this is the bounded choice:
+
+1. `apply_policy(...)` already accepts `WorldSpec`, so a `WorldSpec`-owned
+   carrier gives Packet `3` one honest place to reconcile or reject drift,
+2. `MacLimaBackend` already stores `fs_mode` from `WorldSpec`, so widening the
+   backend-held session state follows the existing contract,
+3. widening `ExecRequest` first would leave `apply_policy(...)` semantically
+   underpowered unless Slice `05` created a second policy source of truth.
+
 Verification checkpoint:
 
 1. the exact Packet `2` / `3` symbol set is explicit:
@@ -185,6 +203,24 @@ Verification checkpoint:
 3. any `HIGH` or `CRITICAL` impact result is surfaced before implementation
    proceeds,
 4. the slice still has not absorbed Slice `06` docs/script cutover.
+
+Recorded Packet `1` GitNexus gate results:
+
+1. `WorldSpec` impact = `CRITICAL`
+   - 52 upstream impacts
+   - direct/shared fallout includes replay, `world-service`, `world`,
+     `world-mac-lima`, and shell bootstrap/helper consumers
+   - highest-signal affected processes include
+     `build_agent_client_and_member_dispatch_request_impl`,
+     `build_agent_client_and_request_impl`, and `handle_legacy_start`
+2. `ExecRequest` impact = `HIGH`
+   - 7 upstream impacts
+   - direct fallout centers on replay, the macOS smoke example, and Windows
+     WSL tests
+3. the required exact function-level impact commands for
+   `convert_exec_request` and `apply_policy` returned target-not-found while
+   `gitnexus context` resolved both symbols; treat that as a lookup quirk and
+   keep Packet `1` bounded to seam freezing plus blast-radius documentation.
 
 ### Packet 2: Widen the shared backend contract
 
