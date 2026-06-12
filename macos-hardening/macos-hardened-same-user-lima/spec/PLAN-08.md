@@ -368,6 +368,22 @@ Verification checkpoint:
 2. actual mount removal/sync work is still plainly deferred,
 3. the next implementation seam is obvious from the final handoff.
 
+Packet `4` closeout for this plan:
+
+1. Slice `08` lands only the ingress inventory, classification matrix,
+   narrowed default contract, validation surfaces, and downstream-consumer
+   handoff in the Slice `08` planning docs.
+2. Slice `09` remains solely responsible for actual mount narrowing and/or any
+   staged sync/copy implementation needed to replace the temporary `/src`
+   allowances while keeping the routed proof surfaces green.
+3. Slice `10` remains solely responsible for guest-unit source-of-truth and
+   sandbox unification against the frozen guest-local runtime/write-path
+   contract.
+4. Slice `12` remains solely responsible for the broader operator/breakglass
+   docs cutover after the implementation slices land.
+5. This Packet `4` closeout leaves Slice `09` unblocked without widening Slice
+   `08` into implementation.
+
 ## Risks and mitigations
 
 1. **Risk: preserving broad `$HOME` by inertia**

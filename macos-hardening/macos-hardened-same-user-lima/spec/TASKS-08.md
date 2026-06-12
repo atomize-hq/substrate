@@ -239,7 +239,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 4.1: Final scope and coherence check
+- [x] Task 4.1: Final scope and coherence check
   - Acceptance: final diffs remain limited to the Slice `08` docs, and the
     slice does not promise actual mount removal or sync/copy behavior it did
     not implement.
@@ -250,7 +250,7 @@ Session goal:
   - Files:
     - touched files only
 
-- [ ] Task 4.2: Record the handoff boundary honestly
+- [x] Task 4.2: Record the handoff boundary honestly
   - Acceptance: the final closeout states explicitly that Slice `08` landed the
     ingress inventory and narrowed-contract seam only, Slice `09` still owns
     actual mount/sync implementation, Slice `10` still owns guest-unit
@@ -259,7 +259,9 @@ Session goal:
   - Verify:
     - manual closeout review
   - Files:
-    - implementation closeout or PR description
+    - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md`
+    - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md`
+    - final session closeout wording
 
 ### Packet 4 checkpoint
 
@@ -268,3 +270,7 @@ Packet `4` is complete only when:
 1. the slice remained docs-only and contract-scoped,
 2. the implementation seam for Slice `09` is obvious,
 3. the deferred downstream consumers are stated plainly.
+
+Packet `4` is checkpoint-green for this landing once the verification checks
+above are green and the final closeout keeps Slice `09` unblocked without
+widening into Slice `09`, Slice `10`, or Slice `12` implementation.

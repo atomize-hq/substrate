@@ -419,3 +419,23 @@ Inspection surfaces that this slice must review but should not edit by default:
 2. Slice `08` names a narrowed default contract for each ingress class.
 3. Slice `08` leaves a reviewer with a plain handoff into Slice `09` and Slice
    `10`.
+
+## Packet 4 closeout and bounded handoff
+
+1. Slice `08` lands the ingress inventory and narrowed-contract seam only in
+   the Slice `08` planning docs; it does not land actual Lima mount removal,
+   a Substrate-managed sync/copy path, guest-unit sandbox unification, or the
+   broader operator/docs cutover.
+2. The final bounded handoff is therefore explicit:
+   - Slice `09` remains the implementation seam for actual mount-profile
+     narrowing and/or any staged sync/copy replacement for the current `/src`
+     consumers, while preserving the warm proof, routed gateway lifecycle
+     proof, and routed diagnostics proof frozen above.
+   - Slice `10` remains the guest-unit source-of-truth and sandbox-unification
+     seam that consumes the already-frozen guest-local runtime/write paths
+     without re-introducing ambient host-home visibility.
+   - Slice `12` remains the broader breakglass/docs cutover seam after Slices
+     `09` and `10` make the narrowed contract real.
+3. With this docs-only closeout, Slice `09` is unblocked to implement against
+   an explicit ingress contract instead of the prior implicit “currently
+   mounted” default.
