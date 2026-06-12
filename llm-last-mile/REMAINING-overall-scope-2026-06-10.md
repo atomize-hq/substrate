@@ -57,7 +57,7 @@ For this note:
 1. **Family 1** means the host-orchestrator to world control-plane stack.
 2. **Host-orchestrator tool surface** means the newer Family-1 sub-seam that exposes the landed internal dispatch/runtime to the live host runtime family.
 3. **Family 2** means the durable deferred-work, obligation-ledger, auto-attach, host-targeting, and host-global ingress/materialization stack.
-4. **Current** means repo truth after the landed Slice `55` Packet `4` closeout state reflected on `2026-06-11`.
+4. **Current** means repo truth after the landed Slice `56` Packet `2` checkpoint-green state reflected on `2026-06-12`.
 
 ## How To Use This Note
 
