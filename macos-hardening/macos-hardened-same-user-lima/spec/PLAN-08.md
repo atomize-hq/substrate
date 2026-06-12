@@ -197,7 +197,7 @@ Goal:
 
 1. confirm the authority stack, official source set, and current repo-truth
    mount/ingress posture,
-2. freeze the exact ingress classes this slice must reason about,
+2. name the ingress classes this slice must reason about,
 3. record the concrete surfaces that still rely on broad host-home visibility
    or `/src`.
 

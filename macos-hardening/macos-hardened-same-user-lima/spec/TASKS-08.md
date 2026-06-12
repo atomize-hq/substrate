@@ -73,7 +73,7 @@ Session goal:
 1. confirm the authority stack, official source set, and live ingress posture,
 2. record the exact default mount inventory and the concrete repo surfaces that
    depend on it,
-3. freeze the ingress classes this slice will use.
+3. name the ingress classes this slice will use.
 
 #### Tasks
 
@@ -98,7 +98,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-08-ingress-inventory-and-narrowed-mount-contract.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-08.md`
 
-- [x] Task 1.2: Freeze the current mount inventory and ingress classes
+- [x] Task 1.2: Record the current mount inventory and ingress class vocabulary
   - Acceptance: the slice names the current default host-home and `/src`
     mounts, records where they are consumed, and defines the classification
     classes as workspace, auth, runtime, and troubleshooting ingress.
@@ -119,8 +119,8 @@ Packet `1` is complete only when:
 2. the live default ingress inventory is explicit,
 3. the slice still has not widened into actual mount or sync implementation.
 
-Packet `1` is source-gated and complete for this landing; later packets remain
-pending.
+Packet `1` is source-gated and inventory-complete for this landing;
+later class-decision, validation, and closeout packets remain pending.
 
 Do not start Packet `2` until Packet `1` is coherent.
 

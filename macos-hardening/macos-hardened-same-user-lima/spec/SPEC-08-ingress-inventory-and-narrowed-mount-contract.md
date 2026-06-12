@@ -127,10 +127,11 @@ Live 2026-06-12 repo-truth confirmation for Packet `1`:
 4. `scripts/mac/lima-warm.sh` only uses `$HOME/.cargo/env` inside the guest to
    bootstrap optional in-guest builds; that is guest-home usage, not proof that
    supported runtime operation requires a broad host-home mount.
-5. `scripts/mac/smoke.sh` writes temporary host auth material under the host
-   home directory for the smoke harness, but the actual supported gateway path
-   goes through routed CLI commands rather than guest access to the mounted host
-   home directory.
+5. `scripts/mac/smoke.sh` builds its gateway smoke harness under a
+   `mktemp -d` fixture root, places `SUBSTRATE_HOME` under that temporary tree,
+   and passes Codex auth into routed proof commands via environment variables.
+   That is smoke-fixture setup, not proof that supported gateway auth depends
+   on guest access to mounted host-home material.
 6. `crates/shell/src/builtins/world_gateway.rs` still constructs the
    request-provided integrated auth handoff for gateway lifecycle requests,
    which means supported gateway auth is already narrower than ambient mounted
