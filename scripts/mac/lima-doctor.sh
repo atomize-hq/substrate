@@ -33,19 +33,29 @@ diagnose() {
     fi
 }
 
+note_routed_override_bypass() {
+    if [[ -n "${SUBSTRATE_WORLD_SOCKET:-}" ]]; then
+        warn "Ignoring SUBSTRATE_WORLD_SOCKET during routed readiness proof; it remains advanced/test/breakglass on macOS."
+    fi
+}
+
+run_routed_readiness_command() {
+    env -u SUBSTRATE_WORLD_SOCKET "$@"
+}
+
 resolve_substrate_bin() {
     if [[ -n "${SUBSTRATE_BIN:-}" ]]; then
         printf '%s\n' "${SUBSTRATE_BIN}"
         return
     fi
 
-    if command -v substrate >/dev/null 2>&1; then
-        command -v substrate
+    if [[ -x "${REPO_ROOT}/target/debug/substrate" ]]; then
+        printf '%s\n' "${REPO_ROOT}/target/debug/substrate"
         return
     fi
 
-    if [[ -x "${REPO_ROOT}/target/debug/substrate" ]]; then
-        printf '%s\n' "${REPO_ROOT}/target/debug/substrate"
+    if command -v substrate >/dev/null 2>&1; then
+        command -v substrate
         return
     fi
 
@@ -180,8 +190,9 @@ fi
 
 echo ""
 echo "Routed Readiness Proof (canonical for provisioned backends):"
-check_doctor_json "substrate host doctor --json" '.ok == true and .host.ok == true' "${SUBSTRATE_BIN}" host doctor --json
-check_doctor_json "substrate world doctor --json" '.ok == true and .host.ok == true and .world.ok == true and .world.status == "ok"' "${SUBSTRATE_BIN}" world doctor --json
+note_routed_override_bypass
+check_doctor_json "substrate host doctor --json" '.ok == true and .host.ok == true' run_routed_readiness_command "${SUBSTRATE_BIN}" host doctor --json
+check_doctor_json "substrate world doctor --json" '.ok == true and .host.ok == true and .world.ok == true and .world.status == "ok"' run_routed_readiness_command "${SUBSTRATE_BIN}" world doctor --json
 
 echo ""
 if [[ "${RUN_BREAKGLASS_CHECKS}" == "1" || "${failures}" -ne 0 ]]; then

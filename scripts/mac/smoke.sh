@@ -74,6 +74,16 @@ log() {
   printf '[mac-smoke] %s\n' "$*"
 }
 
+note_routed_override_bypass() {
+  if [[ -n "${SUBSTRATE_WORLD_SOCKET:-}" ]]; then
+    log "Ignoring SUBSTRATE_WORLD_SOCKET during routed smoke proof; it remains advanced/test/breakglass on macOS."
+  fi
+}
+
+run_routed_proof_command() {
+  env -u SUBSTRATE_WORLD_SOCKET "$@"
+}
+
 run_guest_direct_gateway_compatibility_check() {
   local port="$1"
   log "Running guest-direct gateway compatibility check (breakglass only)"
@@ -227,11 +237,11 @@ run_gateway_lifecycle_proof() {
   trap 'rm -rf "'"${fixture_root}"'"' RETURN
 
   pushd "${REPO_ROOT}" >/dev/null
-  env SUBSTRATE_HOME="${substrate_home}" \
+  run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
     "${SUBSTRATE_BIN}" world gateway sync
-  status_json="$(env SUBSTRATE_HOME="${substrate_home}" \
+  status_json="$(run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
     "${SUBSTRATE_BIN}" world gateway status --json)"
@@ -240,11 +250,11 @@ run_gateway_lifecycle_proof() {
     .client_wiring.openai_base_url == .client_wiring.anthropic_base_url
   ' >/dev/null
 
-  env SUBSTRATE_HOME="${substrate_home}" \
+  run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
     "${SUBSTRATE_BIN}" world gateway restart
-  status_json="$(env SUBSTRATE_HOME="${substrate_home}" \
+  status_json="$(run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
     "${SUBSTRATE_BIN}" world gateway status --json)"
@@ -277,7 +287,7 @@ run_dev_install_readiness_proof() {
     exit 1
   fi
 
-  if ! host_doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+  if ! host_doctor_json="$(run_routed_proof_command env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
     "${install_bin}" host doctor --json)"; then
     echo "ERROR: substrate host doctor --json failed during routed readiness proof" >&2
     run_guest_direct_readiness_diagnostics || true
@@ -293,7 +303,7 @@ run_dev_install_readiness_proof() {
     exit 1
   fi
 
-  if ! doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+  if ! doctor_json="$(run_routed_proof_command env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
     "${install_bin}" world doctor --json)"; then
     echo "ERROR: substrate world doctor --json failed during routed readiness proof" >&2
     run_guest_direct_readiness_diagnostics || true
@@ -372,7 +382,7 @@ run_fixture_command() {
   local substrate_home="$2"
   local project_dir="$3"
   shift 3
-  env \
+  run_routed_proof_command env \
     HOME="${fixture_home}" \
     USERPROFILE="${fixture_home}" \
     SUBSTRATE_HOME="${substrate_home}" \
@@ -735,17 +745,18 @@ run_generic_smoke() {
   trace_log="${SHIM_TRACE_LOG:-$HOME/.substrate/trace.jsonl}"
   dev_install_prefix="$(mktemp -d)"
 
+  note_routed_override_bypass
   rm -rf "${REPO_ROOT}/world-mac-smoke"
   run_dev_install_readiness_proof "${dev_install_prefix}"
   run_gateway_lifecycle_proof
-  "${SUBSTRATE_BIN}" -c 'echo smoke-nonpty'
-  "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
+  run_routed_proof_command "${SUBSTRATE_BIN}" -c 'echo smoke-nonpty'
+  run_routed_proof_command "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
   mkdir -p "$(dirname "${trace_log}")"
 
-  "${SUBSTRATE_BIN}" -c 'rm -rf world-mac-smoke'
+  run_routed_proof_command "${SUBSTRATE_BIN}" -c 'rm -rf world-mac-smoke'
   local payload_cmd
   payload_cmd="(cd /src 2>/dev/null || cd \"${REPO_ROOT}\") && (test -d world-mac-smoke || mkdir world-mac-smoke) && printf 'data\n' > world-mac-smoke/file.txt"
-  "${SUBSTRATE_BIN}" -c "${payload_cmd}"
+  run_routed_proof_command "${SUBSTRATE_BIN}" -c "${payload_cmd}"
 
   if [[ ! -f "${trace_log}" ]]; then
     echo "ERROR: Trace log not found at ${trace_log}" >&2
@@ -768,8 +779,8 @@ run_generic_smoke() {
     exit 1
   fi
 
-  "${SUBSTRATE_BIN}" --replay "${span}" --replay-verbose
-  "${SUBSTRATE_BIN}" --trace "${span}" | tee /tmp/world-mac-replay.json
+  run_routed_proof_command "${SUBSTRATE_BIN}" --replay "${span}" --replay-verbose
+  run_routed_proof_command "${SUBSTRATE_BIN}" --trace "${span}" | tee /tmp/world-mac-replay.json
   jq '.fs_diff | ((.writes // []) + (.mods // []))' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
   rm -rf "${dev_install_prefix}"
 }
@@ -795,6 +806,7 @@ run_netfilter_conformance() {
   write_smoke_config "${substrate_home}"
   : > "${fixture_home}/.substrate/trace.jsonl"
 
+  note_routed_override_bypass
   log "Using log directory ${log_dir}"
   SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${SCRIPTS_ROOT}/lima-warm.sh"
   run_gateway_lifecycle_proof
