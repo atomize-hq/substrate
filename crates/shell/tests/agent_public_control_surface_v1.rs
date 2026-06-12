@@ -542,6 +542,18 @@ fn write_fake_codex_script_exit_after_startup_prompt(dir: &Path) -> PathBuf {
     path
 }
 
+fn write_fake_codex_script_exit_after_bootstrap_frames(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-exit-after-bootstrap-frames.sh");
+    let body = "#!/bin/sh\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nexit 0\n";
+    fs::write(&path, body).expect("write exit-after-bootstrap fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("exit-after-bootstrap fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set exit-after-bootstrap fake codex permissions");
+    path
+}
+
 fn write_fake_codex_script_turn_requires_helper_cancel_after_prompt(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-turn-requires-helper-cancel.sh");
     let count_path = dir.join("fake-codex-turn-requires-helper-cancel.count");
@@ -4009,6 +4021,112 @@ fn public_start_split_bootstrap_retry_timeout_emits_single_terminal_failure() {
     assert!(
         stderr.contains("startup prompt stream ended before terminal completion"),
         "split bootstrap retry timeout stderr should match the terminal failed envelope message: {start_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_fails_closed_when_bootstrap_detaches_before_startup_stabilizes() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_exit_after_bootstrap_frames,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from unstable bootstrap",
+        "--json",
+    ]);
+    assert_eq!(
+        start_output.status.code(),
+        Some(1),
+        "bootstrap-only startup must fail closed instead of surfacing a resumable session: {start_output:?}"
+    );
+    let records = parse_ndjson_output(&start_output);
+    assert_eq!(
+        records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "bootstrap-only startup must still surface the accepted envelope before terminal failure: {records:?}"
+    );
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.get("kind").and_then(Value::as_str),
+                    Some("completed" | "failed")
+                )
+            })
+            .count(),
+        1,
+        "bootstrap-only startup must emit exactly one terminal envelope: {records:?}"
+    );
+    assert!(
+        records
+            .iter()
+            .all(|record| record.get("kind").and_then(Value::as_str) != Some("completed")),
+        "bootstrap-only startup must not emit a completed envelope: {records:?}"
+    );
+    let failed = find_ndjson_record(&records, "failed");
+    assert_eq!(failed.get("terminal").and_then(Value::as_bool), Some(true));
+    assert_eq!(failed.get("stage").and_then(Value::as_str), Some("runtime"));
+    assert!(
+        failed
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains("failed to establish attached control ownership")
+                    || message.contains("ended before ownership could be established")
+                    || message.contains("startup prompt stream ended before terminal completion")
+            }),
+        "bootstrap-only startup failure must explain the unstable ownership boundary: {failed}"
+    );
+
+    let orchestration_session_id = records
+        .iter()
+        .find_map(|record| {
+            record
+                .get("orchestration_session_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .expect("bootstrap-only accepted session id");
+    let persisted_session = fixture.load_orchestration_session(&orchestration_session_id);
+    assert_eq!(
+        persisted_session.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        persisted_session.get("posture").and_then(Value::as_str),
+        Some("parked_resumable")
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/startup_prompt/state")
+            .and_then(Value::as_str),
+        Some("failed")
+    );
+    assert!(
+        persisted_session
+            .get("attached_participant_id")
+            .is_none_or(Value::is_null),
+        "failed bootstrap must not leave stale attached ownership behind: {persisted_session}"
+    );
+
+    let stderr = stderr_text(&start_output);
+    assert!(
+        stderr.contains("failed to establish attached control ownership")
+            || stderr.contains("ended before ownership could be established")
+            || stderr.contains("startup prompt stream ended before terminal completion"),
+        "bootstrap-only startup stderr should explain the unstable ownership boundary: {start_output:?}"
     );
 }
 

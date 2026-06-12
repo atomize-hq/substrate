@@ -7,7 +7,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 use futures::{pin_mut, FutureExt, StreamExt};
@@ -4368,7 +4368,32 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     let mut heartbeat_task = Some(heartbeat_task);
 
     match tokio::time::timeout(Duration::from_secs(10), startup_rx).await {
-        Ok(Ok(RuntimeStartupSignal::Running)) => {}
+        Ok(Ok(RuntimeStartupSignal::Running)) => {
+            if !runtime_owns_private_stop {
+                if let Err(failure) = revalidate_retained_startup_after_running(
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    runtime_role.as_str(),
+                )
+                .await
+                {
+                    abort_bootstrap_runtime(
+                        &shutdown_requested,
+                        &mut retained_control,
+                        &mut heartbeat_stop_tx,
+                        &mut heartbeat_task,
+                    )
+                    .await;
+                    mark_runtime_startup_failed(
+                        &startup_context.store,
+                        &startup_context.orchestration_session,
+                        &manifest,
+                        &failure.message,
+                    );
+                    return Err(failure);
+                }
+            }
+        }
         Ok(Ok(RuntimeStartupSignal::Failed(message))) => {
             abort_bootstrap_runtime(
                 &shutdown_requested,
@@ -6709,7 +6734,30 @@ async fn start_remote_member_runtime_with_prepared(
 
     let mut observe_task = Some(observe_task);
     match tokio::time::timeout(Duration::from_secs(10), startup_rx).await {
-        Ok(Ok(RuntimeStartupSignal::Running)) => {}
+        Ok(Ok(RuntimeStartupSignal::Running)) => {
+            if let Err(failure) = revalidate_retained_startup_after_running(
+                &startup_context.orchestration_session,
+                &manifest,
+                runtime_role.as_str(),
+            )
+            .await
+            {
+                abort_remote_member_bootstrap_runtime(
+                    &shutdown_requested,
+                    &client,
+                    &span_id,
+                    &mut observe_task,
+                )
+                .await;
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &failure.message,
+                );
+                return Err(failure);
+            }
+        }
         Ok(Ok(RuntimeStartupSignal::Failed(message))) => {
             abort_remote_member_bootstrap_runtime(
                 &shutdown_requested,
@@ -7879,6 +7927,96 @@ fn signal_runtime_startup(
         .take()
     {
         let _ = tx.send(value);
+    }
+}
+
+fn unstable_retained_startup_message(runtime_role: &str) -> String {
+    if runtime_role == MEMBER_ROLE {
+        "world-scoped member control ownership ended before startup stabilized".to_string()
+    } else {
+        "attached control turn ended before ownership could be established".to_string()
+    }
+}
+
+async fn revalidate_retained_startup_after_running(
+    orchestration_session: &Arc<Mutex<OrchestrationSessionRecord>>,
+    manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
+    runtime_role: &str,
+) -> std::result::Result<(), RuntimeBootstrapFailure> {
+    let deadline = Instant::now() + Duration::from_millis(200);
+
+    loop {
+        enum StartupStability {
+            Stable,
+            Waiting,
+            Failed(String),
+        }
+
+        let stability = {
+            let orchestration_guard = orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+            let startup_prompt = orchestration_guard.startup_prompt.clone();
+            let startup_prompt_completed = startup_prompt
+                .as_ref()
+                .is_some_and(|record| record.state == StartupPromptStreamState::Completed);
+
+            if matches!(
+                manifest_guard.handle.state,
+                AgentRuntimeSessionState::Failed
+                    | AgentRuntimeSessionState::Invalidated
+                    | AgentRuntimeSessionState::Stopped
+            ) {
+                StartupStability::Failed(
+                    manifest_guard
+                        .internal
+                        .last_error_message
+                        .clone()
+                        .or(manifest_guard.internal.termination_reason.clone())
+                        .or_else(|| startup_prompt.and_then(|record| record.error_message))
+                        .unwrap_or_else(|| unstable_retained_startup_message(runtime_role)),
+                )
+            } else if let Some(message) = startup_prompt
+                .as_ref()
+                .filter(|record| record.state == StartupPromptStreamState::Failed)
+                .and_then(|record| record.error_message.clone())
+            {
+                StartupStability::Failed(message)
+            } else if startup_prompt_completed {
+                StartupStability::Stable
+            } else if Instant::now() >= deadline {
+                if manifest_guard.has_valid_ownership() {
+                    StartupStability::Stable
+                } else {
+                    StartupStability::Failed(
+                        manifest_guard
+                            .internal
+                            .last_error_message
+                            .clone()
+                            .or(manifest_guard.internal.termination_reason.clone())
+                            .or_else(|| startup_prompt.and_then(|record| record.error_message))
+                            .unwrap_or_else(|| unstable_retained_startup_message(runtime_role)),
+                    )
+                }
+            } else {
+                StartupStability::Waiting
+            }
+        };
+
+        match stability {
+            StartupStability::Stable => return Ok(()),
+            StartupStability::Failed(message) => {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 4,
+                    message,
+                });
+            }
+            StartupStability::Waiting => {
+                tokio::task::yield_now().await;
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        }
     }
 }
 
@@ -10421,7 +10559,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn start_host_orchestrator_runtime_parks_when_attached_control_exits() {
+    fn start_host_orchestrator_runtime_fails_closed_when_attached_control_exits_before_stable_startup(
+    ) {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
@@ -10454,56 +10593,26 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         rt.block_on(async {
             let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
-            let runtime =
-                start_host_orchestrator_runtime(&config, &ReplPrinter::Stdout, &mut telemetry)
+            let failure =
+                match start_host_orchestrator_runtime(&config, &ReplPrinter::Stdout, &mut telemetry)
                     .await
-                    .expect("runtime start should still observe attached ownership briefly")
-                    .expect("agents enabled should create a runtime");
-
-            tokio::time::timeout(Duration::from_secs(2), async {
-                loop {
-                    let store = AgentRuntimeStateStore::new().expect("state store");
-                    let manifests = store.list_manifests().expect("list manifests");
-                    let manifest = manifests
-                        .into_iter()
-                        .find(|manifest| manifest.handle.agent_id == "codex")
-                        .expect("runtime manifest should exist");
-                    let parent = store
-                        .load_orchestration_session(&manifest.handle.orchestration_session_id)
-                        .expect("load orchestration session")
-                        .expect("runtime orchestration session should exist");
-                    if parent.posture == OrchestrationSessionPosture::ParkedResumable
-                        && !manifest.internal.ownership_valid
-                        && !manifest.internal.control_owner_retained
-                        && !manifest.internal.completion_observer_retained
-                        && !manifest.attached_client_present()
-                        && manifest.is_resume_eligible()
-                    {
-                        assert_eq!(parent.state, OrchestrationSessionState::Active);
-                        assert_eq!(parent.attached_participant_id.as_deref(), None);
-                        assert_eq!(
-                            parent.active_session_handle_id.as_deref(),
-                            Some(manifest.handle.participant_id.as_str())
-                        );
-                        assert_eq!(parent.shell_owner_pid, 0);
-                        assert!(parent.closed_at.is_none());
-                        assert!(!manifest.internal.ownership_valid);
-                        assert!(!manifest.internal.control_owner_retained);
-                        assert!(!manifest.internal.completion_observer_retained);
-                        assert!(!manifest.attached_client_present());
-                        assert!(manifest.is_resume_eligible());
-                        assert_eq!(manifest.internal.shell_owner_pid, 0);
-                        assert_eq!(
-                            manifest.internal.uaa_session_id.as_deref(),
-                            Some("thread-test")
-                        );
-                        break;
+                {
+                    Ok(_) => {
+                        panic!(
+                            "bootstrap frames without durable ownership must fail before startup escapes"
+                        )
                     }
-                    tokio::time::sleep(Duration::from_millis(25)).await;
-                }
-            })
-            .await
-            .expect("runtime should park promptly after attached control exits");
+                    Err(failure) => failure,
+                };
+            assert!(
+                failure
+                    .message
+                    .contains("failed to establish attached control ownership")
+                    || failure
+                        .message
+                        .contains("ended before ownership could be established"),
+                "bootstrap failure should explain the unstable ownership boundary: {failure:?}"
+            );
 
             let live_orchestrator = AgentRuntimeStateStore::new()
                 .expect("state store")
@@ -10527,7 +10636,30 @@ mod tests {
                 },
                 "parked detached control must disappear from parent-gated live resolution: {live_session:?}"
             );
-            shutdown_host_orchestrator_runtime(runtime, &ReplPrinter::Stdout, &mut telemetry).await;
+
+            let manifest = AgentRuntimeStateStore::new()
+                .expect("state store")
+                .list_manifests()
+                .expect("list manifests")
+                .into_iter()
+                .find(|manifest| manifest.handle.agent_id == "codex")
+                .expect("failed manifest should exist");
+            assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Failed);
+            assert!(!manifest.internal.ownership_valid);
+            assert!(!manifest.internal.control_owner_retained);
+            assert!(!manifest.internal.completion_observer_retained);
+            assert_eq!(
+                manifest.internal.uaa_session_id.as_deref(),
+                Some("thread-test")
+            );
+            let parent = AgentRuntimeStateStore::new()
+                .expect("state store")
+                .load_orchestration_session(&manifest.handle.orchestration_session_id)
+                .expect("load failed orchestration session")
+                .expect("failed orchestration session should exist");
+            assert_eq!(parent.state, OrchestrationSessionState::Failed);
+            assert_eq!(parent.posture, OrchestrationSessionPosture::Terminal);
+            assert!(parent.attached_participant_id.is_none());
         });
         std::env::remove_var("SUBSTRATE_HOME");
     }

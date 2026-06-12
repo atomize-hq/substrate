@@ -3,6 +3,110 @@
 Status: living document capturing near-term and upcoming work.
 Keep concise, actionable, and security-focused.
 
+## P0 MUST RESOLVE
+
+- **P0 – Store-level atomic publication for orchestration session / world binding / member state**
+  - Context:
+    - The retained-startup race was fixed locally in [crates/shell/src/repl/async_repl.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs), but the broader torn-read issue called out in [STABILIZATION_NEXT_SLICE_2026-06-12.md](/home/azureuser/__Active_Code/atomize-hq/substrate/STABILIZATION_NEXT_SLICE_2026-06-12.md) is still real.
+    - Current publication order still allows observers to see parent session/world generation `N+1` while stale member rows at generation `N` remain authoritative-live for a short window.
+    - This is most relevant around world restart / binding replacement and follow-up routing, not the direct retained-startup fix that just landed.
+  - Hotspots:
+    - [crates/shell/src/repl/async_repl.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+    - [crates/shell/src/execution/agent_runtime/control.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+    - [crates/shell/src/execution/agent_runtime/state_store.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+  - What future agents need to know:
+    - This is not a good candidate for another local ordering tweak in the REPL.
+    - The likely durable fix is a store-level batch / transactional snapshot primitive so session row, world binding, and participant rows publish as one authoritative state transition.
+    - The state store currently degrades torn roots into incomplete/warned views rather than authorizing them, so the problem is degraded correctness and fail-closed routing churn, not silent success.
+  - Preserve while fixing:
+    - The retained-startup fail-closed behavior now covered by:
+      - [crates/shell/src/repl/async_repl.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+      - [crates/shell/tests/agent_public_control_surface_v1.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+    - The hidden owner-helper/public-start detached normalization contract validated by:
+      - `public_start_split_bootstrap_retry_timeout_emits_single_terminal_failure`
+      - `public_start_persists_detached_session_when_hidden_owner_helper_exits`
+  - Acceptance:
+    - No observer can read a mixed snapshot where the parent/session world binding has advanced but stale member rows are still authoritative-live.
+    - Public turn/control resolution either sees the old coherent snapshot or the new coherent snapshot, not a torn combination.
+
+- **P0 – Narrow PTY startup wait hardening in `repl_world_first_routing_v1.rs`**
+  - Context:
+    - The build-lock flake amplifier is already fixed, but there are still concrete PTY harness hotspots that can mask or amplify startup/order races if flakes continue.
+    - Do not do a broad helper rewrite. Keep this narrow and evidence-driven, exactly as the stabilization handoff recommended.
+  - Hotspots:
+    - [crates/shell/tests/repl_world_first_routing_v1.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs)
+      - `PtyRepl.wait_for_output`
+      - `PtyRepl.wait_for_prompt`
+      - `launch_host_runtime_via_targeted_turn`
+      - `wait_for_min_start_sessions*`
+    - [crates/shell/tests/support/repl_world_service.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_service.rs)
+      - startup recording vs `ready` publication ordering
+      - synthetic drift injection around first `ready.cwd`
+  - Concrete problems already identified:
+    - Prompt waits are buffer-wide substring scans, so a later `wait_for_prompt()` can match a stale earlier prompt instead of a newly rendered one.
+    - Some waits advance on “start requested” before “replacement startup actually reached ready”.
+    - `launch_host_runtime_via_targeted_turn` currently waits past the suspicious startup-ready edge, which can over-serialize the exact race we want to observe.
+  - First safe fixes to try:
+    - Make prompt/output waits edge-based by tracking new buffer length or prompt count.
+    - Introduce one startup-specific helper that returns on the retained ready edge instead of after extra settle/prompt time.
+    - Prefer waiting on ready-specific stub state instead of raw start-session count where the race matters.
+  - Explicitly avoid in this slice:
+    - generalized substring cleanup across the whole PTY suite
+    - a large shared helper rewrite
+    - framework-level PTY abstraction work
+  - Acceptance:
+    - The startup/routing tests most related to retained startup stop depending on stale-buffer prompt matches or “start requested” as a proxy for “ready observed”.
+
+- **P0 – Add focused remote-member retained-startup regression coverage**
+  - Context:
+    - The retained-startup revalidation helper now guards both:
+      - the direct host retained path in [crates/shell/src/repl/async_repl.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+      - the remote member bootstrap path in the same file
+    - This slice added focused host/public-start coverage, but not a new dedicated remote-member regression.
+  - Why this still needs work:
+    - The remote-member path has its own observer model (`ExecuteStreamFrame::{Start,Event,Exit,Error}`) and can still regress independently even if host/public-start stays green.
+    - Right now that branch is mostly protected by broader routing coverage rather than a targeted “early session handle then immediate terminal outcome” test.
+  - Best test shape:
+    - Add a focused low-level async REPL test near the retained member startup tests in [crates/shell/src/repl/async_repl.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs).
+    - Simulate a remote member that emits an early surfaced handle / `Start`+`Event`, then exits or errors before startup stabilizes.
+    - Assert startup fails closed, no stale authoritative-live retained member survives, and the persisted state matches the runtime-start-failed contract.
+  - Acceptance:
+    - Remote member retained startup cannot escape as healthy on an early surfaced handle alone.
+    - A terminal outcome immediately after the optimistic ready edge overrides startup before a live runtime is returned.
+
+- **P0 – Preserve and document the startup contract split while touching retained startup again**
+  - Context:
+    - The repo now has two intentionally different startup outcomes that are easy to break if future work treats them as the same:
+      - direct retained startup should fail closed if control ownership never stabilizes
+      - public `agent start` may still return a failed start while reconciling the durable session to detached/parked truth if the hidden owner-helper exits after bootstrap continuity is established
+    - This distinction surfaced during the current slice when `public_start_split_bootstrap_retry_timeout_emits_single_terminal_failure` correctly stayed green only after the direct-start revalidation was narrowed away from the hidden owner-helper path.
+  - Required context/tests:
+    - [crates/shell/src/repl/async_repl.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+    - [crates/shell/tests/agent_public_control_surface_v1.rs](/home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+    - Must keep these behaviors passing together:
+      - `start_host_orchestrator_runtime_fails_closed_when_attached_control_exits_before_stable_startup`
+      - `public_start_fails_closed_when_bootstrap_detaches_before_startup_stabilizes`
+      - `public_start_split_bootstrap_retry_timeout_emits_single_terminal_failure`
+      - `public_start_persists_detached_session_when_hidden_owner_helper_exits`
+  - Why backlog this:
+    - Future agents debugging startup may otherwise “simplify” toward one contract and accidentally break either direct fail-closed startup or public detached-session recovery.
+  - Acceptance:
+    - Any future startup work preserves this split intentionally, with tests proving both contracts remain true.
+
+- **P0 – Restore authoritative CI signal for stabilization branches / PRs**
+  - Context:
+    - During the stabilization slice captured in [STABILIZATION_NEXT_SLICE_2026-06-12.md](/home/azureuser/__Active_Code/atomize-hq/substrate/STABILIZATION_NEXT_SLICE_2026-06-12.md), `gh run list --branch feat/internal-host-orchestrator-world-dispatch-bootstrap` returned no useful runs.
+    - That forced the slice to rely on local targeted verification only, which is workable but not a good steady-state for high-risk runtime stabilization.
+  - Why this matters:
+    - The retained-startup path has a `HIGH` GitNexus blast radius through REPL + `agent start` flows.
+    - Future stabilization slices need branch/PR CI signal so regressions are caught without reconstructing the same local-only workflow.
+  - What to fix:
+    - Ensure the expected PR/manual route for runtime stabilization branches actually runs `CI Testing` or the equivalent authoritative workflow.
+    - Document the exact trigger path future agents should use when they need branch-level signal.
+    - If workflow conditions are intentionally selective, make the rule explicit in contributor docs so “no runs” is understandable instead of surprising.
+  - Acceptance:
+    - A stabilization branch/PR in this area reliably produces authoritative CI runs without relying on guesswork.
+
 ## Next
 
 - **P1 – First-class observability for internal world-dispatch bootstrap**
