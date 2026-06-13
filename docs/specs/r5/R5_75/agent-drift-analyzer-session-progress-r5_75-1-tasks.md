@@ -70,7 +70,7 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
     - docs-only packet-local closeout evidence was recorded in commit `47b3ab467`
       (`docs: record r5.75-1.5 closeout evidence`)
 
-- [ ] Task R5.75-1.6: Run the named native and adapted smoke sessions and inspect the first
+- [x] Task R5.75-1.6: Run the named native and adapted smoke sessions and inspect the first
       checkpoint objective manually.
   - Acceptance:
     - native sessions
@@ -88,6 +88,23 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
       - `sed -n '1,5p' "$ANALYZER_OUT/checkpoints.jsonl"`
   - Files:
     - no new implementation files; manual smoke evidence only
+  - Closeout note (2026-06-12):
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+    - reran the packet smoke ladder for native sessions
+      `019eb430-6f9a-7a03-9a63-cb451b654795`,
+      `019eb47f-0118-7e90-8291-30a1fb93769e`,
+      `019eb98e-3c16-7ba0-92f9-0085654b470c`,
+      plus adapted session `05a56cc51632982b`
+    - re-inspected `summary.md` and the first `checkpoints.jsonl` rows under
+      `target/r5_75-smoke/r5_75-1/<session-id>/analyzer/`
+    - first checkpoint objectives resolved to:
+      - `019eb430-6f9a-7a03-9a63-cb451b654795` → /goal Review the already-landed Packet R5-7 implementation in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` against its spec, plan, tasks, fixtures, and validation protocol, and determine whether it is ready to keep.
+      - `019eb47f-0118-7e90-8291-30a1fb93769e` → use the `$code-review-and-quality` skill to evaluate if what was implemented laned correctly and completely
+      - `019eb98e-3c16-7ba0-92f9-0085654b470c` → review what landed in the codebase vs the planning docs and intended end state and validate/invalidate if it landed correctly and completely
+      - `05a56cc51632982b` → add this skill to `@shared-cab-app`
+    - packet-scoped analyzer fix retained scope in `checkpoint/mod.rs` plus
+      `tests/checkpoints.rs`; no compactor/schema/sentinel widening was needed
 
 ## Hard Gate For R5.75-1
 

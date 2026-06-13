@@ -2184,8 +2184,7 @@ fn objective_text_specificity_priority(original: &str, normalized: &str) -> u8 {
         3
     } else if extract_labeled_concrete_objective_text(original).is_some() {
         2
-    } else if normalized.len() < original.trim().len() && objective_line_looks_concrete(normalized)
-    {
+    } else if objective_line_looks_concrete(normalized) {
         1
     } else {
         0
@@ -2193,10 +2192,6 @@ fn objective_text_specificity_priority(original: &str, normalized: &str) -> u8 {
 }
 
 fn normalized_objective_text(text: &str) -> String {
-    if !text.contains('\n') {
-        return text.to_string();
-    }
-
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -2208,6 +2203,14 @@ fn normalized_objective_text(text: &str) -> String {
 
     if let Some(goal_line) = extract_embedded_goal_line(trimmed) {
         return goal_line;
+    }
+
+    if let Some(clause) = extract_inline_concrete_objective_clause(trimmed) {
+        return clause;
+    }
+
+    if !text.contains('\n') {
+        return text.to_string();
     }
 
     if contains_embedded_goal_line(trimmed) {
@@ -2233,6 +2236,64 @@ fn normalized_objective_text(text: &str) -> String {
     } else {
         first_paragraph.to_string()
     }
+}
+
+fn extract_inline_concrete_objective_clause(text: &str) -> Option<String> {
+    const MARKERS: &[&str] = &[
+        "now i need you to ",
+        "now i want you to ",
+        "i need you to ",
+        "i want you to ",
+        "need you to ",
+        "want you to ",
+    ];
+
+    let lower = text.to_ascii_lowercase();
+    for marker in MARKERS {
+        let Some(start) = lower.find(marker) else {
+            continue;
+        };
+
+        let clause = &text[start + marker.len()..];
+        if let Some(candidate) = cleaned_inline_objective_clause(clause) {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn cleaned_inline_objective_clause(clause: &str) -> Option<String> {
+    let mut trimmed = clause
+        .trim()
+        .trim_start_matches([':', '-', '—', '–'])
+        .trim_start();
+
+    loop {
+        let next = trimmed
+            .strip_prefix("actually ")
+            .or_else(|| trimmed.strip_prefix("just "))
+            .or_else(|| trimmed.strip_prefix("please "))
+            .or_else(|| trimmed.strip_prefix("kindly "))
+            .or_else(|| trimmed.strip_prefix("then "))
+            .or_else(|| trimmed.strip_prefix("first "));
+        let Some(next) = next else {
+            break;
+        };
+        trimmed = next.trim_start();
+    }
+
+    let first_segment = trimmed.split("\n\n").next().unwrap_or(trimmed).trim();
+    if let Some(line) = first_segment
+        .lines()
+        .filter_map(objective_candidate_line_text)
+        .find(|line| objective_line_looks_concrete(line))
+    {
+        return Some(line);
+    }
+
+    let candidate = cleaned_objective_candidate_text(first_segment)?;
+    objective_line_looks_concrete(&candidate).then_some(candidate)
 }
 
 fn extract_embedded_goal_line(text: &str) -> Option<String> {
@@ -2371,6 +2432,7 @@ fn objective_line_looks_concrete(line: &str) -> bool {
         "explain ",
         "determine ",
         "review ",
+        "use ",
         "plan ",
         "land ",
         "tighten ",
@@ -2380,6 +2442,7 @@ fn objective_line_looks_concrete(line: &str) -> bool {
         "run ",
         "rerun ",
         "re-run ",
+        "perform ",
         "only ",
     ]
     .iter()
@@ -2738,14 +2801,29 @@ fn thread_goal_objective_text(row: &CompactionRow) -> Option<String> {
 }
 
 fn row_is_pure_boilerplate(row: &CompactionRow) -> bool {
-    objective_text_is_pure_boilerplate(&row.text)
+    (objective_text_is_pure_boilerplate(&row.text) || row_is_session_bootstrap_scaffold(row))
         && extract_embedded_goal_line(&row.text).is_none()
         && extract_labeled_concrete_objective_text(&row.text).is_none()
+        && extract_inline_concrete_objective_clause(&row.text).is_none()
         && !preserves_user_requested_boilerplate_target(row)
 }
 
 fn objective_text_is_pure_boilerplate(text: &str) -> bool {
     boilerplate_class(text).is_some()
+}
+
+fn row_is_session_bootstrap_scaffold(row: &CompactionRow) -> bool {
+    if !matches!(
+        row.kind,
+        CompactionKind::SystemMessage | CompactionKind::DeveloperMessage
+    ) {
+        return false;
+    }
+
+    let lower = row.text.to_ascii_lowercase();
+    lower.contains("prefer spawned subagents with the built-in `default` agent type")
+        || lower.contains("only use non-default built-in agent roles on this profile")
+        || (lower.contains("for sessions using the `") && lower.contains("profile:"))
 }
 
 fn preserves_user_requested_boilerplate_target(row: &CompactionRow) -> bool {

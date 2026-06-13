@@ -3752,7 +3752,7 @@ fn checkpoints_prefer_literal_goal_over_boilerplate_instruction_frames() {
     ]);
 
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
-    assert_eq!(checkpoint.task_frame.objective, goal);
+    assert_eq!(checkpoint.task_frame.objective, goal.trim_end());
 }
 
 #[test]
@@ -4214,6 +4214,176 @@ After that, report the changed files, tests run, residual risk, and the exact co
 }
 
 #[test]
+fn checkpoints_extract_inline_review_clause_from_single_line_prompt() {
+    let prompt = "We just completed implementing the entire handbook extraction phase set and I need you to review what landed in the codebase vs the planning docs and intended end state and validate/invalidate if it landed correctly and completely";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' HANDBOOK_ENGINE_EXTRACTION_PLAN.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/handbook-engine-extraction-slice-map.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "review what landed in the codebase vs the planning docs and intended end state and validate/invalidate if it landed correctly and completely"
+    );
+}
+
+#[test]
+fn checkpoints_extract_inline_use_skill_review_clause_from_single_line_prompt() {
+    let prompt = "We just landed the complete docs/specs/r5 and now I need you to use the $code-review-and-quality skill to evaluate if what was implemented laned correctly and completely";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "use the $code-review-and-quality skill to evaluate if what was implemented laned correctly and completely"
+    );
+}
+
+#[test]
+fn checkpoints_extract_inline_manual_smoke_clause_from_single_line_prompt() {
+    let prompt = "i fixed the formatting issue. but now I want you to actually perform a series of manual smoke checks on unzeen sessions and evaluate if what landed is providing the intended signal/classification/etc";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"python3 smoke.py --session unzeen","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' target/manual-r55-validation/README.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "perform a series of manual smoke checks on unzeen sessions and evaluate if what landed is providing the intended signal/classification/etc"
+    );
+}
+
+#[test]
+fn checkpoints_prefer_concrete_workspace_action_steer_over_earlier_skill_body() {
+    let pasted_prompt = r#"[$skill-creator](C:\Users\<REDACTED>\.codex\skills\.system\skill-creator\SKILL.md) use this and improve if u want ---
+name: frontend-pro
+description: Triggers when the user asks to build, review, style, or modify frontend user interfaces, React/Vue components, web animations, or CSS/Tailwind styling.
+
+# Frontend Pro Engineering Guidelines
+You are acting under the `frontend-pro` skill. Your goal is to generate production-grade, accessible, and highly responsive frontend interfaces."#;
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", pasted_prompt),
+        steer_row(1, "turn-001", "add this skill to @shared-cab-app"),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"Get-ChildItem -Force","workdir":"D:\\Shared-cab-app"}"#,
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"Get-Content -Path 'D:\\Shared-cab-app\\AGENTS.md' -Raw"}"#,
+        ),
+        tool_output_row(5, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "add this skill to @shared-cab-app"
+    );
+}
+
+#[test]
+fn checkpoints_ignore_profile_bootstrap_scaffold_until_real_goal_arrives() {
+    let goal =
+        "/goal Review the already-landed Packet R5-7 implementation and determine whether it is ready to keep.";
+    let result = analyze_custom_rows(vec![
+        system_row(
+            0,
+            "turn-001",
+            "For sessions using the `buildconnectors_azure|code_intel_azure|handbook_east2_azure` profile:\n- Prefer spawned subagents with the built-in `default` agent type.\n- Only use non-default built-in agent roles on this profile when the user explicitly asks for them and the runtime behavior has been revalidated in the current environment.",
+        ),
+        developer_row(
+            1,
+            "turn-001",
+            "<permissions instructions>\nFilesystem sandboxing defines which files can be read or written. Approval policy is currently never.\n</permissions instructions>",
+        ),
+        row(
+            2,
+            "turn-001",
+            CompactionKind::UserMessage,
+            "# AGENTS.md instructions for /repo\n<INSTRUCTIONS>\nWhen a user message ends with thoughts? do not implement.\n</INSTRUCTIONS>",
+            None,
+        )
+        .with_user_message_role(UserMessageRole::Unknown),
+        row(
+            3,
+            "turn-001",
+            CompactionKind::Unknown,
+            r#"{"payload":{"approval_policy":"never"},"type":"environment_context"}"#,
+            None,
+        ),
+        prompt_row(4, "turn-001", goal),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(6, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            7,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(8, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(checkpoints[0].task_frame.objective, goal);
+}
+
+#[test]
 fn checkpoints_keep_embedded_agents_instruction_targets_intact_after_condensation() {
     let concrete_ask =
         "Compare the AGENTS.md instructions block against the current task behavior and explain only the mismatches.";
@@ -4368,7 +4538,7 @@ PATCH","workdir":"/repo"}"#,
     ]);
 
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
-    assert_eq!(checkpoint.task_frame.objective, goal);
+    assert_eq!(checkpoint.task_frame.objective, goal.trim_end());
 }
 
 #[test]
@@ -4432,7 +4602,7 @@ fn checkpoints_preserve_long_form_goal_targeting_agents_skill_and_available_skil
     ]);
 
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
-    assert_eq!(checkpoint.task_frame.objective, goal);
+    assert_eq!(checkpoint.task_frame.objective, goal.trim_end());
 }
 
 #[test]
