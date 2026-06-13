@@ -95,7 +95,7 @@ cargo bench                                 # exercise hotspots when touching pe
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **substrate** (28879 symbols, 58018 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ff74-substrate** (28880 symbols, 58019 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -118,10 +118,10 @@ This project is indexed by GitNexus as **substrate** (28879 symbols, 58018 relat
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/substrate/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/substrate/clusters` | All functional areas |
-| `gitnexus://repo/substrate/processes` | All execution flows |
-| `gitnexus://repo/substrate/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/ff74-substrate/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/ff74-substrate/clusters` | All functional areas |
+| `gitnexus://repo/ff74-substrate/processes` | All execution flows |
+| `gitnexus://repo/ff74-substrate/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

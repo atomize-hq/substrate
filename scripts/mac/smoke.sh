@@ -318,6 +318,7 @@ run_gateway_lifecycle_proof() {
   local port=""
   local fixture_root=""
   local substrate_home=""
+  local gateway_cwd="/"
   local codex_account_id="acct_smoke"
   local codex_access_token="header.payload.signature"
 
@@ -330,31 +331,44 @@ run_gateway_lifecycle_proof() {
   write_gateway_smoke_inventory "${substrate_home}"
   trap 'rm -rf "'"${fixture_root}"'"' RETURN
 
-  pushd "${REPO_ROOT}" >/dev/null
-  run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway sync
-  status_json="$(run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway status --json)"
+  # Slice 09 staged-workspace cutover removed guest reliance on the host checkout path.
+  # Run lifecycle/status proofs from a stable cwd that exists on both host and guest,
+  # while sourcing the gateway contract from the dedicated smoke SUBSTRATE_HOME fixture.
+  (
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway sync
+  )
+  status_json="$(
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway status --json
+  )"
   printf '%s\n' "${status_json}" | jq -e '
     .status == "available" and
     .client_wiring.openai_base_url == .client_wiring.anthropic_base_url
   ' >/dev/null
 
-  run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway restart
-  status_json="$(run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway status --json)"
+  (
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway restart
+  )
+  status_json="$(
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway status --json
+  )"
   base_url="$(printf '%s\n' "${status_json}" | jq -r '.client_wiring.openai_base_url')"
   port="$(printf '%s\n' "${base_url}" | sed -n 's#http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
-  popd >/dev/null
   if [[ -z "${port}" ]]; then
     echo "ERROR: unable to derive gateway port from ${base_url}" >&2
     exit 1
