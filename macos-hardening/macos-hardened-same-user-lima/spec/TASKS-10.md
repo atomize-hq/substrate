@@ -271,10 +271,10 @@ Session goal:
 Closeout verified on 2026-06-13 against the rerun Packet `2` / Packet `3`
 verification wall. Slice `10` closes only the guest unit source-of-truth and
 sandbox-unification seam. A narrow validation-unblocking repair in
-`scripts/mac/lima-warm.sh` was required so staged-workspace verification runs
-under the actual guest ownership boundary and optional in-guest Linux CLI build
-failures no longer abort mandatory `world-service` / `substrate-gateway`
-provisioning or closeout cleanup.
+`scripts/mac/lima-warm.sh` was required so staged-workspace verification can
+read the staged manifest and Cargo-source presence after the guest handoff, and
+optional in-guest Linux CLI build failures no longer abort mandatory
+`world-service` / `substrate-gateway` provisioning or closeout cleanup.
 
 The downstream boundary remains explicit:
 
