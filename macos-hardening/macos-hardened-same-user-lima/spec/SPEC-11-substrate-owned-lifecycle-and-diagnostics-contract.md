@@ -290,6 +290,7 @@ Frozen Packet `1` operator matrix:
 | `substrate world doctor [--json]` | `supported` | Already landed as the primary world-readiness report and preserves machine-readable routed evidence. | Use before guest-direct diagnosis. |
 | `substrate world gateway sync|status|restart` (`status --json` authoritative) | `supported` | Already-landed CLI-owned gateway lifecycle/status family and the stable machine-readable gateway posture surface. | Keep gateway lifecycle and availability on the owned path. |
 | `substrate world enable` | `supported` | CLI-owned provisioning/enablement surface already exists even though the current macOS implementation still routes through helper logic underneath. | Treat this as the owned provisioning entrypoint when provisioning is needed. |
+| `substrate world deps current sync` | `supported` | Already-landed CLI-owned dependency-application surface documented in `docs/USAGE.md` and `docs/WORLD.md`; it applies the effective enabled deps list into the world without claiming to sync workspace source contents. | Use when enabled world deps change, but do not confuse it with the separate normal workspace sync/copy story. |
 | `scripts/mac/lima-doctor.sh` after routed proof failure | `degraded-but-supported` | Repo truth already preserves it as a deeper troubleshooting helper, but only after doctor/gateway-first routed proof. | Keep it behind the routed CLI checks rather than as the first command. |
 | Direct `scripts/mac/lima-warm.sh` create/start/repair plus its guest-local staged-workspace copy into `/var/lib/substrate/staged-workspace/current` | `degraded-but-supported` | This is still the live macOS lifecycle + normal workspace-ingress implementation owner, but it is helper-backed and not yet the final owned operator contract. | Freeze this as the truthful interim lifecycle/sync contract for Packet `1` while later packets decide how much to productize. |
 | `substrate workspace sync` | deferred candidate, not the frozen normal path yet | The command exists and is world-gated, but Packet `1` evidence does not yet prove it is the current honest macOS default for lifecycle-adjacent workspace ingress. | Do not claim it as the normal macOS sync/copy story yet. |
@@ -305,7 +306,10 @@ Frozen normal sync/copy direction for Packet `1`:
 2. The honest current normal-path contract is the explicit guest-local staged
    workspace flow already owned by `scripts/mac/lima-warm.sh`, which therefore
    remains a bounded `degraded-but-supported` interim sync/lifecycle contract.
-3. Later packets may promote a more owned CLI-facing sync story, but Packet `1`
+3. `substrate world deps current sync` is already a `supported` owned surface
+   for dependency reconciliation into the world, but it is not the same thing
+   as syncing workspace source contents into the guest.
+4. Later packets may promote a more owned CLI-facing sync story, but Packet `1`
    must not pretend that productization is already finished.
 
 ## Validation command wall

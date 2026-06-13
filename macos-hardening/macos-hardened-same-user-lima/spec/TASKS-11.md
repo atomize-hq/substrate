@@ -119,7 +119,9 @@ Session goal:
     explicitly bounded degraded interim contract.
     Packet `1` now freezes that direction as:
     - `supported`: `substrate host doctor`, `substrate world doctor`,
-      `substrate world gateway sync|status|restart`, and `substrate world enable`
+      `substrate world gateway sync|status|restart`, `substrate world enable`,
+      and `substrate world deps current sync` for dependency application into
+      the world
     - `degraded-but-supported`: `scripts/mac/lima-doctor.sh` after routed proof
       failure plus the current `scripts/mac/lima-warm.sh` lifecycle and staged
       workspace copy flow
@@ -128,7 +130,9 @@ Session goal:
       `SUBSTRATE_WORLD_SOCKET` override use
     - normal sync/copy direction: an explicitly bounded degraded interim
       contract around the existing guest-local staged-workspace flow, not
-      `substrate workspace sync` yet
+      `substrate workspace sync` yet; `substrate world deps current sync` is
+      classified separately as dependency reconciliation rather than source
+      workspace ingress
   - Verify:
     - `rg -n "supported|degraded-but-supported|breakglass|world deps current sync|workspace sync|staged-workspace|world enable|SUBSTRATE_WORLD_SOCKET|limactl shell|curl|world gateway|world doctor|host doctor" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-11-substrate-owned-lifecycle-and-diagnostics-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-11.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-11.md`
     - manual boundary and task-coherence review

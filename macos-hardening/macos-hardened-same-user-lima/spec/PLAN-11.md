@@ -94,21 +94,25 @@ Frozen Packet `1` implementation direction:
 3. `substrate world enable` freezes as a `supported` CLI-owned provisioning
    entrypoint even though its current macOS implementation still routes through
    helper logic.
-4. `scripts/mac/lima-doctor.sh` and the direct `scripts/mac/lima-warm.sh`
+4. `substrate world deps current sync` freezes as a `supported` CLI-owned
+   dependency-application surface for applying the effective enabled deps list
+   into the world, but it does **not** define the normal workspace sync/copy
+   contract by itself.
+5. `scripts/mac/lima-doctor.sh` and the direct `scripts/mac/lima-warm.sh`
    lifecycle + staged-workspace copy flow freeze as
    `degraded-but-supported` wrapper-backed surfaces rather than as the primary
    happy path.
-5. Raw `limactl shell`, plain SSH guest access, direct guest `systemctl`,
+6. Raw `limactl shell`, plain SSH guest access, direct guest `systemctl`,
    direct guest socket `curl`, direct guest `journalctl`, and host-side
    `SUBSTRATE_WORLD_SOCKET` override use remain `breakglass`.
-6. Packet `1` does **not** freeze `substrate workspace sync` as the normal
+7. Packet `1` does **not** freeze `substrate workspace sync` as the normal
    macOS sync/copy path yet. The truthful interim contract remains the explicit
    guest-local staged-workspace flow already owned by `scripts/mac/lima-warm.sh`.
-7. Because Lima’s official mount docs keep host exposure guest-visible only via
+8. Because Lima’s official mount docs keep host exposure guest-visible only via
    explicit mount configuration, Slice `11` should consume Slice `09`’s staged
    ingress result instead of implying that mount-backed guest access is the
    operator contract.
-8. Slice `11` must freeze that truthful interim contract now rather than
+9. Slice `11` must freeze that truthful interim contract now rather than
    pretend the sync path is already fully productized.
 
 ## Packet 2 operator matrix and owned-path consolidation
