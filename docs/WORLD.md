@@ -190,7 +190,7 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 - Provisioning & lifecycle
 - `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` as the only hardened default guest listener plus managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` remains the deeper troubleshooting helper once the routed CLI proof below has already failed.
-  - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
+  - The helper scripts stage the active project path into the guest-local workspace root at `/var/lib/substrate/staged-workspace/current` via `limactl copy`; broad host-home visibility and a mounted `/src` checkout are no longer the hardened default ingress path.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
     `limactl shell substrate systemctl show substrate-world-service.service -p CapabilityBoundingSet -p AmbientCapabilities`
 

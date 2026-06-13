@@ -10,6 +10,7 @@ SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_ROOT}/../.." && pwd)"
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-${REPO_ROOT}/target/debug/substrate}"
 VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-${LIMA_VM_NAME:-substrate}}"
+STAGED_WORKSPACE_CURRENT="${SUBSTRATE_LIMA_STAGED_WORKSPACE_CURRENT:-/var/lib/substrate/staged-workspace/current}"
 RUN_GUEST_DIRECT_BREAKGLASS="${SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT:-0}"
 
 MODE="generic"
@@ -753,9 +754,9 @@ run_generic_smoke() {
   run_routed_proof_command "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
   mkdir -p "$(dirname "${trace_log}")"
 
-  run_routed_proof_command "${SUBSTRATE_BIN}" -c 'rm -rf world-mac-smoke'
+  run_routed_proof_command "${SUBSTRATE_BIN}" -c "cd \"${STAGED_WORKSPACE_CURRENT}\" && rm -rf world-mac-smoke"
   local payload_cmd
-  payload_cmd="(cd /src 2>/dev/null || cd \"${REPO_ROOT}\") && (test -d world-mac-smoke || mkdir world-mac-smoke) && printf 'data\n' > world-mac-smoke/file.txt"
+  payload_cmd="cd \"${STAGED_WORKSPACE_CURRENT}\" && (test -d world-mac-smoke || mkdir world-mac-smoke) && printf 'data\n' > world-mac-smoke/file.txt"
   run_routed_proof_command "${SUBSTRATE_BIN}" -c "${payload_cmd}"
 
   if [[ ! -f "${trace_log}" ]]; then

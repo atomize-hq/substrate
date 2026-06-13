@@ -66,7 +66,7 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    - Create a new Lima VM named "substrate" with Ubuntu 24.04
    - Install required packages (nftables, iproute2, dnsmasq, etc.)
    - Configure the systemd service for substrate-world-service
-   - Mount your home directory (read-only) and project directory (read-write)
+   - Stage the requested project path into `/var/lib/substrate/staged-workspace/current` inside the guest via `limactl copy`
    - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
 
 2. Or, to use the dev profile (heavier resources), start it explicitly as shown above.
@@ -79,15 +79,14 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 
 ### Step 2: Build and Deploy World Service
 
-1. **Compile inside the Lima guest** (recommended):
+1. **Compile inside the Lima guest from the staged workspace** (recommended if you are not relying on host-staged Linux binaries from `scripts/mac/lima-warm.sh`):
    ```sh
-   # Build from the mounted project directory
-   limactl shell substrate bash -lc 'cd /src && cargo build -p world-service --release'
+   limactl shell substrate bash -lc 'cd /var/lib/substrate/staged-workspace/current && cargo build -p world-service --release'
    ```
 
 2. **Install the binary inside the VM**:
    ```sh
-   limactl shell substrate sudo install -m755 /src/target/release/world-service /usr/local/bin/substrate-world-service
+   limactl shell substrate sudo install -m755 /var/lib/substrate/staged-workspace/current/target/release/world-service /usr/local/bin/substrate-world-service
    ```
 
    > **Alternative:** Cross-compile on the host using a Linux target (e.g.
