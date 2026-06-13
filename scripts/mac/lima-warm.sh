@@ -689,6 +689,9 @@ EOF
         status=$?
     fi
     if [[ "${status}" -ne 0 ]]; then
+        if [[ "${build_agent}" -eq 1 && "${build_gateway}" -eq 1 ]]; then
+            fatal "Failed to build mandatory Linux guest binaries inside Lima (world-service and/or substrate-gateway) (exit ${status}). Provide prebuilt binaries under bin/linux/ or rerun from a source checkout."
+        fi
         if [[ "${build_agent}" -eq 1 ]]; then
             fatal "Failed to build Linux world-service inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-service or rerun from a source checkout."
         fi
