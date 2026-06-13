@@ -153,15 +153,30 @@ Frozen Packet `1` unification direction:
    root posture.
 3. Hardening-critical fields may be parameterized, but they may no longer be
    maintained as two separately handwritten unit bodies.
-4. The preferred implementation direction is a checked-in canonical unit source
-   plus one render/install path under `scripts/mac/lima/`, consumed by both the
-   fresh-create and warm/repair flows.
-5. If preserving raw profile bootstrap requires keeping some unit-related logic
-   in `scripts/mac/lima/substrate.yaml`, that logic must consume the same
-   canonical source or reduce itself to bootstrap prerequisites only. It must
-   not remain a second handwritten service authority.
-6. This slice may adjust doctor/smoke/docs enough to prove and describe unit
-   parity honestly, but it must not widen into the broader Phase `3`
+4. The authoritative mechanism is a checked-in canonical unit source plus one
+   render/install path under `scripts/mac/lima/`, with
+   `scripts/mac/lima/substrate.yaml` reduced to VM bootstrap prerequisites only
+   while the warm/create flow installs the actual service/socket units from that
+   canonical source after guest creation.
+5. The frozen Phase `2` target contract that Packet `2` must render identically
+   across fresh-create and warm/repair is:
+   - socket: `ListenStream=/run/substrate.sock`, `SocketMode=0660`,
+     `SocketUser=root`, `SocketGroup=substrate`, `DirectoryMode=0750`, and
+     `RemoveOnStop=yes`
+   - service environment: `Environment=RUST_LOG=info`,
+     `Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock`,
+     `Environment=SUBSTRATE_HOME=<guest-home>/.substrate`, plus conditional
+     `Environment=WORLD_NETFILTER_ENABLE=1` only when the host-side netfilter
+     input requests it
+   - service runtime/sandbox: `RuntimeDirectory=substrate`,
+     `StateDirectory=substrate`, `WorkingDirectory=/var/lib/substrate`,
+     `ProtectSystem=strict`, `ProtectHome=read-only`, and
+     `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`
+   - capabilities: `CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE`
+6. Packet `2` remains script/config/docs first; no Rust/backend assist is
+   currently required to keep the unit-authority cutover honest, though the
+   slice may still adjust doctor/smoke/docs enough to prove and describe parity
+   without widening into the broader Phase `3`
    operator-surface/productization story.
 
 ## Objective

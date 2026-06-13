@@ -80,7 +80,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 1.1: Confirm the authority stack, source gate, and live unit drift
+- [x] Task 1.1: Confirm the authority stack, source gate, and live unit drift
   - Acceptance: the execution pass explicitly grounds itself in
     `EXECUTION-RUBRIC.md`, `ROADMAP.md`, Phase `2`, milestone `2.3`,
     Phase `3`, milestone `3.1`, `DESIGN-macos-guest-unit-source-of-truth.md`,
@@ -99,14 +99,17 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
 
-- [ ] Task 1.2: Freeze the canonical-source mechanism and target sandbox contract
+- [x] Task 1.2: Freeze the canonical-source mechanism and target sandbox contract
   - Acceptance: the slice names the authoritative unit-source mechanism,
-    confirms whether `scripts/mac/lima/substrate.yaml` will consume that source
-    directly or reduce itself to bootstrap prerequisites only, and freezes the
-    final Phase `2` writable-path/environment/capability/socket contract that
-    must be rendered identically across fresh-create and warm/repair.
+    confirms that `scripts/mac/lima/substrate.yaml` reduces itself to bootstrap
+    prerequisites only while the canonical install path owns the actual guest
+    service/socket units, freezes the final Phase `2`
+    writable-path/environment/capability/socket contract that must be rendered
+    identically across fresh-create and warm/repair, and states that Packet
+    `2` can remain scripts/config/docs first unless parity proof forces a
+    minimal backend assist.
   - Verify:
-    - `rg -n "staged-workspace|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|ProtectHome|ReadWritePaths|CapabilityBoundingSet|AmbientCapabilities" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
+    - `rg -n "staged-workspace|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|ProtectHome|ReadWritePaths|CapabilityBoundingSet|AmbientCapabilities|ListenStream|SocketMode|SocketGroup" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
     - manual boundary review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md`
@@ -120,7 +123,8 @@ Packet `1` is complete only when:
 1. the official source gate is explicit,
 2. the live hardening-critical unit drift is explicit,
 3. the authoritative source mechanism is explicit,
-4. the slice has not yet widened into implementation changes.
+4. the frozen target sandbox contract and Packet `2` boundary are explicit,
+5. the slice has not yet widened into implementation changes.
 
 Do not start Packet `2` until Packet `1` is coherent.
 

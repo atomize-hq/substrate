@@ -79,14 +79,28 @@ Live 2026-06-13 repo-truth confirmation for Slice `10`:
 
 Frozen Packet `1` implementation decision:
 
-1. Slice `10` should prefer a checked-in canonical unit source plus a single
+1. Slice `10` will use a checked-in canonical unit source plus a single
    render/install path under `scripts/mac/lima/`.
 2. The canonical source may be parameterized, but create/bootstrap and
    warm/repair may no longer maintain separately handwritten service bodies.
-3. If necessary, `scripts/mac/lima/substrate.yaml` may reduce itself to VM
-   bootstrap prerequisites only and rely on the canonical install path for the
-   actual service/socket contract.
-4. Packet `2` should remain script/config/docs first and should not escalate
+3. `scripts/mac/lima/substrate.yaml` should reduce itself to VM bootstrap
+   prerequisites only; the actual service/socket contract should be installed
+   by the canonical render/install path after guest creation so the YAML is no
+   longer a second handwritten authority.
+4. The frozen Phase `2` target contract for Packet `2` is:
+   - socket parity on `ListenStream=/run/substrate.sock`, `SocketMode=0660`,
+     `SocketUser=root`, `SocketGroup=substrate`, `DirectoryMode=0750`, and
+     `RemoveOnStop=yes`
+   - service environment parity on `RUST_LOG=info`,
+     `SUBSTRATE_WORLD_SOCKET=/run/substrate.sock`,
+     `SUBSTRATE_HOME=<guest-home>/.substrate`, and conditional
+     `WORLD_NETFILTER_ENABLE=1` when host-side netfilter support is requested
+   - runtime/sandbox parity on `RuntimeDirectory=substrate`,
+     `StateDirectory=substrate`, `WorkingDirectory=/var/lib/substrate`,
+     `ProtectSystem=strict`, `ProtectHome=read-only`, and
+     `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`
+   - capability parity on `CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE`
+5. Packet `2` should remain script/config/docs first and should not escalate
    into Rust/backend surfaces unless parity cannot stay honest otherwise.
 
 ## Packet 2 canonical unit source and create/repair convergence
