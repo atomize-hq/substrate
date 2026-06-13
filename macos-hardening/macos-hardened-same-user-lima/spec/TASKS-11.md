@@ -96,14 +96,19 @@ Session goal:
     `docs/USAGE.md`, `scripts/mac/*`, `docs/WORLD.md`,
     `docs/reference/world/platforms/macos-lima-setup.md`,
     `crates/shell/src/builtins/world_enable/`, and
-    `crates/shell/src/execution/workspace_cmd.rs`.
+    `crates/shell/src/execution/workspace_cmd.rs`, including the
+    `substrate world deps current sync` surface, the current guest-local
+    staged-workspace copy flow, and the guest socket `curl` breakglass path.
   - Verify:
-    - `rg -n "host doctor|world doctor|world gateway (sync|status|restart)|world enable|workspace sync|SUBSTRATE_WORLD_SOCKET|limactl shell|systemctl|journalctl" docs/USAGE.md docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md scripts/mac/lima-doctor.sh scripts/mac/lima-warm.sh scripts/mac/smoke.sh scripts/mac/orchestration-smoke.sh crates/shell/src/execution/workspace_cmd.rs crates/shell/src/builtins/world_enable crates/shell/src/builtins/world_gateway.rs`
+    - `rg -n "host doctor|world doctor|world gateway (sync|status|restart)|world enable|world deps current sync|workspace sync|SUBSTRATE_WORLD_SOCKET|limactl shell|systemctl|curl|journalctl" docs/USAGE.md docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md scripts/mac/lima-doctor.sh scripts/mac/lima-warm.sh scripts/mac/smoke.sh scripts/mac/orchestration-smoke.sh crates/shell/src/execution/workspace_cmd.rs crates/shell/src/builtins/world_enable crates/shell/src/builtins/world_gateway.rs`
+    - `rg -n "limactl shell|SSH|Filesystem mounts|world deps current sync|workspace sync|staged-workspace|curl|breakglass|degraded-but-supported" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-11-substrate-owned-lifecycle-and-diagnostics-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-11.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-11.md`
     - manual authority review
     - manual official-source review
+    - manual spec/plan/tasks coherence review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-11-substrate-owned-lifecycle-and-diagnostics-contract.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-11.md`
+    - `macos-hardening/macos-hardened-same-user-lima/spec/TASKS-11.md`
 
 - [x] Task 1.2: Freeze the operator matrix and sync/lifecycle classification direction
   - Acceptance: the slice names the primary supported command set, names the
@@ -125,8 +130,8 @@ Session goal:
       contract around the existing guest-local staged-workspace flow, not
       `substrate workspace sync` yet
   - Verify:
-    - `rg -n "supported|degraded-but-supported|breakglass|workspace sync|world enable|SUBSTRATE_WORLD_SOCKET|limactl shell|world gateway|world doctor|host doctor" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-11-substrate-owned-lifecycle-and-diagnostics-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-11.md`
-    - manual boundary review
+    - `rg -n "supported|degraded-but-supported|breakglass|world deps current sync|workspace sync|staged-workspace|world enable|SUBSTRATE_WORLD_SOCKET|limactl shell|curl|world gateway|world doctor|host doctor" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-11-substrate-owned-lifecycle-and-diagnostics-contract.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-11.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-11.md`
+    - manual boundary and task-coherence review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-11-substrate-owned-lifecycle-and-diagnostics-contract.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-11.md`
@@ -140,7 +145,10 @@ Packet `1` is complete only when:
 2. the live operator inventory is explicit,
 3. the owned/degraded/breakglass matrix is explicit,
 4. the normal sync/copy direction is explicit,
-5. the slice has not yet widened into implementation changes.
+5. the verification story explicitly covers guest socket `curl`,
+   `substrate world deps current sync`, and agreement across `SPEC-11`,
+   `PLAN-11`, and `TASKS-11`,
+6. the slice has not yet widened into implementation changes.
 
 Do not start Packet `2` until Packet `1` is coherent.
 
