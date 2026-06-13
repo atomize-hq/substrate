@@ -245,9 +245,17 @@ Session goal:
     ingress cutover and explicit staged-path seam only, Slice `10` still owns
     guest-unit source-of-truth and sandbox unification, Slice `11` still owns
     broader Substrate-owned lifecycle/sync productization, and Slice `12`
-    still owns the broad breakglass/docs cutover.
+    still owns the broad breakglass/docs cutover. The same closeout must also
+    link any Packet `4` complete/checkpoint-green claim to current green
+    evidence from the rerun Packet `2` / Packet `3` verification wall for the
+    landed warm-path staging and routed smoke/doctor/gateway proof surfaces
+    rather than treating those proofs as implied.
   - Verify:
-    - manual closeout review
+    - rerun the Packet `2` verification commands for `scripts/mac/lima/substrate.yaml` and `scripts/mac/lima-warm.sh`
+    - rerun the Packet `3` verification commands for `scripts/mac/smoke.sh`, `docs/WORLD.md`, and `docs/reference/world/platforms/macos-lima-setup.md`
+    - manual closeout review that the Packet `4` wording explicitly ties
+      closeout/checkpoint-green status to that rerun Packet `2` / Packet `3`
+      evidence
   - Files:
     - touched files only
 
@@ -268,6 +276,10 @@ Packet `4` closeout note:
    sync productization beyond the script/config/docs cutover that landed here.
 5. Slice `12` still owns the broad breakglass/docs cutover; Slice `09` only
    made the minimal doc truth corrections required by the ingress cutover.
+6. Packet `4` closeout and checkpoint-green status should only be claimed
+   alongside the rerun Packet `2` / Packet `3` verification wall that kept the
+   landed warm-path staging, routed smoke proof, and routed doctor/gateway
+   proof surfaces intact in the current tree.
 
 ### Packet 4 checkpoint
 
@@ -284,5 +296,8 @@ Do not declare the slice implementation-ready until all four conditions are
 true.
 
 Packet `4` is checkpoint-green for this landing once the verification checks
-above are green and the final closeout keeps Slice `10`, Slice `11`, and Slice
-`12` unblocked without widening into their implementation seams.
+above are green, the closeout explicitly points at the current green
+warm/smoke/routed doctor/routed gateway evidence from that rerun Packet `2` /
+Packet `3` verification wall, and the final closeout keeps Slice `10`,
+Slice `11`, and Slice `12` unblocked without widening into their
+implementation seams.
