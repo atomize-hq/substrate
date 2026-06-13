@@ -95,9 +95,11 @@ Frozen Packet `1` implementation decision:
      `SUBSTRATE_WORLD_SOCKET=/run/substrate.sock`,
      `SUBSTRATE_HOME=<guest-home>/.substrate`, and conditional
      `WORLD_NETFILTER_ENABLE=1` when host-side netfilter support is requested
-   - runtime/sandbox parity on `RuntimeDirectory=substrate`,
-     `StateDirectory=substrate`, `WorkingDirectory=/var/lib/substrate`,
-     `ProtectSystem=strict`, `ProtectHome=read-only`,
+   - runtime/sandbox parity on `Group=substrate`, `UMask=0027`,
+     `RuntimeDirectory=substrate`, `RuntimeDirectoryMode=0750`,
+     `StateDirectory=substrate`, `StateDirectoryMode=0750`,
+     `WorkingDirectory=/var/lib/substrate`, `ProtectSystem=strict`,
+     `ProtectHome=read-only`,
      `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`,
      and explicit preservation of the managed gateway-runtime surface under
      `/run/substrate/substrate-gateway-runtime/`

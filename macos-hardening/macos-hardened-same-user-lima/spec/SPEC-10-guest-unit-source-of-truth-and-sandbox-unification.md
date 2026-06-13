@@ -168,9 +168,11 @@ Frozen Packet `1` unification direction:
      `Environment=SUBSTRATE_HOME=<guest-home>/.substrate`, plus conditional
      `Environment=WORLD_NETFILTER_ENABLE=1` only when the host-side netfilter
      input requests it
-   - service runtime/sandbox: `RuntimeDirectory=substrate`,
-     `StateDirectory=substrate`, `WorkingDirectory=/var/lib/substrate`,
-     `ProtectSystem=strict`, `ProtectHome=read-only`,
+   - service runtime/sandbox: `Group=substrate`, `UMask=0027`,
+     `RuntimeDirectory=substrate`, `RuntimeDirectoryMode=0750`,
+     `StateDirectory=substrate`, `StateDirectoryMode=0750`,
+     `WorkingDirectory=/var/lib/substrate`, `ProtectSystem=strict`,
+     `ProtectHome=read-only`,
      `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`,
      and explicit preservation of the managed gateway-runtime surface under
      `/run/substrate/substrate-gateway-runtime/`
