@@ -140,9 +140,8 @@ check_rendered_unit_parity() {
     local vm_user=""
     local vm_home=""
     local guest_substrate_home=""
-    local guest_service_fragment=""
-    local guest_socket_fragment=""
-    local guest_netfilter_env=""
+    local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
+    local expected_netfilter_env=""
     local expected_service_sha=""
     local expected_socket_sha=""
     local actual_service_sha=""
@@ -177,19 +176,13 @@ check_rendered_unit_parity() {
     fi
     guest_substrate_home="${vm_home}/.substrate"
 
-    guest_service_fragment="$(limactl shell "${VM_NAME}" sudo -n systemctl show substrate-world-service.service -p FragmentPath --value 2>/dev/null | tr -d '\r' || true)"
-    guest_socket_fragment="$(limactl shell "${VM_NAME}" sudo -n systemctl show substrate-world-service.socket -p FragmentPath --value 2>/dev/null | tr -d '\r' || true)"
-    if [[ -z "${guest_service_fragment}" || -z "${guest_socket_fragment}" ]]; then
-        warn "Unable to resolve guest FragmentPath values for substrate-world-service.service/.socket."
-        rm -rf "${parity_tmp}"
-        return 1
-    fi
+    case "${enable_netfilter}" in
+        1|true|yes|TRUE|YES)
+            expected_netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
+            ;;
+    esac
 
-    if limactl shell "${VM_NAME}" sudo -n grep -q '^Environment=WORLD_NETFILTER_ENABLE=1$' "${guest_service_fragment}" >/dev/null 2>&1; then
-        guest_netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
-    fi
-
-    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${guest_netfilter_env}" \
+    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${expected_netfilter_env}" \
         envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl" > "${expected_dir}/substrate-world-service.service"
     envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket" > "${expected_dir}/substrate-world-service.socket"
 
@@ -211,16 +204,16 @@ check_rendered_unit_parity() {
 
     expected_service_sha="$(host_sha256 "${expected_dir}/substrate-world-service.service")"
     expected_socket_sha="$(host_sha256 "${expected_dir}/substrate-world-service.socket")"
-    actual_service_sha="$(limactl shell "${VM_NAME}" sudo -n sha256sum "${guest_service_fragment}" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
-    actual_socket_sha="$(limactl shell "${VM_NAME}" sudo -n sha256sum "${guest_socket_fragment}" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
+    actual_service_sha="$(host_sha256 "${actual_dir}/substrate-world-service.service")"
+    actual_socket_sha="$(host_sha256 "${actual_dir}/substrate-world-service.socket")"
 
     if ! cmp -s "${expected_dir}/substrate-world-service.service" "${actual_dir}/substrate-world-service.service"; then
-        warn "Guest service unit differs from the canonical rendered contract (expected sha256 ${expected_service_sha}, guest sha256 ${actual_service_sha:-unknown})."
+        warn "Guest service unit differs from the canonical rendered contract (expected sha256 ${expected_service_sha}, loaded guest sha256 ${actual_service_sha:-unknown})."
         mismatch=1
     fi
 
     if ! cmp -s "${expected_dir}/substrate-world-service.socket" "${actual_dir}/substrate-world-service.socket"; then
-        warn "Guest socket unit differs from the canonical rendered contract (expected sha256 ${expected_socket_sha}, guest sha256 ${actual_socket_sha:-unknown})."
+        warn "Guest socket unit differs from the canonical rendered contract (expected sha256 ${expected_socket_sha}, loaded guest sha256 ${actual_socket_sha:-unknown})."
         mismatch=1
     fi
 
