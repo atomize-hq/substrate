@@ -8,7 +8,10 @@ PROJECT_PATH_EXPLICIT=0
 CHECK_ONLY=0
 BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
 LAYOUT_SENTINEL="/etc/substrate-lima-layout"
-LAYOUT_VERSION="socket-parity-v1"
+LAYOUT_VERSION="socket-parity-v2-staged-workspace-v1"
+STAGED_WORKSPACE_ROOT="/var/lib/substrate/staged-workspace"
+STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_ROOT}/current"
+STAGED_WORKSPACE_MANIFEST_NAME=".substrate-lima-stage-manifest"
 WAIT_TIMEOUT=120
 SKIP_GUEST_BUILD="${SUBSTRATE_LIMA_SKIP_GUEST_BUILD:-0}"
 
@@ -34,7 +37,7 @@ Options:
   -h, --help        Show this help text
 
 Arguments:
-  <project-path>    Repository or release path to mount inside the Lima VM (default: current directory)
+  <project-path>    Repository or release path to stage for guest provisioning (default: current directory)
 USAGE
 }
 
@@ -64,30 +67,6 @@ if [[ -z "${PROJECT_PATH}" ]]; then
     PROJECT_PATH="$(pwd)"
 fi
 PROJECT_PATH="$(cd "${PROJECT_PATH}" && pwd)"
-
-resolve_default_worktree_path() {
-    if [[ "${PROJECT_PATH_EXPLICIT}" -eq 1 ]]; then
-        return
-    fi
-    if ! command -v git >/dev/null 2>&1; then
-        return
-    fi
-
-    local git_dir common_dir primary_worktree
-    git_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-dir 2>/dev/null || true)"
-    common_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-common-dir 2>/dev/null || true)"
-    if [[ -z "${git_dir}" || -z "${common_dir}" || "${git_dir}" == "${common_dir}" ]]; then
-        return
-    fi
-
-    primary_worktree="$(git -C "${PROJECT_PATH}" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr($0, 10); exit }')"
-    if [[ -n "${primary_worktree}" && -d "${primary_worktree}" && "${primary_worktree}" != "${PROJECT_PATH}" ]]; then
-        log "Detected linked worktree; defaulting Lima mount path to primary checkout ${primary_worktree}"
-        PROJECT_PATH="${primary_worktree}"
-    fi
-}
-
-resolve_default_worktree_path
 
 require_cmd() {
     local name="$1"
@@ -254,36 +233,92 @@ ensure_vm_ready() {
     fi
 }
 
-ensure_repo_mount() {
-    if ! limactl shell "${VM_NAME}" test -d /src >/dev/null 2>&1; then
-        fatal "Repository path ${PROJECT_PATH} is not mounted inside the VM. Ensure it exists and rerun."
+host_git_head() {
+    if ! command -v git >/dev/null 2>&1; then
+        return
     fi
+    git -C "${PROJECT_PATH}" rev-parse HEAD 2>/dev/null || true
+}
 
-    # Verify that the *intended* host checkout is actually mounted as /src.
-    #
-    # Lima mounts are fixed at VM creation time. In CI and multi-checkout dev setups, it's easy for
-    # an existing VM to still be mounted to an older checkout, which silently causes the guest to
-    # build/run the wrong world-service version. That manifests as schema mismatches (e.g. V2 policy
-    # fields rejected by an older agent).
-    local sentinel
-    sentinel=".substrate-lima-mount-sentinel.$RANDOM.$RANDOM"
-    echo "sentinel" > "${PROJECT_PATH}/${sentinel}"
+create_stage_manifest() {
+    local manifest_path git_head
+    manifest_path="$(mktemp)"
+    git_head="$(host_git_head)"
+    {
+        printf 'project_path=%s\n' "${PROJECT_PATH}"
+        printf 'project_basename=%s\n' "$(basename "${PROJECT_PATH}")"
+        if [[ -n "${git_head}" ]]; then
+            printf 'git_head=%s\n' "${git_head}"
+        fi
+    } > "${manifest_path}"
+    printf '%s\n' "${manifest_path}"
+}
 
-    if limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
-        rm -f "${PROJECT_PATH}/${sentinel}"
-        return 0
+stage_workspace() {
+    local vm_user="$1"
+    local workspace_name stage_parent manifest_path
+    workspace_name="$(basename "${PROJECT_PATH}")"
+    stage_parent="/tmp/substrate-stage-workspace"
+    manifest_path="$(create_stage_manifest)"
+
+    log "Staging workspace input into guest-local path ${STAGED_WORKSPACE_CURRENT}"
+    limactl shell "${VM_NAME}" env STAGE_PARENT="${stage_parent}" bash <<'EOF'
+set -euo pipefail
+rm -rf "${STAGE_PARENT}"
+mkdir -p "${STAGE_PARENT}"
+EOF
+    limactl copy --recursive "${PROJECT_PATH}" "${VM_NAME}:${stage_parent}/"
+    limactl copy "${manifest_path}" "${VM_NAME}:${stage_parent}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+    limactl shell "${VM_NAME}" \
+        env STAGE_PARENT="${stage_parent}" \
+            WORKSPACE_NAME="${workspace_name}" \
+            STAGED_WORKSPACE_ROOT="${STAGED_WORKSPACE_ROOT}" \
+            STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
+            STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
+            VM_USER="${vm_user}" \
+        bash <<'EOF'
+set -euo pipefail
+test -d "${STAGE_PARENT}/${WORKSPACE_NAME}"
+test -f "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+sudo install -d -o root -g substrate -m0750 "${STAGED_WORKSPACE_ROOT}"
+sudo rm -rf "${STAGED_WORKSPACE_CURRENT}"
+sudo mv "${STAGE_PARENT}/${WORKSPACE_NAME}" "${STAGED_WORKSPACE_CURRENT}"
+sudo chown -R "${VM_USER}:substrate" "${STAGED_WORKSPACE_CURRENT}"
+sudo chmod 0750 "${STAGED_WORKSPACE_CURRENT}"
+sudo install -o "${VM_USER}" -g substrate -m0640 \
+    "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}" \
+    "${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+rm -rf "${STAGE_PARENT}"
+EOF
+    rm -f "${manifest_path}"
+}
+
+verify_staged_workspace() {
+    local expected_git_head expect_cargo_sources
+    expected_git_head="$(host_git_head)"
+    expect_cargo_sources=0
+    if [[ -f "${PROJECT_PATH}/Cargo.toml" ]]; then
+        expect_cargo_sources=1
     fi
-
-    warn "Lima VM '${VM_NAME}' is running but /src does not match the current host checkout (${PROJECT_PATH}). Recreating VM to refresh mounts."
-    destroy_vm
-    create_vm
-    wait_for_running
-
-    if ! limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
-        fatal "After recreating Lima VM '${VM_NAME}', /src still does not reflect ${PROJECT_PATH}. Check the Lima profile mounts and rerun."
-    fi
-
-    rm -f "${PROJECT_PATH}/${sentinel}"
+    limactl shell "${VM_NAME}" \
+        env STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
+            STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
+            EXPECTED_PROJECT_PATH="${PROJECT_PATH}" \
+            EXPECTED_GIT_HEAD="${expected_git_head}" \
+            EXPECT_CARGO_SOURCES="${expect_cargo_sources}" \
+        bash <<'EOF'
+set -euo pipefail
+manifest="${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+test -d "${STAGED_WORKSPACE_CURRENT}"
+test -f "${manifest}"
+grep -Fqx "project_path=${EXPECTED_PROJECT_PATH}" "${manifest}"
+if [[ -n "${EXPECTED_GIT_HEAD}" ]]; then
+    grep -Fqx "git_head=${EXPECTED_GIT_HEAD}" "${manifest}"
+fi
+if [[ "${EXPECT_CARGO_SOURCES}" == "1" ]]; then
+    test -f "${STAGED_WORKSPACE_CURRENT}/Cargo.toml"
+fi
+EOF
 }
 
 ensure_substrate_group() {
@@ -440,7 +475,7 @@ build_missing_components_inside_vm() {
         return 0
     fi
 
-    if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" bash <<'EOF'; then
+    if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" STAGED_WORKSPACE_PATH="${STAGED_WORKSPACE_CURRENT}" bash <<'EOF'; then
 set -euo pipefail
 build_cli="${BUILD_GUEST_CLI:-0}"
 build_agent="${BUILD_GUEST_AGENT:-0}"
@@ -450,7 +485,7 @@ ensure_cargo() {
     # Cargo.lock v4 requires a newer cargo than Ubuntu 24.04's apt cargo on some images.
     # Prefer rustup when we detect a v4 lockfile so we don't fail during `cargo build --locked`.
     local needs_lockfile_v4=0
-    if [[ -f /src/Cargo.lock ]] && grep -qx 'version = 4' /src/Cargo.lock 2>/dev/null; then
+    if [[ -f "${STAGED_WORKSPACE_PATH}/Cargo.lock" ]] && grep -qx 'version = 4' "${STAGED_WORKSPACE_PATH}/Cargo.lock" 2>/dev/null; then
         needs_lockfile_v4=1
     fi
 
@@ -571,7 +606,7 @@ release)
     ;;
 esac
 mkdir -p "${BUILD_DIR}"
-cd /src
+cd "${STAGED_WORKSPACE_PATH}"
 if [[ "${build_cli}" == "1" ]]; then
     CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked
     sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
@@ -746,7 +781,7 @@ legacy_unit_prefix="substrate-world"
 legacy_service="${legacy_unit_prefix}-agent.service"
 legacy_socket="${legacy_unit_prefix}-agent.socket"
 sudo install -d -m0755 "${SUBSTRATE_GUEST_HOME}"
-sudo install -d -m0750 /var/lib/substrate
+sudo install -d -m0750 -o root -g substrate /var/lib/substrate
 sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo systemctl stop "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
 sudo systemctl disable "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
@@ -795,7 +830,6 @@ linger_guidance() {
 }
 
 configure_guest() {
-    ensure_repo_mount
     local vm_user
     local vm_home
     local guest_substrate_home
@@ -809,6 +843,8 @@ configure_guest() {
     fi
     guest_substrate_home="${vm_home}/.substrate"
     ensure_substrate_group "${vm_user}"
+    stage_workspace "${vm_user}"
+    verify_staged_workspace
     install_guest_binaries
     verify_guest_binaries
     write_systemd_units "${guest_substrate_home}"

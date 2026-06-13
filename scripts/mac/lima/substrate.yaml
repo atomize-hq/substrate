@@ -13,12 +13,7 @@ rosetta:
 cpus: 4
 memory: "4GiB"
 disk: "20GiB"
-mounts:
-  - location: "$HOME"
-    writable: false
-  - location: "$PROJECT"
-    writable: true
-    mountPoint: "/src"
+mounts: []
 provision:
   - mode: system
     script: |
