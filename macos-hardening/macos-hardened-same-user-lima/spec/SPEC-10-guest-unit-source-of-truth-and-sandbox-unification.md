@@ -170,8 +170,10 @@ Frozen Packet `1` unification direction:
      input requests it
    - service runtime/sandbox: `RuntimeDirectory=substrate`,
      `StateDirectory=substrate`, `WorkingDirectory=/var/lib/substrate`,
-     `ProtectSystem=strict`, `ProtectHome=read-only`, and
-     `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`
+     `ProtectSystem=strict`, `ProtectHome=read-only`,
+     `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`,
+     and explicit preservation of the managed gateway-runtime surface under
+     `/run/substrate/substrate-gateway-runtime/`
    - capabilities: `CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE`
 6. Packet `2` remains script/config/docs first; no Rust/backend assist is
    currently required to keep the unit-authority cutover honest, though the

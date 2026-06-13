@@ -105,11 +105,15 @@ Session goal:
     prerequisites only while the canonical install path owns the actual guest
     service/socket units, freezes the final Phase `2`
     writable-path/environment/capability/socket contract that must be rendered
-    identically across fresh-create and warm/repair, and states that Packet
-    `2` can remain scripts/config/docs first unless parity proof forces a
-    minimal backend assist.
+    identically across fresh-create and warm/repair, explicitly preserves the
+    managed gateway-runtime surface under
+    `/run/substrate/substrate-gateway-runtime/`, explicitly freezes
+    `Environment=RUST_LOG=info`, `WorkingDirectory=/var/lib/substrate`, and
+    `ProtectSystem=strict`, and states that Packet `2` can remain
+    scripts/config/docs first unless parity proof forces a minimal backend
+    assist.
   - Verify:
-    - `rg -n "staged-workspace|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|ProtectHome|ReadWritePaths|CapabilityBoundingSet|AmbientCapabilities|ListenStream|SocketMode|SocketUser|SocketGroup|DirectoryMode|RemoveOnStop" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
+    - `rg -n "staged-workspace|substrate-gateway-runtime|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|RUST_LOG=info|WorkingDirectory=/var/lib/substrate|ProtectSystem=strict|ProtectHome|ReadWritePaths|CapabilityBoundingSet|AmbientCapabilities|ListenStream|SocketMode|SocketUser|SocketGroup|DirectoryMode|RemoveOnStop" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
     - manual boundary review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md`

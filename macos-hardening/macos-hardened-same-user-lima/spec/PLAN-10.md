@@ -97,8 +97,10 @@ Frozen Packet `1` implementation decision:
      `WORLD_NETFILTER_ENABLE=1` when host-side netfilter support is requested
    - runtime/sandbox parity on `RuntimeDirectory=substrate`,
      `StateDirectory=substrate`, `WorkingDirectory=/var/lib/substrate`,
-     `ProtectSystem=strict`, `ProtectHome=read-only`, and
-     `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`
+     `ProtectSystem=strict`, `ProtectHome=read-only`,
+     `ReadWritePaths=<guest-home>/.substrate /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp`,
+     and explicit preservation of the managed gateway-runtime surface under
+     `/run/substrate/substrate-gateway-runtime/`
    - capability parity on `CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE`
 5. Packet `2` should remain script/config/docs first and should not escalate
    into Rust/backend surfaces unless parity cannot stay honest otherwise.
