@@ -8,7 +8,7 @@ while [[ -L "${SOURCE_PATH}" ]]; do
     [[ "${SOURCE_PATH}" != /* ]] && SOURCE_PATH="${SOURCE_DIR}/${SOURCE_PATH}"
 done
 SCRIPT_DIR="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
-CANONICAL_UNIT_SOURCE_DIR="${SCRIPT_DIR}/lima/units"
+CANONICAL_UNIT_SOURCE_DIR=""
 VM_NAME="${LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-${SCRIPT_DIR}/lima/substrate.yaml}"
 PROJECT_PATH=""
@@ -75,6 +75,16 @@ if [[ -z "${PROJECT_PATH}" ]]; then
     PROJECT_PATH="$(pwd)"
 fi
 PROJECT_PATH="$(cd "${PROJECT_PATH}" && pwd)"
+
+project_unit_source_dir="${PROJECT_PATH}/scripts/mac/lima/units"
+script_unit_source_dir="${SCRIPT_DIR}/lima/units"
+if [[ -d "${project_unit_source_dir}" ]]; then
+    CANONICAL_UNIT_SOURCE_DIR="${project_unit_source_dir}"
+elif [[ -d "${script_unit_source_dir}" ]]; then
+    CANONICAL_UNIT_SOURCE_DIR="${script_unit_source_dir}"
+else
+    fatal "Canonical guest unit directory not found. Expected ${project_unit_source_dir} or ${script_unit_source_dir}."
+fi
 
 require_cmd() {
     local name="$1"
