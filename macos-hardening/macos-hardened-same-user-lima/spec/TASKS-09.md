@@ -136,7 +136,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 2.1: Narrow the Lima mount profile to the hardened default
+- [x] Task 2.1: Narrow the Lima mount profile to the hardened default
   - Acceptance: `scripts/mac/lima/substrate.yaml` no longer preserves broad
     host-home visibility as the hardened default, and any retained workspace
     ingress is explicit, minimal, and justified by the Slice `09` staged-path
@@ -147,7 +147,7 @@ Session goal:
   - Files:
     - `scripts/mac/lima/substrate.yaml`
 
-- [ ] Task 2.2: Replace warm-path `/src` dependence with explicit staged ingress
+- [x] Task 2.2: Replace warm-path `/src` dependence with explicit staged ingress
   - Acceptance: `scripts/mac/lima-warm.sh` no longer requires `/src` as the
     normal-path proof of checkout identity or build-source ingress; instead it
     validates and uses the explicit guest-local staged input path while still
@@ -181,7 +181,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Replace the smoke harness’s mounted-workspace proof
+- [x] Task 3.1: Replace the smoke harness’s mounted-workspace proof
   - Acceptance: `scripts/mac/smoke.sh` no longer depends on `(cd /src ...)` as
     the normal-path routed write proof and instead validates filesystem-diff
     behavior through the explicit staged guest-local ingress path while keeping
@@ -193,7 +193,7 @@ Session goal:
   - Files:
     - `scripts/mac/smoke.sh`
 
-- [ ] Task 3.2: Perform only the minimal doc truth corrections required by the cutover
+- [x] Task 3.2: Perform only the minimal doc truth corrections required by the cutover
   - Acceptance: `docs/WORLD.md` and
     `docs/reference/world/platforms/macos-lima-setup.md` no longer describe
     broad host-home visibility or mounted `/src` workflows as the hardened
@@ -228,19 +228,19 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 4.1: Final scope and coherence check
+- [x] Task 4.1: Final scope and coherence check
   - Acceptance: the final diff stays within the allowed execution boundary
     unless an explicitly justified minimal assist was required, and the slice
     does not claim a broader operator-surface/productization landing than it
     actually implemented.
   - Verify:
-    - `git diff --stat`
+    - `git diff --stat -- scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh scripts/mac/smoke.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-09.md`
     - `git status --short`
     - manual wording review
   - Files:
     - touched files only
 
-- [ ] Task 4.2: Record the downstream handoff honestly
+- [x] Task 4.2: Record the downstream handoff honestly
   - Acceptance: the final closeout states explicitly that Slice `09` landed the
     ingress cutover and explicit staged-path seam only, Slice `10` still owns
     guest-unit source-of-truth and sandbox unification, Slice `11` still owns
@@ -250,6 +250,24 @@ Session goal:
     - manual closeout review
   - Files:
     - touched files only
+
+Packet `4` closeout note:
+
+1. Slice `09` landed the ingress cutover and explicit staged-path seam only.
+2. The hardened default now stages the requested project path into
+   `/var/lib/substrate/staged-workspace/current`; broad host-home visibility
+   and a mounted `/src` checkout are no longer the hardened default ingress
+   path.
+3. Slice `10` still owns guest-unit source-of-truth and sandbox unification,
+   consuming the staged-workspace and writable-root contract rooted in
+   `/var/lib/substrate` plus the already-approved guest-local runtime roots
+   (`/run`, `/run/substrate`, `/run/substrate.sock`,
+   `/run/substrate/substrate-gateway-runtime/`, `/sys/fs/cgroup`, guest
+   `SUBSTRATE_HOME`, and `/tmp`).
+4. Slice `11` still owns broader Substrate-owned lifecycle, diagnostics, and
+   sync productization beyond the script/config/docs cutover that landed here.
+5. Slice `12` still owns the broad breakglass/docs cutover; Slice `09` only
+   made the minimal doc truth corrections required by the ingress cutover.
 
 ### Packet 4 checkpoint
 
@@ -264,3 +282,7 @@ Packet `4` is complete only when:
 
 Do not declare the slice implementation-ready until all four conditions are
 true.
+
+Packet `4` is checkpoint-green for this landing once the verification checks
+above are green and the final closeout keeps Slice `10`, Slice `11`, and Slice
+`12` unblocked without widening into their implementation seams.
