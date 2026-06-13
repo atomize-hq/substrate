@@ -503,7 +503,7 @@ build_missing_components_inside_vm() {
     fi
 
     local status=0
-    limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" STAGED_WORKSPACE_PATH="${STAGED_WORKSPACE_CURRENT}" bash <<'EOF'
+    if limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" STAGED_WORKSPACE_PATH="${STAGED_WORKSPACE_CURRENT}" bash <<'EOF'
 set -euo pipefail
 build_cli="${BUILD_GUEST_CLI:-0}"
 build_agent="${BUILD_GUEST_AGENT:-0}"
@@ -683,7 +683,11 @@ if [[ "${cli_build_failed}" -ne 0 ]]; then
     echo "[lima-warm][WARN] Guest provisioning completed without a Linux substrate CLI binary." >&2
 fi
 EOF
-    status=$?
+    then
+        status=0
+    else
+        status=$?
+    fi
     if [[ "${status}" -ne 0 ]]; then
         if [[ "${build_agent}" -eq 1 ]]; then
             fatal "Failed to build Linux world-service inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-service or rerun from a source checkout."
