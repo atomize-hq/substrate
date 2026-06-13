@@ -274,18 +274,26 @@ create_stage_manifest() {
 
 stage_workspace() {
     local vm_user="$1"
-    local workspace_name stage_parent manifest_path
+    local workspace_name stage_parent manifest_path host_stage_root host_stage_workspace
     workspace_name="$(basename "${PROJECT_PATH}")"
     stage_parent="/tmp/substrate-stage-workspace"
     manifest_path="$(create_stage_manifest)"
+    host_stage_root="$(mktemp -d)"
+    host_stage_workspace="${host_stage_root}/${workspace_name}"
 
     log "Staging workspace input into guest-local path ${STAGED_WORKSPACE_CURRENT}"
+    rsync -a \
+        --exclude '.git' \
+        --exclude 'target' \
+        --exclude '.codex' \
+        --exclude '.DS_Store' \
+        "${PROJECT_PATH}/" "${host_stage_workspace}/"
     limactl shell "${VM_NAME}" env STAGE_PARENT="${stage_parent}" bash <<'EOF'
 set -euo pipefail
 rm -rf "${STAGE_PARENT}"
 mkdir -p "${STAGE_PARENT}"
 EOF
-    limactl copy --recursive "${PROJECT_PATH}" "${VM_NAME}:${stage_parent}/"
+    limactl copy --recursive "${host_stage_workspace}" "${VM_NAME}:${stage_parent}/"
     limactl copy "${manifest_path}" "${VM_NAME}:${stage_parent}/${STAGED_WORKSPACE_MANIFEST_NAME}"
     limactl shell "${VM_NAME}" \
         env STAGE_PARENT="${stage_parent}" \
@@ -308,6 +316,7 @@ sudo install -o "${VM_USER}" -g substrate -m0640 \
     "${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
 rm -rf "${STAGE_PARENT}"
 EOF
+    rm -rf "${host_stage_root}"
     rm -f "${manifest_path}"
 }
 
@@ -618,14 +627,13 @@ if ! sudo -u "$(id -un)" -g substrate test -r "${workspace_dir}/Cargo.toml"; the
     exit 1
 fi
 run_guest_cargo_build() {
-    local target_kind="$1"
-    shift
     fix_dns static.crates.io || true
     if sudo -u "$(id -un)" -g substrate env \
         HOME="$HOME" \
         PATH="$PATH" \
         CARGO_TARGET_DIR="${BUILD_DIR}" \
-        bash -lc "cd \"${workspace_dir}\" && \"${cargo_bin}\" build ${target_kind} $*"; then
+        bash -lc 'cd "$1" && shift && exec "$@"' bash \
+        "${workspace_dir}" "${cargo_bin}" build "$@"; then
         return 0
     fi
     fix_dns static.crates.io || true
@@ -633,12 +641,13 @@ run_guest_cargo_build() {
         HOME="$HOME" \
         PATH="$PATH" \
         CARGO_TARGET_DIR="${BUILD_DIR}" \
-        bash -lc "cd \"${workspace_dir}\" && \"${cargo_bin}\" build ${target_kind} $*"
+        bash -lc 'cd "$1" && shift && exec "$@"' bash \
+        "${workspace_dir}" "${cargo_bin}" build "$@"
 }
 mandatory_build_failed=0
 cli_build_failed=0
 if [[ "${build_agent}" == "1" ]]; then
-    if ! run_guest_cargo_build "-p world-service" "${BUILD_PROFILE_FLAG[@]}" --locked; then
+    if ! run_guest_cargo_build -p world-service "${BUILD_PROFILE_FLAG[@]}" --locked; then
         echo "[lima-warm][ERROR] failed to build Linux world-service inside Lima." >&2
         mandatory_build_failed=1
     else
@@ -646,7 +655,7 @@ if [[ "${build_agent}" == "1" ]]; then
     fi
 fi
 if [[ "${build_gateway}" == "1" ]]; then
-    if ! run_guest_cargo_build "-p substrate-gateway" "${BUILD_PROFILE_FLAG[@]}" --locked; then
+    if ! run_guest_cargo_build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked; then
         echo "[lima-warm][ERROR] failed to build Linux substrate-gateway inside Lima." >&2
         mandatory_build_failed=1
     else
@@ -654,7 +663,7 @@ if [[ "${build_gateway}" == "1" ]]; then
     fi
 fi
 if [[ "${build_cli}" == "1" ]]; then
-    if ! run_guest_cargo_build "--bin substrate" "${BUILD_PROFILE_FLAG[@]}" --locked; then
+    if ! run_guest_cargo_build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked; then
         echo "[lima-warm][WARN] failed to build the optional Linux substrate CLI inside Lima; continuing because diagnostics can fall back to the host CLI." >&2
         cli_build_failed=1
     else
