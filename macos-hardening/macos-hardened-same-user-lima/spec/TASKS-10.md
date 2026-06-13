@@ -109,7 +109,7 @@ Session goal:
     `2` can remain scripts/config/docs first unless parity proof forces a
     minimal backend assist.
   - Verify:
-    - `rg -n "staged-workspace|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|ProtectHome|ReadWritePaths|CapabilityBoundingSet|AmbientCapabilities|ListenStream|SocketMode|SocketGroup" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
+    - `rg -n "staged-workspace|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|ProtectHome|ReadWritePaths|CapabilityBoundingSet|AmbientCapabilities|ListenStream|SocketMode|SocketUser|SocketGroup|DirectoryMode|RemoveOnStop" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
     - manual boundary review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md`
