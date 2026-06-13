@@ -54,6 +54,10 @@ PROJECT="$(pwd)" envsubst < scripts/mac/lima/substrate-dev.yaml > /tmp/substrate
 limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 ```
 
+The manual `substrate-dev.yaml` path keeps the host `$HOME` mount and the
+project checkout mounted at `/src`. It does **not** by itself populate
+`/var/lib/substrate/staged-workspace/current`.
+
 ### Step 1: Set up Lima VM
 
 1. **Start the Lima VM** using the provided helper script (runtime defaults):
@@ -70,6 +74,10 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
 
 2. Or, to use the dev profile (heavier resources), start it explicitly as shown above.
+   If you use that manual dev-profile startup path, either run
+   `scripts/mac/lima-warm.sh` afterward to provision and stage the workspace,
+   or treat `/var/lib/substrate/staged-workspace/current` as unavailable until
+   you perform an equivalent manual staging step.
 
 3. **Verify VM is running**:
   ```sh
@@ -79,7 +87,10 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 
 ### Step 2: Build and Deploy World Service
 
-1. **Compile inside the Lima guest from the staged workspace** (recommended if you are not relying on host-staged Linux binaries from `scripts/mac/lima-warm.sh`):
+1. **Compile inside the Lima guest from the staged workspace** (this path assumes
+   `scripts/mac/lima-warm.sh` has already staged the checkout into
+   `/var/lib/substrate/staged-workspace/current`; it is recommended if you are
+   not relying on host-staged Linux binaries from that helper):
    ```sh
    limactl shell substrate bash -lc 'cd /var/lib/substrate/staged-workspace/current && cargo build -p world-service --release'
    ```
