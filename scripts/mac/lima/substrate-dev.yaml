@@ -1,12 +1,11 @@
 # Lima configuration for Substrate (dev profile) on macOS
 # Heavier resources for development and debugging.
-# Usage example (from repository root). After the direct `limactl start`, run
-# `scripts/mac/lima-warm.sh` so the canonical guest
-# `substrate-world-service.service` / `.socket` contract is installed from
-# `scripts/mac/lima/units/` before treating the VM as converged:
-#   PROJECT="$(pwd)" envsubst < scripts/mac/lima/substrate-dev.yaml > /tmp/substrate-dev.yaml
-#   limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
-#   scripts/mac/lima-warm.sh
+# Usage example (from repository root). The canonical converged dev-profile
+# flow is to point `scripts/mac/lima-warm.sh` at this profile so guest create,
+# repair, and canonical `substrate-world-service.service` / `.socket`
+# installation all route through the same Packet 2 path:
+#   LIMA_PROFILE_PATH="$(pwd)/scripts/mac/lima/substrate-dev.yaml" \
+#     scripts/mac/lima-warm.sh
 
 images:
   - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
