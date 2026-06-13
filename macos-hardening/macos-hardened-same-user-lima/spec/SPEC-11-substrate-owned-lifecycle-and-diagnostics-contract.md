@@ -115,12 +115,10 @@ cargo test -p shell
 cargo test -p world-mac-lima
 target/debug/substrate host doctor --json | jq .
 target/debug/substrate world doctor --json | jq .
-target/debug/substrate world gateway sync
-target/debug/substrate world gateway status --json | jq .
-target/debug/substrate world gateway restart
-target/debug/substrate world enable --dry-run
+scripts/mac/smoke.sh --gateway-conformance
+tmp="$(mktemp -d)"; mkdir -p "$tmp/substrate-home/scripts/substrate"; cp scripts/substrate/world-enable.sh "$tmp/substrate-home/scripts/substrate/world-enable.sh"; chmod +x "$tmp/substrate-home/scripts/substrate/world-enable.sh"; target/debug/substrate world enable --home "$tmp/substrate-home" --dry-run; rc=$?; rm -rf "$tmp"; exit $rc
 target/debug/substrate world deps current sync --dry-run --verbose
-target/debug/substrate workspace sync --dry-run
+bin="$(pwd)/target/debug/substrate"; tmp="$(mktemp -d)"; ws="$tmp/ws"; mkdir -p "$ws"; "$bin" workspace init "$ws" >/dev/null && (cd "$ws" && "$bin" workspace sync --dry-run); rc=$?; rm -rf "$tmp"; exit $rc
 scripts/mac/lima-doctor.sh
 scripts/mac/smoke.sh
 scripts/mac/orchestration-smoke.sh
@@ -322,12 +320,10 @@ cargo test -p shell
 cargo test -p world-mac-lima
 target/debug/substrate host doctor --json | jq .
 target/debug/substrate world doctor --json | jq .
-target/debug/substrate world gateway sync
-target/debug/substrate world gateway status --json | jq .
-target/debug/substrate world gateway restart
-target/debug/substrate world enable --dry-run
+scripts/mac/smoke.sh --gateway-conformance
+tmp="$(mktemp -d)"; mkdir -p "$tmp/substrate-home/scripts/substrate"; cp scripts/substrate/world-enable.sh "$tmp/substrate-home/scripts/substrate/world-enable.sh"; chmod +x "$tmp/substrate-home/scripts/substrate/world-enable.sh"; target/debug/substrate world enable --home "$tmp/substrate-home" --dry-run; rc=$?; rm -rf "$tmp"; exit $rc
 target/debug/substrate world deps current sync --dry-run --verbose
-target/debug/substrate workspace sync --dry-run
+bin="$(pwd)/target/debug/substrate"; tmp="$(mktemp -d)"; ws="$tmp/ws"; mkdir -p "$ws"; "$bin" workspace init "$ws" >/dev/null && (cd "$ws" && "$bin" workspace sync --dry-run); rc=$?; rm -rf "$tmp"; exit $rc
 scripts/mac/lima-doctor.sh
 scripts/mac/smoke.sh
 scripts/mac/orchestration-smoke.sh

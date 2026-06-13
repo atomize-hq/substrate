@@ -469,7 +469,13 @@ fn run_workspace_sync_impl(
     }
 
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let workspace_root = require_workspace_root(&cwd, "workspace sync")?;
+    let workspace_root = match require_workspace_root(&cwd, "workspace sync") {
+        Ok(root) => root,
+        Err(err) => {
+            errln!("{err}");
+            return Ok(2);
+        }
+    };
 
     let cli_world_enabled = if cli.world {
         Some(true)
@@ -522,6 +528,18 @@ fn run_workspace_sync_impl(
         for item in &excludes {
             println!("    - {item}");
         }
+        println!("  workspace_root: {}", workspace_root.display());
+        if cfg!(target_os = "macos") {
+            println!(
+                "  note: this command is not yet the frozen normal macOS same-user Lima sync/copy path in this packet."
+            );
+            println!(
+                "  note: the current interim contract remains the degraded-but-supported staged-workspace flow behind `substrate world enable` / `scripts/mac/lima-warm.sh`."
+            );
+        }
+        println!(
+            "  note: apply requires world; run `substrate world enable` then `substrate world doctor`."
+        );
     }
 
     if cli.no_world {

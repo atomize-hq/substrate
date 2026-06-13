@@ -8,9 +8,20 @@ fi
 
 SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_ROOT}/../.." && pwd)"
+SUBSTRATE_BIN="${SUBSTRATE_BIN:-${REPO_ROOT}/target/debug/substrate}"
 
 log() {
   printf '[mac-orchestration-smoke] %s\n' "$*"
+}
+
+note_routed_override_bypass() {
+  if [[ -n "${SUBSTRATE_WORLD_SOCKET:-}" ]]; then
+    log "Ignoring SUBSTRATE_WORLD_SOCKET during routed orchestration proof; it remains advanced/test/breakglass on macOS."
+  fi
+}
+
+run_routed_proof_command() {
+  env -u SUBSTRATE_WORLD_SOCKET "$@"
 }
 
 require_cmd() {
@@ -33,6 +44,7 @@ ensure_host_prereqs() {
 
   require_cmd limactl "Install Lima via Homebrew (brew install lima)."
   require_cmd cargo "Install Rust via rustup."
+  require_cmd jq
 }
 
 run_repo_cmd() {
@@ -43,10 +55,29 @@ run_repo_cmd() {
   )
 }
 
+ensure_substrate_binary() {
+  if [[ ! -x "${SUBSTRATE_BIN}" ]]; then
+    log "Building substrate binary for orchestration smoke..."
+    run_repo_cmd cargo build --bin substrate >/dev/null
+  fi
+}
+
+run_routed_doctor_proof() {
+  note_routed_override_bypass
+  log "Running routed doctor proof before orchestration checks"
+  run_routed_proof_command "${SUBSTRATE_BIN}" host doctor --json \
+    | jq -e '.ok == true and .host.ok == true' >/dev/null
+  run_routed_proof_command "${SUBSTRATE_BIN}" world doctor --json \
+    | jq -e '.ok == true and .host.ok == true and .world.ok == true and .world.status == "ok"' >/dev/null
+}
+
 ensure_host_prereqs
+ensure_substrate_binary
 
 log "Warming the Lima-backed world backend"
 "${SCRIPTS_ROOT}/lima-warm.sh"
+
+run_routed_doctor_proof
 
 log "Running live Lima backend reachability smoke"
 run_repo_cmd cargo run -p world-mac-lima --example mac_backend_smoke

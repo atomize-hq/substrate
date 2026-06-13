@@ -19,9 +19,10 @@ LOG_DIR=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/mac/smoke.sh [--orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
+Usage: scripts/mac/smoke.sh [--gateway-conformance | --orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
 
 Options:
+  --gateway-conformance    Run the fixture-backed gateway lifecycle/status proof instead of the generic smoke
   --world-disabled-diagnostics
                            Run the world-disabled-diagnostics conformance smoke instead of the generic smoke
   --orchestration-conformance
@@ -38,6 +39,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --netfilter-conformance)
       MODE="netfilter-conformance"
+      shift
+      ;;
+    --gateway-conformance)
+      MODE="gateway-conformance"
       shift
       ;;
     --world-disabled-diagnostics)
@@ -942,6 +947,9 @@ if [[ "${MODE}" == "world-disabled-diagnostics" ]]; then
 elif [[ "${MODE}" == "orchestration-conformance" ]]; then
   ensure_host_prereqs
   run_orchestration_conformance
+elif [[ "${MODE}" == "gateway-conformance" ]]; then
+  ensure_host_prereqs
+  run_gateway_lifecycle_proof
 elif [[ "${MODE}" == "netfilter-conformance" ]]; then
   ensure_host_prereqs
   if [[ -z "${LOG_DIR}" ]]; then

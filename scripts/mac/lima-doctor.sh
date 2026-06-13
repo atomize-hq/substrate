@@ -223,16 +223,17 @@ check_rendered_unit_parity() {
 
 run_breakglass_guest_checks() {
     echo "Guest-Direct Breakglass Diagnostics:"
+    local lifecycle_hint="run \`substrate world enable\` first; if you need the current helper-backed create/warm/repair path directly, \`scripts/mac/lima-warm.sh\` remains degraded-but-supported."
 
     if ! limactl list "${VM_NAME}" >/dev/null 2>&1; then
-        warn "VM '${VM_NAME}' does not exist; run scripts/mac/lima-warm.sh to create it."
+        warn "VM '${VM_NAME}' does not exist; ${lifecycle_hint}"
         return
     fi
 
     local status=""
     status="$(limactl list "${VM_NAME}" --json | jq -r '.status // "unknown"' 2>/dev/null || true)"
     if [[ "${status}" != "Running" ]]; then
-        warn "VM '${VM_NAME}' is not running (status: ${status:-unknown}); run scripts/mac/lima-warm.sh."
+        warn "VM '${VM_NAME}' is not running (status: ${status:-unknown}); ${lifecycle_hint}"
         return
     fi
 
@@ -253,7 +254,7 @@ run_breakglass_guest_checks() {
         if [[ "${socket_meta}" == "root:substrate 660" ]]; then
             printf '\033[32m[PASS]\033[0m Socket ownership root:substrate (0660) (breakglass)\n'
         else
-            warn "Socket metadata ${socket_meta:-unknown} (expected root:substrate 660). Run scripts/mac/lima-warm.sh to repair."
+            warn "Socket metadata ${socket_meta:-unknown} (expected root:substrate 660). ${lifecycle_hint}"
         fi
 
         local vm_user=""
@@ -261,7 +262,7 @@ run_breakglass_guest_checks() {
         if [[ -n "${vm_user}" ]] && limactl shell "${VM_NAME}" id -nG "${vm_user}" 2>/dev/null | tr ' ' '\n' | grep -qx substrate; then
             printf '\033[32m[PASS]\033[0m %s belongs to substrate group (breakglass)\n' "${vm_user}"
         else
-            warn "Unable to confirm substrate group membership for ${vm_user:-guest}. Run scripts/mac/lima-warm.sh."
+            warn "Unable to confirm substrate group membership for ${vm_user:-guest}. ${lifecycle_hint}"
         fi
 
         local layout_version=""
@@ -269,7 +270,7 @@ run_breakglass_guest_checks() {
         if [[ "${layout_version}" == "${LAYOUT_EXPECTED}" ]]; then
             printf '\033[32m[PASS]\033[0m Socket parity layout detected (%s) (breakglass)\n' "${layout_version}"
         else
-            warn "Layout sentinel ${layout_version:-missing} (expected ${LAYOUT_EXPECTED}). Run scripts/mac/lima-warm.sh to rebuild."
+            warn "Layout sentinel ${layout_version:-missing} (expected ${LAYOUT_EXPECTED}). ${lifecycle_hint}"
         fi
     else
         warn "Agent socket not found (breakglass)."

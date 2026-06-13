@@ -162,6 +162,12 @@ Primary responsibilities:
 4. apply only the smallest Rust or script changes required to make the owned
    contract honest.
 
+For gateway lifecycle/status verification on macOS, Packet `3` should use the
+fixture-backed routed proof already embodied in `scripts/mac/smoke.sh` rather
+than a bare repo-root `target/debug/substrate world gateway status --json`
+invocation that assumes `llm.routing.default_backend` and auth are already
+seeded in the caller environment.
+
 Likely touched files:
 
 1. `crates/shell/src/builtins/world_enable/`

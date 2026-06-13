@@ -111,6 +111,14 @@ mod world_doctor_macos {
         host_visible_transports_for(Transport::auto_select().unwrap_or_default())
     }
 
+    fn socket_override_in_effect() -> bool {
+        std::env::var_os("SUBSTRATE_WORLD_SOCKET").is_some()
+    }
+
+    fn routed_proof_override_warning() -> &'static str {
+        "SUBSTRATE_WORLD_SOCKET override in effect (advanced/test/breakglass); routed macOS proof requires unsetting it."
+    }
+
     fn guest_service_active(runner: &dyn CommandRunner, vm_name: &str) -> bool {
         runner
             .run(
@@ -435,6 +443,15 @@ echo pass
         })
     }
 
+    fn annotate_lima_json_with_socket_override(mut lima: Value, socket_override: bool) -> Value {
+        if socket_override {
+            if let Some(obj) = lima.as_object_mut() {
+                obj.insert("socket_override_in_effect".into(), json!(true));
+            }
+        }
+        lima
+    }
+
     struct WorldDoctorAssessment {
         exit_code: i32,
         world_fs_mode: String,
@@ -444,6 +461,7 @@ echo pass
         lima_installed: bool,
         lima_virtualization: bool,
         vsock_proxy: bool,
+        socket_override_in_effect: bool,
         vm_status: String,
         service_active: bool,
         agent_caps_ok: bool,
@@ -464,6 +482,7 @@ echo pass
         let world_fs_mode = fs_policy.mode.as_str().to_string();
         let world_fs_isolation = fs_policy.isolation.as_str().to_string();
         let world_fs_require_world = fs_policy.require_world;
+        let socket_override = socket_override_in_effect();
 
         let lima_installed = runner.run("limactl", &["--version"]).success;
         let virtualization = runner.run("sysctl", &["-n", "kern.hv_support"]);
@@ -509,14 +528,17 @@ echo pass
             "world_fs_mode": world_fs_mode,
             "world_fs_isolation": world_fs_isolation,
             "world_fs_require_world": world_fs_require_world,
-            "lima": lima_json_value(
-                &vm_name,
-                lima_installed,
-                lima_virtualization,
-                &vm_status,
-                service_active,
-                agent_caps_ok,
-                vsock_proxy,
+            "lima": annotate_lima_json_with_socket_override(
+                lima_json_value(
+                    &vm_name,
+                    lima_installed,
+                    lima_virtualization,
+                    &vm_status,
+                    service_active,
+                    agent_caps_ok,
+                    vsock_proxy,
+                ),
+                socket_override,
             )
         });
 
@@ -600,6 +622,7 @@ echo pass
             lima_installed,
             lima_virtualization,
             vsock_proxy,
+            socket_override_in_effect: socket_override,
             vm_status,
             service_active,
             agent_caps_ok,
@@ -618,6 +641,7 @@ echo pass
     ) -> i32 {
         let fs_policy = world_fs_policy();
         let vm_name = resolve_lima_vm_name();
+        let socket_override = socket_override_in_effect();
 
         let pass = |msg: &str| println!("PASS  | {}", msg);
         let warn = |msg: &str| println!("WARN  | {}", msg);
@@ -722,6 +746,10 @@ echo pass
             }
         }
 
+        if !json_mode && socket_override {
+            warn(routed_proof_override_warning());
+        }
+
         let host_ok = world_enabled
             && lima_installed
             && lima_virtualization
@@ -741,14 +769,17 @@ echo pass
                     "world_fs_mode": fs_policy.mode.as_str(),
                     "world_fs_isolation": fs_policy.isolation.as_str(),
                     "world_fs_require_world": fs_policy.require_world,
-                    "lima": lima_json_value(
-                        &vm_name,
-                        lima_installed,
-                        lima_virtualization,
-                        &vm_status,
-                        service_active,
-                        agent_caps_ok,
-                        vsock_proxy,
+                    "lima": annotate_lima_json_with_socket_override(
+                        lima_json_value(
+                            &vm_name,
+                            lima_installed,
+                            lima_virtualization,
+                            &vm_status,
+                            service_active,
+                            agent_caps_ok,
+                            vsock_proxy,
+                        ),
+                        socket_override,
                     )
                 }
             });
@@ -852,6 +883,10 @@ echo pass
             } else {
                 fail("world-service unreachable (capabilities probe)");
             }
+        }
+
+        if !json_mode && assessment.socket_override_in_effect {
+            warn(routed_proof_override_warning());
         }
 
         if json_mode {
@@ -1102,6 +1137,25 @@ echo pass
                     ],
                     success_out("active\n"),
                 ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "--workdir=/".into(),
+                        "substrate".into(),
+                        "sudo".into(),
+                        "-n".into(),
+                        "timeout".into(),
+                        "5".into(),
+                        "curl".into(),
+                        "-sS".into(),
+                        "--fail".into(),
+                        "--unix-socket".into(),
+                        "/run/substrate.sock".into(),
+                        "http://localhost/v1/capabilities".into(),
+                    ],
+                    failure_out(),
+                ),
             ];
             let runner = MockRunner::new(responses);
             let exit = run(true, true, None, &runner);
@@ -1128,29 +1182,39 @@ echo pass
         }
 
         #[test]
+        #[serial]
         fn host_visible_transports_follow_selected_transport_order() {
-            let unix_first = host_visible_transports_for(Transport::UnixSocket);
-            assert_eq!(
-                unix_first,
-                vec![
-                    HostVisibleTransport::Unix(managed_host_socket_path()),
-                    HostVisibleTransport::Tcp {
-                        host: COMPATIBILITY_TCP_HOST.to_string(),
-                        port: COMPATIBILITY_TCP_PORT,
-                    },
-                ]
-            );
+            let temp = tempfile::tempdir().expect("tempdir");
+            with_env_var(
+                "HOME",
+                Some(temp.path().to_str().expect("home path")),
+                || {
+                    let expected_socket = managed_host_socket_path();
 
-            let tcp_first = host_visible_transports_for(Transport::VSock);
-            assert_eq!(
-                tcp_first,
-                vec![
-                    HostVisibleTransport::Tcp {
-                        host: COMPATIBILITY_TCP_HOST.to_string(),
-                        port: COMPATIBILITY_TCP_PORT,
-                    },
-                    HostVisibleTransport::Unix(managed_host_socket_path()),
-                ]
+                    let unix_first = host_visible_transports_for(Transport::UnixSocket);
+                    assert_eq!(
+                        unix_first,
+                        vec![
+                            HostVisibleTransport::Unix(expected_socket.clone()),
+                            HostVisibleTransport::Tcp {
+                                host: COMPATIBILITY_TCP_HOST.to_string(),
+                                port: COMPATIBILITY_TCP_PORT,
+                            },
+                        ]
+                    );
+
+                    let tcp_first = host_visible_transports_for(Transport::VSock);
+                    assert_eq!(
+                        tcp_first,
+                        vec![
+                            HostVisibleTransport::Tcp {
+                                host: COMPATIBILITY_TCP_HOST.to_string(),
+                                port: COMPATIBILITY_TCP_PORT,
+                            },
+                            HostVisibleTransport::Unix(expected_socket),
+                        ]
+                    );
+                },
             );
         }
 
@@ -1166,6 +1230,78 @@ echo pass
                     assert_eq!(
                         selected_host_visible_transports(),
                         vec![HostVisibleTransport::Unix(override_path.clone())]
+                    );
+                },
+            );
+        }
+
+        #[test]
+        #[serial]
+        fn world_doctor_assessment_marks_socket_override_as_breakglass() {
+            let override_path = PathBuf::from("/tmp/substrate-override.sock");
+            let override_path_string = override_path.to_str().expect("override path").to_string();
+            let responses = vec![
+                (
+                    "limactl".into(),
+                    vec!["--version".into()],
+                    success_out("Lima v1"),
+                ),
+                (
+                    "sysctl".into(),
+                    vec!["-n".into(), "kern.hv_support".into()],
+                    success_out("1\n"),
+                ),
+                (
+                    "limactl".into(),
+                    vec!["list".into(), "substrate".into(), "--json".into()],
+                    success_out(r#"{"status":"Running"}"#),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "--workdir=/".into(),
+                        "substrate".into(),
+                        "systemctl".into(),
+                        "is-active".into(),
+                        "substrate-world-service".into(),
+                    ],
+                    success_out("active\n"),
+                ),
+                (
+                    "limactl".into(),
+                    vec![
+                        "shell".into(),
+                        "--workdir=/".into(),
+                        "substrate".into(),
+                        "sudo".into(),
+                        "-n".into(),
+                        "timeout".into(),
+                        "5".into(),
+                        "curl".into(),
+                        "-sS".into(),
+                        "--fail".into(),
+                        "--unix-socket".into(),
+                        "/run/substrate.sock".into(),
+                        "http://localhost/v1/capabilities".into(),
+                    ],
+                    failure_out(),
+                ),
+            ];
+            let runner = MockRunner::new(responses);
+
+            with_env_var(
+                "SUBSTRATE_WORLD_SOCKET",
+                Some(&override_path_string),
+                || {
+                    let assessment = collect_world_doctor_assessment(true, true, None, &runner);
+                    assert!(assessment.socket_override_in_effect);
+                    assert_eq!(
+                        assessment
+                            .out
+                            .pointer("/host/lima/socket_override_in_effect")
+                            .and_then(Value::as_bool),
+                        Some(true)
                     );
                 },
             );
@@ -1530,65 +1666,69 @@ echo pass
         #[serial]
         fn world_doctor_json_reports_running_vm_with_inactive_service_as_not_provisioned() {
             let vm_json = r#"{"status":"Running"}"#;
+            let temp = tempfile::tempdir().expect("tempdir");
+            let home = temp.path();
 
-            with_env_var("SUBSTRATE_WORLD_ENABLED", Some("1"), || {
-                let responses = vec![
-                    (
-                        "limactl".into(),
-                        vec!["--version".into()],
-                        success_out("Lima v1"),
-                    ),
-                    (
-                        "sysctl".into(),
-                        vec!["-n".into(), "kern.hv_support".into()],
-                        success_out("1\n"),
-                    ),
-                    (
-                        "limactl".into(),
-                        vec!["list".into(), "substrate".into(), "--json".into()],
-                        success_out(vm_json),
-                    ),
-                    (
-                        "limactl".into(),
-                        vec![
-                            "shell".into(),
-                            "--workdir=/".into(),
-                            "substrate".into(),
-                            "systemctl".into(),
-                            "is-active".into(),
-                            "substrate-world-service".into(),
-                        ],
-                        failure_out(),
-                    ),
-                ];
-                let runner = MockRunner::new(responses);
-                let assessment = collect_world_doctor_assessment(true, true, None, &runner);
-                assert_eq!(assessment.exit_code, 4);
+            with_env_var("HOME", Some(home.to_str().expect("home path")), || {
+                with_env_var("SUBSTRATE_WORLD_ENABLED", Some("1"), || {
+                    let responses = vec![
+                        (
+                            "limactl".into(),
+                            vec!["--version".into()],
+                            success_out("Lima v1"),
+                        ),
+                        (
+                            "sysctl".into(),
+                            vec!["-n".into(), "kern.hv_support".into()],
+                            success_out("1\n"),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec!["list".into(), "substrate".into(), "--json".into()],
+                            success_out(vm_json),
+                        ),
+                        (
+                            "limactl".into(),
+                            vec![
+                                "shell".into(),
+                                "--workdir=/".into(),
+                                "substrate".into(),
+                                "systemctl".into(),
+                                "is-active".into(),
+                                "substrate-world-service".into(),
+                            ],
+                            failure_out(),
+                        ),
+                    ];
+                    let runner = MockRunner::new(responses);
+                    let assessment = collect_world_doctor_assessment(true, true, None, &runner);
+                    assert_eq!(assessment.exit_code, 4);
 
-                let json = assessment.out;
-                assert_eq!(json.pointer("/ok").and_then(Value::as_bool), Some(false));
-                assert_eq!(
-                    json.pointer("/host/lima/vm_status").and_then(Value::as_str),
-                    Some("Running")
-                );
-                assert_eq!(
-                    json.pointer("/host/lima/service_active")
-                        .and_then(Value::as_bool),
-                    Some(false)
-                );
-                assert_eq!(
-                    json.pointer("/host/lima/agent_caps_ok")
-                        .and_then(Value::as_bool),
-                    Some(false)
-                );
-                assert_eq!(
-                    json.pointer("/world/status").and_then(Value::as_str),
-                    Some("not_provisioned")
-                );
-                assert_eq!(
-                    json.pointer("/world/ok").and_then(Value::as_bool),
-                    Some(false)
-                );
+                    let json = assessment.out;
+                    assert_eq!(json.pointer("/ok").and_then(Value::as_bool), Some(false));
+                    assert_eq!(
+                        json.pointer("/host/lima/vm_status").and_then(Value::as_str),
+                        Some("Running")
+                    );
+                    assert_eq!(
+                        json.pointer("/host/lima/service_active")
+                            .and_then(Value::as_bool),
+                        Some(false)
+                    );
+                    assert_eq!(
+                        json.pointer("/host/lima/agent_caps_ok")
+                            .and_then(Value::as_bool),
+                        Some(false)
+                    );
+                    assert_eq!(
+                        json.pointer("/world/status").and_then(Value::as_str),
+                        Some("not_provisioned")
+                    );
+                    assert_eq!(
+                        json.pointer("/world/ok").and_then(Value::as_bool),
+                        Some(false)
+                    );
+                });
             });
         }
     }

@@ -212,21 +212,21 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Align normal sync/copy and lifecycle entrypoints with the frozen contract
+- [x] Task 3.1: Align normal sync/copy and lifecycle entrypoints with the frozen contract
   - Acceptance: the chosen normal sync/copy path and any owned provisioning/
     enablement path are consistent across CLI behavior, helper messaging, and
     contract docs; if a surface remains degraded, the degradation is explicit.
   - Verify:
     - `cargo test -p shell`
-    - `target/debug/substrate world enable --dry-run`
-    - `target/debug/substrate workspace sync --dry-run`
+    - `tmp="$(mktemp -d)"; mkdir -p "$tmp/substrate-home/scripts/substrate"; cp scripts/substrate/world-enable.sh "$tmp/substrate-home/scripts/substrate/world-enable.sh"; chmod +x "$tmp/substrate-home/scripts/substrate/world-enable.sh"; target/debug/substrate world enable --home "$tmp/substrate-home" --dry-run; rc=$?; rm -rf "$tmp"; exit $rc`
+    - `bin="$(pwd)/target/debug/substrate"; tmp="$(mktemp -d)"; ws="$tmp/ws"; mkdir -p "$ws"; "$bin" workspace init "$ws" >/dev/null && (cd "$ws" && "$bin" workspace sync --dry-run); rc=$?; rm -rf "$tmp"; exit $rc`
     - manual contract review
   - Files:
     - `crates/shell/src/builtins/world_enable/`
     - `crates/shell/src/execution/workspace_cmd.rs`
     - `crates/shell/src/execution/platform/macos.rs`
 
-- [ ] Task 3.2: Center the validation wall on the owned path
+- [x] Task 3.2: Center the validation wall on the owned path
   - Acceptance: routed doctor/gateway proof plus smoke/orchestration coverage
     are the default evidence path, and helper scripts only escalate to
     breakglass checks after owned surfaces have been exercised first.
@@ -235,7 +235,7 @@ Session goal:
     - `bash -n scripts/mac/orchestration-smoke.sh`
     - `target/debug/substrate host doctor --json | jq .`
     - `target/debug/substrate world doctor --json | jq .`
-    - `target/debug/substrate world gateway status --json | jq .`
+    - `scripts/mac/smoke.sh --gateway-conformance`
   - Files:
     - `scripts/mac/smoke.sh`
     - `scripts/mac/orchestration-smoke.sh`
