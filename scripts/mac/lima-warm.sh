@@ -905,12 +905,12 @@ configure_guest
 
 cat <<EOF
 Supported operator path:
-  supported: substrate world enable; substrate host doctor --json; substrate world doctor --json; substrate world gateway sync|status|restart
-  degraded-but-supported: scripts/mac/lima-warm.sh remains the current macOS create/warm/repair and staged-workspace copy wrapper
+  supported: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable; substrate world deps current sync for dependency reconciliation
+  degraded-but-supported: scripts/mac/lima-doctor.sh remains the routed-first wrapper for doctor proof; scripts/mac/lima-warm.sh remains the current macOS create/warm/repair and staged-workspace copy wrapper
   note: substrate workspace sync is not yet the frozen normal macOS same-user Lima sync/copy contract in this packet
-  breakglass: direct limactl shell, plain SSH, guest systemctl, guest socket curl, and SUBSTRATE_WORLD_SOCKET override use
+  breakglass: raw limactl shell, plain SSH, direct guest systemctl, guest socket curl, guest journalctl, and host-side SUBSTRATE_WORLD_SOCKET override use
 EOF
 
-log "Lima world backend '${VM_NAME}' is ready. Preferred supported verification: substrate host doctor --json; substrate world doctor --json; substrate world gateway status --json"
+log "Lima world backend '${VM_NAME}' is ready. Preferred supported operations: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable when provisioning is needed; substrate world deps current sync when guest dependency reconciliation is needed."
 log "This helper remains degraded-but-supported for macOS create/warm/repair and staged-workspace copy."
 log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"
