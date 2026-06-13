@@ -274,18 +274,26 @@ create_stage_manifest() {
 
 stage_workspace() {
     local vm_user="$1"
-    local workspace_name stage_parent manifest_path
+    local workspace_name stage_parent manifest_path host_stage_root host_stage_workspace
     workspace_name="$(basename "${PROJECT_PATH}")"
     stage_parent="/tmp/substrate-stage-workspace"
     manifest_path="$(create_stage_manifest)"
+    host_stage_root="$(mktemp -d)"
+    host_stage_workspace="${host_stage_root}/${workspace_name}"
 
     log "Staging workspace input into guest-local path ${STAGED_WORKSPACE_CURRENT}"
+    rsync -a \
+        --exclude '.git' \
+        --exclude 'target' \
+        --exclude '.codex' \
+        --exclude '.DS_Store' \
+        "${PROJECT_PATH}/" "${host_stage_workspace}/"
     limactl shell "${VM_NAME}" env STAGE_PARENT="${stage_parent}" bash <<'EOF'
 set -euo pipefail
 rm -rf "${STAGE_PARENT}"
 mkdir -p "${STAGE_PARENT}"
 EOF
-    limactl copy --recursive "${PROJECT_PATH}" "${VM_NAME}:${stage_parent}/"
+    limactl copy --recursive "${host_stage_workspace}" "${VM_NAME}:${stage_parent}/"
     limactl copy "${manifest_path}" "${VM_NAME}:${stage_parent}/${STAGED_WORKSPACE_MANIFEST_NAME}"
     limactl shell "${VM_NAME}" \
         env STAGE_PARENT="${stage_parent}" \
@@ -308,6 +316,7 @@ sudo install -o "${VM_USER}" -g substrate -m0640 \
     "${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
 rm -rf "${STAGE_PARENT}"
 EOF
+    rm -rf "${host_stage_root}"
     rm -f "${manifest_path}"
 }
 
