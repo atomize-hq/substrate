@@ -8,7 +8,7 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
 
 ## R5.75-1: Objective Condensation And Target Extraction
 
-- [ ] Task R5.75-1.1: Add regressions for giant pasted user prompts whose concrete ask appears
+- [x] Task R5.75-1.1: Add regressions for giant pasted user prompts whose concrete ask appears
       inside the body.
   - Acceptance: `crates/agent-drift-analyzer/tests/checkpoints.rs` contains focused cases showing
     that long pasted prompt/scaffold bodies resolve to the concrete task ask rather than to the
@@ -17,8 +17,17 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-12):
+    - the initial regression-only attempt in commit `97f402961`
+      (`test: capture giant pasted objective extraction regressions`) was later reverted by
+      `0742417f1` when it proved unsupported on its own
+    - the currently landed giant-prompt regression wall is present in the live
+      `crates/agent-drift-analyzer/tests/checkpoints.rs` coverage, including the inline
+      review/manual-smoke and profile-bootstrap cases added/refined across `9ab02b796`,
+      `db4e4f824`, and `95a7d8e27`
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` passed on 2026-06-12
 
-- [ ] Task R5.75-1.2: Add regressions proving preserved boilerplate-target requests still survive
+- [x] Task R5.75-1.2: Add regressions proving preserved boilerplate-target requests still survive
       condensation.
   - Acceptance: regression coverage explicitly proves that real requests to analyze, compare,
     explain, or edit `AGENTS.md`, `<skill>`, `Available skills`, tooling scaffolds, or similar
@@ -28,8 +37,15 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-12):
+    - the live regression suite now explicitly preserves deliberate boilerplate targets such as
+      `AGENTS.md`, `<skill>`, `Available skills`, and tooling scaffolds rather than shortening
+      them into misleading fragments
+    - that preserved-target coverage is represented by the current checkpoint tests and was
+      carried by the cumulative objective-condensation landings in `db4e4f824` and `95a7d8e27`
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` passed on 2026-06-12
 
-- [ ] Task R5.75-1.3: Refine objective-candidate ordering so longer same-priority bodies do not
+- [x] Task R5.75-1.3: Refine objective-candidate ordering so longer same-priority bodies do not
       win by length.
   - Acceptance: `crates/agent-drift-analyzer/src/checkpoint/mod.rs` prefers `/goal`, short
     imperative asks, steer pivots, and concrete workspace/action-target phrases over longer
@@ -40,8 +56,13 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-12):
+    - the live `checkpoint/mod.rs` logic now gives concrete normalized asks specificity credit
+      without rewarding the longer same-priority prompt body just for being longer
+    - the ranking refinement landed in `9ab02b796` and was further tightened in `95a7d8e27`
+    - both analyzer gates passed on 2026-06-12
 
-- [ ] Task R5.75-1.4: Condense the chosen objective row down to the true concrete ask when
+- [x] Task R5.75-1.4: Condense the chosen objective row down to the true concrete ask when
       possible.
   - Acceptance: when the winning row is still a large pasted user prompt, the stored checkpoint
     objective is reduced to the shortest concrete task ask that preserves the real target, rather
@@ -52,6 +73,12 @@ into fail-open behavior, delegated-parent stabilization, or adapted fixture-fami
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-12):
+    - the live `normalized_objective_text(...)` path now condenses embedded and inline concrete
+      asks instead of serializing the full pasted body when a shorter real target is available
+    - that condensation landing was introduced in `9ab02b796` and refined by `db4e4f824` plus
+      the packet-closeout follow-up `95a7d8e27`
+    - both analyzer gates passed on 2026-06-12
 
 - [x] Task R5.75-1.5: Run the packet’s automated validation gates.
   - Acceptance:
