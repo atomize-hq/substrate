@@ -274,26 +274,36 @@ create_stage_manifest() {
 
 stage_workspace() {
     local vm_user="$1"
-    local workspace_name stage_parent manifest_path host_stage_root host_stage_workspace
+    local workspace_name stage_parent manifest_path entry entry_name
     workspace_name="$(basename "${PROJECT_PATH}")"
     stage_parent="/tmp/substrate-stage-workspace"
     manifest_path="$(create_stage_manifest)"
-    host_stage_root="$(mktemp -d)"
-    host_stage_workspace="${host_stage_root}/${workspace_name}"
 
     log "Staging workspace input into guest-local path ${STAGED_WORKSPACE_CURRENT}"
-    rsync -a \
-        --exclude '.git' \
-        --exclude 'target' \
-        --exclude '.codex' \
-        --exclude '.DS_Store' \
-        "${PROJECT_PATH}/" "${host_stage_workspace}/"
-    limactl shell "${VM_NAME}" env STAGE_PARENT="${stage_parent}" bash <<'EOF'
+    # Keep the ingress path aligned with Slice 09 / Slice 10 authority and validation:
+    # transfer the requested workspace directly via `limactl copy` rather than
+    # via a separate host-side staged tree, while preserving the explicit
+    # exclusions that bound guest staging to the supported validation surface.
+    limactl shell "${VM_NAME}" env STAGE_PARENT="${stage_parent}" WORKSPACE_NAME="${workspace_name}" bash <<'EOF'
 set -euo pipefail
 rm -rf "${STAGE_PARENT}"
-mkdir -p "${STAGE_PARENT}"
+mkdir -p "${STAGE_PARENT}/${WORKSPACE_NAME}"
 EOF
-    limactl copy --recursive "${host_stage_workspace}" "${VM_NAME}:${stage_parent}/"
+    shopt -s dotglob nullglob
+    for entry in "${PROJECT_PATH}"/*; do
+        entry_name="$(basename "${entry}")"
+        case "${entry_name}" in
+            .git|target|.codex|.DS_Store)
+                continue
+                ;;
+        esac
+        if [[ -d "${entry}" ]]; then
+            limactl copy --recursive "${entry}" "${VM_NAME}:${stage_parent}/${workspace_name}/"
+        else
+            limactl copy "${entry}" "${VM_NAME}:${stage_parent}/${workspace_name}/"
+        fi
+    done
+    shopt -u dotglob nullglob
     limactl copy "${manifest_path}" "${VM_NAME}:${stage_parent}/${STAGED_WORKSPACE_MANIFEST_NAME}"
     limactl shell "${VM_NAME}" \
         env STAGE_PARENT="${stage_parent}" \
@@ -306,6 +316,7 @@ EOF
 set -euo pipefail
 test -d "${STAGE_PARENT}/${WORKSPACE_NAME}"
 test -f "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+find "${STAGE_PARENT}/${WORKSPACE_NAME}" -name '.DS_Store' -delete
 sudo install -d -o root -g substrate -m0750 "${STAGED_WORKSPACE_ROOT}"
 sudo rm -rf "${STAGED_WORKSPACE_CURRENT}"
 sudo mv "${STAGE_PARENT}/${WORKSPACE_NAME}" "${STAGED_WORKSPACE_CURRENT}"
@@ -316,7 +327,6 @@ sudo install -o "${VM_USER}" -g substrate -m0640 \
     "${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
 rm -rf "${STAGE_PARENT}"
 EOF
-    rm -rf "${host_stage_root}"
     rm -f "${manifest_path}"
 }
 
@@ -699,7 +709,7 @@ EOF
             fatal "Failed to build Linux substrate-gateway inside Lima (exit ${status}). Provide a prebuilt gateway under bin/linux/substrate-gateway or rerun from a source checkout."
         fi
         warn "Failed to build Linux CLI inside Lima; diagnostics requiring a guest CLI will need to run on the host."
-        return 1
+        return 0
     fi
 }
 
