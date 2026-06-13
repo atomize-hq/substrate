@@ -69,7 +69,7 @@ project checkout mounted at `/src`. It does **not** by itself populate
    This script will:
    - Create a new Lima VM named "substrate" with Ubuntu 24.04
    - Install required packages (nftables, iproute2, dnsmasq, etc.)
-   - Configure the systemd service for substrate-world-service
+   - Render and install the authoritative `substrate-world-service.service` / `.socket` contract from `scripts/mac/lima/units/`
    - Stage the requested project path into `/var/lib/substrate/staged-workspace/current` inside the guest via `limactl copy`
    - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
 
@@ -251,6 +251,9 @@ and then re-run `world gateway status --json` to confirm the resulting posture.
 `substrate world gateway status --json` is the authoritative machine-readable gateway posture for
 the already provisioned backend. The legacy `scripts/mac/lima-doctor.sh` script remains available
 for deeper troubleshooting, but the routed CLI commands are the canonical supported entry points.
+When you need to prove rendered-unit parity itself, `scripts/mac/lima-doctor.sh` and
+`scripts/mac/smoke.sh` render the canonical service/socket locally and compare them against the
+guest-loaded units reported by `systemctl show` / `systemctl cat`.
 Same-user Lima still does not provide the Linux ownership boundary, even when these routed checks
 are green.
 

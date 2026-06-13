@@ -22,7 +22,7 @@ On Linux the agent runs directly on the host. On macOS the agent runs inside a L
 
 Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima environment reproducible.
 
-`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning scripts also wire `SUBSTRATE_HOME` into the service unit and keep that path writable under `ReadWritePaths`, so manager/config/runtime state lands in the same canonical home on Linux host-native and macOS Lima guest paths.
+`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. On macOS/Lima, `scripts/mac/lima-warm.sh` now renders the authoritative guest `substrate-world-service.service`/`.socket` contract from `scripts/mac/lima/units/`, wires `SUBSTRATE_HOME` into that service unit, and keeps that path writable under `ReadWritePaths`, so manager/config/runtime state lands in the same canonical home on Linux host-native and macOS Lima guest paths.
 
 ### Transport boundary and multi-user posture
 
@@ -188,7 +188,7 @@ host-side forwarding adapter are ready before routing commands.
 Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-service path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
-- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` as the only hardened default guest listener plus managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
+- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and renders the authoritative guest units from `scripts/mac/lima/units/substrate-world-service.service.tmpl` plus `scripts/mac/lima/units/substrate-world-service.socket` so fresh create and warm/repair load the same systemd contract. That contract writes to `/run/substrate.sock` as the only hardened default guest listener, preserves managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` remains the deeper troubleshooting helper once the routed CLI proof below has already failed.
   - The helper scripts stage the active project path into the guest-local workspace root at `/var/lib/substrate/staged-workspace/current` via `limactl copy`; broad host-home visibility and a mounted `/src` checkout are no longer the hardened default ingress path.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
@@ -220,6 +220,7 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
   - Forwarding issues surface in shell `DEBUG` logs with the selected transport. `scripts/mac/lima-doctor.sh` mirrors doctor CLI checks after the routed proof path has already been attempted.
 
 - Validation
+  - `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` preserve routed CLI proof priority but also render the authoritative guest units locally and compare them against the loaded guest `substrate-world-service.service`/`.socket` via `systemctl show` + `systemctl cat`, so fresh-create and repair parity is proven explicitly instead of inferred.
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
   - `scripts/mac/orchestration-smoke.sh` warms Lima, runs the live `world-mac-lima` backend smoke example, and then runs the macOS-targeted orchestration regression tests that cover shared-owner attach/create, replacement, lazy member launch, targeted follow-up reuse, guest-owned cancel, and shared-world mismatch rejection.
   - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.

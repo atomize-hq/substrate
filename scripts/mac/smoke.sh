@@ -9,6 +9,7 @@ fi
 SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_ROOT}/../.." && pwd)"
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-${REPO_ROOT}/target/debug/substrate}"
+CANONICAL_UNIT_SOURCE_DIR="${REPO_ROOT}/scripts/mac/lima/units"
 VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-${LIMA_VM_NAME:-substrate}}"
 STAGED_WORKSPACE_CURRENT="${SUBSTRATE_LIMA_STAGED_WORKSPACE_CURRENT:-/var/lib/substrate/staged-workspace/current}"
 RUN_GUEST_DIRECT_BREAKGLASS="${SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT:-0}"
@@ -97,6 +98,104 @@ run_guest_direct_readiness_diagnostics() {
   limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-world-service
   limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-gateway
   limactl shell "${VM_NAME}" systemctl is-active --quiet substrate-world-service
+}
+
+host_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+run_rendered_unit_parity_proof() {
+  local parity_tmp=""
+  local expected_dir=""
+  local actual_dir=""
+  local vm_user=""
+  local vm_home=""
+  local guest_substrate_home=""
+  local guest_service_fragment=""
+  local guest_socket_fragment=""
+  local guest_netfilter_env=""
+  local expected_service_sha=""
+  local expected_socket_sha=""
+  local actual_service_sha=""
+  local actual_socket_sha=""
+
+  if [[ ! -f "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl" || ! -f "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket" ]]; then
+    echo "ERROR: missing canonical unit sources under ${CANONICAL_UNIT_SOURCE_DIR}" >&2
+    exit 1
+  fi
+
+  if ! command -v envsubst >/dev/null 2>&1; then
+    echo "ERROR: envsubst is required to render canonical macOS guest units locally" >&2
+    exit 1
+  fi
+
+  parity_tmp="$(mktemp -d)"
+  expected_dir="${parity_tmp}/expected"
+  actual_dir="${parity_tmp}/actual"
+  mkdir -p "${expected_dir}" "${actual_dir}"
+
+  vm_user="$(limactl shell "${VM_NAME}" id -un 2>/dev/null | tr -d '\r' || true)"
+  if [[ -z "${vm_user}" ]]; then
+    echo "ERROR: unable to determine the Lima guest user for rendered-unit parity proof" >&2
+    exit 1
+  fi
+
+  vm_home="$(limactl shell "${VM_NAME}" getent passwd "${vm_user}" 2>/dev/null | cut -d: -f6 | tr -d '\r' || true)"
+  if [[ -z "${vm_home}" ]]; then
+    vm_home="/home/${vm_user}"
+  fi
+  guest_substrate_home="${vm_home}/.substrate"
+
+  guest_service_fragment="$(limactl shell "${VM_NAME}" sudo -n systemctl show substrate-world-service.service -p FragmentPath --value 2>/dev/null | tr -d '\r' || true)"
+  guest_socket_fragment="$(limactl shell "${VM_NAME}" sudo -n systemctl show substrate-world-service.socket -p FragmentPath --value 2>/dev/null | tr -d '\r' || true)"
+  if [[ -z "${guest_service_fragment}" || -z "${guest_socket_fragment}" ]]; then
+    echo "ERROR: unable to resolve guest FragmentPath values for substrate-world-service.service/.socket" >&2
+    exit 1
+  fi
+
+  if limactl shell "${VM_NAME}" sudo -n grep -q '^Environment=WORLD_NETFILTER_ENABLE=1$' "${guest_service_fragment}" >/dev/null 2>&1; then
+    guest_netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
+  fi
+
+  SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${guest_netfilter_env}" \
+    envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl" > "${expected_dir}/substrate-world-service.service"
+  envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket" > "${expected_dir}/substrate-world-service.socket"
+
+  if ! limactl shell "${VM_NAME}" sudo -n systemctl cat substrate-world-service.service \
+    | sed '/^# \//d' \
+    | awk 'BEGIN { seen=0 } { if (!seen && $0 == "") next; seen=1; print }' > "${actual_dir}/substrate-world-service.service"; then
+    echo "ERROR: unable to capture the loaded guest service unit via systemctl cat" >&2
+    exit 1
+  fi
+
+  if ! limactl shell "${VM_NAME}" sudo -n systemctl cat substrate-world-service.socket \
+    | sed '/^# \//d' \
+    | awk 'BEGIN { seen=0 } { if (!seen && $0 == "") next; seen=1; print }' > "${actual_dir}/substrate-world-service.socket"; then
+    echo "ERROR: unable to capture the loaded guest socket unit via systemctl cat" >&2
+    exit 1
+  fi
+
+  expected_service_sha="$(host_sha256 "${expected_dir}/substrate-world-service.service")"
+  expected_socket_sha="$(host_sha256 "${expected_dir}/substrate-world-service.socket")"
+  actual_service_sha="$(limactl shell "${VM_NAME}" sudo -n sha256sum "${guest_service_fragment}" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
+  actual_socket_sha="$(limactl shell "${VM_NAME}" sudo -n sha256sum "${guest_socket_fragment}" 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
+
+  if ! cmp -s "${expected_dir}/substrate-world-service.service" "${actual_dir}/substrate-world-service.service"; then
+    echo "ERROR: guest service unit differs from the canonical rendered contract (expected sha256 ${expected_service_sha}, guest sha256 ${actual_service_sha:-unknown})" >&2
+    exit 1
+  fi
+
+  if ! cmp -s "${expected_dir}/substrate-world-service.socket" "${actual_dir}/substrate-world-service.socket"; then
+    echo "ERROR: guest socket unit differs from the canonical rendered contract (expected sha256 ${expected_socket_sha}, guest sha256 ${actual_socket_sha:-unknown})" >&2
+    exit 1
+  fi
+
+  rm -rf "${parity_tmp}"
+  log "Rendered unit parity proof passed for substrate-world-service.service/.socket"
 }
 
 require_cmd() {
@@ -266,6 +365,8 @@ run_gateway_lifecycle_proof() {
     echo "ERROR: unable to derive gateway port from ${base_url}" >&2
     exit 1
   fi
+
+  run_rendered_unit_parity_proof
 
   if [[ "${RUN_GUEST_DIRECT_BREAKGLASS}" == "1" ]]; then
     run_guest_direct_gateway_compatibility_check "${port}"
