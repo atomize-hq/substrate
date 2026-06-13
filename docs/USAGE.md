@@ -351,6 +351,23 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 - `substrate world deps current install <ITEM...> [--dry-run] [--verbose]` – apply specific deps immediately without changing enabled config; APT-backed items are probe-only at runtime.
 - `substrate world deps global|workspace add|remove|reset` – edit enabled patches only (no install/uninstall).
 
+#### macOS same-user Lima operator posture
+
+For the hardened macOS same-user Lima path frozen in Slice 11 Packet 2:
+
+- `supported`
+  - `substrate host doctor [--json]`
+  - `substrate world doctor [--json]`
+  - `substrate world gateway sync|status|restart`
+  - `substrate world enable`
+  - `substrate world deps current sync` for dependency reconciliation inside the guest
+- `degraded-but-supported`
+  - `scripts/mac/lima-doctor.sh` as a wrapper that runs the routed doctor contract first and only escalates to guest-direct diagnostics after failure or explicit opt-in
+  - `scripts/mac/lima-warm.sh` for create/warm/repair plus the current guest-local staged-workspace copy flow
+- `breakglass`
+  - raw `limactl shell`, plain SSH, direct guest `systemctl`, guest socket `curl`, guest `journalctl`, and host-side `SUBSTRATE_WORLD_SOCKET` override use
+- `substrate workspace sync` exists, but it is not yet the frozen normal macOS same-user Lima sync/copy contract in this slice. The current interim macOS path remains the degraded-but-supported staged-workspace flow above.
+
 World root (anchor) precedence, highest wins: CLI flags
 (`--anchor-mode/--anchor-path`, legacy `--world-root-mode/--world-root-path`),
 `.substrate/settings.yaml` in the launch directory, `~/.substrate/config.yaml`

@@ -296,6 +296,13 @@ SUBSTRATE_BIN="$(resolve_substrate_bin)"
 
 echo "=== Substrate Lima Doctor ==="
 echo ""
+echo "Support posture:"
+echo "  supported: substrate host doctor --json; substrate world doctor --json; substrate world gateway status --json"
+echo "  supported when provisioning is needed: substrate world enable"
+echo "  degraded-but-supported: scripts/mac/lima-doctor.sh wraps routed readiness; scripts/mac/lima-warm.sh retains create/warm/repair"
+echo "  breakglass: direct limactl shell, guest systemctl, guest socket curl, and SUBSTRATE_WORLD_SOCKET override use"
+echo "  note: substrate workspace sync is not the frozen normal macOS sync/copy path in this packet"
+echo ""
 
 echo "Host Environment:"
 check "Lima installed" command -v limactl
