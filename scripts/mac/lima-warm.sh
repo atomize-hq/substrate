@@ -318,12 +318,12 @@ verify_staged_workspace() {
     if [[ -f "${PROJECT_PATH}/Cargo.toml" ]]; then
         expect_cargo_sources=1
     fi
-    limactl shell "${VM_NAME}" \
-        env STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
-            STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
-            EXPECTED_PROJECT_PATH="${PROJECT_PATH}" \
-            EXPECTED_GIT_HEAD="${expected_git_head}" \
-            EXPECT_CARGO_SOURCES="${expect_cargo_sources}" \
+    limactl shell "${VM_NAME}" sudo -n env \
+        STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
+        STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
+        EXPECTED_PROJECT_PATH="${PROJECT_PATH}" \
+        EXPECTED_GIT_HEAD="${expected_git_head}" \
+        EXPECT_CARGO_SOURCES="${expect_cargo_sources}" \
         bash <<'EOF'
 set -euo pipefail
 manifest="${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
@@ -493,17 +493,35 @@ build_missing_components_inside_vm() {
         return 0
     fi
 
-    if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" STAGED_WORKSPACE_PATH="${STAGED_WORKSPACE_CURRENT}" bash <<'EOF'; then
+    local status=0
+    limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" STAGED_WORKSPACE_PATH="${STAGED_WORKSPACE_CURRENT}" bash <<'EOF'
 set -euo pipefail
 build_cli="${BUILD_GUEST_CLI:-0}"
 build_agent="${BUILD_GUEST_AGENT:-0}"
 build_gateway="${BUILD_GUEST_GATEWAY:-0}"
 
+fix_dns() {
+    local probe_host="${1:-ports.ubuntu.com}"
+    if getent hosts "${probe_host}" >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "[lima-warm] DNS resolution failed inside Lima for ${probe_host}; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
+    local SUDO_CMD="sudo"
+    if sudo -n true 2>/dev/null; then
+        SUDO_CMD="sudo -n"
+    fi
+    $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
+    $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
+    $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
+    getent hosts "${probe_host}" >/dev/null 2>&1
+}
+
 ensure_cargo() {
     # Cargo.lock v4 requires a newer cargo than Ubuntu 24.04's apt cargo on some images.
     # Prefer rustup when we detect a v4 lockfile so we don't fail during `cargo build --locked`.
     local needs_lockfile_v4=0
-    if [[ -f "${STAGED_WORKSPACE_PATH}/Cargo.lock" ]] && grep -qx 'version = 4' "${STAGED_WORKSPACE_PATH}/Cargo.lock" 2>/dev/null; then
+    if sudo -u "$(id -un)" -g substrate test -f "${STAGED_WORKSPACE_PATH}/Cargo.lock" \
+        && sudo -u "$(id -un)" -g substrate grep -qx 'version = 4' "${STAGED_WORKSPACE_PATH}/Cargo.lock" 2>/dev/null; then
         needs_lockfile_v4=1
     fi
 
@@ -521,23 +539,8 @@ ensure_cargo() {
     fi
 
     if [[ "${needs_lockfile_v4}" -eq 1 ]]; then
-        fix_dns() {
-            if getent hosts ports.ubuntu.com >/dev/null 2>&1; then
-                return 0
-            fi
-            echo "[lima-warm] DNS resolution failed inside Lima; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
-            local SUDO_CMD="sudo"
-            if sudo -n true 2>/dev/null; then
-                SUDO_CMD="sudo -n"
-            fi
-            $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
-            $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
-            $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
-            getent hosts ports.ubuntu.com >/dev/null 2>&1
-        }
-
         echo "[lima-warm] Cargo.lock v4 detected; installing rustup toolchain (stable)..." >&2
-        fix_dns || true
+        fix_dns ports.ubuntu.com || true
         if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
             # shellcheck disable=SC1090
             source "$HOME/.cargo/env"
@@ -553,32 +556,17 @@ ensure_cargo() {
     if command -v cargo >/dev/null 2>&1; then
         return 0
     fi
-    fix_dns() {
-        if getent hosts ports.ubuntu.com >/dev/null 2>&1; then
-            return 0
-        fi
-        echo "[lima-warm] DNS resolution failed inside Lima; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
-        local SUDO_CMD="sudo"
-        if sudo -n true 2>/dev/null; then
-            SUDO_CMD="sudo -n"
-        fi
-        $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
-        $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
-        $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
-        getent hosts ports.ubuntu.com >/dev/null 2>&1
-    }
-
     echo "[lima-warm] cargo not found inside Lima VM; attempting apt install (rustc cargo)..." >&2
     local SUDO="sudo"
     if sudo -n true 2>/dev/null; then
         SUDO="sudo -n"
     fi
-    fix_dns || true
+    fix_dns ports.ubuntu.com || true
     if $SUDO apt-get update && $SUDO apt-get install -y rustc cargo; then
         return 0
     fi
     echo "[lima-warm] apt install failed; trying rustup via curl (IPv4, retries)..." >&2
-    fix_dns || true
+    fix_dns ports.ubuntu.com || true
     if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
         # shellcheck disable=SC1090
         source "$HOME/.cargo/env"
@@ -624,27 +612,70 @@ release)
     ;;
 esac
 mkdir -p "${BUILD_DIR}"
-cd "${STAGED_WORKSPACE_PATH}"
+workspace_dir="${STAGED_WORKSPACE_PATH}"
+if ! sudo -u "$(id -un)" -g substrate test -r "${workspace_dir}/Cargo.toml"; then
+    echo "[lima-warm][ERROR] staged workspace is not readable under the substrate group: ${workspace_dir}" >&2
+    exit 1
+fi
+run_guest_cargo_build() {
+    local target_kind="$1"
+    shift
+    fix_dns static.crates.io || true
+    if sudo -u "$(id -un)" -g substrate env \
+        HOME="$HOME" \
+        PATH="$PATH" \
+        CARGO_TARGET_DIR="${BUILD_DIR}" \
+        bash -lc "cd \"${workspace_dir}\" && \"${cargo_bin}\" build ${target_kind} $*"; then
+        return 0
+    fi
+    fix_dns static.crates.io || true
+    sudo -u "$(id -un)" -g substrate env \
+        HOME="$HOME" \
+        PATH="$PATH" \
+        CARGO_TARGET_DIR="${BUILD_DIR}" \
+        bash -lc "cd \"${workspace_dir}\" && \"${cargo_bin}\" build ${target_kind} $*"
+}
+mandatory_build_failed=0
+cli_build_failed=0
+if [[ "${build_agent}" == "1" ]]; then
+    if ! run_guest_cargo_build "-p world-service" "${BUILD_PROFILE_FLAG[@]}" --locked; then
+        echo "[lima-warm][ERROR] failed to build Linux world-service inside Lima." >&2
+        mandatory_build_failed=1
+    else
+        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-service" /usr/local/bin/substrate-world-service
+    fi
+fi
+if [[ "${build_gateway}" == "1" ]]; then
+    if ! run_guest_cargo_build "-p substrate-gateway" "${BUILD_PROFILE_FLAG[@]}" --locked; then
+        echo "[lima-warm][ERROR] failed to build Linux substrate-gateway inside Lima." >&2
+        mandatory_build_failed=1
+    else
+        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate-gateway" /usr/local/bin/substrate-gateway
+    fi
+fi
 if [[ "${build_cli}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
-    sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
+    if ! run_guest_cargo_build "--bin substrate" "${BUILD_PROFILE_FLAG[@]}" --locked; then
+        echo "[lima-warm][WARN] failed to build the optional Linux substrate CLI inside Lima; continuing because diagnostics can fall back to the host CLI." >&2
+        cli_build_failed=1
+    else
+        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
+        sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
 #!/usr/bin/env bash
 exec substrate world "$@"
 WORLD
-    sudo chmod 0755 /usr/local/bin/world
+        sudo chmod 0755 /usr/local/bin/world
+    fi
 fi
-if [[ "${build_agent}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-service "${BUILD_PROFILE_FLAG[@]}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-service" /usr/local/bin/substrate-world-service
+rm -rf "${BUILD_DIR}" || true
+if [[ "${mandatory_build_failed}" -ne 0 ]]; then
+    exit 1
 fi
-if [[ "${build_gateway}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate-gateway" /usr/local/bin/substrate-gateway
+if [[ "${cli_build_failed}" -ne 0 ]]; then
+    echo "[lima-warm][WARN] Guest provisioning completed without a Linux substrate CLI binary." >&2
 fi
-rm -rf "${BUILD_DIR}"
 EOF
-        local status=$?
+    status=$?
+    if [[ "${status}" -ne 0 ]]; then
         if [[ "${build_agent}" -eq 1 ]]; then
             fatal "Failed to build Linux world-service inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-service or rerun from a source checkout."
         fi
@@ -764,6 +795,7 @@ legacy_socket="${legacy_unit_prefix}-agent.socket"
 sudo install -d -m0755 "${SUBSTRATE_GUEST_HOME}"
 sudo install -d -m0750 -o root -g substrate /var/lib/substrate
 sudo install -d -m0750 -o root -g substrate /run/substrate
+sudo install -d -m0750 -o root -g substrate /run/substrate/substrate-gateway-runtime
 sudo systemctl stop "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
 sudo systemctl disable "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
 sudo rm -f "/etc/systemd/system/${legacy_service}" "/etc/systemd/system/${legacy_socket}"
@@ -773,6 +805,7 @@ sudo systemctl enable substrate-world-service.socket >/dev/null
 sudo systemctl stop substrate-world-service.service >/dev/null 2>&1 || true
 sudo systemctl stop substrate-world-service.socket >/dev/null 2>&1 || true
 sudo install -d -m0750 -o root -g substrate /run/substrate
+sudo install -d -m0750 -o root -g substrate /run/substrate/substrate-gateway-runtime
 sudo rm -f /run/substrate.sock
 sudo systemctl start substrate-world-service.socket
 sudo systemctl start substrate-world-service.service

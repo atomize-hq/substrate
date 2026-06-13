@@ -2,7 +2,7 @@
 set -euo pipefail
 
 failures=0
-LAYOUT_EXPECTED="socket-parity-v1"
+LAYOUT_EXPECTED="socket-parity-v2-staged-workspace-v1"
 SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_ROOT}/../.." && pwd)"
 CANONICAL_UNIT_SOURCE_DIR="${REPO_ROOT}/scripts/mac/lima/units"

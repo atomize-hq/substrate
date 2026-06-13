@@ -144,7 +144,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 2.1: Introduce the canonical checked-in unit authority
+- [x] Task 2.1: Introduce the canonical checked-in unit authority
   - Acceptance: one checked-in canonical source exists for
     `substrate-world-service.service` and `.socket`, and any supported
     parameterization is explicit and minimal rather than split across separate
@@ -156,7 +156,7 @@ Session goal:
     - new canonical unit-source files under `scripts/mac/lima/`
     - `scripts/mac/lima-warm.sh`
 
-- [ ] Task 2.2: Remove bootstrap-vs-repair service drift
+- [x] Task 2.2: Remove bootstrap-vs-repair service drift
   - Acceptance: `scripts/mac/lima/substrate.yaml` and
     `scripts/mac/lima-warm.sh` no longer act as separate handwritten guest
     service authorities; both paths either consume the same rendered unit
@@ -192,7 +192,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 3.1: Add rendered-unit parity validation to doctor/smoke surfaces
+- [x] Task 3.1: Add rendered-unit parity validation to doctor/smoke surfaces
   - Acceptance: `scripts/mac/lima-doctor.sh` and/or `scripts/mac/smoke.sh`
     explicitly prove that the guest service/socket contract matches the
     authoritative rendered contract, not merely that the VM is alive.
@@ -204,7 +204,7 @@ Session goal:
     - `scripts/mac/lima-doctor.sh`
     - `scripts/mac/smoke.sh`
 
-- [ ] Task 3.2: Perform only the minimal doc truth corrections required by unit unification
+- [x] Task 3.2: Perform only the minimal doc truth corrections required by unit unification
   - Acceptance: `docs/WORLD.md` and
     `docs/reference/world/platforms/macos-lima-setup.md` now point to one
     authoritative guest unit contract and no longer imply that bootstrap and
@@ -237,7 +237,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 4.1: Final scope and coherence check
+- [x] Task 4.1: Final scope and coherence check
   - Acceptance: the final diff stays within the allowed execution boundary
     unless an explicitly justified minimal assist was required, and the slice
     does not claim broader lifecycle/sync productization than it actually
@@ -249,7 +249,7 @@ Session goal:
   - Files:
     - touched files only
 
-- [ ] Task 4.2: Record the downstream handoff honestly
+- [x] Task 4.2: Record the downstream handoff honestly
   - Acceptance: the final closeout states explicitly that Slice `10` landed the
     unit source-of-truth and sandbox-unification seam only, Slice `11` still
     owns broader Substrate-owned lifecycle/diagnostics/sync productization, and
@@ -265,3 +265,27 @@ Session goal:
       closeout/checkpoint-green status to that rerun evidence
   - Files:
     - touched files only
+
+#### Packet 4 closeout and downstream handoff
+
+Closeout verified on 2026-06-13 against the rerun Packet `2` / Packet `3`
+verification wall. Slice `10` closes only the guest unit source-of-truth and
+sandbox-unification seam. A narrow validation-unblocking repair in
+`scripts/mac/lima-warm.sh` was required so staged-workspace verification runs
+under the actual guest ownership boundary and optional in-guest Linux CLI build
+failures no longer abort mandatory `world-service` / `substrate-gateway`
+provisioning or closeout cleanup.
+
+The downstream boundary remains explicit:
+
+1. Slice `11` is still the next seam for broader Substrate-owned
+   lifecycle/diagnostics/sync productization beyond the landed unit-parity
+   contract.
+2. Slice `12` is still the next seam for the broad breakglass/docs cutover and
+   support-taxonomy reclassification beyond the minimal Slice `10` doc truth
+   corrections.
+3. Packet `4` checkpoint-green status depends on the current rerun evidence
+   surface (`git diff --stat`, `git status --short`, Packet `2` command reruns,
+   Packet `3` command reruns, `scripts/mac/lima-warm.sh --check-only`, and
+   `scripts/mac/lima-doctor.sh`) rather than on broader Slice `11` / Slice `12`
+   completion.
