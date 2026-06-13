@@ -113,7 +113,7 @@ Session goal:
     scripts/config/docs first unless parity proof forces a minimal backend
     assist.
   - Verify:
-    - `rg -n "staged-workspace|substrate-gateway-runtime|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|RUST_LOG=info|WorkingDirectory=/var/lib/substrate|ProtectSystem=strict|ProtectHome|ReadWritePaths|CapabilityBoundingSet|AmbientCapabilities|ListenStream|SocketMode|SocketUser|SocketGroup|DirectoryMode|RemoveOnStop" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
+    - `rg -n "staged-workspace|substrate-gateway-runtime|SUBSTRATE_HOME|SUBSTRATE_WORLD_SOCKET|WORLD_NETFILTER_ENABLE|RUST_LOG=info|WorkingDirectory=/var/lib/substrate|ProtectSystem=strict|ProtectHome|ReadWritePaths|RuntimeDirectory=substrate|StateDirectory=substrate|CapabilityBoundingSet|AmbientCapabilities|CAP_CHOWN|ListenStream|SocketMode|SocketUser|SocketGroup|DirectoryMode|RemoveOnStop" scripts/mac/lima/substrate.yaml scripts/mac/lima-warm.sh docs/WORLD.md docs/reference/world/platforms/macos-lima-setup.md macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-10.md`
     - manual boundary review
   - Files:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-10-guest-unit-source-of-truth-and-sandbox-unification.md`
