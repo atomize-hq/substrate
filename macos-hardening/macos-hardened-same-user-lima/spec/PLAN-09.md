@@ -79,13 +79,15 @@ Live 2026-06-12 repo-truth confirmation for Slice `09`:
 Frozen Packet `1` implementation decision:
 
 1. the slice should prefer a script- and config-layer cutover first,
-2. the replacement ingress should stage workspace/artifact input into a child
-   path under `/var/lib/substrate` unless live proof forces another already
-   approved writable root,
-3. reusing an existing `workspace sync` surface is optional and must be proven,
-   not assumed,
-4. the slice should only escalate into shell/CLI ownership surfaces if the
-   script-level cutover cannot satisfy the warm/smoke contract honestly.
+2. the replacement ingress should stage workspace/artifact input into
+   `/var/lib/substrate/staged-workspace`, with Packet `2` free to create
+   direct children under that root if it needs per-checkout subdivision, unless
+   live proof forces another already approved writable root,
+3. reusing an existing `workspace sync` surface is optional, must be proven,
+   and is not the default Packet `2` implementation path,
+4. Packet `2` should start with script/config-layer cutover only and should
+   escalate into shell/CLI ownership surfaces only if the warm/smoke contract
+   cannot stay honest otherwise.
 
 ## Packet 2 mount-profile and warm-path cutover
 

@@ -80,7 +80,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 1.1: Confirm the authority stack, source gate, and live ingress dependencies
+- [x] Task 1.1: Confirm the authority stack, source gate, and live ingress dependencies
   - Acceptance: the execution pass explicitly grounds itself in
     `EXECUTION-RUBRIC.md`, `ROADMAP.md`, Phase `2`, milestone `2.2`, milestone
     `3.1`, `DESIGN-macos-ingress-and-mount-contract.md`,
@@ -100,7 +100,7 @@ Session goal:
     - `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-09-ingress-cutover-and-explicit-staging-path.md`
     - `macos-hardening/macos-hardened-same-user-lima/spec/PLAN-09.md`
 
-- [ ] Task 1.2: Freeze the guest-local staging-root and minimal implementation boundary
+- [x] Task 1.2: Freeze the guest-local staging-root and minimal implementation boundary
   - Acceptance: the slice names the preferred guest-local staging root,
     confirms it stays within an already-approved writable parent (preferably a
     child path under `/var/lib/substrate`), and states whether the ingress

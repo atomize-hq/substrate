@@ -114,8 +114,8 @@ Filesystem mounts, VM types, FAQ, breaking-changes, `limactl copy`, and
 4. Lima’s `limactl create` docs say `--plain` disables mounts, port forwarding,
    containerd, and related conveniences. That reinforces that broad defaults
    are optional conveniences, not hard requirements of the platform contract.
-5. Lima’s FAQ and breaking-changes docs reinforce that default mount posture has
-   changed over time (`/tmp/lima` no longer mounted by default, SSH key loading
+5. Lima’s breaking-changes docs show that default mount posture has changed
+   over time (`/tmp/lima` no longer mounted by default, SSH key loading
    defaults changed, VZ became the default on macOS), so this slice should not
    preserve old convenience assumptions without proof.
 6. Apple’s `VZVirtioFileSystemDevice` docs describe shared directories as host
@@ -158,16 +158,22 @@ Frozen Packet `1` cutover direction:
    exception path-by-path.
 3. The `/src` default mounted-project contract must stop being the normal-path
    ingress dependency for warm/repair and smoke proof.
-4. The replacement ingress must be explicit host→guest staging/copy into a
-   guest-local writable root already allowed by the Slice `08` contract,
-   preferring a child path under `/var/lib/substrate`.
-5. This slice may reuse existing repo surfaces such as `limactl copy` and, only
+4. The replacement ingress must be explicit host→guest staging/copy into
+   `/var/lib/substrate/staged-workspace` (or a direct child underneath that
+   root if Packet `2` needs per-checkout subdivision), because
+   `/var/lib/substrate` is already inside the approved guest-local writable
+   set from Slice `08`.
+5. Packet `2` should start from script/config-layer primitives already proven
+   in repo truth (`limactl copy` plus guest-local validation) rather than
+   assuming any new CLI/backend ownership work.
+6. This slice may reuse existing repo surfaces such as `limactl copy` and, only
    if live proof supports it, an already-landed `workspace sync` surface, but
-   it must not silently widen into a full Phase `3` operator-surface redesign.
-6. Request-provided gateway auth handoff and guest-local runtime artifacts stay
+   that reuse is escalation-only and must not silently widen into a full Phase
+   `3` operator-surface redesign.
+7. Request-provided gateway auth handoff and guest-local runtime artifacts stay
    unchanged; this slice changes workspace ingress and mounted host visibility,
    not the gateway auth contract.
-7. Slice `10` will consume the final guest-local staging and writable-path
+8. Slice `10` will consume the final guest-local staging and writable-path
    contract when unifying `ProtectHome=` and `ReadWritePaths=`.
 
 ## Packet 2 staged workspace contract and mount-removal boundary
@@ -191,14 +197,20 @@ Frozen Packet `2` conclusions:
 2. The minimum honest replacement is an explicit staged workspace/artifact
    ingress rooted in guest-local writable storage already compatible with the
    Slice `08` contract.
-3. The preferred root for that staged ingress is a child path under
-   `/var/lib/substrate`, because that root is already part of the approved
-   guest-local writable set and aligns naturally with Slice `10`’s future
-   sandbox unification.
-4. Minimal compatibility doc updates that become necessary once `/src` and
+3. The preferred root for that staged ingress is
+   `/var/lib/substrate/staged-workspace`, with Packet `2` free to create
+   direct children beneath that root for per-checkout or per-run material if
+   implementation needs that shape. This keeps the cutover inside the already
+   approved guest-local writable set and aligns naturally with Slice `10`’s
+   future sandbox unification.
+4. Packet `1` evidence does not yet force any new shell/CLI/backend ownership
+   surface. The default execution boundary therefore stays script/config/docs
+   first, with CLI/backend escalation allowed only if Packet `2` proves the
+   warm/smoke cutover cannot remain honest otherwise.
+5. Minimal compatibility doc updates that become necessary once `/src` and
    host-home mounts stop being true are in scope for this slice, but the broad
    operator-story rewrite remains deferred.
-5. A new user-facing sync UX is not required unless the current script-level
+6. A new user-facing sync UX is not required unless the current script-level
    and/or already-landed repo surfaces prove insufficient. If a broader CLI
    productization is needed, freeze the exact follow-on boundary into Slice
    `11` rather than silently absorbing it here.
