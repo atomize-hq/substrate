@@ -20,6 +20,31 @@ check() {
     fi
 }
 
+check_with_failure_detail() {
+    local name="$1"
+    shift
+
+    local stdout_file=""
+    local stderr_file=""
+    stdout_file="$(mktemp)"
+    stderr_file="$(mktemp)"
+
+    if "$@" >"${stdout_file}" 2>"${stderr_file}"; then
+        printf '\033[32m[PASS]\033[0m %s\n' "${name}"
+    else
+        printf '\033[31m[FAIL]\033[0m %s\n' "${name}"
+        failures=$((failures+1))
+        if [[ -s "${stdout_file}" ]]; then
+            sed 's/^/  /' "${stdout_file}"
+        fi
+        if [[ -s "${stderr_file}" ]]; then
+            sed 's/^/  /' "${stderr_file}" >&2
+        fi
+    fi
+
+    rm -f "${stdout_file}" "${stderr_file}"
+}
+
 warn() {
     printf '\033[33m[WARN]\033[0m %s\n' "$1"
 }
@@ -297,7 +322,7 @@ echo "Routed Readiness Proof (canonical for provisioned backends):"
 note_routed_override_bypass
 check_doctor_json "substrate host doctor --json" '.ok == true and .host.ok == true' run_routed_readiness_command "${SUBSTRATE_BIN}" host doctor --json
 check_doctor_json "substrate world doctor --json" '.ok == true and .host.ok == true and .world.ok == true and .world.status == "ok"' run_routed_readiness_command "${SUBSTRATE_BIN}" world doctor --json
-check "Canonical rendered guest units match the loaded service/socket contract" check_rendered_unit_parity
+check_with_failure_detail "Canonical rendered guest units match the loaded service/socket contract" check_rendered_unit_parity
 
 echo ""
 if [[ "${RUN_BREAKGLASS_CHECKS}" == "1" || "${failures}" -ne 0 ]]; then
