@@ -49,56 +49,6 @@ provision:
       # Ensure hostname resolves to silence sudo warnings
       (hostnamectl set-hostname lima-substrate || true)
       grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts
-      # Systemd unit for the world agent
-      cat >/etc/systemd/system/substrate-world-service.service <<'EOF'
-      [Unit]
-      Description=Substrate World Service
-      After=network-online.target
-      Wants=network-online.target
-
-      [Service]
-      Type=simple
-      ExecStart=/usr/local/bin/substrate-world-service
-      Restart=always
-      RestartSec=5
-      Environment=RUST_LOG=info
-      Group=substrate
-      UMask=0027
-      RuntimeDirectory=substrate
-      RuntimeDirectoryMode=0750
-      StateDirectory=substrate
-      StateDirectoryMode=0750
-      WorkingDirectory=/var/lib/substrate
-      StandardOutput=journal
-      StandardError=journal
-      NoNewPrivileges=yes
-      ProtectSystem=strict
-      ProtectHome=read-only
-      ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
-      CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_SYS_PTRACE
-      AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_SYS_PTRACE
-
-      [Install]
-      WantedBy=multi-user.target
-      EOF
-      chmod 644 /etc/systemd/system/substrate-world-service.service
-      cat >/etc/systemd/system/substrate-world-service.socket <<'EOF'
-      [Unit]
-      Description=Substrate World Service Socket
-      PartOf=substrate-world-service.service
-
-      [Socket]
-      ListenStream=/run/substrate.sock
-      SocketMode=0660
-      SocketUser=root
-      SocketGroup=substrate
-      DirectoryMode=0750
-      RemoveOnStop=yes
-      Service=substrate-world-service.service
-
-      [Install]
-      WantedBy=sockets.target
-      EOF
-      chmod 644 /etc/systemd/system/substrate-world-service.socket
-      systemctl daemon-reload
-      # Binary copied later; service enabled during Phase 0.4
+      # The canonical guest substrate-world-service.service/.socket authority is
+      # installed later by scripts/mac/lima-warm.sh after guest creation so the
+      # same rendered unit contract is used for fresh create and warm/repair.

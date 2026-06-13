@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CANONICAL_UNIT_SOURCE_DIR="${SCRIPT_DIR}/lima/units"
 VM_NAME="${LIMA_VM_NAME:-substrate}"
-PROFILE="${LIMA_PROFILE_PATH:-scripts/mac/lima/substrate.yaml}"
+PROFILE="${LIMA_PROFILE_PATH:-${SCRIPT_DIR}/lima/substrate.yaml}"
 PROJECT_PATH=""
 PROJECT_PATH_EXPLICIT=0
 CHECK_ONLY=0
@@ -700,76 +702,39 @@ EOF
 write_systemd_units() {
     local guest_substrate_home="$1"
     local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
+    local service_template="${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl"
+    local socket_template="${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket"
+    local rendered_units_dir
+    local netfilter_env=""
+
+    [[ -f "${service_template}" ]] || fatal "Missing canonical service unit source: ${service_template}"
+    [[ -f "${socket_template}" ]] || fatal "Missing canonical socket unit source: ${socket_template}"
+
     case "${enable_netfilter}" in
         1|true|yes|TRUE|YES)
-            log "Writing guest systemd unit with WORLD_NETFILTER_ENABLE=1"
+            log "Installing canonical guest systemd units with WORLD_NETFILTER_ENABLE=1"
+            netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
             ;;
         *)
-            log "Writing guest systemd unit without WORLD_NETFILTER_ENABLE=1"
+            log "Installing canonical guest systemd units without WORLD_NETFILTER_ENABLE=1"
             ;;
     esac
-    limactl shell "${VM_NAME}" env SUBSTRATE_WORLD_NETFILTER_ENABLE="${enable_netfilter}" SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
+    rendered_units_dir="$(mktemp -d)"
+    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${netfilter_env}" \
+        envsubst < "${service_template}" > "${rendered_units_dir}/substrate-world-service.service"
+    envsubst < "${socket_template}" > "${rendered_units_dir}/substrate-world-service.socket"
+
+    limactl copy "${rendered_units_dir}/substrate-world-service.service" \
+        "${VM_NAME}:/tmp/substrate-world-service.service"
+    limactl copy "${rendered_units_dir}/substrate-world-service.socket" \
+        "${VM_NAME}:/tmp/substrate-world-service.socket"
+    rm -rf "${rendered_units_dir}"
+
+    limactl shell "${VM_NAME}" bash <<'EOF'
 set -euo pipefail
-
-netfilter_env=""
-case "${SUBSTRATE_WORLD_NETFILTER_ENABLE:-}" in
-  1|true|yes|TRUE|YES)
-    netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
-    ;;
-esac
-
-cat <<UNIT | sudo tee /etc/systemd/system/substrate-world-service.service >/dev/null
-[Unit]
-Description=Substrate World Service
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/substrate-world-service
-Restart=always
-RestartSec=5
-Environment=RUST_LOG=info
-Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
-Environment=SUBSTRATE_HOME=${SUBSTRATE_GUEST_HOME}
-${netfilter_env}
-Group=substrate
-UMask=0027
-RuntimeDirectory=substrate
-RuntimeDirectoryMode=0750
-StateDirectory=substrate
-StateDirectoryMode=0750
-WorkingDirectory=/var/lib/substrate
-StandardOutput=journal
-StandardError=journal
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=${SUBSTRATE_GUEST_HOME} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-cat <<'UNIT' | sudo tee /etc/systemd/system/substrate-world-service.socket >/dev/null
-[Unit]
-Description=Substrate World Service Socket
-PartOf=substrate-world-service.service
-
-[Socket]
-ListenStream=/run/substrate.sock
-SocketMode=0660
-SocketUser=root
-SocketGroup=substrate
-DirectoryMode=0750
-RemoveOnStop=yes
-Service=substrate-world-service.service
-
-[Install]
-WantedBy=sockets.target
-UNIT
+sudo install -Dm0644 /tmp/substrate-world-service.service /etc/systemd/system/substrate-world-service.service
+sudo install -Dm0644 /tmp/substrate-world-service.socket /etc/systemd/system/substrate-world-service.socket
+sudo rm -f /tmp/substrate-world-service.service /tmp/substrate-world-service.socket
 EOF
 }
 
