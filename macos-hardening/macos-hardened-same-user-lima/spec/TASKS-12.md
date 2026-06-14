@@ -58,7 +58,8 @@ Default execution boundary:
 3. `docs/WORLD.md`,
 4. `scripts/mac/lima-doctor.sh`,
 5. `scripts/mac/lima-warm.sh`,
-6. `scripts/mac/smoke.sh`.
+6. `scripts/mac/smoke.sh`,
+7. `scripts/mac/orchestration-smoke.sh`.
 
 Treat edits outside that boundary as scope expansion unless live execution
 proves a minimal assist is mandatory.
@@ -88,15 +89,17 @@ Session goal:
     current supported, degraded, and breakglass language across
     `docs/reference/world/platforms/macos-lima-setup.md`, `docs/WORLD.md`,
     `docs/USAGE.md`, `scripts/mac/lima-doctor.sh`, `scripts/mac/lima-warm.sh`,
-    and `scripts/mac/smoke.sh`, including that `docs/USAGE.md` already carries
-    the Slice `11` owned command matrix, the clearest remaining primary drift
-    lives in `docs/reference/world/platforms/macos-lima-setup.md`, that
-    `docs/WORLD.md` is already largely aligned and only needs residual wording
-    review if a concrete contradiction is found, and `scripts/mac/smoke.sh`
-    still classifies `SUBSTRATE_WORLD_SOCKET` as advanced/test/breakglass on
-    macOS.
+    `scripts/mac/smoke.sh`, and `scripts/mac/orchestration-smoke.sh`,
+    including that `docs/USAGE.md` already carries the Slice `11` owned
+    command matrix, the clearest remaining primary drift lives in
+    `docs/reference/world/platforms/macos-lima-setup.md`, that `docs/WORLD.md`
+    is already largely aligned and only needs residual wording review if a
+    concrete contradiction is found, that `scripts/mac/smoke.sh` still
+    classifies `SUBSTRATE_WORLD_SOCKET` as advanced/test/breakglass on macOS,
+    and that the routed validation wall still explicitly includes
+    `scripts/mac/orchestration-smoke.sh`.
   - Verify:
-    - `rg -n "limactl shell|SSH|systemctl|journalctl|curl --unix-socket|SUBSTRATE_WORLD_SOCKET|host doctor|world doctor|world gateway|world enable|world deps current sync|workspace sync|supported|degraded-but-supported|breakglass" docs/reference/world/platforms/macos-lima-setup.md docs/WORLD.md docs/USAGE.md scripts/mac/lima-doctor.sh scripts/mac/lima-warm.sh scripts/mac/smoke.sh`
+    - `rg -n "limactl shell|SSH|systemctl|journalctl|curl --unix-socket|SUBSTRATE_WORLD_SOCKET|host doctor|world doctor|world gateway|world enable|world deps current sync|workspace sync|supported|degraded-but-supported|breakglass" docs/reference/world/platforms/macos-lima-setup.md docs/WORLD.md docs/USAGE.md scripts/mac/lima-doctor.sh scripts/mac/lima-warm.sh scripts/mac/smoke.sh scripts/mac/orchestration-smoke.sh`
     - `rg -n "limactl shell|SSH|Filesystem mounts|workspace sync|breakglass|degraded-but-supported|SUBSTRATE_WORLD_SOCKET" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-12-breakglass-reclassification-and-doc-cutover.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-12.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-12.md`
     - manual authority review
     - manual official-source review
@@ -122,11 +125,12 @@ Session goal:
       gateway command inventory explicit, but the primary macOS proof remains
       the owned `substrate host doctor`, `substrate world doctor`, and gateway
       `sync|status|restart` surfaces plus fixture-backed
-      `scripts/mac/smoke.sh --gateway-conformance` and `scripts/mac/smoke.sh`;
-      bare repo-root `target/debug/substrate world gateway sync|status|restart`
-      commands stay caller-seeded spot checks rather than unconditional
-      verification wall proof, and `scripts/mac/lima-doctor.sh` stays the
-      degraded-but-supported deeper post-failure wrapper from Slice `11`
+      `scripts/mac/smoke.sh --gateway-conformance`, `scripts/mac/smoke.sh`,
+      and `scripts/mac/orchestration-smoke.sh`; bare repo-root
+      `target/debug/substrate world gateway sync|status|restart` commands stay
+      caller-seeded spot checks rather than unconditional verification wall
+      proof, and `scripts/mac/lima-doctor.sh` stays the degraded-but-supported
+      deeper post-failure wrapper from Slice `11`
     - degraded-but-supported transitional material:
       `scripts/mac/lima-doctor.sh` as a wrapper around the routed doctor
       contract plus the existing helper-backed `scripts/mac/lima-warm.sh`
@@ -154,8 +158,9 @@ Packet `1` is complete only when:
 2. the live docs drift inventory is explicit,
 3. the supported/degraded/breakglass cutover direction is explicit,
 4. the Slice `11` sync/copy truth is explicitly preserved,
-5. the verification story explicitly covers agreement across `SPEC-12`,
-   `PLAN-12`, and `TASKS-12`,
+5. the verification story explicitly covers routed
+   doctor/gateway/smoke/orchestration evidence plus agreement across
+   `SPEC-12`, `PLAN-12`, and `TASKS-12`,
 6. the slice has not yet widened into broad doc edits.
 
 Do not start Packet `2` until Packet `1` is coherent.
@@ -238,6 +243,7 @@ Session goal:
     - `scripts/mac/lima-doctor.sh`
     - `scripts/mac/smoke.sh --gateway-conformance`
     - `scripts/mac/smoke.sh`
+    - `scripts/mac/orchestration-smoke.sh`
   - Files:
     - touched files only
 
@@ -268,7 +274,7 @@ Session goal:
     does not claim stronger lifecycle, sync, or ownership guarantees than the
     repo actually provides.
   - Verify:
-    - `git diff --stat -- docs/reference/world/platforms/macos-lima-setup.md docs/WORLD.md scripts/mac/lima-doctor.sh scripts/mac/lima-warm.sh scripts/mac/smoke.sh macos-hardening/macos-hardened-same-user-lima/spec/TASKS-12.md`
+    - `git diff --stat -- docs/reference/world/platforms/macos-lima-setup.md docs/WORLD.md scripts/mac/lima-doctor.sh scripts/mac/lima-warm.sh scripts/mac/smoke.sh scripts/mac/orchestration-smoke.sh macos-hardening/macos-hardened-same-user-lima/spec/TASKS-12.md`
     - `git status --short`
     - manual wording review
   - Files:

@@ -72,8 +72,10 @@ Live 2026-06-14 repo-truth confirmation for Slice `12`:
    sync/copy contract in this feature packet.
 2. `scripts/mac/lima-doctor.sh` and `scripts/mac/lima-warm.sh` already state
    supported/degraded/breakglass classifications explicitly.
-3. `scripts/mac/smoke.sh` already suppresses `SUBSTRATE_WORLD_SOCKET` during
-   routed proof and treats it as advanced/test/breakglass on macOS.
+3. `scripts/mac/smoke.sh` and `scripts/mac/orchestration-smoke.sh` already
+   preserve routed-first proof, and `scripts/mac/smoke.sh` still suppresses
+   `SUBSTRATE_WORLD_SOCKET` during routed proof and treats it as
+   advanced/test/breakglass on macOS.
 4. `docs/reference/world/platforms/macos-lima-setup.md` still contains the
    clearest remaining primary drift: it preserves too much direct guest
    procedure and advanced material in the default operator narrative.
@@ -105,9 +107,10 @@ Frozen Packet `1` implementation direction:
    not frozen as unconditional proof; the primary macOS gateway evidence path
    remains the owned `substrate host doctor`, `substrate world doctor`, and
    gateway `sync|status|restart` surfaces plus fixture-backed
-   `scripts/mac/smoke.sh --gateway-conformance` and `scripts/mac/smoke.sh`,
-   while `scripts/mac/lima-doctor.sh` remains the degraded-but-supported deeper
-   post-failure wrapper from Slice `11`.
+   `scripts/mac/smoke.sh --gateway-conformance`, `scripts/mac/smoke.sh`, and
+   `scripts/mac/orchestration-smoke.sh`, while `scripts/mac/lima-doctor.sh`
+   remains the degraded-but-supported deeper post-failure wrapper from Slice
+   `11`.
 5. `substrate workspace sync` must remain explicitly outside the frozen normal
    macOS sync/copy contract unless live repo truth changes and the same slice
    proves that change.
@@ -173,6 +176,7 @@ Likely touched files:
 1. `scripts/mac/lima-doctor.sh`
 2. `scripts/mac/lima-warm.sh`
 3. `scripts/mac/smoke.sh`
+4. `scripts/mac/orchestration-smoke.sh`
 
 Packet `3` should stop and re-scope if it starts turning into:
 
@@ -210,6 +214,7 @@ should land within:
 6. `scripts/mac/lima-doctor.sh`
 7. `scripts/mac/lima-warm.sh`
 8. `scripts/mac/smoke.sh`
+9. `scripts/mac/orchestration-smoke.sh`
 
 This slice should review, but not edit by default:
 

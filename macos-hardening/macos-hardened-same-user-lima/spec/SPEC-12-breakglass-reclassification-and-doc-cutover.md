@@ -124,10 +124,10 @@ inventory or caller-seeded spot checks, not as the unconditional macOS
 verification wall. The primary routed evidence wall remains the owned
 `substrate host doctor`, `substrate world doctor`, and gateway
 `sync|status|restart` surfaces plus the fixture-backed proof in
-`scripts/mac/smoke.sh --gateway-conformance` and `scripts/mac/smoke.sh`,
-matching Slice `11`. `scripts/mac/lima-doctor.sh` remains the
-degraded-but-supported deeper post-failure helper rather than the primary proof
-entry point.
+`scripts/mac/smoke.sh --gateway-conformance`, `scripts/mac/smoke.sh`, and
+`scripts/mac/orchestration-smoke.sh`, matching Slice `11`.
+`scripts/mac/lima-doctor.sh` remains the degraded-but-supported deeper
+post-failure helper rather than the primary proof entry point.
 
 If the implementation only touches docs or helper wording, use the smallest
 relevant subset rather than running the entire wall mechanically.
@@ -154,7 +154,10 @@ Primary repo surfaces for this slice:
 8. `scripts/mac/smoke.sh`
    - evidence-path script whose output and comments must preserve routed-first
      support posture
-9. `macos-hardening/macos-hardened-same-user-lima/spec/`
+9. `scripts/mac/orchestration-smoke.sh`
+   - routed orchestration proof script that must remain part of the frozen
+     validation wall
+10. `macos-hardening/macos-hardened-same-user-lima/spec/`
    - feature-local planning and closeout authority for the slice
 
 ## Project structure
