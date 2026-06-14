@@ -305,28 +305,41 @@ The downstream boundary must remain explicit:
 3. Any remaining raw guest guidance survives only as bounded breakglass
    material for Slice `12`, not as the primary supported macOS operator path.
 
-Current 2026-06-14 rerun status:
+Current Packet `4` rerun status for this closeout:
 
 1. The bounded Packet `2` and Packet `3` rerun wall is green through:
    - `cargo test -p shell`
    - `target/debug/substrate world enable --home "$tmp/substrate-home" --dry-run`
-   - `target/debug/substrate workspace sync --dry-run`
+   - `bin="$(pwd)/target/debug/substrate"; tmp="$(mktemp -d)"; ws="$tmp/ws"; mkdir -p "$ws"; "$bin" workspace init "$ws" >/dev/null && (cd "$ws" && "$bin" workspace sync --dry-run); rc=$?; rm -rf "$tmp"; exit $rc`
    - routed `target/debug/substrate host doctor --json`
    - routed `target/debug/substrate world doctor --json`
    - `scripts/mac/smoke.sh --gateway-conformance`
    - `scripts/mac/lima-doctor.sh`
    - `scripts/mac/smoke.sh`
    - `scripts/mac/orchestration-smoke.sh`
-2. Packet `4` is checkpoint-green on 2026-06-14 because the generic macOS
-   smoke now keeps the staged guest workspace/project-root truth aligned
-   through the CLI-owned routed command and replay path, so the final rerun
-   wall closes without requiring any broader Slice `12` docs/breakglass cutover
-   work.
-3. The final Slice `11` diff did not stay strictly inside the original Packet
-   `4` path list; narrowly justified assists were still required in:
-   - `crates/world/src/exec.rs`
+2. Packet `4` is checkpoint-green when the bounded rerun wall above is green,
+   because the generic macOS smoke keeps the staged guest workspace/project-root
+   truth aligned through the CLI-owned routed command and replay path without
+   requiring any broader Slice `12` docs/breakglass cutover work.
+3. Relative to commit `925403849..HEAD`, the final Packet `4` live diff is:
    - `crates/replay/src/state.rs`
-   - `crates/replay/src/replay/executor.rs`
+   - `crates/shell/src/execution/platform/macos.rs`
+   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+   - `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`
+   - `crates/world-mac-lima/examples/mac_backend_smoke.rs`
+   - `crates/world/src/exec.rs`
+   - `macos-hardening/macos-hardened-same-user-lima/spec/TASKS-11.md`
+   - `scripts/mac/lima-warm.sh`
+   - `scripts/mac/smoke.sh`
+   - `scripts/substrate/dev-install-substrate.sh`
+   Within that live diff, the narrowly justified files outside the original
+   Packet `4` path list were:
+   - `crates/replay/src/state.rs`
+   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+   - `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`
+   - `crates/world-mac-lima/examples/mac_backend_smoke.rs`
+   - `crates/world/src/exec.rs`
+   - `scripts/substrate/dev-install-substrate.sh`
    Those assists stay bounded to the same operator-contract/productization seam
    by preserving staged guest project-root truth for the routed generic smoke
    and replay path rather than broadening Slice `11` into a wider docs rewrite.
