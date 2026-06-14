@@ -1,14 +1,35 @@
 use agent_session_compactor::{CompactionKind, CompactionRow, UserMessageRole};
 use serde::{Deserialize, Serialize};
 
-use crate::checkpoint::EvidenceRef;
+use crate::checkpoint::{EvidenceRef, StructuredObjective};
 use crate::context::{directive_rows, evidence_from_row};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObjectiveSummary {
     pub text: String,
+    #[serde(default)]
+    pub comparison_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured: Option<StructuredObjective>,
     pub verification_commands: Vec<String>,
     pub evidence: Vec<EvidenceRef>,
+}
+
+impl ObjectiveSummary {
+    pub fn compatibility(
+        text: String,
+        verification_commands: Vec<String>,
+        evidence: Vec<EvidenceRef>,
+    ) -> Self {
+        let comparison_key = text.clone();
+        Self {
+            text,
+            comparison_key,
+            structured: None,
+            verification_commands,
+            evidence,
+        }
+    }
 }
 
 pub fn extract_objective(rows: &[CompactionRow]) -> ObjectiveSummary {
@@ -25,16 +46,16 @@ pub fn extract_objective(rows: &[CompactionRow]) -> ObjectiveSummary {
         .or_else(|| directive_rows(rows).find(|row| !row.text.trim().is_empty()));
 
     match objective_row {
-        Some(row) => ObjectiveSummary {
-            text: row.text.clone(),
-            verification_commands: extract_verification_commands(&row.text),
-            evidence: vec![evidence_from_row(row, "literal objective row")],
-        },
-        None => ObjectiveSummary {
-            text: "No objective row available".to_string(),
-            verification_commands: Vec::new(),
-            evidence: Vec::new(),
-        },
+        Some(row) => ObjectiveSummary::compatibility(
+            row.text.clone(),
+            extract_verification_commands(&row.text),
+            vec![evidence_from_row(row, "literal objective row")],
+        ),
+        None => ObjectiveSummary::compatibility(
+            "No objective row available".to_string(),
+            Vec::new(),
+            Vec::new(),
+        ),
     }
 }
 

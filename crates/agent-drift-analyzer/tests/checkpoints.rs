@@ -25,6 +25,11 @@ fn checkpoints_are_deterministic_and_session_scoped() {
         first.sessions[0].checkpoints,
         second.sessions[0].checkpoints
     );
+    assert_eq!(
+        first.sessions[0].context.objective.comparison_key,
+        first.sessions[0].context.objective.text
+    );
+    assert!(first.sessions[0].context.objective.structured.is_none());
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
     assert_eq!(checkpoints[0].session_id, "session-alpha");

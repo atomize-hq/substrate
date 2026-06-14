@@ -2162,11 +2162,11 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
         },
     };
 
-    Some(ObjectiveSummary {
-        text: objective_text,
-        verification_commands: extract_verification_commands(&candidate.text),
-        evidence: vec![evidence_from_row(candidate.row, reason)],
-    })
+    Some(ObjectiveSummary::compatibility(
+        objective_text,
+        extract_verification_commands(&candidate.text),
+        vec![evidence_from_row(candidate.row, reason)],
+    ))
 }
 
 fn objective_sort_key(
