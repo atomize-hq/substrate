@@ -96,7 +96,8 @@ This slice is complete only when a reviewer can answer, without guessing:
 
 ## Commands and evidence surfaces
 
-Use these as the default verification and doc-truth commands for this slice:
+Use these as the default command-truth and verification surfaces for this
+slice:
 
 ```bash
 cargo build --workspace
@@ -114,6 +115,13 @@ scripts/mac/smoke.sh --gateway-conformance
 scripts/mac/smoke.sh
 scripts/mac/orchestration-smoke.sh
 ```
+
+For macOS gateway lifecycle/status proof, treat the bare repo-root
+`target/debug/substrate world gateway sync|status|restart` commands as command
+inventory or caller-seeded spot checks, not as the unconditional macOS
+verification wall. The routed evidence wall remains `scripts/mac/lima-doctor.sh`
+plus the fixture-backed proof in `scripts/mac/smoke.sh --gateway-conformance`
+and `scripts/mac/smoke.sh`, matching Slice `11`.
 
 If the implementation only touches docs or helper wording, use the smallest
 relevant subset rather than running the entire wall mechanically.
@@ -290,10 +298,12 @@ before any broad doc rewrites begin:
      `substrate world enable`, and `substrate world deps current sync` where
      dependency reconciliation is the concern.
 2. **Degraded-but-supported transitional material**
-   - the current helper-backed `scripts/mac/lima-warm.sh` lifecycle path and
-     the staged-workspace copy flow remain transitional inputs carried forward
-     from Slice `11`; Packet `1` does not promote them into a new public
-     command family or claim that they are the final normal sync/copy story.
+   - `scripts/mac/lima-doctor.sh` remains a degraded-but-supported wrapper
+     around the routed doctor contract, and the current helper-backed
+     `scripts/mac/lima-warm.sh` lifecycle path plus staged-workspace copy flow
+     remain transitional inputs carried forward from Slice `11`; Packet `1`
+     does not promote them into a new public command family or claim that they
+     are the final normal sync/copy story.
 3. **Breakglass / advanced material**
    - `docs/reference/world/platforms/macos-lima-setup.md` and `docs/WORLD.md`
      still retain raw `limactl shell`, plain SSH, direct guest `systemctl`,

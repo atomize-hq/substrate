@@ -116,9 +116,18 @@ Session goal:
       `substrate world doctor`, `substrate world gateway sync|status|restart`,
       `substrate world enable`, and `substrate world deps current sync` where
       dependency reconciliation is the concern
-    - degraded-but-supported transitional material: the existing helper-backed
-      `scripts/mac/lima-warm.sh` lifecycle path plus the current staged-workspace
-      copy direction carried forward from Slice `11`
+    - verification/evidence truth preserved: Packet `1` keeps the supported
+      gateway command inventory explicit, but the primary macOS proof remains
+      routed `scripts/mac/lima-doctor.sh` plus fixture-backed
+      `scripts/mac/smoke.sh --gateway-conformance` and `scripts/mac/smoke.sh`;
+      bare repo-root `target/debug/substrate world gateway sync|status|restart`
+      commands stay caller-seeded spot checks rather than unconditional
+      verification wall proof
+    - degraded-but-supported transitional material:
+      `scripts/mac/lima-doctor.sh` as a wrapper around the routed doctor
+      contract plus the existing helper-backed `scripts/mac/lima-warm.sh`
+      lifecycle path and current staged-workspace copy direction carried
+      forward from Slice `11`
     - breakglass / advanced material: raw `limactl shell`, plain SSH, direct
       guest `systemctl`, guest socket `curl`, guest `journalctl`, and host-side
       `SUBSTRATE_WORLD_SOCKET` override use
@@ -221,9 +230,9 @@ Session goal:
   - Verify:
     - `target/debug/substrate host doctor --json | jq .`
     - `target/debug/substrate world doctor --json | jq .`
-    - `target/debug/substrate world gateway status --json | jq .`
     - `scripts/mac/lima-doctor.sh`
     - `scripts/mac/smoke.sh --gateway-conformance`
+    - `scripts/mac/smoke.sh`
   - Files:
     - touched files only
 

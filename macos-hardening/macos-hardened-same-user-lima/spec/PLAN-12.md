@@ -99,17 +99,24 @@ Frozen Packet `1` implementation direction:
    - `substrate world enable`
    - `substrate world deps current sync` where dependency reconciliation is the
      concern
-4. `substrate workspace sync` must remain explicitly outside the frozen normal
+4. Packet `1` keeps the supported gateway command inventory explicit, but the
+   macOS verification/evidence wall remains routed-first: bare repo-root
+   `target/debug/substrate world gateway sync|status|restart` invocations are
+   not frozen as unconditional proof, while `scripts/mac/lima-doctor.sh` plus
+   fixture-backed `scripts/mac/smoke.sh --gateway-conformance` and
+   `scripts/mac/smoke.sh` remain the primary macOS gateway evidence path.
+5. `substrate workspace sync` must remain explicitly outside the frozen normal
    macOS sync/copy contract unless live repo truth changes and the same slice
    proves that change.
-5. The degraded-but-supported transitional story remains the existing
-   helper-backed `scripts/mac/lima-warm.sh` lifecycle flow plus the current
-   staged-workspace copy direction already carried by Slice `11`, not a new
-   public lifecycle or sync family.
-6. Raw `limactl shell`, plain SSH, direct guest `systemctl`, direct guest
+6. The degraded-but-supported transitional story remains
+   `scripts/mac/lima-doctor.sh` as a wrapper around the routed doctor contract
+   plus the existing helper-backed `scripts/mac/lima-warm.sh` lifecycle flow
+   and current staged-workspace copy direction already carried by Slice `11`,
+   not a new public lifecycle or sync family.
+7. Raw `limactl shell`, plain SSH, direct guest `systemctl`, direct guest
    socket `curl`, direct guest `journalctl`, and host-side
    `SUBSTRATE_WORLD_SOCKET` override use remain breakglass/advanced material.
-7. Helper wording may be aligned where needed, but the slice should not turn
+8. Helper wording may be aligned where needed, but the slice should not turn
    into a new command-family implementation effort.
 
 ## Packet 2 primary docs cutover
