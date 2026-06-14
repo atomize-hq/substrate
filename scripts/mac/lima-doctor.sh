@@ -325,7 +325,11 @@ check_doctor_json "substrate world doctor --json" '.ok == true and .host.ok == t
 check_with_failure_detail "Canonical rendered guest units match the loaded service/socket contract" check_rendered_unit_parity
 
 echo ""
-if [[ "${RUN_BREAKGLASS_CHECKS}" == "1" || "${failures}" -ne 0 ]]; then
+if [[ "${RUN_BREAKGLASS_CHECKS}" == "1" ]]; then
+    echo "  Running because SUBSTRATE_MAC_DOCTOR_INCLUDE_BREAKGLASS=1 explicitly requested guest-direct breakglass evidence."
+    run_breakglass_guest_checks
+elif [[ "${failures}" -ne 0 ]]; then
+    echo "  Routed readiness failed above; escalating to guest-direct breakglass diagnostics."
     run_breakglass_guest_checks
 else
     echo "Guest-Direct Breakglass Diagnostics:"

@@ -40,6 +40,15 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/mac/lima-warm.sh [options] [<project-path>]
 
+This helper is the degraded-but-supported macOS create/warm/repair wrapper.
+Preferred day-to-day operator path after provisioning: `substrate host doctor
+[--json]`, `substrate world doctor [--json]`, `substrate world gateway
+sync|status|restart`, `substrate world enable`, and `substrate world deps
+current sync` for dependency reconciliation.
+Breakglass only: raw `limactl shell`, plain SSH, direct guest `systemctl` or
+`journalctl`, guest socket `curl`, and host-side `SUBSTRATE_WORLD_SOCKET`
+override use.
+
 Options:
   --check-only      Report the current Lima VM status without creating or provisioning it
   -h, --help        Show this help text
@@ -866,7 +875,7 @@ linger_guidance() {
     local linger
     linger="$(limactl shell "${VM_NAME}" sudo -n loginctl show-user "${vm_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
     if [[ "${linger}" != "yes" ]]; then
-        warn "loginctl lingering for ${vm_user} is ${linger:-unknown}. Run 'limactl shell ${VM_NAME} sudo loginctl enable-linger ${vm_user}' so socket activation survives logout."
+        warn "loginctl lingering for ${vm_user} is ${linger:-unknown}. Rerun \`substrate world enable\` (or this degraded-but-supported helper) after correcting it. Breakglass guest-admin repair: run 'limactl shell ${VM_NAME} sudo loginctl enable-linger ${vm_user}' so socket activation survives logout."
     else
         log "loginctl lingering already enabled for ${vm_user}."
     fi
@@ -916,4 +925,5 @@ EOF
 
 log "Lima world backend '${VM_NAME}' is ready. Preferred supported operations: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable when provisioning is needed; substrate world deps current sync when guest dependency reconciliation is needed."
 log "This helper remains degraded-but-supported for macOS create/warm/repair and staged-workspace copy."
+log "Escalate to raw limactl shell, plain SSH, direct guest systemctl/journalctl, guest socket curl, or host-side SUBSTRATE_WORLD_SOCKET override use only as breakglass."
 log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"

@@ -21,6 +21,15 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/mac/smoke.sh [--gateway-conformance | --orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
 
+This script preserves the routed macOS proof wall first:
+  supported proof: `substrate host doctor [--json]`, `substrate world doctor
+  [--json]`, `substrate world gateway sync|status|restart`, plus this smoke.
+  breakglass only: guest-direct gateway/readiness checks, raw `limactl shell`,
+  plain SSH, direct guest `systemctl` or `journalctl`, guest socket `curl`,
+  and host-side `SUBSTRATE_WORLD_SOCKET` override use.
+Set `SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT=1` only when you explicitly want
+breakglass guest-direct evidence in addition to the routed proof.
+
 Options:
   --gateway-conformance    Run the fixture-backed gateway lifecycle/status proof instead of the generic smoke
   --world-disabled-diagnostics
@@ -93,13 +102,13 @@ run_routed_proof_command() {
 
 run_guest_direct_gateway_compatibility_check() {
   local port="$1"
-  log "Running guest-direct gateway compatibility check (breakglass only)"
+  log "Running guest-direct gateway compatibility check (breakglass evidence after routed proof / explicit opt-in)"
   limactl shell "${VM_NAME}" curl --fail --silent "http://127.0.0.1:${port}/health" \
     | jq -e '.status == "ok" and .service == "substrate-gateway"' >/dev/null
 }
 
 run_guest_direct_readiness_diagnostics() {
-  log "Running guest-direct readiness diagnostics (fallback/breakglass only)"
+  log "Running guest-direct readiness diagnostics (breakglass only, after routed failure or explicit opt-in)"
   limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-world-service
   limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-gateway
   limactl shell "${VM_NAME}" systemctl is-active --quiet substrate-world-service
