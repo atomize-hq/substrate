@@ -86,32 +86,31 @@ Lima treats host visibility inside the guest as explicit mount configuration,
 so this dev-profile mounted-checkout path is advanced material rather than the
 default supported operator story for this guide.
 
-### Step 1: Set up Lima VM
+### Step 1: Provision the backend through the owned CLI
 
-1. **Start the Lima VM** using the provided helper script (runtime defaults):
-  ```sh
-  # From the substrate repository root
-  scripts/mac/lima-warm.sh
-  ```
+When provisioning or repair is needed, start with the supported Substrate-owned
+entrypoint from the repo root:
 
-   This script will:
-   - Create a new Lima VM named "substrate" with Ubuntu 24.04
-   - Install required packages (nftables, iproute2, dnsmasq, etc.)
-   - Render and install the authoritative `substrate-world-service.service` / `.socket` contract from `scripts/mac/lima/units/`
-   - Stage the requested project path into `/var/lib/substrate/staged-workspace/current` inside the guest via `limactl copy`
-   - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
+```sh
+target/debug/substrate world enable
+```
 
-2. Or, to use the dev profile (heavier resources), start it explicitly as shown above.
-   If you use that manual dev-profile startup path, either run
-   `scripts/mac/lima-warm.sh` afterward to provision and stage the workspace,
-   or treat `/var/lib/substrate/staged-workspace/current` as unavailable until
-   you perform an equivalent manual staging step.
+If guest dependency provisioning is also required, use:
 
-3. **Verify VM is running**:
-  ```sh
-  limactl list substrate
-  # Should show status: Running
-  ```
+```sh
+target/debug/substrate world enable --provision-deps
+```
+
+On macOS same-user Lima, `substrate world enable` is the supported operator
+surface even though the current implementation still routes through the
+helper-backed create/warm/repair and staged-workspace flow underneath.
+
+After `substrate world enable` completes, verify the VM is running:
+
+```sh
+limactl list substrate
+# Should show status: Running
+```
 
 ### Step 2: Run routed readiness checks
 
@@ -148,11 +147,42 @@ Listener posture summary for same-user Lima:
   so direct `limactl shell` and raw SSH remain guest-access / breakglass evidence here rather than
   the supported listener contract.
 
-### Step 3: Advanced/manual guest bootstrap (explicit operator choice)
+### Degraded-but-supported helper lifecycle path (explicit operator choice)
 
-Use this section only when you are intentionally bypassing the default helper-backed bootstrap
-path above or iterating on guest binaries directly. It is not the default supported readiness
-story for same-user Lima.
+Use this section only when you intentionally need the current helper-backed
+create/warm/repair wrapper directly instead of the owned `substrate world enable`
+path above.
+
+1. **Start the Lima VM** using the provided helper script (runtime defaults):
+  ```sh
+  # From the substrate repository root
+  scripts/mac/lima-warm.sh
+  ```
+
+   This script will:
+   - Create a new Lima VM named "substrate" with Ubuntu 24.04
+   - Install required packages (nftables, iproute2, dnsmasq, etc.)
+   - Render and install the authoritative `substrate-world-service.service` / `.socket` contract from `scripts/mac/lima/units/`
+   - Stage the requested project path into `/var/lib/substrate/staged-workspace/current` inside the guest via `limactl copy`
+   - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
+
+2. Or, to use the dev profile (heavier resources), start it explicitly as shown above.
+   If you use that manual dev-profile startup path, either run
+   `scripts/mac/lima-warm.sh` afterward to provision and stage the workspace,
+   or treat `/var/lib/substrate/staged-workspace/current` as unavailable until
+   you perform an equivalent manual staging step.
+
+3. **Verify VM is running**:
+  ```sh
+  limactl list substrate
+  # Should show status: Running
+  ```
+
+### Breakglass: manual guest bootstrap (explicit operator choice)
+
+Use this section only when you are intentionally bypassing the default
+supported provisioning path above or iterating on guest binaries directly. It
+is not the default supported readiness story for same-user Lima.
 
 1. **Compile inside the Lima guest from the staged workspace** (this path assumes
    `scripts/mac/lima-warm.sh` has already staged the checkout into
@@ -177,7 +207,7 @@ story for same-user Lima.
    limactl shell substrate substrate-world-service --version
    ```
 
-### Step 4: Start World Service
+### Breakglass: direct guest service management
 
 1. **Enable and start the systemd service**:
    ```sh
@@ -339,8 +369,8 @@ limactl delete substrate
 # Remove any cached data
 rm -rf ~/.lima/substrate
 
-# Start over from Step 1
-scripts/mac/lima-warm.sh
+# Re-run the supported provisioning path from Step 1
+target/debug/substrate world enable
 ```
 
 ## Environment Variables
