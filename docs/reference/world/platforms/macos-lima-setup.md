@@ -2,6 +2,30 @@
 
 This guide walks through setting up the Lima-based Linux world backend for Substrate on macOS. This enables every Substrate command to run inside an isolated Linux VM with full telemetry and policy enforcement.
 
+## Operator contract at a glance
+
+For the hardened same-user Lima default, the supported day-to-day operator path is:
+
+1. `substrate host doctor [--json]`
+2. `substrate world doctor [--json]`
+3. `substrate world gateway sync|status|restart`
+4. `substrate world enable` when provisioning is needed
+5. `substrate world deps current sync` when guest dependency reconciliation is the concern
+
+Treat these as the authoritative command surfaces for the default macOS flow:
+
+- [`docs/USAGE.md`](../../../USAGE.md)
+- [`docs/contracts/gateway/operator-contract.md`](../../../contracts/gateway/operator-contract.md)
+- [`docs/contracts/gateway/status-schema.md`](../../../contracts/gateway/status-schema.md)
+
+Additional classification for this guide:
+
+- `supported`: the owned CLI path above
+- `degraded-but-supported`: `scripts/mac/lima-warm.sh` for create/warm/repair plus staged-workspace copy, and `scripts/mac/lima-doctor.sh` for routed-first deeper troubleshooting
+- `breakglass`: direct `limactl shell`, plain SSH, direct guest `systemctl`, guest socket `curl`, guest `journalctl`, and host-side `SUBSTRATE_WORLD_SOCKET` override use
+
+Same-user Lima still does not provide the Linux ownership boundary, even when the supported routed checks are green.
+
 ## Prerequisites
 
 ### Host Requirements
@@ -58,6 +82,10 @@ The manual `substrate-dev.yaml` path keeps the host `$HOME` mount and the
 project checkout mounted at `/src`. It does **not** by itself populate
 `/var/lib/substrate/staged-workspace/current`.
 
+Lima treats host visibility inside the guest as explicit mount configuration,
+so this dev-profile mounted-checkout path is advanced material rather than the
+default supported operator story for this guide.
+
 ### Step 1: Set up Lima VM
 
 1. **Start the Lima VM** using the provided helper script (runtime defaults):
@@ -85,45 +113,7 @@ project checkout mounted at `/src`. It does **not** by itself populate
   # Should show status: Running
   ```
 
-### Step 2: Build and Deploy World Service
-
-1. **Compile inside the Lima guest from the staged workspace** (this path assumes
-   `scripts/mac/lima-warm.sh` has already staged the checkout into
-   `/var/lib/substrate/staged-workspace/current`; it is recommended if you are
-   not relying on host-staged Linux binaries from that helper):
-   ```sh
-   limactl shell substrate bash -lc 'cd /var/lib/substrate/staged-workspace/current && cargo build -p world-service --release'
-   ```
-
-2. **Install the binary inside the VM**:
-   ```sh
-   limactl shell substrate sudo install -m755 /var/lib/substrate/staged-workspace/current/target/release/world-service /usr/local/bin/substrate-world-service
-   ```
-
-   > **Alternative:** Cross-compile on the host using a Linux target (e.g.
-   > `cargo build -p world-service --release --target aarch64-unknown-linux-gnu`) and
-   > copy the resulting binary into the guest. Avoid copying the default macOS
-   > build—Mach-O binaries cannot run inside the Linux VM.
-
-3. **Verify the binary works**:
-   ```sh
-   limactl shell substrate substrate-world-service --version
-   ```
-
-### Step 3: Start World Service
-
-1. **Enable and start the systemd service**:
-   ```sh
-   limactl shell substrate sudo systemctl daemon-reload
-   limactl shell substrate sudo systemctl enable substrate-world-service.service
-   limactl shell substrate sudo systemctl enable --now substrate-world-service.socket
-   limactl shell substrate sudo systemctl restart substrate-world-service.service
-   ```
-2. **Proceed to the routed readiness proof below**. Treat direct guest `systemctl`, guest
-   `curl --unix-socket`, and guest `journalctl` as breakglass/post-failure diagnostics rather
-   than the normal proof for an already provisioned backend.
-
-### Step 4: Run routed readiness checks
+### Step 2: Run routed readiness checks
 
 Once the VM is provisioned, validate the supported macOS readiness path through the owned CLI
 surfaces first:
@@ -157,6 +147,48 @@ Listener posture summary for same-user Lima:
 - Lima documents `limactl shell` as SSH-backed and documents plain SSH as an interoperability path,
   so direct `limactl shell` and raw SSH remain guest-access / breakglass evidence here rather than
   the supported listener contract.
+
+### Step 3: Advanced/manual guest bootstrap (explicit operator choice)
+
+Use this section only when you are intentionally bypassing the default helper-backed bootstrap
+path above or iterating on guest binaries directly. It is not the default supported readiness
+story for same-user Lima.
+
+1. **Compile inside the Lima guest from the staged workspace** (this path assumes
+   `scripts/mac/lima-warm.sh` has already staged the checkout into
+   `/var/lib/substrate/staged-workspace/current`; it is recommended if you are
+   not relying on host-staged Linux binaries from that helper):
+   ```sh
+   limactl shell substrate bash -lc 'cd /var/lib/substrate/staged-workspace/current && cargo build -p world-service --release'
+   ```
+
+2. **Install the binary inside the VM**:
+   ```sh
+   limactl shell substrate sudo install -m755 /var/lib/substrate/staged-workspace/current/target/release/world-service /usr/local/bin/substrate-world-service
+   ```
+
+   > **Alternative:** Cross-compile on the host using a Linux target (e.g.
+   > `cargo build -p world-service --release --target aarch64-unknown-linux-gnu`) and
+   > copy the resulting binary into the guest. Avoid copying the default macOS
+   > build—Mach-O binaries cannot run inside the Linux VM.
+
+3. **Verify the binary works**:
+   ```sh
+   limactl shell substrate substrate-world-service --version
+   ```
+
+### Step 4: Start World Service
+
+1. **Enable and start the systemd service**:
+   ```sh
+   limactl shell substrate sudo systemctl daemon-reload
+   limactl shell substrate sudo systemctl enable substrate-world-service.service
+   limactl shell substrate sudo systemctl enable --now substrate-world-service.socket
+   limactl shell substrate sudo systemctl restart substrate-world-service.service
+   ```
+2. **Return to the routed readiness proof above**. Treat direct guest `systemctl`, guest
+   `curl --unix-socket`, and guest `journalctl` as breakglass/post-failure diagnostics rather
+   than the normal proof for an already provisioned backend.
 
 ## Testing the Setup
 
