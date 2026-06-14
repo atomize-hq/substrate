@@ -89,10 +89,12 @@ Session goal:
     `docs/reference/world/platforms/macos-lima-setup.md`, `docs/WORLD.md`,
     `docs/USAGE.md`, `scripts/mac/lima-doctor.sh`, `scripts/mac/lima-warm.sh`,
     and `scripts/mac/smoke.sh`, including that `docs/USAGE.md` already carries
-    the Slice `11` owned command matrix, the main remaining drift lives in
-    `docs/reference/world/platforms/macos-lima-setup.md` and `docs/WORLD.md`,
-    and `scripts/mac/smoke.sh` still classifies `SUBSTRATE_WORLD_SOCKET` as
-    advanced/test/breakglass on macOS.
+    the Slice `11` owned command matrix, the clearest remaining primary drift
+    lives in `docs/reference/world/platforms/macos-lima-setup.md`, that
+    `docs/WORLD.md` is already largely aligned and only needs residual wording
+    review if a concrete contradiction is found, and `scripts/mac/smoke.sh`
+    still classifies `SUBSTRATE_WORLD_SOCKET` as advanced/test/breakglass on
+    macOS.
   - Verify:
     - `rg -n "limactl shell|SSH|systemctl|journalctl|curl --unix-socket|SUBSTRATE_WORLD_SOCKET|host doctor|world doctor|world gateway|world enable|world deps current sync|workspace sync|supported|degraded-but-supported|breakglass" docs/reference/world/platforms/macos-lima-setup.md docs/WORLD.md docs/USAGE.md scripts/mac/lima-doctor.sh scripts/mac/lima-warm.sh scripts/mac/smoke.sh`
     - `rg -n "limactl shell|SSH|Filesystem mounts|workspace sync|breakglass|degraded-but-supported|SUBSTRATE_WORLD_SOCKET" macos-hardening/macos-hardened-same-user-lima/spec/SPEC-12-breakglass-reclassification-and-doc-cutover.md macos-hardening/macos-hardened-same-user-lima/spec/PLAN-12.md macos-hardening/macos-hardened-same-user-lima/spec/TASKS-12.md`
@@ -118,11 +120,13 @@ Session goal:
       dependency reconciliation is the concern
     - verification/evidence truth preserved: Packet `1` keeps the supported
       gateway command inventory explicit, but the primary macOS proof remains
-      routed `scripts/mac/lima-doctor.sh` plus fixture-backed
+      the owned `substrate host doctor`, `substrate world doctor`, and gateway
+      `sync|status|restart` surfaces plus fixture-backed
       `scripts/mac/smoke.sh --gateway-conformance` and `scripts/mac/smoke.sh`;
       bare repo-root `target/debug/substrate world gateway sync|status|restart`
       commands stay caller-seeded spot checks rather than unconditional
-      verification wall proof
+      verification wall proof, and `scripts/mac/lima-doctor.sh` stays the
+      degraded-but-supported deeper post-failure wrapper from Slice `11`
     - degraded-but-supported transitional material:
       `scripts/mac/lima-doctor.sh` as a wrapper around the routed doctor
       contract plus the existing helper-backed `scripts/mac/lima-warm.sh`
@@ -176,15 +180,16 @@ Session goal:
   - Files:
     - `docs/reference/world/platforms/macos-lima-setup.md`
 
-- [ ] Task 2.2: Cut over the macOS sections of `docs/WORLD.md`
-  - Acceptance: the runtime/operator narrative leads with the supported path,
-    keeps `SUBSTRATE_WORLD_SOCKET` advanced/test/breakglass on macOS, and moves
-    guest-admin guidance into clearly bounded escalation wording.
+- [ ] Task 2.2: Review the macOS sections of `docs/WORLD.md` for residual contradiction
+  - Acceptance: `docs/WORLD.md` is edited only if a concrete contradiction with
+    the frozen Packet `1` owned-path-first / breakglass contract remains; if no
+    contradiction remains, the packet records that `docs/WORLD.md` was already
+    largely aligned and needed no main cutover rewrite.
   - Verify:
     - `rg -n "host doctor|world doctor|world gateway|SUBSTRATE_WORLD_SOCKET|limactl shell|journalctl|systemctl|breakglass|degraded-but-supported" docs/WORLD.md`
     - manual diff review
   - Files:
-    - `docs/WORLD.md`
+    - `docs/WORLD.md` only if a concrete contradiction is found
 
 ### Packet 2 checkpoint
 

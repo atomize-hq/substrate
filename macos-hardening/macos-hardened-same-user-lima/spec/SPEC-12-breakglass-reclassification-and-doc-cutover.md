@@ -60,9 +60,11 @@ ASSUMPTIONS I'M MAKING:
    complete:
    - `docs/reference/world/platforms/macos-lima-setup.md` still contains direct
      `limactl shell`, guest `systemctl`, guest socket `curl`, and guest
-     `journalctl` sequences,
-   - `docs/WORLD.md` still retains raw guest and bypass guidance that needs
-     tighter classification and escalation wording,
+     `journalctl` sequences, so it remains the primary remaining cutover
+     surface,
+   - `docs/WORLD.md` is already largely aligned on the routed owned-path-first
+     posture and should be treated as a residual wording review surface only if
+     Packet `2` finds a concrete contradiction,
    - some helper and troubleshooting language still needs to be normalized so
      the supported path is obvious without reading breakglass sections first.
 6. Slice `12` should consume the Slice `11` operator matrix as fixed input
@@ -110,18 +112,22 @@ target/debug/substrate world gateway status --json | jq .
 target/debug/substrate world gateway restart
 target/debug/substrate world gateway status --json | jq .
 target/debug/substrate world deps current sync --dry-run --verbose
-scripts/mac/lima-doctor.sh
 scripts/mac/smoke.sh --gateway-conformance
 scripts/mac/smoke.sh
+scripts/mac/lima-doctor.sh
 scripts/mac/orchestration-smoke.sh
 ```
 
 For macOS gateway lifecycle/status proof, treat the bare repo-root
 `target/debug/substrate world gateway sync|status|restart` commands as command
 inventory or caller-seeded spot checks, not as the unconditional macOS
-verification wall. The routed evidence wall remains `scripts/mac/lima-doctor.sh`
-plus the fixture-backed proof in `scripts/mac/smoke.sh --gateway-conformance`
-and `scripts/mac/smoke.sh`, matching Slice `11`.
+verification wall. The primary routed evidence wall remains the owned
+`substrate host doctor`, `substrate world doctor`, and gateway
+`sync|status|restart` surfaces plus the fixture-backed proof in
+`scripts/mac/smoke.sh --gateway-conformance` and `scripts/mac/smoke.sh`,
+matching Slice `11`. `scripts/mac/lima-doctor.sh` remains the
+degraded-but-supported deeper post-failure helper rather than the primary proof
+entry point.
 
 If the implementation only touches docs or helper wording, use the smallest
 relevant subset rather than running the entire wall mechanically.
@@ -133,7 +139,8 @@ Primary repo surfaces for this slice:
 1. `docs/reference/world/platforms/macos-lima-setup.md`
    - primary setup, troubleshooting, and breakglass cutover target
 2. `docs/WORLD.md`
-   - primary runtime and operator narrative cutover target
+   - secondary runtime/operator narrative review surface; only needs residual
+     wording cleanup if Packet `2` finds a concrete contradiction
 3. `docs/USAGE.md`
    - authoritative top-level command inventory that the cutover docs must match
 4. `docs/contracts/gateway/operator-contract.md`
@@ -305,12 +312,16 @@ before any broad doc rewrites begin:
      does not promote them into a new public command family or claim that they
      are the final normal sync/copy story.
 3. **Breakglass / advanced material**
-   - `docs/reference/world/platforms/macos-lima-setup.md` and `docs/WORLD.md`
-     still retain raw `limactl shell`, plain SSH, direct guest `systemctl`,
-     guest socket `curl`, guest `journalctl`, and host-side
-     `SUBSTRATE_WORLD_SOCKET` override guidance; Slice `12` freezes those
-     surfaces as breakglass or advanced material rather than supported happy
-     path behavior.
+   - `docs/reference/world/platforms/macos-lima-setup.md` remains the primary
+     remaining docs cutover surface because it still retains raw
+     `limactl shell`, plain SSH, direct guest `systemctl`, guest socket `curl`,
+     guest `journalctl`, and host-side `SUBSTRATE_WORLD_SOCKET` override
+     guidance too prominently.
+   - `docs/WORLD.md` is already largely aligned on the routed evidence posture
+     and should only receive residual wording cleanup if a concrete
+     contradiction with that frozen contract is found.
+   - Slice `12` freezes those retained direct guest and bypass surfaces as
+     breakglass or advanced material rather than supported happy path behavior.
 4. **Slice `11` sync/copy truth remains fixed input**
    - `substrate workspace sync` is still not the frozen normal macOS same-user
      Lima sync/copy contract unless this same slice later proves a live repo

@@ -74,18 +74,18 @@ Live 2026-06-14 repo-truth confirmation for Slice `12`:
    supported/degraded/breakglass classifications explicitly.
 3. `scripts/mac/smoke.sh` already suppresses `SUBSTRATE_WORLD_SOCKET` during
    routed proof and treats it as advanced/test/breakglass on macOS.
-4. `docs/reference/world/platforms/macos-lima-setup.md` and `docs/WORLD.md`
-   still contain the main remaining drift: they preserve too much direct guest
-   procedure or advanced material in the default operator narrative.
+4. `docs/reference/world/platforms/macos-lima-setup.md` still contains the
+   clearest remaining primary drift: it preserves too much direct guest
+   procedure and advanced material in the default operator narrative.
 5. `docs/reference/world/platforms/macos-lima-setup.md` still includes direct
    guest `systemctl`, guest socket `curl`, guest `journalctl`, and raw
    `limactl shell` sequences, but its routed readiness proof already leads with
    `substrate host doctor`, `substrate world doctor`, and
    `substrate world gateway sync|status|restart`.
-6. `docs/WORLD.md` still retains guest-level diagnosis and bypass wording that
-   Packet `2` must cut over, but it already treats `substrate world doctor`,
+6. `docs/WORLD.md` already treats `substrate world doctor`,
    `substrate host doctor`, and gateway status as the primary routed evidence
-   wall.
+   wall, so Packet `2` should only do residual wording review there if a
+   concrete contradiction is found.
 
 Frozen Packet `1` implementation direction:
 
@@ -102,9 +102,12 @@ Frozen Packet `1` implementation direction:
 4. Packet `1` keeps the supported gateway command inventory explicit, but the
    macOS verification/evidence wall remains routed-first: bare repo-root
    `target/debug/substrate world gateway sync|status|restart` invocations are
-   not frozen as unconditional proof, while `scripts/mac/lima-doctor.sh` plus
-   fixture-backed `scripts/mac/smoke.sh --gateway-conformance` and
-   `scripts/mac/smoke.sh` remain the primary macOS gateway evidence path.
+   not frozen as unconditional proof; the primary macOS gateway evidence path
+   remains the owned `substrate host doctor`, `substrate world doctor`, and
+   gateway `sync|status|restart` surfaces plus fixture-backed
+   `scripts/mac/smoke.sh --gateway-conformance` and `scripts/mac/smoke.sh`,
+   while `scripts/mac/lima-doctor.sh` remains the degraded-but-supported deeper
+   post-failure wrapper from Slice `11`.
 5. `substrate workspace sync` must remain explicitly outside the frozen normal
    macOS sync/copy contract unless live repo truth changes and the same slice
    proves that change.
@@ -127,8 +130,9 @@ Primary responsibilities:
 
 1. rewrite `docs/reference/world/platforms/macos-lima-setup.md` so the happy
    path leads with Substrate-owned commands,
-2. rewrite the relevant macOS sections of `docs/WORLD.md` so supported and
-   breakglass flows are clearly separated,
+2. review the relevant macOS sections of `docs/WORLD.md` and edit only if a
+   concrete contradiction remains after the primary setup/troubleshooting
+   cutover,
 3. preserve links or references to `docs/USAGE.md`,
    `docs/contracts/gateway/operator-contract.md`, and
    `docs/contracts/gateway/status-schema.md` as the authoritative command and
@@ -139,7 +143,8 @@ Primary responsibilities:
 Likely touched files:
 
 1. `docs/reference/world/platforms/macos-lima-setup.md`
-2. `docs/WORLD.md`
+2. `docs/WORLD.md` only if Packet `2` finds a concrete contradiction that still
+   needs residual wording cleanup
 
 Packet `2` should review, but not edit by default:
 
