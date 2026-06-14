@@ -4219,6 +4219,95 @@ After that, report the changed files, tests run, residual risk, and the exact co
 }
 
 #[test]
+fn checkpoints_context_objective_prefers_scope_section_over_subordinate_checklist_lines() {
+    let scope = "Teach objective extraction to distinguish mission/scope, checklist, verification, constraints, deliverables, context, boilerplate, and tooling-instruction sections without widening into full field assembly yet.";
+    let prompt = format!(
+        r#"Read first:
+- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- crates/agent-drift-analyzer/src/context/objective.rs
+
+## Scope
+{scope}
+
+## Checklist
+- Run this task on a linux machine.
+- Inspect objective.rs before editing.
+
+## Verification
+- cargo test -p agent-drift-analyzer checkpoints -- --nocapture
+
+## Return with
+- changed files
+- residual risk"#,
+    );
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(objective.text, scope);
+    assert_ne!(objective.text, prompt);
+    assert!(!objective.text.contains("Run this task on a linux machine."));
+    assert_eq!(
+        objective.verification_commands,
+        vec!["cargo test -p agent-drift-analyzer checkpoints -- --nocapture"]
+    );
+}
+
+#[test]
+fn checkpoints_context_objective_keeps_explicit_tooling_target_inside_mixed_prompt_scaffolding() {
+    let concrete_ask =
+        "Determine whether the Codex desktop context, plugin instructions, and Apps (Connectors) scaffold should change, and explain only that tooling boilerplate decision.";
+    let prompt = format!(
+        r#"Tools are grouped by namespace.
+Apps (Connectors) can be explicitly triggered in user messages.
+Use memory by default when the query mentions a workspace.
+
+Concrete workspace action request:
+{concrete_ask}
+
+Execution rules:
+- keep the change reviewable
+- do not widen into replay or schema work
+
+Return with:
+- changed files
+- residual risk"#,
+    );
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"Codex desktop context|plugin instructions|Apps \\(Connectors\\)\" AGENTS.md CLAUDE.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(objective.text, concrete_ask);
+    assert_ne!(objective.text, prompt);
+}
+
+#[test]
 fn checkpoints_extract_inline_review_clause_from_single_line_prompt() {
     let prompt = "We just completed implementing the entire handbook extraction phase set and I need you to review what landed in the codebase vs the planning docs and intended end state and validate/invalidate if it landed correctly and completely";
     let result = analyze_custom_rows(vec![
