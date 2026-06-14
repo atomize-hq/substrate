@@ -14,6 +14,8 @@ use substrate_trace::{ExecutionOrigin, TransportMeta};
 
 pub use substrate_trace::ReplayContext;
 
+const REPLAY_WORLD_CWD_ENV: &str = "SUBSTRATE_REPLAY_WORLD_CWD";
+
 /// A span loaded from the trace file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceSpan {
@@ -82,6 +84,16 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
                     }
                 }
 
+                if let Some(previous) = &found_command_complete {
+                    let replay_context_missing =
+                        value.get("replay_context").is_none_or(|ctx| ctx.is_null());
+                    if replay_context_missing {
+                        if let Some(previous_context) = previous.get("replay_context").cloned() {
+                            value["replay_context"] = previous_context;
+                        }
+                    }
+                }
+
                 found_command_complete = Some(value);
             }
             Some("world_process_start") => {
@@ -130,7 +142,6 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
         if let Some(raw_cmd) = raw_world_inner_cmd {
             value["cmd"] = Value::String(raw_cmd);
             if let Some(world_cwd) = raw_world_cwd {
-                value["cwd"] = Value::String(world_cwd.clone());
                 if let Some(replay_context) = value
                     .get_mut("replay_context")
                     .and_then(|ctx| ctx.as_object_mut())
@@ -215,6 +226,9 @@ pub fn reconstruct_state(
         }
         if let Some(anchor_path) = &ctx.anchor_path {
             env.insert("SUBSTRATE_ANCHOR_PATH".to_string(), anchor_path.clone());
+        }
+        if !ctx.cwd.trim().is_empty() {
+            env.insert(REPLAY_WORLD_CWD_ENV.to_string(), ctx.cwd.clone());
         }
         if let Some(caged) = ctx.caged {
             env.insert(
@@ -494,10 +508,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(span.cmd, "printf raw-world-command");
-        assert_eq!(
-            span.cwd.as_deref(),
-            Some(Path::new("/var/lib/substrate/staged-workspace/current/nested"))
-        );
+        assert_eq!(span.cwd.as_deref(), Some(Path::new("/")));
         assert_eq!(
             span.replay_context.as_ref().map(|ctx| ctx.cwd.as_str()),
             Some("/var/lib/substrate/staged-workspace/current/nested")
@@ -509,6 +520,95 @@ mod tests {
             Some("/var/lib/substrate/staged-workspace/current")
         );
         assert_eq!(span.exit_code, Some(0));
+    }
+
+    #[tokio::test]
+    async fn test_load_span_from_trace_preserves_replay_context_when_later_duplicate_is_sparse() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let trace_content = r#"
+{"ts":"2024-01-01T00:00:00Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","command":"printf ***\n","cwd":"/","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","umask":18,"locale":null,"cwd":"/","policy_id":"default","policy_commit":null,"world_image_version":"0.2.8","anchor_mode":"workspace","anchor_path":"/","caged":true},"exit_code":0}
+{"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shim","command":"printf ***\n","cwd":"/","exit":0}
+{"ts":"2024-01-01T00:00:02Z","event_type":"world_process_start","parent_span":"test-span-2","session_id":"session-1","component":"world-service","cwd":"/var/lib/substrate/staged-workspace/current","env":{"SUBSTRATE_INNER_CMD":"printf raw-world-command\n","SUBSTRATE_MOUNT_PROJECT_DIR":"/var/lib/substrate/staged-workspace/current"}}
+"#;
+
+        let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
+        file.write_all(trace_content.as_bytes()).await.unwrap();
+        file.flush().await.unwrap();
+        drop(file);
+
+        let span = load_span_from_trace(temp_file.path(), "test-span-2")
+            .await
+            .unwrap();
+
+        assert_eq!(span.cmd, "printf raw-world-command");
+        assert_eq!(span.cwd.as_deref(), Some(Path::new("/")));
+        assert_eq!(
+            span.replay_context
+                .as_ref()
+                .and_then(|ctx| ctx.anchor_path.as_deref()),
+            Some("/var/lib/substrate/staged-workspace/current")
+        );
+        assert_eq!(
+            span.replay_context.as_ref().map(|ctx| ctx.cwd.as_str()),
+            Some("/var/lib/substrate/staged-workspace/current")
+        );
+    }
+
+    #[test]
+    fn reconstruct_state_preserves_host_policy_cwd_for_raw_world_replay() {
+        let span = TraceSpan {
+            ts: Utc::now(),
+            event_type: "command_complete".to_string(),
+            span_id: "raw-world-span".to_string(),
+            session_id: "test-session".to_string(),
+            component: "shell".to_string(),
+            cmd: "printf raw-world-command".to_string(),
+            cwd: Some(PathBuf::from("/Users/test/workspace")),
+            exit_code: Some(0),
+            duration_ms: Some(10),
+            policy_decision: None,
+            fs_diff: None,
+            scopes_used: None,
+            replay_context: Some(ReplayContext {
+                path: Some("/usr/bin:/bin".to_string()),
+                env_hash: "abc123".to_string(),
+                umask: 22,
+                locale: None,
+                cwd: "/var/lib/substrate/staged-workspace/current/nested".to_string(),
+                policy_id: "default".to_string(),
+                policy_commit: None,
+                world_image_version: "test".to_string(),
+                hostname: None,
+                user: None,
+                shell: None,
+                term: None,
+                world_image: None,
+                execution_origin: Some(ExecutionOrigin::World),
+                transport: None,
+                anchor_mode: Some("workspace".to_string()),
+                anchor_path: Some("/var/lib/substrate/staged-workspace/current".to_string()),
+                world_root_mode: None,
+                world_root_path: None,
+                caged: Some(true),
+                world_fs_mode: None,
+            }),
+            transport: None,
+            execution_origin: None,
+            stdout: None,
+            stderr: None,
+            env_hash: None,
+        };
+
+        let state = reconstruct_state(&span, &HashMap::new()).unwrap();
+        assert_eq!(state.cwd, PathBuf::from("/Users/test/workspace"));
+        assert_eq!(
+            state.env.get(REPLAY_WORLD_CWD_ENV).map(String::as_str),
+            Some("/var/lib/substrate/staged-workspace/current/nested")
+        );
+        assert_eq!(
+            state.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
+            Some("/var/lib/substrate/staged-workspace/current")
+        );
     }
 
     #[test]
@@ -562,6 +662,10 @@ mod tests {
         assert_eq!(state.cwd, PathBuf::from("/tmp"));
         assert_eq!(state.env.get("PATH"), Some(&"/usr/bin:/bin".to_string()));
         assert_eq!(state.env.get("USER"), Some(&"testuser".to_string()));
+        assert_eq!(
+            state.env.get(REPLAY_WORLD_CWD_ENV),
+            Some(&"/tmp".to_string())
+        );
     }
 
     #[test]

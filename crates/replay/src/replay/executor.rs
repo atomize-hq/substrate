@@ -44,12 +44,17 @@ use world::{copydiff, overlayfs};
 
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
+const REPLAY_WORLD_CWD_ENV: &str = "SUBSTRATE_REPLAY_WORLD_CWD";
 
 fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
     let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
         .map_err(|e| anyhow!("failed to resolve effective policy for snapshot: {e}"))?;
 
     snapshot_from_policy(&policy)
+}
+
+fn effective_policy_context_cwd(state: &ExecutionState) -> &Path {
+    &state.cwd
 }
 
 fn snapshot_from_policy(policy: &substrate_broker::Policy) -> Result<PolicySnapshotV3> {
@@ -199,7 +204,7 @@ fn build_agent_execute_request(
     Ok(ExecuteRequest {
         profile: None,
         cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
-        cwd: Some(state.cwd.display().to_string()),
+        cwd: Some(effective_world_exec_cwd(state).display().to_string()),
         env: Some(state.env.clone()),
         pty: false,
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
@@ -302,7 +307,8 @@ pub async fn execute_with_world_backends(
     timeout_secs: u64,
 ) -> Result<ExecutionResult> {
     let verbose = replay_verbose();
-    let project_dir = project_dir_from_env(&state.env, &state.cwd)?;
+    let world_exec_cwd = effective_world_exec_cwd(state);
+    let project_dir = project_dir_from_env(&state.env, &world_exec_cwd)?;
     #[cfg(target_os = "linux")]
     let mut agent_fallback_reason: Option<String> = None;
     #[cfg(not(target_os = "linux"))]
@@ -372,6 +378,7 @@ pub async fn execute_with_world_backends(
         execute_on_linux(
             state,
             &project_dir,
+            &world_exec_cwd,
             verbose,
             agent_fallback_reason,
             agent_socket,
@@ -392,19 +399,20 @@ async fn try_world_backend(
     if let Ok(backend) = world_backend_factory::factory() {
         use world_api::ExecRequest;
         let start = Instant::now();
-        let backend_policy = resolve_policy_snapshot_v3_for_cwd(&state.cwd)
-            .and_then(|snapshot| {
-                world_net_filter_from_process_env().and_then(|world_net_filter| {
-                    backend_policy_input_for_snapshot(&snapshot, world_net_filter)
+        let backend_policy =
+            resolve_policy_snapshot_v3_for_cwd(effective_policy_context_cwd(state))
+                .and_then(|snapshot| {
+                    world_net_filter_from_process_env().and_then(|world_net_filter| {
+                        backend_policy_input_for_snapshot(&snapshot, world_net_filter)
+                    })
                 })
-            })
-            .ok();
+                .ok();
         let spec = world_spec_for_replay_backend(project_dir, backend_policy);
         match backend.ensure_session(&spec) {
             Ok(handle) => {
                 let req = ExecRequest {
                     cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
-                    cwd: state.cwd.clone(),
+                    cwd: effective_world_exec_cwd(state),
                     env: state.env.clone(),
                     pty: false,
                     span_id: Some(state.span_id.clone()),
@@ -481,6 +489,7 @@ fn world_spec_for_replay_backend(
 pub fn execute_on_linux(
     state: &ExecutionState,
     project_dir: &Path,
+    world_exec_cwd: &Path,
     verbose: bool,
     agent_fallback_reason: Option<String>,
     agent_socket: Option<PathBuf>,
@@ -715,7 +724,7 @@ pub fn execute_on_linux(
             ovl,
             &bash_cmd,
             project_dir,
-            &state.cwd,
+            world_exec_cwd,
             &state.env,
             if cgroup_active {
                 Some(&cgroup_mgr)
@@ -771,7 +780,7 @@ pub fn execute_on_linux(
                 ovl,
                 &bash_cmd,
                 project_dir,
-                &state.cwd,
+                world_exec_cwd,
                 &state.env,
                 if cgroup_active {
                     Some(&cgroup_mgr)
@@ -822,7 +831,7 @@ pub fn execute_on_linux(
         world_id,
         &bash_cmd,
         project_dir,
-        &state.cwd,
+        world_exec_cwd,
         &state.env,
         netns_name.as_deref(),
     )?;
@@ -901,6 +910,16 @@ fn project_dir_from_env(env: &HashMap<String, String>, cwd: &Path) -> Result<Pat
     };
 
     Ok(base_dir)
+}
+
+fn effective_world_exec_cwd(state: &ExecutionState) -> PathBuf {
+    state
+        .env
+        .get(REPLAY_WORLD_CWD_ENV)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| state.cwd.clone())
 }
 
 pub fn record_replay_strategy(
@@ -1036,7 +1055,7 @@ async fn try_agent_backend(
         }
     }
 
-    let policy_snapshot = resolve_policy_snapshot_v3_for_cwd(&state.cwd)?;
+    let policy_snapshot = resolve_policy_snapshot_v3_for_cwd(effective_policy_context_cwd(state))?;
     let world_net_filter = world_net_filter_from_process_env()?;
     let request = build_agent_execute_request(state, policy_snapshot, world_net_filter)?;
 
@@ -1194,6 +1213,45 @@ mod tests {
     }
 
     #[test]
+    fn effective_world_exec_cwd_prefers_captured_world_cwd() {
+        let mut state = execution_state();
+        state.cwd = PathBuf::from("/Users/test/workspace");
+        state.env.insert(
+            REPLAY_WORLD_CWD_ENV.to_string(),
+            "/var/lib/substrate/staged-workspace/current/nested".to_string(),
+        );
+
+        assert_eq!(
+            effective_world_exec_cwd(&state),
+            PathBuf::from("/var/lib/substrate/staged-workspace/current/nested")
+        );
+        assert_eq!(
+            effective_policy_context_cwd(&state),
+            Path::new("/Users/test/workspace")
+        );
+    }
+
+    #[test]
+    fn project_dir_from_env_uses_world_exec_cwd_for_follow_cwd_mode() {
+        let mut state = execution_state();
+        state.cwd = PathBuf::from("/Users/test/workspace");
+        state.env.insert(
+            REPLAY_WORLD_CWD_ENV.to_string(),
+            "/var/lib/substrate/staged-workspace/current/nested".to_string(),
+        );
+        state
+            .env
+            .insert(ANCHOR_MODE_ENV.to_string(), "follow-cwd".to_string());
+
+        let project_dir =
+            project_dir_from_env(&state.env, &effective_world_exec_cwd(&state)).expect("project");
+        assert_eq!(
+            project_dir,
+            PathBuf::from("/var/lib/substrate/staged-workspace/current/nested")
+        );
+    }
+
+    #[test]
     fn snapshot_from_policy_preserves_authoritative_net_allowed() {
         let mut policy = substrate_broker::Policy::default();
         policy.net_allowed = vec![" Example.COM. ".into(), "api.example.com".into()];
@@ -1261,6 +1319,24 @@ mod tests {
                 std::env::remove_var("SUBSTRATE_AGENT_ID");
             }
         }
+    }
+
+    #[test]
+    fn build_agent_execute_request_prefers_replay_world_cwd_when_present() {
+        let mut state = execution_state();
+        state.cwd = PathBuf::from("/");
+        state.env.insert(
+            REPLAY_WORLD_CWD_ENV.to_string(),
+            "/var/lib/substrate/staged-workspace/current".to_string(),
+        );
+        let snapshot = snapshot_with_net_allowed(&[]);
+
+        let request = build_agent_execute_request(&state, snapshot, false).expect("build request");
+
+        assert_eq!(
+            request.cwd.as_deref(),
+            Some("/var/lib/substrate/staged-workspace/current")
+        );
     }
 
     #[test]

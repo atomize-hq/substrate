@@ -207,20 +207,79 @@ mod world_doctor_macos {
     }
 
     #[cfg(not(test))]
-    fn try_bootstrap_host_visible_transport() -> bool {
+    async fn try_bootstrap_host_visible_transport_async() -> bool {
         let Ok(backend) = world_mac_lima::MacLimaBackend::new() else {
             return false;
         };
+        if backend
+            .ensure_persistent_session_ready_async()
+            .await
+            .is_err()
+        {
+            return false;
+        }
+
+        selected_host_visible_transports()
+            .iter()
+            .any(probe_caps_over_transport)
+    }
+
+    #[cfg(not(test))]
+    fn try_bootstrap_host_visible_transport() -> bool {
         let Ok(rt) = tokio::runtime::Runtime::new() else {
             return false;
         };
-        rt.block_on(backend.ensure_persistent_session_ready_async())
-            .is_ok()
+        rt.block_on(try_bootstrap_host_visible_transport_async())
     }
 
     #[cfg(test)]
     fn try_bootstrap_host_visible_transport() -> bool {
         false
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum WorldDoctorReportPath {
+        Routed,
+        BootstrappedRouted,
+        GuestDirectBreakglass,
+        GuestDirectBreakglassFallbackV1,
+    }
+
+    impl WorldDoctorReportPath {
+        fn as_str(self) -> &'static str {
+            match self {
+                Self::Routed => "routed",
+                Self::BootstrappedRouted => "bootstrapped_routed",
+                Self::GuestDirectBreakglass => "guest_direct_breakglass",
+                Self::GuestDirectBreakglassFallbackV1 => "guest_direct_breakglass_fallback_v1",
+            }
+        }
+
+        fn is_breakglass(self) -> bool {
+            matches!(
+                self,
+                Self::GuestDirectBreakglass | Self::GuestDirectBreakglassFallbackV1
+            )
+        }
+    }
+
+    #[cfg(not(test))]
+    async fn doctor_world_report_via_bootstrapped_transport() -> Option<Value> {
+        let backend = world_mac_lima::MacLimaBackend::new().ok()?;
+        backend.ensure_persistent_session_ready_async().await.ok()?;
+
+        for transport in selected_host_visible_transports() {
+            if let Some(report) = doctor_world_report_over_transport(&transport).await {
+                return Some(report);
+            }
+        }
+
+        None
+    }
+
+    #[cfg(test)]
+    async fn doctor_world_report_via_bootstrapped_transport() -> Option<Value> {
+        None
     }
 
     struct WorldServiceReachability {
@@ -586,11 +645,18 @@ echo pass
                         for transport in &host_visible_transports {
                             if let Some(report) = doctor_world_report_over_transport(transport).await
                             {
-                                return Some(report);
+                                return Some((report, WorldDoctorReportPath::Routed));
                             }
                         }
 
-                        doctor_world_report_via_vm(runner, &vm_name)
+                        if let Some(report) = doctor_world_report_via_bootstrapped_transport().await
+                        {
+                            return Some((report, WorldDoctorReportPath::BootstrappedRouted));
+                        }
+
+                        doctor_world_report_via_vm(runner, &vm_name).map(|report| {
+                            (report, WorldDoctorReportPath::GuestDirectBreakglass)
+                        })
                     }))
                 }
                 Err(err) => {
@@ -604,21 +670,36 @@ echo pass
             }
             .flatten();
 
+            let (report, report_path) = match report {
+                Some((report, path)) => (Some(report), Some(path)),
+                None => (None, None),
+            };
+
             let mut value = match report {
                 Some(report) => serde_json::to_value(report).unwrap_or_else(|_| json!({})),
                 None => fallback_world_report_v1_via_vm(runner, &vm_name),
             };
 
-            let status = if value.get("ok").and_then(Value::as_bool) == Some(true) {
+            let report_path =
+                report_path.unwrap_or(WorldDoctorReportPath::GuestDirectBreakglassFallbackV1);
+            let used_guest_direct_breakglass = report_path.is_breakglass();
+
+            let status = if used_guest_direct_breakglass {
+                "breakglass_only"
+            } else if value.get("ok").and_then(Value::as_bool) == Some(true) {
                 "ok"
             } else {
                 "missing_prereqs"
             };
             if let Some(obj) = value.as_object_mut() {
                 obj.insert("status".to_string(), json!(status));
+                obj.insert("report_path".to_string(), json!(report_path.as_str()));
             }
 
-            if host_ok && value.get("ok").and_then(Value::as_bool) == Some(true) {
+            if host_ok
+                && value.get("ok").and_then(Value::as_bool) == Some(true)
+                && !used_guest_direct_breakglass
+            {
                 exit_code = 0;
             } else {
                 exit_code = 4;
@@ -927,6 +1008,43 @@ echo pass
                     fail("world backend not provisioned (VM/service not running)")
                 }
                 Some("unreachable") => fail("world backend unreachable (agent did not respond)"),
+                Some("breakglass_only") => {
+                    fail("world doctor report available only via guest-direct breakglass fallback");
+                    let landlock_supported = assessment
+                        .world_value
+                        .get("landlock")
+                        .and_then(|l| l.get("supported"))
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    let landlock_abi = assessment
+                        .world_value
+                        .get("landlock")
+                        .and_then(|l| l.get("abi"))
+                        .and_then(Value::as_u64);
+                    if landlock_supported {
+                        pass(&format!(
+                            "landlock: supported{}",
+                            landlock_abi
+                                .map(|abi| format!(" (abi {abi})"))
+                                .unwrap_or_default()
+                        ));
+                    } else {
+                        fail("landlock: unsupported");
+                    }
+                    let probe_result = assessment
+                        .world_value
+                        .get("world_fs_strategy")
+                        .and_then(|w| w.get("probe"))
+                        .and_then(|p| p.get("result"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("fail");
+                    if probe_result == "pass" {
+                        pass("world fs strategy probe: pass");
+                    } else {
+                        fail("world fs strategy probe: fail");
+                    }
+                    fail("world doctor: ok=false");
+                }
                 Some("missing_prereqs") | Some("ok") => {
                     let landlock_supported = assessment
                         .world_value
@@ -1608,7 +1726,173 @@ echo pass
                             .out
                             .pointer("/world/status")
                             .and_then(Value::as_str),
-                        Some("ok")
+                        Some("breakglass_only")
+                    );
+                    assert_eq!(
+                        assessment.out.pointer("/world/ok").and_then(Value::as_bool),
+                        Some(true)
+                    );
+                    assert_eq!(
+                        assessment
+                            .out
+                            .pointer("/world/report_path")
+                            .and_then(Value::as_str),
+                        Some("guest_direct_breakglass")
+                    );
+                    assert_eq!(
+                        assessment.out.pointer("/ok").and_then(Value::as_bool),
+                        Some(false)
+                    );
+                },
+            );
+        }
+
+        #[test]
+        #[serial]
+        fn reachability_marks_v1_guest_direct_fallback_as_breakglass_only() {
+            let vm_json = r#"{"status":"Running"}"#;
+
+            with_env_var(
+                "SUBSTRATE_WORLD_SOCKET",
+                Some("/tmp/substrate-missing.sock"),
+                || {
+                    let responses = vec![
+                    (
+                        "limactl".into(),
+                        vec!["--version".into()],
+                        success_out("Lima v1"),
+                    ),
+                    (
+                        "sysctl".into(),
+                        vec!["-n".into(), "kern.hv_support".into()],
+                        success_out("1\n"),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec!["list".into(), "substrate".into(), "--json".into()],
+                        success_out(vm_json),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "systemctl".into(),
+                            "is-active".into(),
+                            "substrate-world-service".into(),
+                        ],
+                        success_out("active\n"),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "sudo".into(),
+                            "-n".into(),
+                            "timeout".into(),
+                            "5".into(),
+                            "curl".into(),
+                            "-sS".into(),
+                            "--fail".into(),
+                            "--unix-socket".into(),
+                            "/run/substrate.sock".into(),
+                            "http://localhost/v1/capabilities".into(),
+                        ],
+                        success_out(r#"{"version":"v1","features":["execute"]}"#),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "sudo".into(),
+                            "-n".into(),
+                            "timeout".into(),
+                            "5".into(),
+                            "curl".into(),
+                            "-sS".into(),
+                            "--fail".into(),
+                            "--unix-socket".into(),
+                            "/run/substrate.sock".into(),
+                            "http://localhost/v1/doctor/world".into(),
+                        ],
+                        failure_out(),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "sudo".into(),
+                            "-n".into(),
+                            "sh".into(),
+                            "-c".into(),
+                            r#"
+set -eu
+exec 2>&1
+if ! grep -qs ' /sys/kernel/security ' /proc/mounts; then
+  mount -t securityfs securityfs /sys/kernel/security || true
+fi
+cat /sys/kernel/security/landlock/abi_version
+"#
+                            .into(),
+                        ],
+                        success_out("3\n"),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "sudo".into(),
+                            "-n".into(),
+                            "timeout".into(),
+                            "10".into(),
+                            "sh".into(),
+                            "-c".into(),
+                            r#"
+set -eu
+exec 2>&1
+modprobe overlay >/dev/null 2>&1 || true
+dir="$(mktemp -d)"
+cleanup() {
+  umount "$dir/merged" >/dev/null 2>&1 || true
+  rm -rf "$dir"
+}
+trap cleanup EXIT
+mkdir -p "$dir/lower" "$dir/upper" "$dir/work" "$dir/merged"
+mount -t overlay overlay -o "lowerdir=$dir/lower,upperdir=$dir/upper,workdir=$dir/work" "$dir/merged"
+touch "$dir/merged/.substrate_enum_probe"
+ls -a "$dir/merged" | grep -q '\.substrate_enum_probe'
+echo pass
+"#
+                            .into(),
+                        ],
+                        success_out("pass\n"),
+                    ),
+                ];
+                    let runner = MockRunner::new(responses);
+                    let assessment = collect_world_doctor_assessment(true, true, None, &runner);
+                    assert_eq!(assessment.exit_code, 4);
+                    assert_eq!(
+                        assessment
+                            .out
+                            .pointer("/world/status")
+                            .and_then(Value::as_str),
+                        Some("breakglass_only")
+                    );
+                    assert_eq!(
+                        assessment
+                            .out
+                            .pointer("/world/report_path")
+                            .and_then(Value::as_str),
+                        Some("guest_direct_breakglass_fallback_v1")
                     );
                     assert_eq!(
                         assessment.out.pointer("/world/ok").and_then(Value::as_bool),
