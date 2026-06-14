@@ -64,6 +64,9 @@ Primary seed artifacts:
 - `/Users/spensermcconnell/.codex/sessions/2026/03/10/rollout-2026-03-10T20-40-30-019cda56-8bbf-7ed2-9de3-2db5f65e24d7.jsonl`
 - `/Users/spensermcconnell/.codex/sessions/2026/03/10/rollout-2026-03-10T20-41-00-019cda57-012e-7073-a736-6eda6f2ba615.jsonl`
 
+Add the named `R5.75` linux/macOS smoke adaptations as locked benchmark seeds first. Adapted
+external prompt families are secondary stretch coverage, not the primary acceptance anchor.
+
 ### Family B: Deliberate boilerplate-target prompts
 
 These are preserved-target cases where the user is actually asking to analyze or edit the
@@ -153,7 +156,8 @@ Each prompt should also have:
 Each extracted field should carry:
 
 - supporting row ref,
-- supporting section id,
+- supporting source kind,
+- supporting section kind,
 - supporting clause span,
 - annotator confidence.
 
@@ -163,13 +167,30 @@ Each extracted field should carry:
 2. do not promote checklist steps to `goal` when a broader mission span exists,
 3. treat tool-choice instructions as execution metadata, not semantic constraints,
 4. mark fields unknown when evidence is weak rather than guessing,
-5. allow a clause to support more than one field only when both uses are explicit and justified.
+5. allow a clause to support more than one field only when both uses are explicit and justified,
+6. record forbidden role promotions explicitly, not only forbidden final objective strings.
+
+A phase-1 extractor passes when weakly supported fields stay unknown with evidence explaining why.
+It fails when it fabricates target, constraint, deliverable, or verification fields from weak spans.
 
 ## Expected Output Shape
 
 A benchmark manifest should be easy for both humans and tests to inspect.
 
-Recommended case shape:
+Recommended repo shape:
+
+```text
+crates/agent-drift-analyzer/tests/objective_acceptance.rs
+crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/design-set/<case-id>/raw.json
+crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/design-set/<case-id>/expected.json
+crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/locked-acceptance/<case-id>/raw.json
+crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/locked-acceptance/<case-id>/expected.json
+crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/stretch-external/<case-id>/raw.json
+crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/stretch-external/<case-id>/expected.json
+crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/<case-id>/notes.md
+```
+
+Recommended `expected.json` shape:
 
 ```json
 {
@@ -178,17 +199,61 @@ Recommended case shape:
   "source_rollout_id": "019cda56-8bbf-7ed2-9de3-2db5f65e24d7",
   "objective_class": "task_statement",
   "primary_intent": "validate",
-  "target": "ensure the slice is green for linux",
-  "semantic_constraints": ["linux-specific scope"],
+  "target": {
+    "display": "ensure the slice is green for linux",
+    "kind": "repo_slice"
+  },
+  "semantic_constraints": [
+    {
+      "display": "linux-specific scope",
+      "constraint_kind": "platform_boundary"
+    }
+  ],
   "deliverables": [],
-  "success_conditions": ["slice is green for linux"],
+  "success_conditions": [
+    {
+      "display": "slice is green for linux"
+    }
+  ],
   "verification_commands": [],
-  "role_spans": [...],
-  "field_evidence": {...},
-  "forbidden_objective_strings": ["Run this task on a linux machine."],
+  "role_spans": [
+    {
+      "source_kind": "user_prompt",
+      "section_kind": "mission",
+      "role": "goal",
+      "excerpt": "Ensure the slice is green for linux..."
+    }
+  ],
+  "field_evidence": {
+    "target": ["source:user_prompt/row:0/section:mission/clause:0"],
+    "success_conditions": ["source:user_prompt/row:0/section:mission/clause:0"]
+  },
+  "forbidden_objective_strings": [
+    "Run this task on a linux machine."
+  ],
+  "forbidden_role_promotions": [
+    {
+      "excerpt": "Run this task on a linux machine.",
+      "from_source_kind": "user_prompt",
+      "from_section_kind": "checklist",
+      "forbidden_role": "goal"
+    }
+  ],
+  "compatibility_rendering": {
+    "acceptable_any_of": [
+      "Ensure the slice is green for linux.",
+      "Validate the slice is green for linux."
+    ],
+    "comparison_key": "validate|repo_slice|linux|green"
+  },
+  "unknowns": [],
   "notes": "checklist line is subordinate, not canonical mission"
 }
 ```
+
+Compatibility rendering may be acceptable even when structured extraction is richer than the old
+string-first output. Tests should not overfit to one exact pretty string when the structured frame
+is clearly correct.
 
 ## Data Split Strategy
 
@@ -198,7 +263,7 @@ Recommended partition:
 
 - **design-set**: a handful of cases used to refine the schema and rules,
 - **locked acceptance set**: cases not edited during rule tuning,
-- **stretch set**: optional external/adapted cases used for robustness only.
+- **stretch external**: optional external/adapted cases used for robustness only.
 
 When/if classifier work begins later, these can become train/dev/test splits.
 
@@ -216,12 +281,24 @@ When/if classifier work begins later, these can become train/dev/test splits.
    - does the legacy objective string remain acceptable for current consumers,
 5. **forbidden-promotion rate**
    - how often does a subordinate checklist or boilerplate line incorrectly become canonical task
-     truth.
+     truth,
+6. **unknown-field correctness**
+   - were weakly supported fields left unknown instead of guessed.
+
+### Acceptance summary table
+
+Each scorer run should emit at least:
+
+- `cases_total`
+- `field_exact_pass`
+- `grounding_pass`
+- `forbidden_promotion_failures`
+- `compatibility_rendering_failures`
+- `unknown_field_correctness`
 
 ### Optional metrics
 
 - confidence calibration,
-- unknown-field precision,
 - per-family error rate,
 - human review time per case.
 
@@ -236,21 +313,6 @@ A future implementation should not be considered successful unless it passes all
 5. extracted fields are grounded to evidence spans,
 6. unknowns are used instead of fabricated values when the prompt is genuinely ambiguous.
 
-## Recommended Repo Shape
-
-This benchmark should eventually live in a dedicated fixture/eval surface instead of being buried
-inside string-only assertions.
-
-Recommended future shape:
-
-```text
-crates/agent-drift-analyzer/tests/objective_acceptance.rs
-crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/README.md
-crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/<case-id>/raw.json
-crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/<case-id>/expected.json
-crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/<case-id>/notes.md
-```
-
 ## Non-Goals
 
 This design does not define:
@@ -258,20 +320,13 @@ This design does not define:
 - the final Rust schema implementation,
 - the final classifier training pipeline,
 - the full downstream migration order,
-- packet-by-packet implementation planning.
+- the final pretty-string rendering policy beyond acceptance compatibility.
 
 ## Source Map
 
-Primary sources used for this design:
-
-- Instruct and Extract: [arXiv 2310.16040](https://arxiv.org/abs/2310.16040)
-- LMDX: [arXiv 2309.10952](https://arxiv.org/abs/2309.10952)
-- Schema-Guided Dialogue Dataset: [arXiv 1909.05855](https://arxiv.org/abs/1909.05855)
-- Description-Driven Task-Oriented Dialog Modeling: [arXiv 2201.08904](https://arxiv.org/abs/2201.08904)
-- MTOP: [arXiv 2008.09335](https://arxiv.org/abs/2008.09335)
-
-Primary local evidence inputs:
+Primary local authority used for this design:
 
 - `.codex/handoffs/2026-06-13-objective-architecture-decision-dossier.md`
 - `.codex/handoffs/2026-06-13-081405-r5-75-objective-failure.md`
-- WDAP raw rollout files listed in the dossier
+- `/Users/spensermcconnell/.codex/sessions/2026/03/10/rollout-2026-03-10T20-40-30-019cda56-8bbf-7ed2-9de3-2db5f65e24d7.jsonl`
+- `/Users/spensermcconnell/.codex/sessions/2026/03/10/rollout-2026-03-10T20-41-00-019cda57-012e-7073-a736-6eda6f2ba615.jsonl`

@@ -77,7 +77,7 @@ Why it matters:
 
 ## Recommended Migration Phases
 
-## Phase 0: Docs and evaluation lock
+### Phase 0: Docs and evaluation lock
 
 Deliverables:
 
@@ -88,56 +88,125 @@ Deliverables:
 
 Exit condition:
 
-- doc stack agrees on field semantics, evidence rules, and migration order.
+- doc stack agrees on field semantics, evidence rules, migration order, and acceptance scoring.
 
-## Phase 1: Heuristic structured sidecar introduction
+### Phase 1A: Schema types + additive sidecar
 
 Primary change:
 
-- add `structured: Option<StructuredObjective>` to `ObjectiveSummary`.
+- add `structured: Option<StructuredObjective>` and `comparison_key: String` to
+  `ObjectiveSummary`.
 
 Rules:
 
 1. keep current `text` field,
-2. populate the sidecar heuristically first,
-3. attach evidence spans,
-4. render the current string from structured fields only when safe,
-5. leave sidecar absent when evidence is too weak.
+2. keep `text` as the display compatibility rendering,
+3. add `comparison_key` as the deterministic semantic comparison key,
+4. leave the sidecar optional,
+5. do not allow downstream consumers to assume the sidecar is always present.
+
+Recommended compatibility shape:
+
+```rust
+pub struct ObjectiveSummary {
+    pub text: String,
+    pub comparison_key: String,
+    pub structured: Option<StructuredObjective>,
+    pub verification_commands: Vec<String>,
+    pub evidence: Vec<EvidenceRef>,
+}
+```
 
 Rationale:
 
 - this is the smallest architecture-valid change,
-- it allows fixture and evaluation work before classifier work,
-- it preserves compatibility for all current consumers.
+- it creates a stable bridge away from one-string comparison,
+- it preserves compatibility while richer fields are introduced.
 
-## Phase 2: TaskFrame coexistence
+### Phase 1B: Heuristic section/clause decomposition + evidence spans
 
 Primary change:
 
-- add `structured_objective: Option<StructuredObjective>` to `TaskFrame`.
+- populate the sidecar heuristically with section-aware and clause-aware evidence spans.
+
+Rules:
+
+1. phase 1 remains deterministic and dependency-free,
+2. evidence spans must include section kind and clause offsets when available,
+3. unknown fields are valid outcomes,
+4. fields without evidence must stay absent or unknown.
+
+Rationale:
+
+- this is the first phase that materially fixes the WDAP section-hierarchy failure,
+- it establishes the structure that later classifier work may assist but not replace.
+
+### Phase 1C: Compatibility rendering + objective acceptance tests
+
+Primary change:
+
+- render compatibility output from structured state when safe and validate it with the objective
+  acceptance wall.
+
+Rules:
+
+1. `ObjectiveSummary.text` remains the public display string,
+2. `comparison_key` becomes the preferred internal comparison surface,
+3. acceptance tests must score structured fields, grounding, forbidden promotions, and acceptable
+   compatibility rendering,
+4. exact pretty-string equality is no longer the sole success criterion.
+
+Exit condition:
+
+- WDAP seed cases stop promoting checklist lines,
+- preserved boilerplate-target cases remain intact,
+- compatibility rendering stays acceptable for current consumers.
+
+### Phase 2: TaskFrame coexistence
+
+Primary change:
+
+- add `structured_objective: Option<StructuredObjective>` and `objective_key: String` to
+  `TaskFrame`.
 
 Rules:
 
 1. preserve `TaskFrame.objective` during the coexistence window,
-2. teach new tests to assert both structured correctness and compatibility rendering,
-3. do not widen public schema versioning unless the sidecar must be serialized externally.
+2. `TaskFrame.objective` stays the public display string,
+3. `TaskFrame.objective_key` becomes the preferred internal comparison source,
+4. teach new tests to assert both structured correctness and compatibility rendering,
+5. do not widen public schema versioning unless the sidecar must be serialized externally.
 
-## Phase 3: Downstream consumer migration
+Recommended coexistence shape:
+
+```rust
+pub struct TaskFrame {
+    pub objective: String,
+    pub objective_key: String,
+    pub structured_objective: Option<StructuredObjective>,
+    // existing fields remain during migration
+}
+```
+
+### Phase 3: Downstream consumer migration
 
 Suggested migration order:
 
 1. `context/working_set.rs`
+   - first downstream migration target,
    - prefer target/evidence-driven path attribution over raw substring checks,
 2. `checkpoint/mod.rs`
-   - port closeout/review/no-code predicates to typed fields,
+   - port closeout/review/no-code predicates to typed fields only after TaskFrame coexistence is
+     stable,
 3. `checkpoint/progress.rs`
-   - port continuity and overlap logic away from raw objective strings,
+   - port continuity and overlap logic away from raw objective strings only after TaskFrame
+     coexistence and working-set migration have landed,
 4. export and rendering surfaces
    - keep legacy strings available until all major downstream logic can consume the structured form.
 
 This order reduces the risk of changing progress reasoning too early.
 
-## Phase 4: Optional classifier augmentation
+### Phase 4: Optional classifier augmentation
 
 Only after the evaluation wall exists and the heuristic sidecar is stable:
 
@@ -151,9 +220,24 @@ During migration, the repo should obey these rules:
 
 1. the legacy objective string remains available,
 2. the sidecar is additive,
-3. no downstream module may assume the sidecar is always present in phase 1,
+3. no downstream module may assume the sidecar is always present until its seam is explicitly
+   migrated,
 4. unknowns are allowed and expected,
-5. tests must validate both structure and compatibility.
+5. tests must validate both structure and compatibility,
+6. internal comparison should prefer `comparison_key` / `objective_key` before richer structured
+   comparison is fully wired.
+
+## Sidecar Presence Guard
+
+No downstream migration should land without an explicit sidecar-presence guard.
+
+That means migrated consumers must define what they do when:
+
+- structured sidecar is present and high-confidence,
+- structured sidecar is absent,
+- structured sidecar is present but key fields remain unknown.
+
+Silent fallback from missing structure back to brittle string assumptions must be visible in tests.
 
 ## Failure-Mode Guardrails
 
@@ -174,6 +258,11 @@ behavior when necessary.
 
 `checkpoint/progress.rs` is downstream of several other seams and should not be the first migration
 step.
+
+### Guardrail 5: Do not let compatibility display text remain the hidden authority
+
+Any newly migrated downstream consumer should prefer typed fields or `comparison_key` /
+`objective_key` rather than reintroducing string truth under a new name.
 
 ## Risks
 
@@ -212,7 +301,9 @@ When implementation eventually begins, the safest initial touch order is:
 3. `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
 4. `crates/agent-drift-analyzer/src/inference/mod.rs`
 5. tests for context/task frame/objective acceptance
-6. only then `context/working_set.rs`, `checkpoint/mod.rs`, and `checkpoint/progress.rs`
+6. only then `context/working_set.rs`
+7. only then `checkpoint/mod.rs`
+8. only then `checkpoint/progress.rs`
 
 ## Non-Goals
 

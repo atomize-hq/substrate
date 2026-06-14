@@ -114,6 +114,19 @@ The dossier already resolved several questions. This doc adopts them as design a
 3. **Tool-choice metadata stays outside semantic constraint fields.**
 4. **Head A / Head B / Head C remain separate stages.**
 5. **MiniLM is the first small-model prototype if classifier work starts.**
+6. **Phase 1 must be deterministic and dependency-free.** No classifier or LLM is required for the
+   first structured-objective slice.
+7. **Compatibility rendering is downstream-only.** The legacy string is a view over structured
+   state, not the authority that structured fields merely decorate.
+
+## R5.75 Stopgap Status
+
+`R5.75-1` objective condensation remains useful only as a stopgap compatibility filter and
+front-end candidate reducer.
+
+It is **not** the target architecture and must **not** be extended into another growing ladder of
+imperative-prefix or boilerplate-substring heuristics. The repo should not continue investing in
+`normalized_objective_text(...)` as if it were the durable abstraction boundary.
 
 ## Proposed Core Abstraction
 
@@ -173,6 +186,92 @@ pub enum ObjectiveIntent {
     OtherTask,
 }
 
+pub struct ObjectiveTarget {
+    pub display: String,
+    pub kind: ObjectiveTargetKind,
+    pub paths: Vec<String>,
+    pub symbols: Vec<String>,
+    pub named_artifacts: Vec<String>,
+    pub workspace_refs: Vec<String>,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+pub enum ObjectiveTargetKind {
+    RepoSlice,
+    CrateOrPackage,
+    FileOrDirectory,
+    SpecOrDesignDoc,
+    TestOrVerifier,
+    SkillOrInstructionSurface,
+    ExternalArtifact,
+    ConceptualTopic,
+    UnknownTarget,
+}
+
+pub struct ObjectiveConstraint {
+    pub display: String,
+    pub constraint_kind: ObjectiveConstraintKind,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+pub enum ObjectiveConstraintKind {
+    ScopeBoundary,
+    NoCode,
+    DocsOnly,
+    ReviewOnly,
+    ValidateOnly,
+    PlatformBoundary,
+    DeliverableFormat,
+    OtherConstraint,
+}
+
+pub struct SuccessCondition {
+    pub display: String,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+pub struct RequestedDeliverable {
+    pub display: String,
+    pub deliverable_kind: RequestedDeliverableKind,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+pub enum RequestedDeliverableKind {
+    CodeChange,
+    DesignDoc,
+    Plan,
+    Review,
+    ValidationReport,
+    ResearchSummary,
+    OtherDeliverable,
+}
+
+pub enum ObjectiveSourceKind {
+    ThreadGoal,
+    UserPrompt,
+    AssistantContext,
+    SystemInstruction,
+    ToolOutput,
+    UnknownSource,
+}
+
+pub enum ObjectiveSectionKind {
+    Scope,
+    Mission,
+    Checklist,
+    Verification,
+    Constraints,
+    Deliverables,
+    Context,
+    Boilerplate,
+    ToolingInstructions,
+    UnknownSection,
+}
+
 pub enum ObjectiveRole {
     Goal,
     Constraint,
@@ -183,9 +282,19 @@ pub enum ObjectiveRole {
 
 pub struct ObjectiveEvidenceSpan {
     pub row: RowRef,
+    pub source_kind: ObjectiveSourceKind,
+    pub section_kind: ObjectiveSectionKind,
     pub role: ObjectiveRole,
     pub excerpt: String,
+    pub start_char: Option<usize>,
+    pub end_char: Option<usize>,
     pub confidence: Confidence,
+}
+
+pub struct ObjectiveUnknown {
+    pub field_name: String,
+    pub reason: String,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
 }
 ```
 
@@ -219,8 +328,10 @@ Long prompts should be segmented into meaningful sections such as:
 - checklist / operational steps
 - verification
 - boundaries / constraints
+- deliverables
 - context / motivation
 - metadata / boilerplate
+- tooling instructions
 
 This follows the decomposition logic supported by `Decomposed Prompting` and the schema-first
 paradigm from the IE papers.
@@ -255,12 +366,40 @@ This is where the intent+slot/state literature contributes most directly.
 ### Stage 5: Structured frame assembly
 
 Assemble the `StructuredObjective` using only grounded spans. No field should be populated without a
-supporting clause or an explicit inference rule.
+supporting clause or an explicit deterministic inference rule.
 
 ### Stage 6: Compatibility rendering
 
-Render the legacy objective string from the structured frame only after the structured frame exists.
-The string becomes a compatibility view, not the source of truth.
+Render legacy compatibility fields only after the structured frame exists. Compatibility text is a
+projection of structured state, not the source of truth.
+
+## Frame Assembly Precedence
+
+The staged pipeline also needs explicit conflict-resolution rules.
+
+### Goal precedence
+
+1. explicit `/goal` or accepted thread goal,
+2. mission / scope section goal,
+3. direct imperative user ask near the beginning or end of a prompt,
+4. checklist item only if no broader mission / scope goal exists,
+5. boilerplate or instruction line only if the user explicitly asks to analyze or edit that surface.
+
+### Verification precedence
+
+1. explicit verification section or command request,
+2. success condition phrased as proof requirement,
+3. tool-choice or environment instruction only as execution metadata, never as verification by
+   default.
+
+### Constraint precedence
+
+1. scope limits, no-code/docs-only, platform-specific task boundary,
+2. deliverable format requirements,
+3. tool/environment preference only if it changes semantic task meaning.
+
+These precedence rules are required so the WDAP class of failure is visible as a section-hierarchy
+mistake rather than hidden inside generic text normalization.
 
 ## Grounding Rules
 
@@ -269,7 +408,8 @@ Following the grounding/localization lesson from `LMDX`, the new system should o
 1. every nontrivial field must cite one or more source spans,
 2. fields without good evidence should stay unknown,
 3. the same clause may support multiple fields, but each usage should be explicit,
-4. display text and reasoning evidence must stay linked.
+4. display text and reasoning evidence must stay linked,
+5. source kind and section kind must be preserved so scope-vs-checklist and user-vs-boilerplate conflicts are auditable.
 
 ## What Counts As Semantic State
 
@@ -298,6 +438,7 @@ Recommended incremental shape:
 ```rust
 pub struct ObjectiveSummary {
     pub text: String,
+    pub comparison_key: String,
     pub structured: Option<StructuredObjective>,
     pub verification_commands: Vec<String>,
     pub evidence: Vec<EvidenceRef>,
@@ -305,10 +446,40 @@ pub struct ObjectiveSummary {
 
 pub struct TaskFrame {
     pub objective: String,
+    pub objective_key: String,
     pub structured_objective: Option<StructuredObjective>,
     // existing fields remain during migration
 }
 ```
+
+Rules:
+
+- `ObjectiveSummary.text` is the human-readable compatibility rendering.
+- `ObjectiveSummary.comparison_key` is the deterministic semantic comparison key derived from the
+  structured frame.
+- `TaskFrame.objective` remains the public display string during migration.
+- Task-frame and progress comparability should migrate to `comparison_key` first, then to richer
+  structured fields.
+
+## Unknowns Are Success, Not Failure
+
+A phase-1 extractor passes when it leaves weakly supported fields unknown and preserves the evidence
+showing why.
+
+It fails when it fabricates target, constraint, deliverable, or verification fields from weak spans
+just to look complete.
+
+## Determinism And Phase-1 Scope
+
+Phase 1 should be deterministic, dependency-free, and auditable.
+
+That means:
+
+1. no classifier is required to produce the first sidecar,
+2. no LLM call belongs in analyzer-time extraction,
+3. the first implementation should succeed or fail by evidence-grounded deterministic rules,
+4. classifier experiments are blocked on the objective acceptance wall defined in the evaluation
+   design.
 
 ## Why Not A Single Flat Classifier
 
@@ -329,7 +500,10 @@ That path can reduce some failures but does not fix the underlying mismatch:
 - it still serializes one string as truth,
 - it still mixes structural selection and semantic interpretation,
 - it still provides weak auditability,
-- it still leaves downstream modules dependent on a lossy representation.
+- it still leaves downstream modules dependent on a lossy representation,
+- it invites more prompt-shape-specific heuristic ladders instead of a typed architecture.
+
+That section is a hard design boundary, not merely a preference.
 
 ## Non-Goals
 
@@ -339,16 +513,17 @@ This architecture doc does not commit the repo to:
 - immediate checkpoint schema versioning,
 - rewriting checkpoint boundary logic in the same slice,
 - collapsing execution metadata into semantic state,
-- replacing all string consumers in one packet.
+- replacing all string consumers in one packet,
+- using a classifier or LLM in the analyzer before the objective acceptance wall exists.
 
 ## Open Design Questions
 
-1. what is the smallest useful `ObjectiveTarget` representation for phase 1,
-2. whether compatibility rendering should remain one string or split into display vs comparison
-   strings internally,
-3. whether clause segmentation should be purely heuristic in phase 1 or reserve an optional learned
-   helper immediately,
-4. which downstream string consumers should migrate first after the sidecar lands.
+The major phase-1 shape questions are now intentionally narrowed. Remaining open questions are:
+
+1. which deterministic clause-segmentation helper is simplest without overfitting,
+2. how aggressively `comparison_key` should normalize synonymous phrasing in early migration,
+3. which downstream predicate family after `working_set` should migrate first once coexistence is
+   stable.
 
 ## Research Source Map
 

@@ -19,6 +19,14 @@ pipeline, not the sole owner of objective semantics.
 Its job is to improve routing and role labeling quality under low-data constraints. It is not a
 replacement for grounding, evidence spans, or the structured sidecar.
 
+## Guardrail Invariants
+
+1. a classifier cannot populate ungrounded structured fields,
+2. classifier confidence cannot exceed the confidence of the supporting evidence spans,
+3. classifier outputs are hints to the assembler, not direct `StructuredObjective` DTO fields,
+4. the final assembler remains evidence-grounded and deterministic about what becomes canonical
+   structured state.
+
 ## Research Patterns This Design Borrows
 
 ### Intent and slot/state remain foundational
@@ -216,6 +224,17 @@ Important constraint:
 4. keep the classifier advisory until the grounding/evidence pipeline is trustworthy,
 5. prefer data-efficient baselines before larger experiments.
 
+## Minimum Data Thresholds
+
+Do not begin model experiments until at least these floor conditions are met:
+
+- Head B prompt-level intent training: at least **50 manually labeled request-level cases**,
+- Head C clause-role training: at least **200 manually labeled clause-level spans**,
+- every model experiment: a locked heuristic baseline from the objective acceptance wall already
+  exists.
+
+These are minimum entry conditions, not claims that the dataset is sufficient for production.
+
 ## Evaluation Philosophy
 
 Each head should be evaluated on its own task:
@@ -227,6 +246,12 @@ Each head should be evaluated on its own task:
 
 A classifier that improves its local score but worsens end-to-end structured extraction should not be
 considered a success.
+
+Every experiment must compare against:
+
+1. a deterministic heuristic baseline,
+2. the current structured-objective acceptance suite,
+3. forbidden-promotion error rate.
 
 ## Data Requirements By Head
 
@@ -249,7 +274,8 @@ This design does not do any of the following yet:
 - choose final training hyperparameters,
 - add model dependencies to the repo,
 - define the exact serialized model interface,
-- replace heuristic decomposition entirely.
+- replace heuristic decomposition entirely,
+- allow classifier predictions to bypass evidence-grounded assembly.
 
 ## Source Map
 
@@ -262,7 +288,3 @@ Primary sources used for this design:
 - SetFit: [arXiv 2209.11055](https://arxiv.org/abs/2209.11055)
 - MiniLM model card: [Hugging Face](https://huggingface.co/microsoft/MiniLM-L12-H384-uncased)
 - DeBERTa-v3-small model card: [Hugging Face](https://huggingface.co/microsoft/deberta-v3-small)
-
-Primary local authority:
-
-- `.codex/handoffs/2026-06-13-objective-architecture-decision-dossier.md`
