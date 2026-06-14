@@ -53,6 +53,9 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
 
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
+    let mut found_command_complete: Option<Value> = None;
+    let mut raw_world_inner_cmd: Option<String> = None;
+    let mut raw_world_project_dir: Option<String> = None;
 
     while let Some(line) = lines.next_line().await? {
         if line.is_empty() {
@@ -62,27 +65,82 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
         let value: Value =
             serde_json::from_str(&line).context("Failed to parse trace line as JSON")?;
 
-        // Check if this is the span we're looking for
-        if value.get("event_type").and_then(|v| v.as_str()) != Some("command_complete") {
-            continue;
-        }
+        match value.get("event_type").and_then(|v| v.as_str()) {
+            Some("command_complete") => {
+                let Some(sid) = value.get("span_id").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                if sid != span_id {
+                    continue;
+                }
 
-        if let Some(sid) = value.get("span_id").and_then(|v| v.as_str()) {
-            if sid != span_id {
-                continue;
+                let mut value = value;
+                if value.get("cmd").is_none() {
+                    if let Some(command) = value.get("command").cloned() {
+                        value["cmd"] = command;
+                    }
+                }
+
+                found_command_complete = Some(value);
             }
+            Some("world_process_start") => {
+                let Some(parent_span) = value.get("parent_span").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                if parent_span != span_id {
+                    continue;
+                }
 
-            let mut value = value;
-            if value.get("cmd").is_none() {
-                if let Some(command) = value.get("command").cloned() {
-                    value["cmd"] = command;
+                let candidate = value
+                    .get("env")
+                    .and_then(|env| env.get("SUBSTRATE_INNER_CMD"))
+                    .and_then(|cmd| cmd.as_str())
+                    .map(str::trim)
+                    .filter(|cmd| !cmd.is_empty())
+                    .map(ToOwned::to_owned);
+                if candidate.is_some() {
+                    raw_world_inner_cmd = candidate;
+                }
+                let project_dir = value
+                    .get("env")
+                    .and_then(|env| env.get("SUBSTRATE_MOUNT_PROJECT_DIR"))
+                    .or_else(|| {
+                        value
+                            .get("env")
+                            .and_then(|env| env.get("SUBSTRATE_WORLD_PROJECT_DIR"))
+                    })
+                    .and_then(|path| path.as_str())
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())
+                    .map(ToOwned::to_owned);
+                if project_dir.is_some() {
+                    raw_world_project_dir = project_dir;
                 }
             }
-
-            let span: TraceSpan =
-                serde_json::from_value(value).context("Failed to deserialize trace span")?;
-            return Ok(span);
+            _ => {}
         }
+    }
+
+    if let Some(mut value) = found_command_complete {
+        if let Some(raw_cmd) = raw_world_inner_cmd {
+            value["cmd"] = Value::String(raw_cmd);
+            if let Some(project_dir) = raw_world_project_dir {
+                value["cwd"] = Value::String(project_dir.clone());
+                if let Some(replay_context) = value
+                    .get_mut("replay_context")
+                    .and_then(|ctx| ctx.as_object_mut())
+                {
+                    replay_context.insert(
+                        "anchor_path".to_string(),
+                        Value::String(project_dir),
+                    );
+                }
+            }
+        }
+
+        let span: TraceSpan =
+            serde_json::from_value(value).context("Failed to deserialize trace span")?;
+        return Ok(span);
     }
 
     anyhow::bail!("Span {} not found in trace file", span_id)
@@ -362,6 +420,7 @@ pub fn hash_env_vars() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use tempfile::NamedTempFile;
     use tokio::io::AsyncWriteExt;
 
@@ -405,6 +464,36 @@ mod tests {
             .unwrap();
         assert_eq!(span.span_id, "test-span-1");
         assert_eq!(span.cmd, "echo test");
+        assert_eq!(span.exit_code, Some(0));
+    }
+
+    #[tokio::test]
+    async fn test_load_span_from_trace_prefers_raw_world_inner_command_for_replay() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let trace_content = r#"
+{"ts":"2024-01-01T00:00:00Z","event_type":"world_process_start","parent_span":"test-span-1","session_id":"session-1","component":"world-service","env":{"SUBSTRATE_INNER_CMD":"printf raw-world-command\n","SUBSTRATE_MOUNT_PROJECT_DIR":"/var/lib/substrate/staged-workspace/current"}}
+{"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","command":"printf ***\n","cwd":"/","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","umask":18,"locale":null,"cwd":"/","policy_id":"default","policy_commit":null,"world_image_version":"0.2.8","anchor_mode":"workspace","anchor_path":"/","caged":true},"exit_code":0}
+"#;
+
+        let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
+        file.write_all(trace_content.as_bytes()).await.unwrap();
+        file.flush().await.unwrap();
+        drop(file);
+
+        let span = load_span_from_trace(temp_file.path(), "test-span-1")
+            .await
+            .unwrap();
+        assert_eq!(span.cmd, "printf raw-world-command");
+        assert_eq!(
+            span.cwd.as_deref(),
+            Some(Path::new("/var/lib/substrate/staged-workspace/current"))
+        );
+        assert_eq!(
+            span.replay_context
+                .as_ref()
+                .and_then(|ctx| ctx.anchor_path.as_deref()),
+            Some("/var/lib/substrate/staged-workspace/current")
+        );
         assert_eq!(span.exit_code, Some(0));
     }
 

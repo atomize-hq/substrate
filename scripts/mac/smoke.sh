@@ -857,21 +857,40 @@ run_world_disabled_diagnostics() {
 run_generic_smoke() {
   local trace_log
   local dev_install_prefix
-  trace_log="${SHIM_TRACE_LOG:-$HOME/.substrate/trace.jsonl}"
+  local dev_install_bin
+  local routed_cwd="/"
+  local -a dev_install_env
   dev_install_prefix="$(mktemp -d)"
+  dev_install_bin="${dev_install_prefix}/bin/substrate"
+  trace_log="${SHIM_TRACE_LOG:-${dev_install_prefix}/trace.jsonl}"
+  dev_install_env=(
+    env
+    SUBSTRATE_HOME="${dev_install_prefix}"
+    SUBSTRATE_ROOT="${dev_install_prefix}"
+    SHIM_TRACE_LOG="${trace_log}"
+    SUBSTRATE_WORLD_PROJECT_DIR="${STAGED_WORKSPACE_CURRENT}"
+  )
 
   note_routed_override_bypass
   rm -rf "${REPO_ROOT}/world-mac-smoke"
   run_dev_install_readiness_proof "${dev_install_prefix}"
   run_gateway_lifecycle_proof
-  run_routed_proof_command "${SUBSTRATE_BIN}" -c 'echo smoke-nonpty'
-  run_routed_proof_command "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world -c 'echo smoke-nonpty'
+  )
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world --pty -c 'printf smoke-pty\n'
+  )
   mkdir -p "$(dirname "${trace_log}")"
 
-  run_routed_proof_command "${SUBSTRATE_BIN}" -c "cd \"${STAGED_WORKSPACE_CURRENT}\" && rm -rf world-mac-smoke"
   local payload_cmd
-  payload_cmd="cd \"${STAGED_WORKSPACE_CURRENT}\" && (test -d world-mac-smoke || mkdir world-mac-smoke) && printf 'data\n' > world-mac-smoke/file.txt"
-  run_routed_proof_command "${SUBSTRATE_BIN}" -c "${payload_cmd}"
+  payload_cmd="mkdir -p world-mac-smoke && printf 'smoke-%s\n' '$(date -u +%s)' > world-mac-smoke/file.txt"
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world -c "${payload_cmd}"
+  )
 
   if [[ ! -f "${trace_log}" ]]; then
     echo "ERROR: Trace log not found at ${trace_log}" >&2
@@ -894,8 +913,14 @@ run_generic_smoke() {
     exit 1
   fi
 
-  run_routed_proof_command "${SUBSTRATE_BIN}" --replay "${span}" --replay-verbose
-  run_routed_proof_command "${SUBSTRATE_BIN}" --trace "${span}" | tee /tmp/world-mac-replay.json
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world --replay "${span}" --replay-verbose
+  )
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world --trace "${span}" | tee /tmp/world-mac-replay.json
+  )
   jq '.fs_diff | ((.writes // []) + (.mods // []))' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
   rm -rf "${dev_install_prefix}"
 }

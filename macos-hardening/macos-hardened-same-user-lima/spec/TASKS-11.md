@@ -263,7 +263,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 4.1: Final scope and coherence check
+- [x] Task 4.1: Final scope and coherence check
   - Acceptance: the final diff stays within the allowed execution boundary
     unless an explicitly justified minimal assist was required, and the slice
     does not claim a broader docs cutover than it actually implemented.
@@ -274,7 +274,7 @@ Session goal:
   - Files:
     - touched files only
 
-- [ ] Task 4.2: Record the Slice 12 handoff honestly
+- [x] Task 4.2: Record the Slice 12 handoff honestly
   - Acceptance: the final closeout states explicitly that Slice `11` landed the
     operator-contract/productization seam only, that Slice `12` still owns the
     broad docs/breakglass cutover, and that any remaining raw guest guidance
@@ -302,3 +302,35 @@ The downstream boundary must remain explicit:
    and full docs/setup/troubleshooting cutover.
 2. Packet `4` checkpoint-green status depends on current rerun evidence from
    the Packet `2` and Packet `3` walls rather than on Slice `12` completion.
+3. Any remaining raw guest guidance survives only as bounded breakglass
+   material for Slice `12`, not as the primary supported macOS operator path.
+
+Current 2026-06-14 rerun status:
+
+1. The bounded Packet `2` and Packet `3` rerun wall is green through:
+   - `cargo test -p shell`
+   - `target/debug/substrate world enable --home "$tmp/substrate-home" --dry-run`
+   - `target/debug/substrate workspace sync --dry-run`
+   - routed `target/debug/substrate host doctor --json`
+   - routed `target/debug/substrate world doctor --json`
+   - `scripts/mac/smoke.sh --gateway-conformance`
+   - `scripts/mac/lima-doctor.sh`
+   - `scripts/mac/smoke.sh`
+   - `scripts/mac/orchestration-smoke.sh`
+2. Packet `4` is checkpoint-green on 2026-06-14 because the generic macOS
+   smoke now keeps the staged guest workspace/project-root truth aligned
+   through the CLI-owned routed command and replay path, so the final rerun
+   wall closes without requiring any broader Slice `12` docs/breakglass cutover
+   work.
+3. The final Slice `11` diff did not stay strictly inside the original Packet
+   `4` path list; narrowly justified assists were still required in:
+   - `crates/world/src/exec.rs`
+   - `crates/replay/src/state.rs`
+   - `crates/replay/src/replay/executor.rs`
+   Those assists stay bounded to the same operator-contract/productization seam
+   by preserving staged guest project-root truth for the routed generic smoke
+   and replay path rather than broadening Slice `11` into a wider docs rewrite.
+4. Slice `12` is now the only remaining seam, and it remains explicitly scoped
+   to the broad docs/setup/troubleshooting and breakglass cutover; any
+   surviving raw guest guidance remains bounded breakglass material rather than
+   the primary supported macOS operator path.

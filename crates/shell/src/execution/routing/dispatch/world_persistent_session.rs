@@ -4,6 +4,7 @@
 #[allow(dead_code)]
 mod imp {
     use super::super::shim_ops::build_world_env_map_for_cwd;
+    #[cfg(target_os = "macos")]
     use crate::execution::platform_world::WorldTransportWsIo;
     use crate::execution::policy_snapshot;
     use crate::execution::pty;
@@ -17,6 +18,8 @@ mod imp {
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::Arc;
+    #[cfg(target_os = "linux")]
+    use tokio::net::UnixStream;
     use tokio::sync::{Mutex, OnceCell};
     use tokio_tungstenite as tungs;
 
@@ -362,6 +365,9 @@ mod imp {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    type WsIo = UnixStream;
+    #[cfg(target_os = "macos")]
     type WsIo = WorldTransportWsIo;
 
     #[derive(Debug, Serialize)]
@@ -687,7 +693,7 @@ mod imp {
             .with_context(|| format!("connect world-service UDS ({})", socket_path.display()))?;
 
         let url = url::Url::parse("ws://localhost/v1/stream").expect("static ws URL");
-        let io: WsIo = Box::new(stream);
+        let io: WsIo = stream;
         let (ws, _resp) = tungs::client_async(url, io)
             .await
             .context("ws handshake /v1/stream")?;

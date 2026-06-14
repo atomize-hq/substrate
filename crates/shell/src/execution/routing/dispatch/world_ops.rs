@@ -24,6 +24,8 @@ use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 use substrate_common::WorldRootMode;
 #[cfg(target_os = "linux")]
+use tokio::net::UnixStream;
+#[cfg(target_os = "linux")]
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use tokio_tungstenite as tungs;
@@ -1211,6 +1213,14 @@ fn preserve_world_project_dir_override(
     env_map: &mut std::collections::HashMap<String, String>,
     cwd_path: &std::path::Path,
 ) {
+    if env_map
+        .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return;
+    }
+
     let anchor_mode = env_map
         .get("SUBSTRATE_ANCHOR_MODE")
         .and_then(|value| WorldRootMode::parse(value));
@@ -2381,6 +2391,28 @@ mod tests {
             Some(value) => std::env::set_var("SUBSTRATE_ANCHOR_PATH", value),
             None => std::env::remove_var("SUBSTRATE_ANCHOR_PATH"),
         }
+    }
+
+    #[test]
+    fn preserve_world_project_dir_override_keeps_explicit_env_override() {
+        let mut env_map = std::collections::HashMap::<String, String>::new();
+        env_map.insert(
+            WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+            "/var/lib/substrate/staged-workspace/current".to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_ANCHOR_MODE".to_string(),
+            "follow-cwd".to_string(),
+        );
+
+        preserve_world_project_dir_override(&mut env_map, std::path::Path::new("/"));
+
+        assert_eq!(
+            env_map
+                .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+                .map(String::as_str),
+            Some("/var/lib/substrate/staged-workspace/current")
+        );
     }
 
     #[test]

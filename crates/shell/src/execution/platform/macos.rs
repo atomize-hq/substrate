@@ -206,6 +206,23 @@ mod world_doctor_macos {
             .success
     }
 
+    #[cfg(not(test))]
+    fn try_bootstrap_host_visible_transport() -> bool {
+        let Ok(backend) = world_mac_lima::MacLimaBackend::new() else {
+            return false;
+        };
+        let Ok(rt) = tokio::runtime::Runtime::new() else {
+            return false;
+        };
+        rt.block_on(backend.ensure_persistent_session_ready_async())
+            .is_ok()
+    }
+
+    #[cfg(test)]
+    fn try_bootstrap_host_visible_transport() -> bool {
+        false
+    }
+
     struct WorldServiceReachability {
         host_visible_transports: Vec<HostVisibleTransport>,
         service_active: bool,
@@ -233,9 +250,20 @@ mod world_doctor_macos {
         // prove the selected host-visible transport contract first, and only
         // fall back to guest-direct breakglass access when those routed probes
         // fail.
-        let agent_caps_ok = host_visible_transports
+        let mut agent_caps_ok = host_visible_transports
             .iter()
             .any(probe_caps_over_transport);
+        if !agent_caps_ok
+            && service_active
+            && !socket_override_in_effect()
+            // `ensure_persistent_session_ready_async()` proves routed host-visible
+            // capabilities reachability while the backend-owned forwarding handle
+            // is alive. Do not re-probe after the helper returns: dropping that
+            // helper backend tears the temporary forwarding back down again.
+            && try_bootstrap_host_visible_transport()
+        {
+            agent_caps_ok = true;
+        }
         let guest_direct_caps_ok =
             !agent_caps_ok && service_active && probe_caps_via_vm(runner, vm_name);
         WorldServiceReachability {

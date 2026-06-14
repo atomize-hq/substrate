@@ -20,15 +20,25 @@ use world_api::{
 use world_mac_lima::MacLimaBackend;
 
 #[cfg(target_os = "macos")]
+fn staged_workspace_current() -> PathBuf {
+    std::env::var("SUBSTRATE_LIMA_STAGED_WORKSPACE_CURRENT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/var/lib/substrate/staged-workspace/current"))
+}
+
+#[cfg(target_os = "macos")]
 fn smoke_world_spec(project_dir: PathBuf) -> WorldSpec {
     WorldSpec {
         project_dir,
         fs_mode: WorldFsMode::ReadOnly,
+        // Keep the generic Lima backend smoke focused on routed reachability and
+        // authoritative backend-policy handoff. Opt-in netfilter posture is
+        // verified separately by the dedicated macOS netfilter conformance flow.
         backend_policy: Some(BackendPolicyInputV1 {
             schema_version: 1,
             policy_snapshot: BackendPolicySnapshotV3 {
                 schema_version: 3,
-                net_allowed: vec!["https://api.example.com".to_string()],
+                net_allowed: Vec::new(),
                 world_fs: BackendPolicySnapshotWorldFsV3 {
                     host_visible: false,
                     fail_closed: BackendPolicySnapshotWorldFsFailClosedV3 { routing: true },
@@ -50,8 +60,8 @@ fn smoke_world_spec(project_dir: PathBuf) -> WorldSpec {
                 },
             },
             world_network: BackendWorldNetworkRoutingV1 {
-                isolate_network: true,
-                allowed_domains: vec!["api.example.com".to_string()],
+                isolate_network: false,
+                allowed_domains: Vec::new(),
             },
         }),
         ..WorldSpec::default()
@@ -64,14 +74,15 @@ fn main() -> Result<()> {
     let backend = MacLimaBackend::new()?;
 
     println!("Creating world session with authoritative backend policy...");
-    let spec = smoke_world_spec(std::env::current_dir()?);
+    let project_dir = staged_workspace_current();
+    let spec = smoke_world_spec(project_dir.clone());
     let handle = backend.ensure_session(&spec)?;
     println!("World session created: {}", handle.id);
 
     println!("Executing test command...");
     let req = ExecRequest {
         cmd: "bash -lc 'echo from-mac-backend'".to_string(),
-        cwd: std::env::current_dir()?,
+        cwd: project_dir,
         env: std::env::vars().collect(),
         pty: false,
         span_id: None,

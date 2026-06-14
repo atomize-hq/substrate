@@ -316,7 +316,10 @@ EOF
 set -euo pipefail
 test -d "${STAGE_PARENT}/${WORKSPACE_NAME}"
 test -f "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
-find "${STAGE_PARENT}/${WORKSPACE_NAME}" -name '.DS_Store' -delete
+# Finder metadata can disappear between traversal and deletion while the staged
+# tree is being copied into place; use rm -f so transient ENOENTs do not abort
+# the supported staging path.
+find "${STAGE_PARENT}/${WORKSPACE_NAME}" -name '.DS_Store' -exec rm -f {} +
 sudo install -d -o root -g substrate -m0750 "${STAGED_WORKSPACE_ROOT}"
 sudo rm -rf "${STAGED_WORKSPACE_CURRENT}"
 sudo mv "${STAGE_PARENT}/${WORKSPACE_NAME}" "${STAGED_WORKSPACE_CURRENT}"

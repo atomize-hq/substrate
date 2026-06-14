@@ -1722,9 +1722,10 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   (cd "${REPO_ROOT}" && env "${lima_warm_env[@]}" "${LIMA_WARM}" "${REPO_ROOT}")
 
   cache_ok=1
-  if ! link_prefix_lima_socket; then
-    cache_ok=0
-  fi
+  # The managed host socket is backend-owned and may not exist until the first
+  # routed proof bootstraps forwarding under this prefix. Keep the legacy link
+  # best-effort; missing it here is no longer a provisioning failure.
+  link_prefix_lima_socket || true
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate "${BIN_DIR}/linux/substrate" "substrate CLI"; then
     warn "Linux substrate CLI was not cached from Lima; continuing because routed diagnostics can fall back to the host CLI on macOS."
   fi
