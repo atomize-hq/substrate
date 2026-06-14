@@ -268,7 +268,7 @@ Session goal:
 
 #### Tasks
 
-- [ ] Task 4.1: Final scope and coherence check
+- [x] Task 4.1: Final scope and coherence check
   - Acceptance: the final diff stays within the allowed execution boundary
     unless an explicitly justified minimal assist was required, and the slice
     does not claim stronger lifecycle, sync, or ownership guarantees than the
@@ -280,7 +280,7 @@ Session goal:
   - Files:
     - touched files only
 
-- [ ] Task 4.2: Record the final Phase 3 closeout state honestly
+- [x] Task 4.2: Record the final Phase 3 closeout state honestly
   - Acceptance: final closeout states explicitly whether the docs cutover is
     checkpoint-green, whether any drift remains, and that the same-user
     limitation still exists even if the operator narrative is now cut over.
@@ -305,3 +305,22 @@ The downstream boundary must remain explicit:
 3. Any remaining raw guest guidance that survives after this slice must remain
    explicitly bounded breakglass or advanced material rather than the primary
    supported path.
+
+Packet `4` closeout status (2026-06-14):
+
+1. **checkpoint-green:** yes — the final Packet `4` write set stayed bounded to
+   this task ledger, the Slice `12` touched doc/script surface still presents
+   the owned-path-first contract, and the rerun Packet `2` / Packet `3`
+   verification wall remained green.
+2. **write set:** `macos-hardening/macos-hardened-same-user-lima/spec/TASKS-12.md`
+   only. No additional doc or script assist was required to keep the final
+   Slice `12` narrative honest.
+3. **drift remains:** no material Slice `12` docs-cutover drift inside the
+   allowed authority set. The same-user Lima ownership limitation still
+   remains, but that is an explicit background constraint rather than residual
+   Packet `4` contradiction.
+4. **Phase `3` honestly closed:** yes for the feature-local docs-cutover seam.
+   The repo now leads with Substrate-owned macOS operator surfaces, keeps
+   helper-backed flows degraded-but-supported, bounds direct guest and bypass
+   flows as breakglass/advanced material, and still does **not** claim
+   Linux-equivalent host ownership isolation.
