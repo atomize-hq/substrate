@@ -322,6 +322,7 @@ Current Packet `4` rerun status for this closeout:
    truth aligned through the CLI-owned routed command and replay path without
    requiring any broader Slice `12` docs/breakglass cutover work.
 3. Relative to commit `925403849..HEAD`, the final Packet `4` live diff is:
+   - `crates/replay/src/replay/executor.rs`
    - `crates/replay/src/state.rs`
    - `crates/shell/src/execution/platform/macos.rs`
    - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
@@ -334,6 +335,7 @@ Current Packet `4` rerun status for this closeout:
    - `scripts/substrate/dev-install-substrate.sh`
    Within that live diff, the narrowly justified files outside the original
    Packet `4` path list were:
+   - `crates/replay/src/replay/executor.rs`
    - `crates/replay/src/state.rs`
    - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
    - `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`

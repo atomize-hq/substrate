@@ -16,6 +16,35 @@ pub use substrate_trace::ReplayContext;
 
 const REPLAY_WORLD_CWD_ENV: &str = "SUBSTRATE_REPLAY_WORLD_CWD";
 
+fn inherit_missing_trace_fields(current: &mut Value, previous: &Value) {
+    if let Value::Null = current {
+        *current = previous.clone();
+        return;
+    }
+
+    if let (Value::Object(current_map), Value::Object(previous_map)) = (current, previous) {
+        for (key, previous_value) in previous_map {
+            let alias_already_present = match key.as_str() {
+                "exit_code" => current_map.contains_key("exit"),
+                "exit" => current_map.contains_key("exit_code"),
+                _ => false,
+            };
+            if alias_already_present {
+                continue;
+            }
+
+            match current_map.get_mut(key) {
+                Some(current_value) if !current_value.is_null() => {
+                    inherit_missing_trace_fields(current_value, previous_value);
+                }
+                _ => {
+                    current_map.insert(key.clone(), previous_value.clone());
+                }
+            }
+        }
+    }
+}
+
 /// A span loaded from the trace file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceSpan {
@@ -85,13 +114,7 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
                 }
 
                 if let Some(previous) = &found_command_complete {
-                    let replay_context_missing =
-                        value.get("replay_context").is_none_or(|ctx| ctx.is_null());
-                    if replay_context_missing {
-                        if let Some(previous_context) = previous.get("replay_context").cloned() {
-                            value["replay_context"] = previous_context;
-                        }
-                    }
+                    inherit_missing_trace_fields(&mut value, previous);
                 }
 
                 found_command_complete = Some(value);
@@ -526,8 +549,8 @@ mod tests {
     async fn test_load_span_from_trace_preserves_replay_context_when_later_duplicate_is_sparse() {
         let temp_file = NamedTempFile::new().unwrap();
         let trace_content = r#"
-{"ts":"2024-01-01T00:00:00Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","command":"printf ***\n","cwd":"/","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","umask":18,"locale":null,"cwd":"/","policy_id":"default","policy_commit":null,"world_image_version":"0.2.8","anchor_mode":"workspace","anchor_path":"/","caged":true},"exit_code":0}
-{"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shim","command":"printf ***\n","cwd":"/","exit":0}
+{"ts":"2024-01-01T00:00:00Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","command":"printf ***\n","cwd":"/","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","umask":18,"locale":null,"cwd":"/","policy_id":"default","policy_commit":null,"world_image_version":"0.2.8","anchor_mode":"workspace","anchor_path":"/","caged":true},"exit_code":0,"duration_ms":42,"stdout":"stdout payload\n","stderr":"stderr payload\n","fs_diff":{"writes":["world-mac-smoke/file.txt"],"mods":[],"deletes":[]}}
+{"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shim","command":"printf ***\n","cwd":"/","replay_context":{"cwd":"/"},"exit":0}
 {"ts":"2024-01-01T00:00:02Z","event_type":"world_process_start","parent_span":"test-span-2","session_id":"session-1","component":"world-service","cwd":"/var/lib/substrate/staged-workspace/current","env":{"SUBSTRATE_INNER_CMD":"printf raw-world-command\n","SUBSTRATE_MOUNT_PROJECT_DIR":"/var/lib/substrate/staged-workspace/current"}}
 "#;
 
@@ -551,6 +574,20 @@ mod tests {
         assert_eq!(
             span.replay_context.as_ref().map(|ctx| ctx.cwd.as_str()),
             Some("/var/lib/substrate/staged-workspace/current")
+        );
+        assert_eq!(
+            span.replay_context
+                .as_ref()
+                .and_then(|ctx| ctx.path.as_deref()),
+            Some("/usr/bin:/bin")
+        );
+        assert_eq!(span.exit_code, Some(0));
+        assert_eq!(span.duration_ms, Some(42));
+        assert_eq!(span.stdout.as_deref(), Some("stdout payload\n"));
+        assert_eq!(span.stderr.as_deref(), Some("stderr payload\n"));
+        assert_eq!(
+            span.fs_diff.as_ref().map(|diff| diff.writes.clone()),
+            Some(vec![PathBuf::from("world-mac-smoke/file.txt")])
         );
     }
 
