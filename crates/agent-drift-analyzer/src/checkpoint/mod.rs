@@ -28,9 +28,13 @@ pub use export::{
 };
 pub use schema::{
     Checkpoint, CheckpointBoundary, CheckpointDiagnostics, Confidence, DriftClass, DriftScore,
-    DriftState, EvidenceRef, ProgressDimension, ProgressSignal, ProgressSignalCode, ProgressStatus,
-    SessionArchetype, SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength,
-    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+    DriftState, EvidenceRef, ObjectiveClass, ObjectiveConstraint, ObjectiveConstraintKind,
+    ObjectiveEvidenceSpan, ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind,
+    ObjectiveSourceKind, ObjectiveTarget, ObjectiveTargetKind, ObjectiveUnknown, ProgressDimension,
+    ProgressSignal, ProgressSignalCode, ProgressStatus, RequestedDeliverable,
+    RequestedDeliverableKind, SessionArchetype, SessionArchetypeLabel, SessionProgress,
+    SignalPolarity, SignalStrength, StructuredObjective, SuccessCondition, TaskFrame,
+    TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
@@ -2318,7 +2322,11 @@ fn embedded_goal_line_overrides_first_paragraph(text: &str, goal_line: &str) -> 
     }
 
     let mut saw_non_goal_line = false;
-    for line in first_paragraph.lines().map(str::trim).filter(|line| !line.is_empty()) {
+    for line in first_paragraph
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
         if line == goal_line {
             continue;
         }

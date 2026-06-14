@@ -26,6 +26,169 @@ pub struct EvidenceRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StructuredObjective {
+    pub objective_class: ObjectiveClass,
+    pub primary_intent: ObjectiveIntent,
+    pub target: Option<ObjectiveTarget>,
+    pub constraints: Vec<ObjectiveConstraint>,
+    pub success_conditions: Vec<SuccessCondition>,
+    pub deliverables: Vec<RequestedDeliverable>,
+    pub verification_commands: Vec<String>,
+    pub evidence_spans: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+    pub unknowns: Vec<ObjectiveUnknown>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectiveClass {
+    TaskStatement,
+    NotTaskStatement,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectiveIntent {
+    Implement,
+    Debug,
+    Review,
+    Research,
+    Plan,
+    Validate,
+    Docs,
+    OtherTask,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ObjectiveTarget {
+    pub display: String,
+    pub kind: ObjectiveTargetKind,
+    pub paths: Vec<String>,
+    pub symbols: Vec<String>,
+    pub named_artifacts: Vec<String>,
+    pub workspace_refs: Vec<String>,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectiveTargetKind {
+    RepoSlice,
+    CrateOrPackage,
+    FileOrDirectory,
+    SpecOrDesignDoc,
+    TestOrVerifier,
+    SkillOrInstructionSurface,
+    ExternalArtifact,
+    ConceptualTopic,
+    UnknownTarget,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ObjectiveConstraint {
+    pub display: String,
+    pub constraint_kind: ObjectiveConstraintKind,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectiveConstraintKind {
+    ScopeBoundary,
+    NoCode,
+    DocsOnly,
+    ReviewOnly,
+    ValidateOnly,
+    PlatformBoundary,
+    DeliverableFormat,
+    OtherConstraint,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SuccessCondition {
+    pub display: String,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RequestedDeliverable {
+    pub display: String,
+    pub deliverable_kind: RequestedDeliverableKind,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+    pub confidence: Confidence,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum RequestedDeliverableKind {
+    CodeChange,
+    DesignDoc,
+    Plan,
+    Review,
+    ValidationReport,
+    ResearchSummary,
+    OtherDeliverable,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectiveSourceKind {
+    ThreadGoal,
+    UserPrompt,
+    AssistantContext,
+    SystemInstruction,
+    ToolOutput,
+    UnknownSource,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectiveSectionKind {
+    Scope,
+    Mission,
+    Checklist,
+    Verification,
+    Constraints,
+    Deliverables,
+    Context,
+    Boilerplate,
+    ToolingInstructions,
+    UnknownSection,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectiveRole {
+    Goal,
+    Constraint,
+    Verification,
+    Context,
+    OtherRole,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ObjectiveEvidenceSpan {
+    pub row: RowRef,
+    pub source_kind: ObjectiveSourceKind,
+    pub section_kind: ObjectiveSectionKind,
+    pub role: ObjectiveRole,
+    pub excerpt: String,
+    pub start_char: Option<usize>,
+    pub end_char: Option<usize>,
+    pub confidence: Confidence,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ObjectiveUnknown {
+    pub field_name: String,
+    pub reason: String,
+    pub evidence: Vec<ObjectiveEvidenceSpan>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskFrame {
     pub objective: String,
     pub confidence: Confidence,
