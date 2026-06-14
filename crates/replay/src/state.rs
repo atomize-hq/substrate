@@ -55,6 +55,7 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
     let mut lines = reader.lines();
     let mut found_command_complete: Option<Value> = None;
     let mut raw_world_inner_cmd: Option<String> = None;
+    let mut raw_world_cwd: Option<String> = None;
     let mut raw_world_project_dir: Option<String> = None;
 
     while let Some(line) = lines.next_line().await? {
@@ -91,6 +92,15 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
                     continue;
                 }
 
+                let world_cwd = value
+                    .get("cwd")
+                    .and_then(|cwd| cwd.as_str())
+                    .map(str::trim)
+                    .filter(|cwd| !cwd.is_empty())
+                    .map(ToOwned::to_owned);
+                if world_cwd.is_some() {
+                    raw_world_cwd = world_cwd;
+                }
                 let candidate = value
                     .get("env")
                     .and_then(|env| env.get("SUBSTRATE_INNER_CMD"))
@@ -104,11 +114,6 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
                 let project_dir = value
                     .get("env")
                     .and_then(|env| env.get("SUBSTRATE_MOUNT_PROJECT_DIR"))
-                    .or_else(|| {
-                        value
-                            .get("env")
-                            .and_then(|env| env.get("SUBSTRATE_WORLD_PROJECT_DIR"))
-                    })
                     .and_then(|path| path.as_str())
                     .map(str::trim)
                     .filter(|path| !path.is_empty())
@@ -124,16 +129,21 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
     if let Some(mut value) = found_command_complete {
         if let Some(raw_cmd) = raw_world_inner_cmd {
             value["cmd"] = Value::String(raw_cmd);
-            if let Some(project_dir) = raw_world_project_dir {
-                value["cwd"] = Value::String(project_dir.clone());
+            if let Some(world_cwd) = raw_world_cwd {
+                value["cwd"] = Value::String(world_cwd.clone());
                 if let Some(replay_context) = value
                     .get_mut("replay_context")
                     .and_then(|ctx| ctx.as_object_mut())
                 {
-                    replay_context.insert(
-                        "anchor_path".to_string(),
-                        Value::String(project_dir),
-                    );
+                    replay_context.insert("cwd".to_string(), Value::String(world_cwd));
+                }
+            }
+            if let Some(project_dir) = raw_world_project_dir {
+                if let Some(replay_context) = value
+                    .get_mut("replay_context")
+                    .and_then(|ctx| ctx.as_object_mut())
+                {
+                    replay_context.insert("anchor_path".to_string(), Value::String(project_dir));
                 }
             }
         }
@@ -471,7 +481,7 @@ mod tests {
     async fn test_load_span_from_trace_prefers_raw_world_inner_command_for_replay() {
         let temp_file = NamedTempFile::new().unwrap();
         let trace_content = r#"
-{"ts":"2024-01-01T00:00:00Z","event_type":"world_process_start","parent_span":"test-span-1","session_id":"session-1","component":"world-service","env":{"SUBSTRATE_INNER_CMD":"printf raw-world-command\n","SUBSTRATE_MOUNT_PROJECT_DIR":"/var/lib/substrate/staged-workspace/current"}}
+{"ts":"2024-01-01T00:00:00Z","event_type":"world_process_start","parent_span":"test-span-1","session_id":"session-1","component":"world-service","cwd":"/var/lib/substrate/staged-workspace/current/nested","env":{"SUBSTRATE_INNER_CMD":"printf raw-world-command\n","SUBSTRATE_MOUNT_PROJECT_DIR":"/var/lib/substrate/staged-workspace/current"}}
 {"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","command":"printf ***\n","cwd":"/","replay_context":{"path":"/usr/bin:/bin","env_hash":"abc123","umask":18,"locale":null,"cwd":"/","policy_id":"default","policy_commit":null,"world_image_version":"0.2.8","anchor_mode":"workspace","anchor_path":"/","caged":true},"exit_code":0}
 "#;
 
@@ -486,7 +496,11 @@ mod tests {
         assert_eq!(span.cmd, "printf raw-world-command");
         assert_eq!(
             span.cwd.as_deref(),
-            Some(Path::new("/var/lib/substrate/staged-workspace/current"))
+            Some(Path::new("/var/lib/substrate/staged-workspace/current/nested"))
+        );
+        assert_eq!(
+            span.replay_context.as_ref().map(|ctx| ctx.cwd.as_str()),
+            Some("/var/lib/substrate/staged-workspace/current/nested")
         );
         assert_eq!(
             span.replay_context

@@ -44,7 +44,6 @@ use world::{copydiff, overlayfs};
 
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
-const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 
 fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
     let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
@@ -883,14 +882,6 @@ fn emit_scopes_line(verbose: bool, scopes: &[String]) {
 }
 
 fn project_dir_from_env(env: &HashMap<String, String>, cwd: &Path) -> Result<PathBuf> {
-    if let Some(project_dir) = env
-        .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-    {
-        return Ok(PathBuf::from(project_dir));
-    }
-
     let mode = env
         .get(ANCHOR_MODE_ENV)
         .and_then(|value| WorldRootMode::parse(value))
@@ -1291,25 +1282,6 @@ mod tests {
             vec!["example.com".to_string(), "api.example.com".to_string()]
         );
         assert_eq!(spec.backend_policy, Some(backend_policy));
-    }
-
-    #[test]
-    fn project_dir_from_env_prefers_explicit_world_project_dir_override() {
-        let mut env = HashMap::new();
-        env.insert(
-            WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
-            "/var/lib/substrate/staged-workspace/current".to_string(),
-        );
-        env.insert(ANCHOR_MODE_ENV.to_string(), "workspace".to_string());
-        env.insert(ANCHOR_PATH_ENV.to_string(), "/".to_string());
-
-        let project_dir =
-            project_dir_from_env(&env, Path::new("/")).expect("project dir from explicit override");
-
-        assert_eq!(
-            project_dir,
-            PathBuf::from("/var/lib/substrate/staged-workspace/current")
-        );
     }
 
     #[test]

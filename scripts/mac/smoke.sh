@@ -868,6 +868,8 @@ run_generic_smoke() {
     SUBSTRATE_HOME="${dev_install_prefix}"
     SUBSTRATE_ROOT="${dev_install_prefix}"
     SHIM_TRACE_LOG="${trace_log}"
+    SUBSTRATE_ANCHOR_MODE=custom
+    SUBSTRATE_ANCHOR_PATH="${STAGED_WORKSPACE_CURRENT}"
     SUBSTRATE_WORLD_PROJECT_DIR="${STAGED_WORKSPACE_CURRENT}"
   )
 

@@ -44,6 +44,7 @@ use world_api::WorldBackend;
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
+const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
 const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
 
@@ -1215,8 +1216,12 @@ fn preserve_world_project_dir_override(
 ) {
     if env_map
         .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
-        .map(|value| !value.trim().is_empty())
-        .unwrap_or(false)
+        .map(|value| value.trim())
+        .filter(|value| {
+            *value == MACOS_STAGED_WORKSPACE_CURRENT
+                || value.starts_with(&format!("{MACOS_STAGED_WORKSPACE_CURRENT}/"))
+        })
+        .is_some()
     {
         return;
     }
