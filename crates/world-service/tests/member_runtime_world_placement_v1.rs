@@ -221,6 +221,7 @@ async fn member_runtime_launches_inside_authoritative_overlay_and_cgroup() {
         project_dir: tmp.path().to_path_buf(),
         always_isolate: true,
         fs_mode: substrate_common::WorldFsMode::Writable,
+        backend_policy: None,
     };
     let (world, overlay_root) = match service.ensure_session_overlay_root(&world_spec) {
         Ok(result) => result,

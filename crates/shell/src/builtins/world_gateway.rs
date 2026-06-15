@@ -38,6 +38,7 @@ const CLI_CODEX_BACKEND: &str = "cli:codex";
 const API_OPENAI_BACKEND: &str = "api:openai";
 const API_ANTHROPIC_BACKEND: &str = "api:anthropic";
 const SUBSTRATE_GATEWAY_ROUTER: &str = "substrate_gateway";
+#[cfg(target_os = "macos")]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 const CODEX_ACCOUNT_ID_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID";
 const CODEX_ACCESS_TOKEN_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN";

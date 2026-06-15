@@ -12495,6 +12495,7 @@ agents:
             project_dir: temp.path().to_path_buf(),
             always_isolate: true,
             fs_mode: substrate_common::WorldFsMode::Writable,
+            backend_policy: None,
         };
         let world = match service.ensure_session_world(&world_spec) {
             Ok(world) => world,
@@ -12730,6 +12731,7 @@ agents:
             project_dir: temp.path().to_path_buf(),
             always_isolate: true,
             fs_mode: substrate_common::WorldFsMode::Writable,
+            backend_policy: None,
         };
         let world = match service.ensure_session_world(&world_spec) {
             Ok(world) => world,

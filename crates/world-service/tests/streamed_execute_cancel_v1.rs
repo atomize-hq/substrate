@@ -399,6 +399,7 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
         project_dir: tmp.path().to_path_buf(),
         always_isolate: true,
         fs_mode: substrate_common::WorldFsMode::Writable,
+        backend_policy: None,
     };
     let world = match service.ensure_session_world(&world_spec) {
         Ok(world) => world,
@@ -484,6 +485,7 @@ async fn submit_member_turn_cancel_releases_active_slot_for_next_turn() {
         project_dir: tmp.path().to_path_buf(),
         always_isolate: true,
         fs_mode: substrate_common::WorldFsMode::Writable,
+        backend_policy: None,
     };
     let world = match service.ensure_session_world(&world_spec) {
         Ok(world) => world,
@@ -665,6 +667,7 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         project_dir: tmp.path().to_path_buf(),
         always_isolate: true,
         fs_mode: substrate_common::WorldFsMode::Writable,
+        backend_policy: None,
     };
     let world = match service.ensure_session_world(&world_spec) {
         Ok(world) => world,
