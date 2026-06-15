@@ -1382,6 +1382,7 @@ mod tests {
             project_dir: PathBuf::from("/tmp/project-a"),
             always_isolate: false,
             fs_mode: world_api::WorldFsMode::Writable,
+            backend_policy: None,
         };
         let world = SessionWorld {
             id: "wld_test".into(),

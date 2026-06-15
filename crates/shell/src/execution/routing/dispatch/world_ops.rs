@@ -770,6 +770,7 @@ pub(super) fn execute_world_pty_over_ws_macos(
                 eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
             }
             normalize_env_for_linux_guest(&mut env_map);
+            apply_macos_staged_workspace_project_dir_override(&mut env_map);
             crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
                 &policy_snapshot,
                 &mut env_map,
@@ -1210,7 +1211,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn preserve_world_project_dir_override(
+pub(super) fn preserve_world_project_dir_override(
     env_map: &mut std::collections::HashMap<String, String>,
     cwd_path: &std::path::Path,
 ) {
@@ -1245,6 +1246,24 @@ fn preserve_world_project_dir_override(
     env_map.insert(
         WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
         project_dir.display().to_string(),
+    );
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn apply_macos_staged_workspace_project_dir_override(
+    env_map: &mut std::collections::HashMap<String, String>,
+) {
+    if env_map
+        .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+        .map(|value| value.trim())
+        .is_some_and(|value| !value.is_empty())
+    {
+        return;
+    }
+
+    env_map.insert(
+        WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+        MACOS_STAGED_WORKSPACE_CURRENT.to_string(),
     );
 }
 
@@ -1308,6 +1327,7 @@ fn build_agent_client_and_request_impl(
             eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
         }
         normalize_env_for_linux_guest(&mut env_map);
+        apply_macos_staged_workspace_project_dir_override(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -1360,6 +1380,7 @@ fn build_agent_client_and_request_impl(
         eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
     }
     normalize_env_for_linux_guest(&mut env_map);
+    apply_macos_staged_workspace_project_dir_override(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -1406,6 +1427,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
             eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
         }
         normalize_env_for_linux_guest(&mut env_map);
+        apply_macos_staged_workspace_project_dir_override(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -1454,6 +1476,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
     }
     normalize_env_for_linux_guest(&mut env_map);
+    apply_macos_staged_workspace_project_dir_override(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;

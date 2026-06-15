@@ -738,6 +738,7 @@ mod imp {
             "persistent world session bootstrap",
         )?;
         super::super::world_ops::normalize_env_for_linux_guest(&mut env);
+        super::super::world_ops::apply_macos_staged_workspace_project_dir_override(&mut env);
 
         // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
         if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {

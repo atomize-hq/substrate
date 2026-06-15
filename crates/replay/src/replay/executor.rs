@@ -1253,8 +1253,10 @@ mod tests {
 
     #[test]
     fn snapshot_from_policy_preserves_authoritative_net_allowed() {
-        let mut policy = substrate_broker::Policy::default();
-        policy.net_allowed = vec![" Example.COM. ".into(), "api.example.com".into()];
+        let policy = substrate_broker::Policy {
+            net_allowed: vec![" Example.COM. ".into(), "api.example.com".into()],
+            ..Default::default()
+        };
 
         let snapshot = snapshot_from_policy(&policy).expect("build snapshot");
 

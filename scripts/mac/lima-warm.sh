@@ -12,7 +12,6 @@ CANONICAL_UNIT_SOURCE_DIR=""
 VM_NAME="${LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-${SCRIPT_DIR}/lima/substrate.yaml}"
 PROJECT_PATH=""
-PROJECT_PATH_EXPLICIT=0
 CHECK_ONLY=0
 BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
 LAYOUT_SENTINEL="/etc/substrate-lima-layout"
@@ -71,7 +70,6 @@ while [[ $# -gt 0 ]]; do
         *)
             if [[ -z "${PROJECT_PATH}" ]]; then
                 PROJECT_PATH="$1"
-                PROJECT_PATH_EXPLICIT=1
             else
                 fatal "Unexpected argument: $1"
             fi
