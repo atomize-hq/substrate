@@ -24,8 +24,8 @@ pub use checkpoint::{
     ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTarget,
     ObjectiveTargetKind, ObjectiveUnknown, ProgressDimension, ProgressSignal, ProgressSignalCode,
     ProgressStatus, RequestedDeliverable, RequestedDeliverableKind, SessionArchetype,
-    SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength, StructuredObjective, SuccessCondition, TaskFrame,
-    TurnActivityMix, TurnContext, TurnExecutionMode,
+    SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength, StructuredObjective,
+    SuccessCondition, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 pub use input::{AnalyzerSurface, BundleSession, InputBundle, InputError};
 

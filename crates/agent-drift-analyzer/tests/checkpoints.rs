@@ -5,8 +5,9 @@ mod support;
 use std::fs;
 
 use agent_drift_analyzer::{
-    AnalyzeRequest, AnalyzeResult, Confidence, ObjectiveRole, ObjectiveSectionKind, ObjectiveTargetKind, ProgressDimension, ProgressSignalCode,
-    ProgressStatus, SessionArchetypeLabel,
+    AnalyzeRequest, AnalyzeResult, Confidence, ObjectiveRole, ObjectiveSectionKind,
+    ObjectiveTargetKind, ProgressDimension, ProgressSignalCode, ProgressStatus,
+    SessionArchetypeLabel,
 };
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
@@ -4268,7 +4269,9 @@ fn checkpoints_context_objective_prefers_scope_section_over_subordinate_checklis
     }));
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Verification
-            && span.excerpt.contains("cargo test -p agent-drift-analyzer checkpoints")
+            && span
+                .excerpt
+                .contains("cargo test -p agent-drift-analyzer checkpoints")
     }));
     assert_eq!(
         objective.verification_commands,
