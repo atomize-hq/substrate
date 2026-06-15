@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SOURCE_PATH="${BASH_SOURCE[0]}"
+while [[ -L "${SOURCE_PATH}" ]]; do
+    SOURCE_DIR="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
+    SOURCE_PATH="$(readlink "${SOURCE_PATH}")"
+    [[ "${SOURCE_PATH}" != /* ]] && SOURCE_PATH="${SOURCE_DIR}/${SOURCE_PATH}"
+done
+SCRIPT_DIR="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
+CANONICAL_UNIT_SOURCE_DIR=""
 VM_NAME="${LIMA_VM_NAME:-substrate}"
-PROFILE="${LIMA_PROFILE_PATH:-scripts/mac/lima/substrate.yaml}"
+PROFILE="${LIMA_PROFILE_PATH:-${SCRIPT_DIR}/lima/substrate.yaml}"
 PROJECT_PATH=""
-PROJECT_PATH_EXPLICIT=0
 CHECK_ONLY=0
 BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
 LAYOUT_SENTINEL="/etc/substrate-lima-layout"
-LAYOUT_VERSION="socket-parity-v1"
+LAYOUT_VERSION="socket-parity-v2-staged-workspace-v1"
+STAGED_WORKSPACE_ROOT="/var/lib/substrate/staged-workspace"
+STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_ROOT}/current"
+STAGED_WORKSPACE_MANIFEST_NAME=".substrate-lima-stage-manifest"
 WAIT_TIMEOUT=120
 SKIP_GUEST_BUILD="${SUBSTRATE_LIMA_SKIP_GUEST_BUILD:-0}"
 
@@ -29,12 +39,21 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/mac/lima-warm.sh [options] [<project-path>]
 
+This helper is the degraded-but-supported macOS create/warm/repair wrapper.
+Preferred day-to-day operator path after provisioning: `substrate host doctor
+[--json]`, `substrate world doctor [--json]`, `substrate world gateway
+sync|status|restart`, `substrate world enable`, and `substrate world deps
+current sync` for dependency reconciliation.
+Breakglass only: raw `limactl shell`, plain SSH, direct guest `systemctl` or
+`journalctl`, guest socket `curl`, and host-side `SUBSTRATE_WORLD_SOCKET`
+override use.
+
 Options:
   --check-only      Report the current Lima VM status without creating or provisioning it
   -h, --help        Show this help text
 
 Arguments:
-  <project-path>    Repository or release path to mount inside the Lima VM (default: current directory)
+  <project-path>    Repository or release path to stage for guest provisioning (default: current directory)
 USAGE
 }
 
@@ -51,7 +70,6 @@ while [[ $# -gt 0 ]]; do
         *)
             if [[ -z "${PROJECT_PATH}" ]]; then
                 PROJECT_PATH="$1"
-                PROJECT_PATH_EXPLICIT=1
             else
                 fatal "Unexpected argument: $1"
             fi
@@ -65,29 +83,15 @@ if [[ -z "${PROJECT_PATH}" ]]; then
 fi
 PROJECT_PATH="$(cd "${PROJECT_PATH}" && pwd)"
 
-resolve_default_worktree_path() {
-    if [[ "${PROJECT_PATH_EXPLICIT}" -eq 1 ]]; then
-        return
-    fi
-    if ! command -v git >/dev/null 2>&1; then
-        return
-    fi
-
-    local git_dir common_dir primary_worktree
-    git_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-dir 2>/dev/null || true)"
-    common_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-common-dir 2>/dev/null || true)"
-    if [[ -z "${git_dir}" || -z "${common_dir}" || "${git_dir}" == "${common_dir}" ]]; then
-        return
-    fi
-
-    primary_worktree="$(git -C "${PROJECT_PATH}" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr($0, 10); exit }')"
-    if [[ -n "${primary_worktree}" && -d "${primary_worktree}" && "${primary_worktree}" != "${PROJECT_PATH}" ]]; then
-        log "Detected linked worktree; defaulting Lima mount path to primary checkout ${primary_worktree}"
-        PROJECT_PATH="${primary_worktree}"
-    fi
-}
-
-resolve_default_worktree_path
+project_unit_source_dir="${PROJECT_PATH}/scripts/mac/lima/units"
+script_unit_source_dir="${SCRIPT_DIR}/lima/units"
+if [[ -d "${project_unit_source_dir}" ]]; then
+    CANONICAL_UNIT_SOURCE_DIR="${project_unit_source_dir}"
+elif [[ -d "${script_unit_source_dir}" ]]; then
+    CANONICAL_UNIT_SOURCE_DIR="${script_unit_source_dir}"
+else
+    fatal "Canonical guest unit directory not found. Expected ${project_unit_source_dir} or ${script_unit_source_dir}."
+fi
 
 require_cmd() {
     local name="$1"
@@ -254,36 +258,114 @@ ensure_vm_ready() {
     fi
 }
 
-ensure_repo_mount() {
-    if ! limactl shell "${VM_NAME}" test -d /src >/dev/null 2>&1; then
-        fatal "Repository path ${PROJECT_PATH} is not mounted inside the VM. Ensure it exists and rerun."
+host_git_head() {
+    if ! command -v git >/dev/null 2>&1; then
+        return
     fi
+    git -C "${PROJECT_PATH}" rev-parse HEAD 2>/dev/null || true
+}
 
-    # Verify that the *intended* host checkout is actually mounted as /src.
-    #
-    # Lima mounts are fixed at VM creation time. In CI and multi-checkout dev setups, it's easy for
-    # an existing VM to still be mounted to an older checkout, which silently causes the guest to
-    # build/run the wrong world-service version. That manifests as schema mismatches (e.g. V2 policy
-    # fields rejected by an older agent).
-    local sentinel
-    sentinel=".substrate-lima-mount-sentinel.$RANDOM.$RANDOM"
-    echo "sentinel" > "${PROJECT_PATH}/${sentinel}"
+create_stage_manifest() {
+    local manifest_path git_head
+    manifest_path="$(mktemp)"
+    git_head="$(host_git_head)"
+    {
+        printf 'project_path=%s\n' "${PROJECT_PATH}"
+        printf 'project_basename=%s\n' "$(basename "${PROJECT_PATH}")"
+        if [[ -n "${git_head}" ]]; then
+            printf 'git_head=%s\n' "${git_head}"
+        fi
+    } > "${manifest_path}"
+    printf '%s\n' "${manifest_path}"
+}
 
-    if limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
-        rm -f "${PROJECT_PATH}/${sentinel}"
-        return 0
+stage_workspace() {
+    local vm_user="$1"
+    local workspace_name stage_parent manifest_path entry entry_name
+    workspace_name="$(basename "${PROJECT_PATH}")"
+    stage_parent="/tmp/substrate-stage-workspace"
+    manifest_path="$(create_stage_manifest)"
+
+    log "Staging workspace input into guest-local path ${STAGED_WORKSPACE_CURRENT}"
+    # Keep the ingress path aligned with Slice 09 / Slice 10 authority and validation:
+    # transfer the requested workspace directly via `limactl copy` rather than
+    # via a separate host-side staged tree, while preserving the explicit
+    # exclusions that bound guest staging to the supported validation surface.
+    limactl shell "${VM_NAME}" env STAGE_PARENT="${stage_parent}" WORKSPACE_NAME="${workspace_name}" bash <<'EOF'
+set -euo pipefail
+rm -rf "${STAGE_PARENT}"
+mkdir -p "${STAGE_PARENT}/${WORKSPACE_NAME}"
+EOF
+    shopt -s dotglob nullglob
+    for entry in "${PROJECT_PATH}"/*; do
+        entry_name="$(basename "${entry}")"
+        case "${entry_name}" in
+            .git|target|.codex|.DS_Store)
+                continue
+                ;;
+        esac
+        if [[ -d "${entry}" ]]; then
+            limactl copy --recursive "${entry}" "${VM_NAME}:${stage_parent}/${workspace_name}/"
+        else
+            limactl copy "${entry}" "${VM_NAME}:${stage_parent}/${workspace_name}/"
+        fi
+    done
+    shopt -u dotglob nullglob
+    limactl copy "${manifest_path}" "${VM_NAME}:${stage_parent}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+    limactl shell "${VM_NAME}" \
+        env STAGE_PARENT="${stage_parent}" \
+            WORKSPACE_NAME="${workspace_name}" \
+            STAGED_WORKSPACE_ROOT="${STAGED_WORKSPACE_ROOT}" \
+            STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
+            STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
+            VM_USER="${vm_user}" \
+        bash <<'EOF'
+set -euo pipefail
+test -d "${STAGE_PARENT}/${WORKSPACE_NAME}"
+test -f "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+# Finder metadata can disappear between traversal and deletion while the staged
+# tree is being copied into place; use rm -f so transient ENOENTs do not abort
+# the supported staging path.
+find "${STAGE_PARENT}/${WORKSPACE_NAME}" -name '.DS_Store' -exec rm -f {} +
+sudo install -d -o root -g substrate -m0750 "${STAGED_WORKSPACE_ROOT}"
+sudo rm -rf "${STAGED_WORKSPACE_CURRENT}"
+sudo mv "${STAGE_PARENT}/${WORKSPACE_NAME}" "${STAGED_WORKSPACE_CURRENT}"
+sudo chown -R "${VM_USER}:substrate" "${STAGED_WORKSPACE_CURRENT}"
+sudo chmod 0750 "${STAGED_WORKSPACE_CURRENT}"
+sudo install -o "${VM_USER}" -g substrate -m0640 \
+    "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}" \
+    "${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+rm -rf "${STAGE_PARENT}"
+EOF
+    rm -f "${manifest_path}"
+}
+
+verify_staged_workspace() {
+    local expected_git_head expect_cargo_sources
+    expected_git_head="$(host_git_head)"
+    expect_cargo_sources=0
+    if [[ -f "${PROJECT_PATH}/Cargo.toml" ]]; then
+        expect_cargo_sources=1
     fi
-
-    warn "Lima VM '${VM_NAME}' is running but /src does not match the current host checkout (${PROJECT_PATH}). Recreating VM to refresh mounts."
-    destroy_vm
-    create_vm
-    wait_for_running
-
-    if ! limactl shell "${VM_NAME}" test -f "/src/${sentinel}" >/dev/null 2>&1; then
-        fatal "After recreating Lima VM '${VM_NAME}', /src still does not reflect ${PROJECT_PATH}. Check the Lima profile mounts and rerun."
-    fi
-
-    rm -f "${PROJECT_PATH}/${sentinel}"
+    limactl shell "${VM_NAME}" sudo -n env \
+        STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
+        STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
+        EXPECTED_PROJECT_PATH="${PROJECT_PATH}" \
+        EXPECTED_GIT_HEAD="${expected_git_head}" \
+        EXPECT_CARGO_SOURCES="${expect_cargo_sources}" \
+        bash <<'EOF'
+set -euo pipefail
+manifest="${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
+test -d "${STAGED_WORKSPACE_CURRENT}"
+test -f "${manifest}"
+grep -Fqx "project_path=${EXPECTED_PROJECT_PATH}" "${manifest}"
+if [[ -n "${EXPECTED_GIT_HEAD}" ]]; then
+    grep -Fqx "git_head=${EXPECTED_GIT_HEAD}" "${manifest}"
+fi
+if [[ "${EXPECT_CARGO_SOURCES}" == "1" ]]; then
+    test -f "${STAGED_WORKSPACE_CURRENT}/Cargo.toml"
+fi
+EOF
 }
 
 ensure_substrate_group() {
@@ -440,17 +522,35 @@ build_missing_components_inside_vm() {
         return 0
     fi
 
-    if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" bash <<'EOF'; then
+    local status=0
+    if limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" STAGED_WORKSPACE_PATH="${STAGED_WORKSPACE_CURRENT}" bash <<'EOF'
 set -euo pipefail
 build_cli="${BUILD_GUEST_CLI:-0}"
 build_agent="${BUILD_GUEST_AGENT:-0}"
 build_gateway="${BUILD_GUEST_GATEWAY:-0}"
 
+fix_dns() {
+    local probe_host="${1:-ports.ubuntu.com}"
+    if getent hosts "${probe_host}" >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "[lima-warm] DNS resolution failed inside Lima for ${probe_host}; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
+    local SUDO_CMD="sudo"
+    if sudo -n true 2>/dev/null; then
+        SUDO_CMD="sudo -n"
+    fi
+    $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
+    $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
+    $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
+    getent hosts "${probe_host}" >/dev/null 2>&1
+}
+
 ensure_cargo() {
     # Cargo.lock v4 requires a newer cargo than Ubuntu 24.04's apt cargo on some images.
     # Prefer rustup when we detect a v4 lockfile so we don't fail during `cargo build --locked`.
     local needs_lockfile_v4=0
-    if [[ -f /src/Cargo.lock ]] && grep -qx 'version = 4' /src/Cargo.lock 2>/dev/null; then
+    if sudo -u "$(id -un)" -g substrate test -f "${STAGED_WORKSPACE_PATH}/Cargo.lock" \
+        && sudo -u "$(id -un)" -g substrate grep -qx 'version = 4' "${STAGED_WORKSPACE_PATH}/Cargo.lock" 2>/dev/null; then
         needs_lockfile_v4=1
     fi
 
@@ -468,23 +568,8 @@ ensure_cargo() {
     fi
 
     if [[ "${needs_lockfile_v4}" -eq 1 ]]; then
-        fix_dns() {
-            if getent hosts ports.ubuntu.com >/dev/null 2>&1; then
-                return 0
-            fi
-            echo "[lima-warm] DNS resolution failed inside Lima; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
-            local SUDO_CMD="sudo"
-            if sudo -n true 2>/dev/null; then
-                SUDO_CMD="sudo -n"
-            fi
-            $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
-            $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
-            $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
-            getent hosts ports.ubuntu.com >/dev/null 2>&1
-        }
-
         echo "[lima-warm] Cargo.lock v4 detected; installing rustup toolchain (stable)..." >&2
-        fix_dns || true
+        fix_dns ports.ubuntu.com || true
         if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
             # shellcheck disable=SC1090
             source "$HOME/.cargo/env"
@@ -500,32 +585,17 @@ ensure_cargo() {
     if command -v cargo >/dev/null 2>&1; then
         return 0
     fi
-    fix_dns() {
-        if getent hosts ports.ubuntu.com >/dev/null 2>&1; then
-            return 0
-        fi
-        echo "[lima-warm] DNS resolution failed inside Lima; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
-        local SUDO_CMD="sudo"
-        if sudo -n true 2>/dev/null; then
-            SUDO_CMD="sudo -n"
-        fi
-        $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
-        $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
-        $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
-        getent hosts ports.ubuntu.com >/dev/null 2>&1
-    }
-
     echo "[lima-warm] cargo not found inside Lima VM; attempting apt install (rustc cargo)..." >&2
     local SUDO="sudo"
     if sudo -n true 2>/dev/null; then
         SUDO="sudo -n"
     fi
-    fix_dns || true
+    fix_dns ports.ubuntu.com || true
     if $SUDO apt-get update && $SUDO apt-get install -y rustc cargo; then
         return 0
     fi
     echo "[lima-warm] apt install failed; trying rustup via curl (IPv4, retries)..." >&2
-    fix_dns || true
+    fix_dns ports.ubuntu.com || true
     if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
         # shellcheck disable=SC1090
         source "$HOME/.cargo/env"
@@ -571,27 +641,77 @@ release)
     ;;
 esac
 mkdir -p "${BUILD_DIR}"
-cd /src
+workspace_dir="${STAGED_WORKSPACE_PATH}"
+if ! sudo -u "$(id -un)" -g substrate test -r "${workspace_dir}/Cargo.toml"; then
+    echo "[lima-warm][ERROR] staged workspace is not readable under the substrate group: ${workspace_dir}" >&2
+    exit 1
+fi
+run_guest_cargo_build() {
+    fix_dns static.crates.io || true
+    if sudo -u "$(id -un)" -g substrate env \
+        HOME="$HOME" \
+        PATH="$PATH" \
+        CARGO_TARGET_DIR="${BUILD_DIR}" \
+        bash -lc 'cd "$1" && shift && exec "$@"' bash \
+        "${workspace_dir}" "${cargo_bin}" build "$@"; then
+        return 0
+    fi
+    fix_dns static.crates.io || true
+    sudo -u "$(id -un)" -g substrate env \
+        HOME="$HOME" \
+        PATH="$PATH" \
+        CARGO_TARGET_DIR="${BUILD_DIR}" \
+        bash -lc 'cd "$1" && shift && exec "$@"' bash \
+        "${workspace_dir}" "${cargo_bin}" build "$@"
+}
+mandatory_build_failed=0
+cli_build_failed=0
+if [[ "${build_agent}" == "1" ]]; then
+    if ! run_guest_cargo_build -p world-service "${BUILD_PROFILE_FLAG[@]}" --locked; then
+        echo "[lima-warm][ERROR] failed to build Linux world-service inside Lima." >&2
+        mandatory_build_failed=1
+    else
+        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-service" /usr/local/bin/substrate-world-service
+    fi
+fi
+if [[ "${build_gateway}" == "1" ]]; then
+    if ! run_guest_cargo_build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked; then
+        echo "[lima-warm][ERROR] failed to build Linux substrate-gateway inside Lima." >&2
+        mandatory_build_failed=1
+    else
+        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate-gateway" /usr/local/bin/substrate-gateway
+    fi
+fi
 if [[ "${build_cli}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
-    sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
+    if ! run_guest_cargo_build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked; then
+        echo "[lima-warm][WARN] failed to build the optional Linux substrate CLI inside Lima; continuing because diagnostics can fall back to the host CLI." >&2
+        cli_build_failed=1
+    else
+        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
+        sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
 #!/usr/bin/env bash
 exec substrate world "$@"
 WORLD
-    sudo chmod 0755 /usr/local/bin/world
+        sudo chmod 0755 /usr/local/bin/world
+    fi
 fi
-if [[ "${build_agent}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-service "${BUILD_PROFILE_FLAG[@]}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-service" /usr/local/bin/substrate-world-service
+rm -rf "${BUILD_DIR}" || true
+if [[ "${mandatory_build_failed}" -ne 0 ]]; then
+    exit 1
 fi
-if [[ "${build_gateway}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate-gateway" /usr/local/bin/substrate-gateway
+if [[ "${cli_build_failed}" -ne 0 ]]; then
+    echo "[lima-warm][WARN] Guest provisioning completed without a Linux substrate CLI binary." >&2
 fi
-rm -rf "${BUILD_DIR}"
 EOF
-        local status=$?
+    then
+        status=0
+    else
+        status=$?
+    fi
+    if [[ "${status}" -ne 0 ]]; then
+        if [[ "${build_agent}" -eq 1 && "${build_gateway}" -eq 1 ]]; then
+            fatal "Failed to build mandatory Linux guest binaries inside Lima (world-service and/or substrate-gateway) (exit ${status}). Provide prebuilt binaries under bin/linux/ or rerun from a source checkout."
+        fi
         if [[ "${build_agent}" -eq 1 ]]; then
             fatal "Failed to build Linux world-service inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-service or rerun from a source checkout."
         fi
@@ -599,7 +719,7 @@ EOF
             fatal "Failed to build Linux substrate-gateway inside Lima (exit ${status}). Provide a prebuilt gateway under bin/linux/substrate-gateway or rerun from a source checkout."
         fi
         warn "Failed to build Linux CLI inside Lima; diagnostics requiring a guest CLI will need to run on the host."
-        return 1
+        return 0
     fi
 }
 
@@ -665,77 +785,39 @@ EOF
 write_systemd_units() {
     local guest_substrate_home="$1"
     local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
+    local service_template="${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl"
+    local socket_template="${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket"
+    local rendered_units_dir
+    local netfilter_env=""
+
+    [[ -f "${service_template}" ]] || fatal "Missing canonical service unit source: ${service_template}"
+    [[ -f "${socket_template}" ]] || fatal "Missing canonical socket unit source: ${socket_template}"
+
     case "${enable_netfilter}" in
         1|true|yes|TRUE|YES)
-            log "Writing guest systemd unit with WORLD_NETFILTER_ENABLE=1"
+            log "Installing canonical guest systemd units with WORLD_NETFILTER_ENABLE=1"
+            netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
             ;;
         *)
-            log "Writing guest systemd unit without WORLD_NETFILTER_ENABLE=1"
+            log "Installing canonical guest systemd units without WORLD_NETFILTER_ENABLE=1"
             ;;
     esac
-    limactl shell "${VM_NAME}" env SUBSTRATE_WORLD_NETFILTER_ENABLE="${enable_netfilter}" SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
+    rendered_units_dir="$(mktemp -d)"
+    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${netfilter_env}" \
+        envsubst < "${service_template}" > "${rendered_units_dir}/substrate-world-service.service"
+    envsubst < "${socket_template}" > "${rendered_units_dir}/substrate-world-service.socket"
+
+    limactl copy "${rendered_units_dir}/substrate-world-service.service" \
+        "${VM_NAME}:/tmp/substrate-world-service.service"
+    limactl copy "${rendered_units_dir}/substrate-world-service.socket" \
+        "${VM_NAME}:/tmp/substrate-world-service.socket"
+    rm -rf "${rendered_units_dir}"
+
+    limactl shell "${VM_NAME}" bash <<'EOF'
 set -euo pipefail
-
-netfilter_env=""
-case "${SUBSTRATE_WORLD_NETFILTER_ENABLE:-}" in
-  1|true|yes|TRUE|YES)
-    netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
-    ;;
-esac
-
-cat <<UNIT | sudo tee /etc/systemd/system/substrate-world-service.service >/dev/null
-[Unit]
-Description=Substrate World Service
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/substrate-world-service
-Restart=always
-RestartSec=5
-Environment=RUST_LOG=info
-Environment=SUBSTRATE_AGENT_TCP_PORT=61337
-Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
-Environment=SUBSTRATE_HOME=${SUBSTRATE_GUEST_HOME}
-${netfilter_env}
-Group=substrate
-UMask=0027
-RuntimeDirectory=substrate
-RuntimeDirectoryMode=0750
-StateDirectory=substrate
-StateDirectoryMode=0750
-WorkingDirectory=/var/lib/substrate
-StandardOutput=journal
-StandardError=journal
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=${SUBSTRATE_GUEST_HOME} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-cat <<'UNIT' | sudo tee /etc/systemd/system/substrate-world-service.socket >/dev/null
-[Unit]
-Description=Substrate World Service Socket
-PartOf=substrate-world-service.service
-
-[Socket]
-ListenStream=/run/substrate.sock
-SocketMode=0660
-SocketUser=root
-SocketGroup=substrate
-DirectoryMode=0750
-RemoveOnStop=yes
-Service=substrate-world-service.service
-
-[Install]
-WantedBy=sockets.target
-UNIT
+sudo install -Dm0644 /tmp/substrate-world-service.service /etc/systemd/system/substrate-world-service.service
+sudo install -Dm0644 /tmp/substrate-world-service.socket /etc/systemd/system/substrate-world-service.socket
+sudo rm -f /tmp/substrate-world-service.service /tmp/substrate-world-service.socket
 EOF
 }
 
@@ -747,8 +829,9 @@ legacy_unit_prefix="substrate-world"
 legacy_service="${legacy_unit_prefix}-agent.service"
 legacy_socket="${legacy_unit_prefix}-agent.socket"
 sudo install -d -m0755 "${SUBSTRATE_GUEST_HOME}"
-sudo install -d -m0750 /var/lib/substrate
+sudo install -d -m0750 -o root -g substrate /var/lib/substrate
 sudo install -d -m0750 -o root -g substrate /run/substrate
+sudo install -d -m0750 -o root -g substrate /run/substrate/substrate-gateway-runtime
 sudo systemctl stop "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
 sudo systemctl disable "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
 sudo rm -f "/etc/systemd/system/${legacy_service}" "/etc/systemd/system/${legacy_socket}"
@@ -758,6 +841,7 @@ sudo systemctl enable substrate-world-service.socket >/dev/null
 sudo systemctl stop substrate-world-service.service >/dev/null 2>&1 || true
 sudo systemctl stop substrate-world-service.socket >/dev/null 2>&1 || true
 sudo install -d -m0750 -o root -g substrate /run/substrate
+sudo install -d -m0750 -o root -g substrate /run/substrate/substrate-gateway-runtime
 sudo rm -f /run/substrate.sock
 sudo systemctl start substrate-world-service.socket
 sudo systemctl start substrate-world-service.service
@@ -789,14 +873,13 @@ linger_guidance() {
     local linger
     linger="$(limactl shell "${VM_NAME}" sudo -n loginctl show-user "${vm_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
     if [[ "${linger}" != "yes" ]]; then
-        warn "loginctl lingering for ${vm_user} is ${linger:-unknown}. Run 'limactl shell ${VM_NAME} sudo loginctl enable-linger ${vm_user}' so socket activation survives logout."
+        warn "loginctl lingering for ${vm_user} is ${linger:-unknown}. Rerun \`substrate world enable\` (or this degraded-but-supported helper) after correcting it. Breakglass guest-admin repair: run 'limactl shell ${VM_NAME} sudo loginctl enable-linger ${vm_user}' so socket activation survives logout."
     else
         log "loginctl lingering already enabled for ${vm_user}."
     fi
 }
 
 configure_guest() {
-    ensure_repo_mount
     local vm_user
     local vm_home
     local guest_substrate_home
@@ -810,6 +893,8 @@ configure_guest() {
     fi
     guest_substrate_home="${vm_home}/.substrate"
     ensure_substrate_group "${vm_user}"
+    stage_workspace "${vm_user}"
+    verify_staged_workspace
     install_guest_binaries
     verify_guest_binaries
     write_systemd_units "${guest_substrate_home}"
@@ -828,5 +913,15 @@ render_profile
 ensure_vm_ready
 configure_guest
 
-log "Lima world backend '${VM_NAME}' is ready. Verify with: limactl shell ${VM_NAME} sudo systemctl status substrate-world-service.socket"
+cat <<EOF
+Supported operator path:
+  supported: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable; substrate world deps current sync for dependency reconciliation
+  degraded-but-supported: scripts/mac/lima-doctor.sh remains the routed-first wrapper for doctor proof; scripts/mac/lima-warm.sh remains the current macOS create/warm/repair and staged-workspace copy wrapper
+  note: substrate workspace sync is not yet the frozen normal macOS same-user Lima sync/copy contract in this packet
+  breakglass: raw limactl shell, plain SSH, direct guest systemctl, guest socket curl, guest journalctl, and host-side SUBSTRATE_WORLD_SOCKET override use
+EOF
+
+log "Lima world backend '${VM_NAME}' is ready. Preferred supported operations: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable when provisioning is needed; substrate world deps current sync when guest dependency reconciliation is needed."
+log "This helper remains degraded-but-supported for macOS create/warm/repair and staged-workspace copy."
+log "Escalate to raw limactl shell, plain SSH, direct guest systemctl/journalctl, guest socket curl, or host-side SUBSTRATE_WORLD_SOCKET override use only as breakglass."
 log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"

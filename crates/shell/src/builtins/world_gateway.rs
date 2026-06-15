@@ -22,6 +22,10 @@ use transport_api_types::{
     GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1, IdentityTuple,
     PlacementExecution, PlacementPosture,
 };
+#[cfg(target_os = "macos")]
+use world_mac_lima::transport::{
+    managed_host_socket_path, COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
+};
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
@@ -34,10 +38,13 @@ const CLI_CODEX_BACKEND: &str = "cli:codex";
 const API_OPENAI_BACKEND: &str = "api:openai";
 const API_ANTHROPIC_BACKEND: &str = "api:anthropic";
 const SUBSTRATE_GATEWAY_ROUTER: &str = "substrate_gateway";
+const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 const CODEX_ACCOUNT_ID_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID";
 const CODEX_ACCESS_TOKEN_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN";
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
+#[cfg(target_os = "macos")]
+const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
 
 struct GatewayLifecycleRequestContext {
     request: GatewayLifecycleRequestV1,
@@ -217,7 +224,9 @@ fn build_macos_gateway_client() -> anyhow::Result<MacosGatewayClient> {
     let client = match forwarding.kind() {
         world_mac_lima::ForwardingKind::SshUds { path } => AgentClient::unix_socket(path.clone())?,
         world_mac_lima::ForwardingKind::SshTcp { port }
-        | world_mac_lima::ForwardingKind::Vsock { port } => AgentClient::tcp("127.0.0.1", *port)?,
+        | world_mac_lima::ForwardingKind::Vsock { port } => {
+            AgentClient::tcp(COMPATIBILITY_TCP_HOST, *port)?
+        }
     };
 
     Ok(MacosGatewayClient {
@@ -243,8 +252,8 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
     match resolve_macos_host_gateway_socket() {
         Some(default_sock) => MacosGatewayClientEndpoint::Unix(default_sock),
         None => MacosGatewayClientEndpoint::Tcp {
-            host: "127.0.0.1".to_string(),
-            port: 17788,
+            host: COMPATIBILITY_TCP_HOST.to_string(),
+            port: COMPATIBILITY_TCP_PORT,
         },
     }
 }
@@ -282,13 +291,21 @@ fn probe_gateway_caps_uds(path: &std::path::Path) -> bool {
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn macos_default_world_socket_path() -> PathBuf {
-    substrate_common::paths::substrate_home()
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".substrate")
-        })
-        .join("sock/agent.sock")
+    #[cfg(target_os = "macos")]
+    {
+        managed_host_socket_path()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        substrate_common::paths::substrate_home()
+            .unwrap_or_else(|_| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".substrate")
+            })
+            .join("sock/agent.sock")
+    }
 }
 
 fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestContext> {
@@ -333,6 +350,13 @@ fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestCont
         "SUBSTRATE_LLM_DEFAULT_BACKEND".to_string(),
         effective_config.llm.routing.default_backend.clone(),
     );
+    #[cfg(target_os = "macos")]
+    if effective_config.llm.gateway.mode == LlmGatewayMode::InWorld {
+        env.insert(
+            WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+            MACOS_STAGED_WORKSPACE_CURRENT.to_string(),
+        );
+    }
 
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let mut identity_tuple =
@@ -1044,6 +1068,7 @@ mod tests {
     use super::*;
     use crate::execution::world_env_guard;
     use serial_test::serial;
+    use std::{fs, path::Path};
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
         let _guard = world_env_guard();
@@ -1058,6 +1083,55 @@ mod tests {
             None => std::env::remove_var(key),
         }
         result
+    }
+
+    fn with_current_dir<T>(path: &Path, f: impl FnOnce() -> T) -> T {
+        let prev = std::env::current_dir().expect("current dir");
+        std::env::set_current_dir(path).expect("set current dir");
+        let result = f();
+        std::env::set_current_dir(prev).expect("restore current dir");
+        result
+    }
+
+    fn write_gateway_test_config(substrate_home: &Path) {
+        fs::create_dir_all(substrate_home).expect("create substrate home");
+        fs::write(
+            substrate_home.join("config.yaml"),
+            r#"world:
+  enabled: true
+policy:
+  mode: observe
+llm:
+  enabled: true
+  gateway:
+    enabled: true
+    mode: in_world
+  routing:
+    default_backend: cli:codex
+agents:
+  enabled: true
+"#,
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            format!(
+                r#"llm:
+  allowed_backends:
+    - cli:codex
+  secrets:
+    env_allowed:
+      - {CODEX_ACCOUNT_ID_ENV}
+      - {CODEX_ACCESS_TOKEN_ENV}
+"#
+            ),
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("create agents dir");
+        let manifest_src =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config/agents/codex.yaml");
+        fs::copy(manifest_src, agents_dir.join("codex.yaml")).expect("copy codex manifest");
     }
 
     #[test]
@@ -1162,6 +1236,56 @@ mod tests {
                         }
                     }
                 })
+            })
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn build_gateway_request_context_uses_staged_workspace_override_for_macos_in_world_gateway() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        let workspace_root = temp.path().join("workspace");
+        let nested_cwd = workspace_root.join("nested");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        write_gateway_test_config(&substrate_home);
+
+        with_env_var("HOME", Some(home.as_os_str()), || {
+            with_env_var("SUBSTRATE_HOME", Some(substrate_home.as_os_str()), || {
+                with_env_var(
+                    CODEX_ACCOUNT_ID_ENV,
+                    Some(std::ffi::OsStr::new("acct_test")),
+                    || {
+                        with_env_var(
+                            CODEX_ACCESS_TOKEN_ENV,
+                            Some(std::ffi::OsStr::new("token_test")),
+                            || {
+                                with_current_dir(&nested_cwd, || {
+                                    let context = build_gateway_request_context()
+                                        .expect("gateway request context");
+                                    let expected_cwd = std::env::current_dir()
+                                        .expect("current dir during request build")
+                                        .display()
+                                        .to_string();
+                                    assert_eq!(
+                                        context
+                                            .request
+                                            .env
+                                            .as_ref()
+                                            .and_then(|env| env.get(WORLD_PROJECT_DIR_OVERRIDE_ENV))
+                                            .map(String::as_str),
+                                        Some(MACOS_STAGED_WORKSPACE_CURRENT)
+                                    );
+                                    assert_eq!(
+                                        context.request.cwd.as_deref(),
+                                        Some(expected_cwd.as_str())
+                                    );
+                                })
+                            },
+                        )
+                    },
+                )
             })
         });
     }

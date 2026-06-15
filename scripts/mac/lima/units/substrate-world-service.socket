@@ -1,0 +1,15 @@
+[Unit]
+Description=Substrate World Service Socket
+PartOf=substrate-world-service.service
+
+[Socket]
+ListenStream=/run/substrate.sock
+SocketMode=0660
+SocketUser=root
+SocketGroup=substrate
+DirectoryMode=0750
+RemoveOnStop=yes
+Service=substrate-world-service.service
+
+[Install]
+WantedBy=sockets.target

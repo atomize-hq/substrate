@@ -76,7 +76,7 @@ The core rule for the phase is that macOS should behave like Linux wherever beha
   - already validates shared-owner/orchestration flows and should keep doing so through hardening
 - `docs/WORLD.md`
   - documents transport selection and the current `SUBSTRATE_WORLD_SOCKET` bypass behavior
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
   - still teaches direct `limactl shell` setup, service, and troubleshooting flows too prominently
 
 ## Deliverables
@@ -100,7 +100,7 @@ The core rule for the phase is that macOS should behave like Linux wherever beha
 - Diff and review the rendered or generated guest unit contents to prove the TCP listener default is gone and the sandbox settings are unified.
 - Capture `scripts/mac/lima-warm.sh --check-only`, `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, and `scripts/mac/orchestration-smoke.sh` evidence before and after the changes.
 - Probe `world-service` listener mode through logs or explicit checks so the evidence distinguishes socket-activation-only operation from TCP-enabled operation.
-- Review `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` for direct-admin guidance that still contradicts the hardened default.
+- Review `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` for direct-admin guidance that still contradicts the hardened default.
 
 ## Risks / open questions
 

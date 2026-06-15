@@ -9,15 +9,29 @@ fi
 SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_ROOT}/../.." && pwd)"
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-${REPO_ROOT}/target/debug/substrate}"
+CANONICAL_UNIT_SOURCE_DIR="${REPO_ROOT}/scripts/mac/lima/units"
+VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-${LIMA_VM_NAME:-substrate}}"
+STAGED_WORKSPACE_CURRENT="${SUBSTRATE_LIMA_STAGED_WORKSPACE_CURRENT:-/var/lib/substrate/staged-workspace/current}"
+RUN_GUEST_DIRECT_BREAKGLASS="${SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT:-0}"
 
 MODE="generic"
 LOG_DIR=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/mac/smoke.sh [--orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
+Usage: scripts/mac/smoke.sh [--gateway-conformance | --orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
+
+This script preserves the routed macOS proof wall first:
+  supported proof: `substrate host doctor [--json]`, `substrate world doctor
+  [--json]`, `substrate world gateway sync|status|restart`, plus this smoke.
+  breakglass only: guest-direct gateway/readiness checks, raw `limactl shell`,
+  plain SSH, direct guest `systemctl` or `journalctl`, guest socket `curl`,
+  and host-side `SUBSTRATE_WORLD_SOCKET` override use.
+Set `SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT=1` only when you explicitly want
+breakglass guest-direct evidence in addition to the routed proof.
 
 Options:
+  --gateway-conformance    Run the fixture-backed gateway lifecycle/status proof instead of the generic smoke
   --world-disabled-diagnostics
                            Run the world-disabled-diagnostics conformance smoke instead of the generic smoke
   --orchestration-conformance
@@ -34,6 +48,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --netfilter-conformance)
       MODE="netfilter-conformance"
+      shift
+      ;;
+    --gateway-conformance)
+      MODE="gateway-conformance"
       shift
       ;;
     --world-disabled-diagnostics)
@@ -70,6 +88,122 @@ done
 
 log() {
   printf '[mac-smoke] %s\n' "$*"
+}
+
+note_routed_override_bypass() {
+  if [[ -n "${SUBSTRATE_WORLD_SOCKET:-}" ]]; then
+    log "Ignoring SUBSTRATE_WORLD_SOCKET during routed smoke proof; it remains advanced/test/breakglass on macOS."
+  fi
+}
+
+run_routed_proof_command() {
+  env -u SUBSTRATE_WORLD_SOCKET "$@"
+}
+
+run_guest_direct_gateway_compatibility_check() {
+  local port="$1"
+  log "Running guest-direct gateway compatibility check (breakglass evidence after routed proof / explicit opt-in)"
+  limactl shell "${VM_NAME}" curl --fail --silent "http://127.0.0.1:${port}/health" \
+    | jq -e '.status == "ok" and .service == "substrate-gateway"' >/dev/null
+}
+
+run_guest_direct_readiness_diagnostics() {
+  log "Running guest-direct readiness diagnostics (breakglass only, after routed failure or explicit opt-in)"
+  limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-world-service
+  limactl shell "${VM_NAME}" sudo test -x /usr/local/bin/substrate-gateway
+  limactl shell "${VM_NAME}" systemctl is-active --quiet substrate-world-service
+}
+
+host_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+run_rendered_unit_parity_proof() {
+  local parity_tmp=""
+  local expected_dir=""
+  local actual_dir=""
+  local vm_user=""
+  local vm_home=""
+  local guest_substrate_home=""
+  local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
+  local expected_netfilter_env=""
+  local expected_service_sha=""
+  local expected_socket_sha=""
+  local actual_service_sha=""
+  local actual_socket_sha=""
+
+  if [[ ! -f "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl" || ! -f "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket" ]]; then
+    echo "ERROR: missing canonical unit sources under ${CANONICAL_UNIT_SOURCE_DIR}" >&2
+    exit 1
+  fi
+
+  if ! command -v envsubst >/dev/null 2>&1; then
+    echo "ERROR: envsubst is required to render canonical macOS guest units locally" >&2
+    exit 1
+  fi
+
+  parity_tmp="$(mktemp -d)"
+  expected_dir="${parity_tmp}/expected"
+  actual_dir="${parity_tmp}/actual"
+  mkdir -p "${expected_dir}" "${actual_dir}"
+
+  vm_user="$(limactl shell "${VM_NAME}" id -un 2>/dev/null | tr -d '\r' || true)"
+  if [[ -z "${vm_user}" ]]; then
+    echo "ERROR: unable to determine the Lima guest user for rendered-unit parity proof" >&2
+    exit 1
+  fi
+
+  vm_home="$(limactl shell "${VM_NAME}" getent passwd "${vm_user}" 2>/dev/null | cut -d: -f6 | tr -d '\r' || true)"
+  if [[ -z "${vm_home}" ]]; then
+    vm_home="/home/${vm_user}"
+  fi
+  guest_substrate_home="${vm_home}/.substrate"
+
+  case "${enable_netfilter}" in
+    1|true|yes|TRUE|YES)
+      expected_netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
+      ;;
+  esac
+
+  SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${expected_netfilter_env}" \
+    envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl" > "${expected_dir}/substrate-world-service.service"
+  envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket" > "${expected_dir}/substrate-world-service.socket"
+
+  if ! limactl shell "${VM_NAME}" sudo -n systemctl cat substrate-world-service.service \
+    | sed '/^# \//d' \
+    | awk 'BEGIN { seen=0 } { if (!seen && $0 == "") next; seen=1; print }' > "${actual_dir}/substrate-world-service.service"; then
+    echo "ERROR: unable to capture the loaded guest service unit via systemctl cat" >&2
+    exit 1
+  fi
+
+  if ! limactl shell "${VM_NAME}" sudo -n systemctl cat substrate-world-service.socket \
+    | sed '/^# \//d' \
+    | awk 'BEGIN { seen=0 } { if (!seen && $0 == "") next; seen=1; print }' > "${actual_dir}/substrate-world-service.socket"; then
+    echo "ERROR: unable to capture the loaded guest socket unit via systemctl cat" >&2
+    exit 1
+  fi
+
+  expected_service_sha="$(host_sha256 "${expected_dir}/substrate-world-service.service")"
+  expected_socket_sha="$(host_sha256 "${expected_dir}/substrate-world-service.socket")"
+  actual_service_sha="$(host_sha256 "${actual_dir}/substrate-world-service.service")"
+  actual_socket_sha="$(host_sha256 "${actual_dir}/substrate-world-service.socket")"
+
+  if ! cmp -s "${expected_dir}/substrate-world-service.service" "${actual_dir}/substrate-world-service.service"; then
+    echo "ERROR: guest service unit differs from the canonical rendered contract (expected sha256 ${expected_service_sha}, loaded guest sha256 ${actual_service_sha:-unknown})" >&2
+    exit 1
+  fi
+
+  if ! cmp -s "${expected_dir}/substrate-world-service.socket" "${actual_dir}/substrate-world-service.socket"; then
+    echo "ERROR: guest socket unit differs from the canonical rendered contract (expected sha256 ${expected_socket_sha}, loaded guest sha256 ${actual_socket_sha:-unknown})" >&2
+    exit 1
+  fi
+
+  rm -rf "${parity_tmp}"
+  log "Rendered unit parity proof passed for substrate-world-service.service/.socket"
 }
 
 require_cmd() {
@@ -198,6 +332,7 @@ run_gateway_lifecycle_proof() {
   local port=""
   local fixture_root=""
   local substrate_home=""
+  local gateway_cwd="/"
   local codex_account_id="acct_smoke"
   local codex_access_token="header.payload.signature"
 
@@ -210,46 +345,65 @@ run_gateway_lifecycle_proof() {
   write_gateway_smoke_inventory "${substrate_home}"
   trap 'rm -rf "'"${fixture_root}"'"' RETURN
 
-  pushd "${REPO_ROOT}" >/dev/null
-  env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway sync
-  status_json="$(env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway status --json)"
+  # Slice 09 staged-workspace cutover removed guest reliance on the host checkout path.
+  # Run lifecycle/status proofs from a stable cwd that exists on both host and guest,
+  # while sourcing the gateway contract from the dedicated smoke SUBSTRATE_HOME fixture.
+  (
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway sync
+  )
+  status_json="$(
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway status --json
+  )"
   printf '%s\n' "${status_json}" | jq -e '
     .status == "available" and
     .client_wiring.openai_base_url == .client_wiring.anthropic_base_url
   ' >/dev/null
 
-  env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway restart
-  status_json="$(env SUBSTRATE_HOME="${substrate_home}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
-    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
-    "${SUBSTRATE_BIN}" world gateway status --json)"
+  (
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway restart
+  )
+  status_json="$(
+    cd "${gateway_cwd}"
+    run_routed_proof_command env SUBSTRATE_HOME="${substrate_home}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+      "${SUBSTRATE_BIN}" world gateway status --json
+  )"
   base_url="$(printf '%s\n' "${status_json}" | jq -r '.client_wiring.openai_base_url')"
   port="$(printf '%s\n' "${base_url}" | sed -n 's#http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
-  popd >/dev/null
   if [[ -z "${port}" ]]; then
     echo "ERROR: unable to derive gateway port from ${base_url}" >&2
     exit 1
   fi
 
-  limactl shell substrate curl --fail --silent "http://127.0.0.1:${port}/health" \
-    | jq -e '.status == "ok" and .service == "substrate-gateway"' >/dev/null
+  run_rendered_unit_parity_proof
+
+  if [[ "${RUN_GUEST_DIRECT_BREAKGLASS}" == "1" ]]; then
+    run_guest_direct_gateway_compatibility_check "${port}"
+  else
+    log "Skipping guest-direct gateway compatibility check; set SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT=1 to run it as breakglass evidence."
+  fi
 }
 
 run_dev_install_readiness_proof() {
   local install_prefix="$1"
   local install_bin="${install_prefix%/}/bin/substrate"
+  local host_doctor_json=""
   local doctor_json=""
 
-  log "Running macOS dev-install readiness proof"
+  log "Running macOS dev-install routed readiness proof"
   "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" --prefix "${install_prefix}" --profile debug
 
   if [[ ! -x "${install_bin}" ]]; then
@@ -257,18 +411,45 @@ run_dev_install_readiness_proof() {
     exit 1
   fi
 
-  limactl shell substrate sudo test -x /usr/local/bin/substrate-world-service
-  limactl shell substrate sudo test -x /usr/local/bin/substrate-gateway
-  limactl shell substrate systemctl is-active --quiet substrate-world-service
+  if ! host_doctor_json="$(run_routed_proof_command env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+    "${install_bin}" host doctor --json)"; then
+    echo "ERROR: substrate host doctor --json failed during routed readiness proof" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
+  if ! printf '%s\n' "${host_doctor_json}" | jq -e '
+    .ok == true and
+    .host.ok == true
+  ' >/dev/null; then
+    echo "ERROR: substrate host doctor --json reported host readiness failure" >&2
+    printf '%s\n' "${host_doctor_json}" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
 
-  doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
-    "${install_bin}" world doctor --json)"
-  printf '%s\n' "${doctor_json}" | jq -e '
+  if ! doctor_json="$(run_routed_proof_command env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+    "${install_bin}" world doctor --json)"; then
+    echo "ERROR: substrate world doctor --json failed during routed readiness proof" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
+  if ! printf '%s\n' "${doctor_json}" | jq -e '
     .ok == true and
     .host.ok == true and
     .world.ok == true and
     .world.status == "ok"
-  ' >/dev/null
+  ' >/dev/null; then
+    echo "ERROR: substrate world doctor --json reported world readiness failure" >&2
+    printf '%s\n' "${doctor_json}" >&2
+    run_guest_direct_readiness_diagnostics || true
+    exit 1
+  fi
+
+  if [[ "${RUN_GUEST_DIRECT_BREAKGLASS}" == "1" ]]; then
+    run_guest_direct_readiness_diagnostics
+  else
+    log "Skipping guest-direct readiness diagnostics; set SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT=1 to run them as breakglass evidence."
+  fi
 }
 
 default_netfilter_log_dir() {
@@ -325,7 +506,7 @@ run_fixture_command() {
   local substrate_home="$2"
   local project_dir="$3"
   shift 3
-  env \
+  run_routed_proof_command env \
     HOME="${fixture_home}" \
     USERPROFILE="${fixture_home}" \
     SUBSTRATE_HOME="${substrate_home}" \
@@ -685,20 +866,42 @@ run_world_disabled_diagnostics() {
 run_generic_smoke() {
   local trace_log
   local dev_install_prefix
-  trace_log="${SHIM_TRACE_LOG:-$HOME/.substrate/trace.jsonl}"
+  local dev_install_bin
+  local routed_cwd="/"
+  local -a dev_install_env
   dev_install_prefix="$(mktemp -d)"
+  dev_install_bin="${dev_install_prefix}/bin/substrate"
+  trace_log="${SHIM_TRACE_LOG:-${dev_install_prefix}/trace.jsonl}"
+  dev_install_env=(
+    env
+    SUBSTRATE_HOME="${dev_install_prefix}"
+    SUBSTRATE_ROOT="${dev_install_prefix}"
+    SHIM_TRACE_LOG="${trace_log}"
+    SUBSTRATE_ANCHOR_MODE=custom
+    SUBSTRATE_ANCHOR_PATH="${STAGED_WORKSPACE_CURRENT}"
+    SUBSTRATE_WORLD_PROJECT_DIR="${STAGED_WORKSPACE_CURRENT}"
+  )
 
+  note_routed_override_bypass
   rm -rf "${REPO_ROOT}/world-mac-smoke"
   run_dev_install_readiness_proof "${dev_install_prefix}"
   run_gateway_lifecycle_proof
-  "${SUBSTRATE_BIN}" -c 'echo smoke-nonpty'
-  "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world -c 'echo smoke-nonpty'
+  )
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world --pty -c 'printf smoke-pty\n'
+  )
   mkdir -p "$(dirname "${trace_log}")"
 
-  "${SUBSTRATE_BIN}" -c 'rm -rf world-mac-smoke'
   local payload_cmd
-  payload_cmd="(cd /src 2>/dev/null || cd \"${REPO_ROOT}\") && (test -d world-mac-smoke || mkdir world-mac-smoke) && printf 'data\n' > world-mac-smoke/file.txt"
-  "${SUBSTRATE_BIN}" -c "${payload_cmd}"
+  payload_cmd="mkdir -p world-mac-smoke && printf 'smoke-%s\n' '$(date -u +%s)' > world-mac-smoke/file.txt"
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world -c "${payload_cmd}"
+  )
 
   if [[ ! -f "${trace_log}" ]]; then
     echo "ERROR: Trace log not found at ${trace_log}" >&2
@@ -721,8 +924,14 @@ run_generic_smoke() {
     exit 1
   fi
 
-  "${SUBSTRATE_BIN}" --replay "${span}" --replay-verbose
-  "${SUBSTRATE_BIN}" --trace "${span}" | tee /tmp/world-mac-replay.json
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world --replay "${span}" --replay-verbose
+  )
+  (
+    cd "${routed_cwd}"
+    run_routed_proof_command "${dev_install_env[@]}" "${dev_install_bin}" --world --trace "${span}" | tee /tmp/world-mac-replay.json
+  )
   jq '.fs_diff | ((.writes // []) + (.mods // []))' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
   rm -rf "${dev_install_prefix}"
 }
@@ -748,6 +957,7 @@ run_netfilter_conformance() {
   write_smoke_config "${substrate_home}"
   : > "${fixture_home}/.substrate/trace.jsonl"
 
+  note_routed_override_bypass
   log "Using log directory ${log_dir}"
   SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${SCRIPTS_ROOT}/lima-warm.sh"
   run_gateway_lifecycle_proof
@@ -773,6 +983,9 @@ if [[ "${MODE}" == "world-disabled-diagnostics" ]]; then
 elif [[ "${MODE}" == "orchestration-conformance" ]]; then
   ensure_host_prereqs
   run_orchestration_conformance
+elif [[ "${MODE}" == "gateway-conformance" ]]; then
+  ensure_host_prereqs
+  run_gateway_lifecycle_proof
 elif [[ "${MODE}" == "netfilter-conformance" ]]; then
   ensure_host_prereqs
   if [[ -z "${LOG_DIR}" ]]; then

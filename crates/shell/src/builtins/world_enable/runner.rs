@@ -85,6 +85,48 @@ fn render_missing_accepted_staged_world_service_remediation(version_dir: &Path) 
     )
 }
 
+fn find_repo_checkout_helper(start: &Path) -> Option<PathBuf> {
+    for ancestor in start.ancestors() {
+        let candidate = ancestor.join("scripts/substrate/world-enable.sh");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn repo_checkout_helper_from_current_exe() -> Option<PathBuf> {
+    let exe = env::current_exe().ok()?;
+    find_repo_checkout_helper(&exe)
+}
+
+fn locate_dry_run_helper_script(
+    substrate_home: &Path,
+    helper_override: &Option<PathBuf>,
+) -> Result<PathBuf> {
+    if let Some(path) = helper_override {
+        if path.exists() {
+            return Ok(path.clone());
+        }
+        bail!(
+            "SUBSTRATE_WORLD_ENABLE_SCRIPT={} does not exist",
+            path.display()
+        );
+    }
+
+    let prefix_candidate = substrate_home.join("scripts/substrate/world-enable.sh");
+    if prefix_candidate.exists() {
+        return Ok(prefix_candidate);
+    }
+
+    if let Some(repo_helper) = repo_checkout_helper_from_current_exe() {
+        return Ok(repo_helper);
+    }
+
+    let version_dir = resolve_helper_version_dir(substrate_home, helper_override)?;
+    locate_helper_script(substrate_home, version_dir.as_deref(), None)
+}
+
 pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     if args.provision_deps {
         return run_enable_with_provision_deps(args);
@@ -104,6 +146,24 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
         .map(PathBuf::from);
     let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
     enforce_standard_version_dir_preflight(version_dir.as_deref(), &helper_override);
+    if args.dry_run {
+        let script_path = locate_dry_run_helper_script(&substrate_home, &helper_override)?;
+        let log_path = next_log_path(&substrate_home)?;
+        print_dry_run_plan(&script_path, args, &substrate_home, &log_path)?;
+        if !script_path.starts_with(&substrate_home) {
+            println!(
+                "Dry run note: using helper discovery from the current source checkout at {}.",
+                script_path.display()
+            );
+            println!(
+                "Dry run note: real provisioning still expects an installed helper bundle under $SUBSTRATE_HOME or an explicit SUBSTRATE_WORLD_ENABLE_SCRIPT override."
+            );
+        }
+        println!(
+            "Dry run only – no changes were made. Run 'substrate world doctor --json' after provisioning to verify connectivity."
+        );
+        return Ok(());
+    }
     let config_path = substrate_paths::config_file()?;
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
@@ -130,14 +190,6 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     let script_path =
         locate_helper_script(&substrate_home, version_dir.as_deref(), helper_override)?;
     let log_path = next_log_path(&substrate_home)?;
-
-    if args.dry_run {
-        print_dry_run_plan(&script_path, args, &substrate_home, &log_path)?;
-        println!(
-            "Dry run only – no changes were made. Run 'substrate world doctor --json' after provisioning to verify connectivity."
-        );
-        return Ok(());
-    }
 
     initialize_log_file(&log_path)?;
     append_log_line(&log_path, &format!("helper: {}", script_path.display()))?;
@@ -482,5 +534,20 @@ mod tests {
         ));
         assert!(message.contains("scripts/substrate/dev-install-substrate.sh --no-world"));
         assert!(message.contains("cargo build -p world-service"));
+    }
+
+    #[test]
+    fn find_repo_checkout_helper_detects_repo_layout_from_target_path() {
+        let temp = tempdir().unwrap();
+        let repo_root = temp.path().join("repo");
+        let helper = repo_root.join("scripts/substrate/world-enable.sh");
+        let target_bin = repo_root.join("target/debug/substrate");
+        std::fs::create_dir_all(helper.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(target_bin.parent().unwrap()).unwrap();
+        std::fs::write(&helper, "#!/bin/sh\n").unwrap();
+        std::fs::write(&target_bin, "").unwrap();
+
+        let detected = find_repo_checkout_helper(&target_bin).expect("repo helper");
+        assert_eq!(detected, helper);
     }
 }

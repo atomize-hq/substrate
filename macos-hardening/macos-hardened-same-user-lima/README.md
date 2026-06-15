@@ -4,7 +4,7 @@ Status: Draft
 
 Owner: Substrate world backend / macOS hardening
 
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / outcome
 
@@ -25,7 +25,7 @@ The remaining macOS problem is no longer "there is no Substrate-owned surface." 
 - `scripts/mac/lima/substrate.yaml` still mounts broad host state, including a read-only `$HOME` mount that is wider than the hardened runtime contract should require.
 - `scripts/mac/lima-warm.sh` still writes `SUBSTRATE_AGENT_TCP_PORT=61337`, leaving an extra guest listener enabled by default.
 - Guest unit/socket definitions still drift between `scripts/mac/lima/substrate.yaml` and `scripts/mac/lima-warm.sh`.
-- `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` still normalize direct guest setup and troubleshooting more than the hardened same-user path should.
+- `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` still normalize direct guest setup and troubleshooting more than the hardened same-user path should.
 - `SUBSTRATE_WORLD_SOCKET` is still available as an advanced/test/breakglass bypass, but it is not the standard Lima-backed operator path and already rejects explicit shared-owner reuse on macOS.
 
 Phase 0 exists to lock that support contract before implementation work continues, because the repo still mixes three different stories:
@@ -33,6 +33,47 @@ Phase 0 exists to lock that support contract before implementation work continue
 - a real Substrate-owned CLI surface that already exists
 - same-user Lima implementation shortcuts that are still tolerated
 - direct guest administration that is still too prominent in docs and troubleshooting
+
+## Supported mode contract
+
+Slice `01` Packet `1` freezes the supported posture for this feature as:
+
+1. one macOS host user owns the Substrate process, the Lima VM lifecycle, and
+   the host-side forwarding artifacts,
+2. the world still executes inside the Lima guest and keeps guest-local socket
+   ACL semantics inside Linux,
+3. Substrate-owned commands are the normal operator path, starting with:
+   - `substrate host doctor`
+   - `substrate world doctor`
+   - `substrate world gateway sync|status|restart`
+   - routed Lima-backed execution and shared-world/orchestration flows
+4. later slices may harden or narrow those paths, but Slice `01` does not
+   widen into version-floor, transport, mount, unit, or lifecycle semantics.
+
+## Linux non-parity boundary
+
+This feature is intentionally explicit about what same-user Lima does **not**
+claim:
+
+1. it is not Linux host-side ownership parity for `root:substrate 0660`,
+2. it is not a privilege boundary against the owning host user,
+3. direct guest administration is not the normal operator path,
+4. host-side `SUBSTRATE_WORLD_SOCKET` override use remains an
+   advanced/test/breakglass bypass rather than the default Lima-backed path.
+
+## Support taxonomy
+
+Slice `01` Packet `2` inherits the exact support classes from
+[`spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md`](./spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md).
+That design doc is the single authoritative wording source for the taxonomy
+definitions and examples. This README intentionally references the taxonomy
+without restating it.
+
+The feature-local support classes are:
+
+1. `supported`
+2. `degraded-but-supported`
+3. `breakglass`
 
 ## In-scope
 
@@ -83,12 +124,14 @@ The key design constraint is explicit: same-user Lima can match much of Linux's 
   `crates/shell/src/builtins/world_gateway.rs`
 - Lima profile and guest units: `scripts/mac/lima/substrate.yaml`
 - Provisioning and readiness workflow: `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, `scripts/mac/orchestration-smoke.sh`
-- Operator-facing architecture and setup guidance: `docs/WORLD.md`, `docs/cross-platform/mac_world_setup.md`, `docs/USAGE.md`, `docs/contracts/substrate-gateway-operator-contract.md`
+- Operator-facing architecture and setup guidance: `docs/WORLD.md`, `docs/reference/world/platforms/macos-lima-setup.md`, `docs/USAGE.md`, `docs/contracts/gateway/operator-contract.md`
 - Phase overviews: `macos-hardening/macos-hardened-same-user-lima/phase-0-security-contract-and-scope/`
 
 ## Deliverables
 
 - This feature overview.
+- An execution-control rubric that future short planning prompts can rely on:
+  [`EXECUTION-RUBRIC.md`](./EXECUTION-RUBRIC.md)
 - Four phase overview documents that sequence the work from contract-setting through operator-surface replacement.
 - Milestone SOWs that focus later work on the remaining gaps:
   - same-user Lima ownership boundary
@@ -118,7 +161,7 @@ The key design constraint is explicit: same-user Lima can match much of Linux's 
 - Treat this feature as ready for implementation only when reviewers can answer three questions from the docs alone:
   - What is the supported same-user mode?
   - What is explicitly not promised relative to Linux?
-  - Which current workflows are normal operation versus breakglass?
+  - Which current workflows are `supported`, `degraded-but-supported`, and `breakglass`?
 
 ## Risks / open questions
 
@@ -132,3 +175,6 @@ The key design constraint is explicit: same-user Lima can match much of Linux's 
 - [Phase 1: Runtime Parity Foundation](./phase-1-runtime-parity-foundation/README.md)
 - [Phase 2: Same-User Hardening](./phase-2-same-user-hardening/README.md)
 - [Phase 3: Substrate-Owned Operations](./phase-3-substrate-owned-operations/README.md)
+- [Execution Rubric](./EXECUTION-RUBRIC.md)
+- [Roadmap](./ROADMAP.md)
+- [Spec Scaffold](./spec/README.md)

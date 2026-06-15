@@ -42,6 +42,24 @@ Ownership split:
 - `substrate-gateway` owns the in-world front door, provider/planner/executor internals, and normalized event generation.
 - Gateway-local config files, admin mutation surfaces, and token persistence are not required Substrate contract surfaces.
 
+## macOS same-user Lima operator matrix
+
+For the hardened macOS same-user Lima default, the broader operator contract surrounding this gateway family is:
+
+- `supported`
+  - `substrate host doctor [--json]`
+  - `substrate world doctor [--json]`
+  - `substrate world gateway sync|status|restart`
+  - `substrate world enable`
+  - `substrate world deps current sync` for guest dependency reconciliation
+- `degraded-but-supported`
+  - `scripts/mac/lima-doctor.sh` as a routed-first wrapper over the supported doctor contract
+  - `scripts/mac/lima-warm.sh` as the current create/warm/repair and staged-workspace-copy wrapper
+- `breakglass`
+  - direct `limactl shell`, plain SSH, direct guest `systemctl`, guest socket `curl`, guest `journalctl`, and host-side `SUBSTRATE_WORLD_SOCKET` override use
+
+`substrate workspace sync` is not yet the frozen normal macOS same-user Lima sync/copy contract in Slice 11 Packet 2; the current interim path remains the degraded-but-supported staged-workspace flow owned by `scripts/mac/lima-warm.sh`.
+
 ## Boundaries
 
 - This document does not define the `status --json` field list; that contract is owned by `docs/contracts/gateway/status-schema.md`.

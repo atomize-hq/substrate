@@ -1,7 +1,7 @@
 # Milestone 0.1: Target Mode and Support Contract SOW
 
 Status: Draft  
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / outcome
 
@@ -27,18 +27,39 @@ claims that are still too broad.
   `substrate world gateway sync|status|restart`.
   The remaining gap is to make those the supported contract first and classify
   direct guest administration and host-side overrides accordingly.
-- `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` still do not
+- `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` still do not
   sharply separate guest-local Linux-like behavior from the unresolved same-user
   host ownership limitation.
 
 Without a target-mode contract, later fixes will remain local patches instead of a coherent hardening program.
+
+## Target-mode contract
+
+This milestone is the quotable contract for the supported same-user Lima mode:
+
+1. one macOS host user owns the Substrate process, the Lima VM lifecycle, and
+   the host-side forwarding artifacts,
+2. the world executes inside the Lima guest and keeps guest-local Linux socket
+   ACL semantics inside that guest,
+3. Substrate-owned commands are the supported control plane, starting with
+   `substrate host doctor`, `substrate world doctor`, and
+   `substrate world gateway sync|status|restart`,
+4. shared-world/orchestration behavior remains part of the supported runtime
+   story on the Lima-backed path,
+5. this contract does not claim Linux host-side ownership parity, a privilege
+   boundary against the owning host user, or direct guest administration as the
+   normal operator path.
+
+Everything version-sensitive about Lima, transport specifics, and deeper
+breakglass classification remains milestone `0.2` or later scope.
 
 ## In-scope
 
 - Define the supported deployment posture for same-user Lima.
 - Define the exact Linux parity claims macOS is allowed to make after hardening.
 - Define unsupported claims, especially around host-side ownership and multi-user separation.
-- Define the required operator story for normal mode, degraded mode, and unsupported mode.
+- Define the required operator story for `supported`,
+  `degraded-but-supported`, and `breakglass` operation.
 - Produce a concrete gap ledger that later milestones can convert into code and docs work.
 
 ## Out-of-scope
@@ -82,7 +103,7 @@ This milestone should lock the contract around these rules:
 - Uses evidence from:
   - `crates/world-mac-lima/src/lib.rs`
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/lima/substrate.yaml`
 - Must complete before milestone 0.2, because version-floor and breakglass rules depend on the supported-mode definition.
@@ -100,23 +121,25 @@ This milestone should lock the contract around these rules:
   - `crates/shell/src/builtins/world_gateway.rs`
 - Existing operator/gateway contract surfaces:
   - `crates/shell/src/execution/platform/macos.rs`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
 - Guest lifecycle and mount posture:
   - `scripts/mac/lima-warm.sh`
   - `scripts/mac/lima/substrate.yaml`
 - Current operator claims and normal-mode drift:
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
 
 ## Deliverables
 
 - A written target-mode contract section in this SOW that later phases can quote directly.
 - A support matrix with three states:
   - supported same-user hardened mode
-  - degraded but supported diagnostic mode using routed Substrate surfaces or
-    compatibility wrappers around them, not raw direct guest procedures
-  - breakglass / unsupported direct guest mode
+  - degraded-but-supported operation that remains part of the supported story,
+    but with narrower guarantees, transitional caveats, or known UX debt while
+    still using routed Substrate surfaces or compatibility wrappers around
+    them, not raw direct guest procedures
+  - breakglass direct guest mode plus host-side `SUBSTRATE_WORLD_SOCKET` override use
 - A gap list that future implementation must close, at minimum:
   - remove backend-local policy synthesis from `MacLimaBackend`
   - strengthen `apply_policy(...)` semantics in the backend-mediated path
@@ -151,7 +174,7 @@ This milestone should lock the contract around these rules:
   `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and
   `crates/shell/src/builtins/world_gateway.rs` and confirm the SOW correctly
   narrows the policy-drift claim to the backend-mediated macOS path.
-- Read `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` and confirm
+- Read `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` and confirm
   the SOW correctly identifies where operator language currently
   over-normalizes direct guest management and host-side overrides.
 - Use milestone review to force a binary decision on this statement:

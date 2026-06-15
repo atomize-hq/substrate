@@ -2,6 +2,30 @@
 
 This guide walks through setting up the Lima-based Linux world backend for Substrate on macOS. This enables every Substrate command to run inside an isolated Linux VM with full telemetry and policy enforcement.
 
+## Operator contract at a glance
+
+For the hardened same-user Lima default, the supported day-to-day operator path is:
+
+1. `substrate host doctor [--json]`
+2. `substrate world doctor [--json]`
+3. `substrate world gateway sync|status|restart`
+4. `substrate world enable` when provisioning is needed
+5. `substrate world deps current sync` when guest dependency reconciliation is the concern
+
+Treat these as the authoritative command surfaces for the default macOS flow:
+
+- [`docs/USAGE.md`](../../../USAGE.md)
+- [`docs/contracts/gateway/operator-contract.md`](../../../contracts/gateway/operator-contract.md)
+- [`docs/contracts/gateway/status-schema.md`](../../../contracts/gateway/status-schema.md)
+
+Additional classification for this guide:
+
+- `supported`: the owned CLI path above
+- `degraded-but-supported`: `scripts/mac/lima-warm.sh` for create/warm/repair plus staged-workspace copy, and `scripts/mac/lima-doctor.sh` for routed-first deeper troubleshooting
+- `breakglass`: direct `limactl shell`, plain SSH, direct guest `systemctl`, guest socket `curl`, guest `journalctl`, and host-side `SUBSTRATE_WORLD_SOCKET` override use
+
+Same-user Lima still does not provide the Linux ownership boundary, even when the supported routed checks are green.
+
 ## Prerequisites
 
 ### Host Requirements
@@ -54,7 +78,80 @@ PROJECT="$(pwd)" envsubst < scripts/mac/lima/substrate-dev.yaml > /tmp/substrate
 limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
 ```
 
-### Step 1: Set up Lima VM
+The manual `substrate-dev.yaml` path keeps the host `$HOME` mount and the
+project checkout mounted at `/src`. It does **not** by itself populate
+`/var/lib/substrate/staged-workspace/current`.
+
+Lima treats host visibility inside the guest as explicit mount configuration,
+so this dev-profile mounted-checkout path is advanced material rather than the
+default supported operator story for this guide.
+
+### Step 1: Provision the backend through the owned CLI
+
+When provisioning or repair is needed, start with the supported Substrate-owned
+entrypoint from the repo root:
+
+```sh
+target/debug/substrate world enable
+```
+
+If guest dependency provisioning is also required, use:
+
+```sh
+target/debug/substrate world enable --provision-deps
+```
+
+On macOS same-user Lima, `substrate world enable` is the supported operator
+surface even though the current implementation still routes through the
+helper-backed create/warm/repair and staged-workspace flow underneath.
+
+After `substrate world enable` completes, verify the VM is running:
+
+```sh
+limactl list substrate
+# Should show status: Running
+```
+
+### Step 2: Run routed readiness checks
+
+Once the VM is provisioned, validate the supported macOS readiness path through the owned CLI
+surfaces first:
+
+```sh
+target/debug/substrate host doctor --json | jq .
+target/debug/substrate world doctor --json | jq .
+target/debug/substrate world gateway sync
+target/debug/substrate world gateway status --json | jq .
+```
+
+If you need to verify managed runtime recovery after the routed path is already healthy:
+
+```sh
+target/debug/substrate world gateway restart
+target/debug/substrate world gateway status --json | jq .
+```
+
+Use `scripts/mac/lima-doctor.sh` only for deeper post-failure troubleshooting. Direct
+`limactl shell`, guest `systemctl`, guest `curl`, and guest `journalctl` remain breakglass or
+post-failure diagnostics rather than the normal readiness proof for an already provisioned backend.
+
+Listener posture summary for same-user Lima:
+
+- the hardened guest listener is `/run/substrate.sock` only,
+- supported host-side adapters are VSock first and SSH UDS forwarding as the fallback, and both route back to that guest
+  socket,
+- the host loopback port `127.0.0.1:17788` may still appear as the VSock host-side endpoint or in
+  retained compatibility references, but it is not by itself proof of a second guest listener or
+  of an automatic raw TCP fallback,
+- Lima documents `limactl shell` as SSH-backed and documents plain SSH as an interoperability path,
+  so direct `limactl shell` and raw SSH remain guest-access / breakglass evidence here rather than
+  the supported listener contract.
+
+### Degraded-but-supported helper lifecycle path (explicit operator choice)
+
+Use this section only when you intentionally need the current helper-backed
+create/warm/repair wrapper directly instead of the owned `substrate world enable`
+path above.
 
 1. **Start the Lima VM** using the provided helper script (runtime defaults):
   ```sh
@@ -65,11 +162,15 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    This script will:
    - Create a new Lima VM named "substrate" with Ubuntu 24.04
    - Install required packages (nftables, iproute2, dnsmasq, etc.)
-   - Configure the systemd service for substrate-world-service
-   - Mount your home directory (read-only) and project directory (read-write)
+   - Render and install the authoritative `substrate-world-service.service` / `.socket` contract from `scripts/mac/lima/units/`
+   - Stage the requested project path into `/var/lib/substrate/staged-workspace/current` inside the guest via `limactl copy`
    - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
 
 2. Or, to use the dev profile (heavier resources), start it explicitly as shown above.
+   If you use that manual dev-profile startup path, either run
+   `scripts/mac/lima-warm.sh` afterward to provision and stage the workspace,
+   or treat `/var/lib/substrate/staged-workspace/current` as unavailable until
+   you perform an equivalent manual staging step.
 
 3. **Verify VM is running**:
   ```sh
@@ -77,17 +178,23 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
   # Should show status: Running
   ```
 
-### Step 2: Build and Deploy World Service
+### Breakglass: manual guest bootstrap (explicit operator choice)
 
-1. **Compile inside the Lima guest** (recommended):
+Use this section only when you are intentionally bypassing the default
+supported provisioning path above or iterating on guest binaries directly. It
+is not the default supported readiness story for same-user Lima.
+
+1. **Compile inside the Lima guest from the staged workspace** (this path assumes
+   `scripts/mac/lima-warm.sh` has already staged the checkout into
+   `/var/lib/substrate/staged-workspace/current`; it is recommended if you are
+   not relying on host-staged Linux binaries from that helper):
    ```sh
-   # Build from the mounted project directory
-   limactl shell substrate bash -lc 'cd /src && cargo build -p world-service --release'
+   limactl shell substrate bash -lc 'cd /var/lib/substrate/staged-workspace/current && cargo build -p world-service --release'
    ```
 
 2. **Install the binary inside the VM**:
    ```sh
-   limactl shell substrate sudo install -m755 /src/target/release/world-service /usr/local/bin/substrate-world-service
+   limactl shell substrate sudo install -m755 /var/lib/substrate/staged-workspace/current/target/release/world-service /usr/local/bin/substrate-world-service
    ```
 
    > **Alternative:** Cross-compile on the host using a Linux target (e.g.
@@ -100,7 +207,7 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    limactl shell substrate substrate-world-service --version
    ```
 
-### Step 3: Start World Service
+### Breakglass: direct guest service management
 
 1. **Enable and start the systemd service**:
    ```sh
@@ -109,44 +216,44 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    limactl shell substrate sudo systemctl enable --now substrate-world-service.socket
    limactl shell substrate sudo systemctl restart substrate-world-service.service
    ```
-
-2. **Verify service is running**:
-   ```sh
-   limactl shell substrate systemctl status substrate-world-service.socket
-   limactl shell substrate systemctl status substrate-world-service.service
-   ```
-
-3. **Test the agent API**:
-   ```sh
-   limactl shell substrate curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities
-   # Should return JSON with world backend capabilities
-   ```
-
-### Step 4: Run Health Check
-
-Run the comprehensive health check script to ensure everything is configured correctly:
-
-```sh
-scripts/mac/lima-doctor.sh
-```
-
-All critical checks should show `[PASS]`. If any show `[FAIL]`, see the troubleshooting section below.
+2. **Return to the routed readiness proof above**. Treat direct guest `systemctl`, guest
+   `curl --unix-socket`, and guest `journalctl` as breakglass/post-failure diagnostics rather
+   than the normal proof for an already provisioned backend.
 
 ## Testing the Setup
 
-### Manual Smoke Test
+### Breakglass guest-level probe
 
-1. **Test basic command execution** through the agent:
-   ```sh
-   limactl shell substrate bash -c 'curl --unix-socket /run/substrate.sock -X POST http://localhost/v1/execute \
-     -H "Content-Type: application/json" \
-     -d "{\"cmd\": \"echo hello world\", \"env\": {}, \"cwd\": \"/tmp\"}"'
-   ```
+If the routed checks above fail and you need direct guest diagnosis, you can probe the guest-owned
+socket manually.
 
-2. **Check agent logs** for any issues:
-   ```sh
-   limactl shell substrate journalctl -u substrate-world-service -n 50
-   ```
+Start with guest service status:
+
+```sh
+limactl shell substrate systemctl status substrate-world-service.socket
+limactl shell substrate systemctl status substrate-world-service.service
+```
+
+Then confirm the guest socket API is alive:
+
+```sh
+limactl shell substrate curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities
+# Should return JSON with world backend capabilities
+```
+
+If you need an in-guest execute-path probe after that:
+
+```sh
+limactl shell substrate bash -c 'curl --unix-socket /run/substrate.sock -X POST http://localhost/v1/execute \
+  -H "Content-Type: application/json" \
+  -d "{\"cmd\": \"echo hello world\", \"env\": {}, \"cwd\": \"/tmp\"}"'
+```
+
+Follow with guest logs only for post-failure diagnosis:
+
+```sh
+limactl shell substrate journalctl -u substrate-world-service -n 50
+```
 
 ### Substrate CLI Smoke Script
 
@@ -182,9 +289,9 @@ Use `--log-dir <dir>` if you want the doctor JSON and command transcripts writte
 artifact directory. For the full operator playbook, including Linux privileged verification and the
 optional named-allowlist walkthrough, see `docs/reference/world/verification/netfilter_enforcement.md`.
 
-### Using `substrate host doctor` and `substrate world doctor`
+### Using `substrate host doctor`, `substrate world doctor`, and gateway status
 
-Once the VM is provisioned, prefer the CLI doctors for day-to-day checks:
+Once the VM is provisioned, prefer the owned CLI readiness flow for day-to-day checks:
 
 ```sh
 target/debug/substrate host doctor
@@ -192,9 +299,27 @@ target/debug/substrate host doctor --json | jq .
 
 target/debug/substrate world doctor
 target/debug/substrate world doctor --json | jq .
+
+target/debug/substrate world gateway sync
+target/debug/substrate world gateway status --json | jq .
 ```
 
-`substrate host doctor` is host-scoped (limactl + virtualization + VM/service reachability). `substrate world doctor` includes the host report plus world-service-reported “in-world” facts (guest-kernel Landlock support/ABI + world fs strategy probe) via `/v1/doctor/world`. The legacy `scripts/mac/lima-doctor.sh` script remains available for deeper troubleshooting but the CLI commands are the canonical entry points.
+Use `target/debug/substrate world gateway restart` when you need to force managed runtime recovery
+and then re-run `world gateway status --json` to confirm the resulting posture.
+
+`substrate host doctor` is host-scoped (limactl + virtualization + VM/service reachability).
+`substrate world doctor` includes the host report plus world-service-reported “in-world” facts
+(guest-kernel Landlock support/ABI + world fs strategy probe) via `/v1/doctor/world`.
+`substrate world gateway status --json` is the authoritative machine-readable gateway posture for
+the already provisioned backend. The legacy `scripts/mac/lima-doctor.sh` script remains available
+for deeper troubleshooting, but the routed CLI commands are the canonical supported entry points.
+When you need to prove rendered-unit parity itself, `scripts/mac/lima-doctor.sh` and
+`scripts/mac/smoke.sh` render the canonical service/socket locally and compare them against the
+guest-loaded units captured via `systemctl cat`. Those parity checks render from the same
+host-side inputs that `scripts/mac/lima-warm.sh` consumes, so include
+`SUBSTRATE_WORLD_NETFILTER_ENABLE=1` when you need to verify the opt-in netfilter contract.
+Same-user Lima still does not provide the Linux ownership boundary, even when these routed checks
+are green.
 
 ## Helper Scripts
 
@@ -206,21 +331,27 @@ target/debug/substrate world doctor --json | jq .
 
 ### Common Issues and Solutions
 
+Treat the guest-direct commands below as post-failure/breakglass diagnosis, not as the normal
+readiness flow.
+
 | Issue | Diagnosis | Solution |
 |-------|-----------|----------|
 | Virtualization not available | `sysctl kern.hv_support` returns 0 | Enable virtualization in System Settings → Privacy & Security → Developer Tools |
 | Lima VM fails to start | Check `limactl start substrate` output | Ensure sufficient disk space; check `~/Library/Logs/lima/` for detailed logs |
-| SSH connection fails | `limactl shell substrate` fails | Run `limactl shell substrate` once to accept host key |
-| Agent not responding | `substrate host doctor` shows agent unreachable | Check systemd: `limactl shell substrate systemctl status substrate-world-service.socket` and `.service`, then probe directly in-guest: `limactl shell substrate sudo -n curl --fail --unix-socket /run/substrate.sock http://localhost/v1/doctor/world | jq .` |
-| Agent binary missing | Service fails to start | Rebuild and copy binary as shown in Step 2 |
+| SSH connection fails | `limactl shell substrate` fails | For the supported Substrate-routed SSH UDS path, no manual host-key acceptance step should be needed: the managed forwarding flow already uses `StrictHostKeyChecking=accept-new` with a Substrate-scoped `known_hosts` file. If `limactl shell substrate` itself fails, inspect Lima SSH state and the generated SSH config instead of treating a one-time manual shell login as a setup prerequisite. |
+| Agent not responding | `substrate host doctor` or `substrate world gateway status --json` reports the routed path as unavailable | Breakglass: check systemd with `limactl shell substrate systemctl status substrate-world-service.socket` and `.service`, then probe directly in-guest with `limactl shell substrate sudo -n curl --fail --unix-socket /run/substrate.sock http://localhost/v1/doctor/world | jq .` |
+| Agent binary missing | Service fails to start | Breakglass: rebuild `world-service` from `/var/lib/substrate/staged-workspace/current`, install the resulting binary to `/usr/local/bin/substrate-world-service`, then return to the routed readiness proof. |
 | Permission errors | Socket operations fail | Ensure directories exist with correct permissions: `/run/substrate` (0750) |
-| DNS resolution issues | Network operations fail in VM | Check dnsmasq: `limactl shell substrate systemctl status dnsmasq` |
+| DNS resolution issues | Network operations fail in VM | Breakglass: check dnsmasq with `limactl shell substrate systemctl status dnsmasq` |
 | `sudo: unable to resolve host lima-substrate` | Sudo emits warning due to missing host mapping | `limactl shell substrate sudo bash -lc "grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts"` |
 | `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-service --release` → copy to `/usr/local/bin/substrate-world-service` |
-| SSH UDS not creating local socket | SSH ControlMaster multiplexing interferes | Disable ControlMaster: add `-o ControlMaster=no -o ControlPath=none` |
-| TCP forwarding resets | SSH cannot forward TCP→UDS directly | Use SSH UDS; TCP fallback requires a guest TCP↔UDS bridge (e.g., `socat`) |
+| SSH UDS not creating local socket | The routed SSH forward is unhealthy or guest reachability is failing | The managed Substrate forwarding command already forces `-o ControlMaster=no -o ControlPath=none`. Troubleshoot the routed SSH forward / Lima SSH config rather than adding extra ControlMaster overrides for the supported path. |
+| TCP forwarding resets | The selected host-side adapter at `127.0.0.1:17788` is unhealthy or unavailable, or a retained compatibility reference is stale | Do not treat `127.0.0.1:17788` as proof of a guest TCP listener. Prefer the routed CLI proof or SSH UDS first. If VSock should be active, debug the VSock proxy/VM state. Retained compatibility references to `127.0.0.1:17788` do not mean the backend automatically fell through to raw TCP, because the default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly. |
 
 ### Viewing Logs
+
+Use these only after the routed doctor/gateway path fails or when you are explicitly doing
+breakglass diagnosis.
 
 - **VM provisioning logs**: `limactl start substrate --debug`
 - **Agent service logs**: `limactl shell substrate journalctl -u substrate-world-service -f`
@@ -238,8 +369,8 @@ limactl delete substrate
 # Remove any cached data
 rm -rf ~/.lima/substrate
 
-# Start over from Step 1
-scripts/mac/lima-warm.sh
+# Re-run the supported provisioning path from Step 1
+target/debug/substrate world enable
 ```
 
 ## Environment Variables
@@ -252,7 +383,7 @@ The shell manages transport detection automatically. The only knobs you should n
   `WORLD_NETFILTER_ENABLE=1` into the guest `substrate-world-service.service` unit so requested
   netfilter enforcement can be honored.
 - There are no macOS-only transport override flags in the supported operator surface; transport
-  selection follows the built-in fallback chain automatically.
+  detection prefers VSock, then SSH UDS, and intentionally skips automatic SSH TCP fallback.
 
 For a quick guest-env check without reprovisioning, run:
 

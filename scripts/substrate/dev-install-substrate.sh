@@ -1249,10 +1249,28 @@ cache_linux_binary_from_lima() {
   stage_managed_linux_binary_copy "${vm_path}" "${dest_path}" "${PREFIX}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "${label}"
 }
 
+link_prefix_lima_socket() {
+  local default_socket="${HOME}/.substrate/sock/agent.sock"
+  local prefix_socket_dir="${PREFIX}/sock"
+  local prefix_socket="${prefix_socket_dir}/agent.sock"
+
+  if [[ ! -S "${default_socket}" ]]; then
+    warn "Expected managed Lima host socket at ${default_socket}, but it is not present."
+    return 1
+  fi
+
+  mkdir -p "${prefix_socket_dir}"
+  ln -sfn "${default_socket}" "${prefix_socket}"
+  log "Linked managed Lima host socket into ${prefix_socket}"
+}
+
 verify_prefix_linux_bundle() {
   local missing_status=0
   local binary path
-  for binary in substrate world-service substrate-gateway; do
+  if [[ "$#" -eq 0 ]]; then
+    set -- substrate world-service substrate-gateway
+  fi
+  for binary in "$@"; do
     path="${BIN_DIR}/linux/${binary}"
     if ! is_linux_elf "${path}"; then
       warn "Expected cached Linux ${binary} at ${path}, but it is missing or not a Linux ELF."
@@ -1704,8 +1722,12 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   (cd "${REPO_ROOT}" && env "${lima_warm_env[@]}" "${LIMA_WARM}" "${REPO_ROOT}")
 
   cache_ok=1
+  # The managed host socket is backend-owned and may not exist until the first
+  # routed proof bootstraps forwarding under this prefix. Keep the legacy link
+  # best-effort; missing it here is no longer a provisioning failure.
+  link_prefix_lima_socket || true
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate "${BIN_DIR}/linux/substrate" "substrate CLI"; then
-    cache_ok=0
+    warn "Linux substrate CLI was not cached from Lima; continuing because routed diagnostics can fall back to the host CLI on macOS."
   fi
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate-world-service "${BIN_DIR}/linux/world-service" "world-service"; then
     cache_ok=0
@@ -1714,7 +1736,7 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
     cache_ok=0
   fi
 
-  if [[ "${cache_ok}" -eq 0 ]] || ! verify_prefix_linux_bundle; then
+  if [[ "${cache_ok}" -eq 0 ]] || ! verify_prefix_linux_bundle world-service substrate-gateway; then
     WORLD_ENABLED=0
     write_install_metadata "${WORLD_ENABLED}"
     write_env_sh_script "${WORLD_ENABLED}"

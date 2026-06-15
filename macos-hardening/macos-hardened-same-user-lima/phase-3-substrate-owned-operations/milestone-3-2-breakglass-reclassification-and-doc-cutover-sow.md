@@ -74,13 +74,13 @@ This milestone exists because the hardening story is incomplete until the operat
 
 ## Concrete repo surfaces and file pointers
 
-- `docs/cross-platform/mac_world_setup.md`
+- `docs/reference/world/platforms/macos-lima-setup.md`
   - primary setup and troubleshooting cutover target
 - `docs/WORLD.md`
   - primary runtime and operator contract target
-- `docs/contracts/substrate-gateway-operator-contract.md`
+- `docs/contracts/gateway/operator-contract.md`
   - already-landed gateway lifecycle operator contract that docs should lead with
-- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/gateway/status-schema.md`
   - status JSON contract the docs should reference instead of redefining
 - `scripts/mac/lima-doctor.sh`
   - messaging and role should match the reclassification
@@ -117,7 +117,7 @@ This milestone exists because the hardening story is incomplete until the operat
 ## Validation / evidence plan
 
 - Perform a doc inventory of direct guest commands and host-side overrides in
-  `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` and classify
+  `docs/WORLD.md` and `docs/reference/world/platforms/macos-lima-setup.md` and classify
   each one.
 - Review script help output and inline messaging to ensure it matches the new operator contract.
 - Re-run the documented happy path using only Substrate-owned commands and

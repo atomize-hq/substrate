@@ -1204,7 +1204,20 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
 
 else
   # ADR-0004: place the overlay mount at the project path via mount --move (not mount --bind).
-  mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+  #
+  # When the project root itself lives under /var/lib (for example the staged guest workspace on
+  # macOS/Lima), we cannot move the merged root there before mounting tmpfs on /var/lib or the
+  # tmpfs mount will hide the project mount before `cd "$SUBSTRATE_MOUNT_CWD"` runs.
+  project_hold=""
+  case "$SUBSTRATE_MOUNT_PROJECT_DIR" in
+    /var/lib/*)
+      project_hold="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/substrate-project-root.XXXXXX")"
+      mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$project_hold"
+      ;;
+    *)
+      mount --move "$SUBSTRATE_MOUNT_MERGED_DIR" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+      ;;
+  esac
   # Preserve the world-deps host root before mounting tmpfs on /var/lib. When the host root lives
   # under /var/lib (the default), mounting tmpfs would otherwise hide it and we would end up
   # bind-mounting an empty directory into the isolated /var/lib.
@@ -1212,6 +1225,11 @@ else
   mkdir -p "$world_deps_hold"
   mount --rbind "$world_deps_host_root" "$world_deps_hold"
   mount -t tmpfs tmpfs /var/lib
+  if [ -n "$project_hold" ]; then
+    mkdir -p "$SUBSTRATE_MOUNT_PROJECT_DIR"
+    mount --move "$project_hold" "$SUBSTRATE_MOUNT_PROJECT_DIR"
+    rmdir "$project_hold" 2>/dev/null || true
+  fi
   mkdir -p /var/lib/substrate/world-deps
   mount --rbind "$world_deps_hold" /var/lib/substrate/world-deps
   umount -l "$world_deps_hold" 2>/dev/null || true
@@ -1854,6 +1872,14 @@ mod tests {
         // Regression test: when workspace isolation mounts tmpfs on /var/lib, the default world-deps
         // host root lives under /var/lib and would be hidden unless we bind it somewhere stable
         // (outside /var/lib) first.
+        assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT.contains(
+            "project_hold=\"$(mktemp -d \"${XDG_RUNTIME_DIR:-/tmp}/substrate-project-root.XXXXXX\")\""
+        ));
+        assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
+            .contains("mount --move \"$SUBSTRATE_MOUNT_MERGED_DIR\" \"$project_hold\""));
+        assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
+            .contains("mount --move \"$project_hold\" \"$SUBSTRATE_MOUNT_PROJECT_DIR\""));
+
         assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT
             .contains("world_deps_hold=\"${XDG_RUNTIME_DIR:-/tmp}/substrate-world-deps-host.$$\""));
         assert!(PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT

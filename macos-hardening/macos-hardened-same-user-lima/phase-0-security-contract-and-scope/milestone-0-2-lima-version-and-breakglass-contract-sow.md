@@ -1,7 +1,7 @@
 # Milestone 0.2: Lima Version and Breakglass Contract SOW
 
 Status: Draft  
-Last updated: 2026-05-19
+Last updated: 2026-06-11
 
 ## Purpose / outcome
 
@@ -23,11 +23,11 @@ already landed.
   remaining transport drift is stale `7788` references plus doctor/probe
   fallback use of host TCP `17788`.
 - `crates/shell/src/builtins/world_gateway.rs`,
-  `docs/contracts/substrate-gateway-operator-contract.md`, and
-  `docs/contracts/substrate-gateway-status-schema.md` already define a gateway
+  `docs/contracts/gateway/operator-contract.md`, and
+  `docs/contracts/gateway/status-schema.md` already define a gateway
   lifecycle/status contract, including `substrate world gateway sync|status|restart`
   and status JSON.
-- `docs/cross-platform/mac_world_setup.md` still teaches direct guest build,
+- `docs/reference/world/platforms/macos-lima-setup.md` still teaches direct guest build,
   install, service enablement, and raw guest probing as standard setup.
 
 Hardening cannot succeed if the supported environment and breakglass boundary remain implicit.
@@ -51,7 +51,12 @@ Hardening cannot succeed if the supported environment and breakglass boundary re
 This milestone should produce four concrete decisions.
 
 1. Supported environment contract
-   - Freeze the minimum macOS and Lima capability set required for hardened mode.
+   - Freeze the supported floor as Lima `v2.x` on macOS `>= 13.0` with
+     `vmType: "vz"` chosen at instance creation time.
+   - The contract must carry two explicit qualifications instead of promoting
+     either into a universal hardened floor: the VM-types docs' separate
+     `>= 13.5` default-VZ-for-new-instances behavior and the VZ docs' Intel
+     `< 13.5` Linux-kernel-`v6.2` caveat.
    - The contract must account for features already assumed by the repo:
      - `vmType: "vz"` in `scripts/mac/lima/substrate.yaml`
      - guest systemd units and socket activation
@@ -96,7 +101,7 @@ This milestone should produce four concrete decisions.
   - `crates/world-mac-lima/src/forwarding.rs`
   - `crates/world-mac-lima/src/transport.rs`
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
 - Must complete before later phases can safely change operator docs or remove permissive transport fallbacks.
 
 ## Concrete repo surfaces and file pointers
@@ -114,12 +119,12 @@ This milestone should produce four concrete decisions.
   - `crates/shell/src/execution/platform/macos.rs`
   - `crates/shell/src/builtins/world_gateway.rs`
 - Gateway lifecycle/status contract already landed:
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
+  - `docs/contracts/gateway/operator-contract.md`
+  - `docs/contracts/gateway/status-schema.md`
   - `crates/world-service/src/gateway_runtime.rs`
 - Operator guidance that must be reclassified:
   - `docs/WORLD.md`
-  - `docs/cross-platform/mac_world_setup.md`
+  - `docs/reference/world/platforms/macos-lima-setup.md`
 
 ## Deliverables
 
@@ -167,7 +172,7 @@ This milestone should produce four concrete decisions.
   `crates/world-service/src/gateway_runtime.rs`, and
   `scripts/mac/smoke.sh` and confirm the SOW acknowledges the already-landed
   gateway lifecycle/status contract and smoke coverage.
-- Review `docs/cross-platform/mac_world_setup.md` and `docs/WORLD.md` and
+- Review `docs/reference/world/platforms/macos-lima-setup.md` and `docs/WORLD.md` and
   enumerate every direct guest command or host-side override that should be
   labeled breakglass in later docs work.
 - Require future implementation-phase plans to cite this milestone when changing:
@@ -180,4 +185,9 @@ This milestone should produce four concrete decisions.
 
 - If the hardened mode requires a narrower Lima feature set than current contributors use, the support matrix may tighten before the replacement workflows are fully built.
 - Some manual `limactl` escape hatches may remain necessary longer than desired while Substrate-owned repair commands are still missing.
-- The exact version floor still needs a concrete selection during milestone execution; until then, this SOW names the decision and evidence required but not the final version number.
+- Packet `1` resolves the supported environment floor as Lima `v2.x` on macOS
+  `>= 13.0` with `vmType: "vz"` chosen at instance creation time, while
+  carrying forward the separate `>= 13.5` default-VZ-for-new-instances
+  behavior and the Intel `< 13.5` Linux-kernel-`v6.2` caveat as documented
+  qualifications; the remaining open work is breakglass classification and
+  compatibility-path framing rather than the lifecycle floor itself.

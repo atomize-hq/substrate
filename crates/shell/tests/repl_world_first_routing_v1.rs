@@ -26,6 +26,9 @@ use support::MemberDispatchStreamScript;
 use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
 
+#[cfg(target_os = "macos")]
+const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
+
 #[cfg(unix)]
 fn set_fd_nonblocking(fd: i32) {
     unsafe {
@@ -7653,6 +7656,26 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
         Some(parent_str.as_str()),
         "expected drift restart to refresh anchor path for new cwd"
     );
+
+    #[cfg(target_os = "macos")]
+    {
+        assert_eq!(
+            first
+                .env
+                .get("SUBSTRATE_WORLD_PROJECT_DIR")
+                .map(String::as_str),
+            Some(MACOS_STAGED_WORKSPACE_CURRENT),
+            "expected initial persistent REPL start to carry the staged-workspace project-dir override on macOS"
+        );
+        assert_eq!(
+            second
+                .env
+                .get("SUBSTRATE_WORLD_PROJECT_DIR")
+                .map(String::as_str),
+            Some(MACOS_STAGED_WORKSPACE_CURRENT),
+            "expected drift restart to preserve the staged-workspace project-dir override on macOS"
+        );
+    }
 }
 
 #[test]

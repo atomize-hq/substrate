@@ -76,6 +76,66 @@ pub struct ResolvedMemberRuntimeDescriptorV1 {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BackendPolicyInputV1 {
+    pub schema_version: u32,
+    pub policy_snapshot: BackendPolicySnapshotV3,
+    pub world_network: BackendWorldNetworkRoutingV1,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BackendWorldNetworkRoutingV1 {
+    pub isolate_network: bool,
+    pub allowed_domains: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BackendPolicySnapshotV3 {
+    pub schema_version: u32,
+    pub net_allowed: Vec<String>,
+    pub world_fs: BackendPolicySnapshotWorldFsV3,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BackendPolicySnapshotWorldFsV3 {
+    pub host_visible: bool,
+    pub fail_closed: BackendPolicySnapshotWorldFsFailClosedV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deny_enforcement: Option<BackendWorldFsDenyEnforcementV3>,
+    pub caged_required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discover: Option<BackendPolicySnapshotWorldFsDimensionV3>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read: Option<BackendPolicySnapshotWorldFsDimensionV3>,
+    pub write: BackendPolicySnapshotWorldFsWriteV3,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BackendPolicySnapshotWorldFsFailClosedV3 {
+    pub routing: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BackendPolicySnapshotWorldFsDimensionV3 {
+    pub allow_list: Vec<String>,
+    pub deny_list: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BackendPolicySnapshotWorldFsWriteV3 {
+    pub enabled: bool,
+    pub allow_list: Vec<String>,
+    pub deny_list: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendWorldFsDenyEnforcementV3 {
+    Strict,
+    PreferStrict,
+    Weak,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MemberDispatchRequestV1 {
     pub schema_version: u32,
     pub orchestration_session_id: String,
@@ -118,6 +178,9 @@ pub struct WorldSpec {
     /// World filesystem mode (writable overlay/copy-diff vs read-only).
     #[serde(default)]
     pub fs_mode: WorldFsMode,
+    /// Authoritative backend-facing policy and routing inputs nested under WorldSpec.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_policy: Option<BackendPolicyInputV1>,
 }
 
 impl Default for WorldSpec {
@@ -137,6 +200,7 @@ impl Default for WorldSpec {
             project_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             always_isolate: false,
             fs_mode: WorldFsMode::Writable,
+            backend_policy: None,
         }
     }
 }
@@ -288,6 +352,7 @@ mod tests {
         assert!(spec.allowed_domains.contains(&"github.com".to_string()));
         assert!(!spec.always_isolate);
         assert_eq!(spec.fs_mode, WorldFsMode::Writable);
+        assert!(spec.backend_policy.is_none());
     }
 
     #[test]
@@ -338,14 +403,56 @@ mod tests {
             r#"{"orchestration_session_id":"orch_123","world_id":"wld_123","world_generation":8,"binding_state":"active"}"#
         );
 
+        let backend_policy_input = BackendPolicyInputV1 {
+            schema_version: 1,
+            policy_snapshot: BackendPolicySnapshotV3 {
+                schema_version: 3,
+                net_allowed: vec!["example.com".into(), "api.example.com".into()],
+                world_fs: BackendPolicySnapshotWorldFsV3 {
+                    host_visible: true,
+                    fail_closed: BackendPolicySnapshotWorldFsFailClosedV3 { routing: true },
+                    deny_enforcement: Some(BackendWorldFsDenyEnforcementV3::PreferStrict),
+                    caged_required: false,
+                    discover: Some(BackendPolicySnapshotWorldFsDimensionV3 {
+                        allow_list: vec![".".into()],
+                        deny_list: vec![".git".into()],
+                    }),
+                    read: Some(BackendPolicySnapshotWorldFsDimensionV3 {
+                        allow_list: vec![".".into()],
+                        deny_list: vec!["target".into()],
+                    }),
+                    write: BackendPolicySnapshotWorldFsWriteV3 {
+                        enabled: true,
+                        allow_list: vec![".".into()],
+                        deny_list: vec!["Cargo.lock".into()],
+                    },
+                },
+            },
+            world_network: BackendWorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["example.com".into(), "api.example.com".into()],
+            },
+        };
         let spec = WorldSpec {
             reuse_mode: mode.clone(),
+            backend_policy: Some(backend_policy_input.clone()),
             ..WorldSpec::default()
         };
         let decoded: WorldSpec =
             serde_json::from_str(&serde_json::to_string(&spec).expect("serialize spec"))
                 .expect("deserialize spec");
         assert_eq!(decoded.reuse_mode, mode);
+        assert_eq!(
+            decoded
+                .backend_policy
+                .expect("backend policy should deserialize"),
+            backend_policy_input
+        );
+        let backend_policy_json =
+            serde_json::to_string(&backend_policy_input).expect("serialize backend policy input");
+        let backend_policy_back: BackendPolicyInputV1 =
+            serde_json::from_str(&backend_policy_json).expect("deserialize backend policy input");
+        assert_eq!(backend_policy_back, backend_policy_input);
 
         let handle = WorldHandle {
             id: "wld_123".into(),

@@ -14,8 +14,12 @@ use transport_api_types::{
     PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
     WorldFsDenyEnforcementV3,
 };
-use world_api::{ResourceLimits, WorldReuseMode, WorldSpec};
-
+use world_api::{
+    BackendPolicyInputV1, BackendPolicySnapshotV3, BackendPolicySnapshotWorldFsDimensionV3,
+    BackendPolicySnapshotWorldFsFailClosedV3, BackendPolicySnapshotWorldFsV3,
+    BackendPolicySnapshotWorldFsWriteV3, BackendWorldFsDenyEnforcementV3,
+    BackendWorldNetworkRoutingV1, ResourceLimits, WorldReuseMode, WorldSpec,
+};
 const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64";
 
 #[derive(Debug, Clone)]
@@ -169,16 +173,22 @@ pub(crate) fn resolve_world_network_policy_for_snapshot(
 }
 
 pub(crate) fn bootstrap_world_spec(project_dir: PathBuf, fs_mode: WorldFsMode) -> WorldSpec {
-    WorldSpec {
-        reuse_session: true,
-        reuse_mode: WorldReuseMode::GenericCompatible,
-        isolate_network: false,
-        limits: ResourceLimits::default(),
-        enable_preload: false,
-        allowed_domains: Vec::new(),
-        project_dir,
-        always_isolate: false,
-        fs_mode,
+    match resolve_world_network_policy_for_cwd(&project_dir) {
+        Ok(network_policy) => world_spec_for_network_policy(project_dir, fs_mode, &network_policy),
+        Err(_) => WorldSpec {
+            reuse_session: true,
+            reuse_mode: WorldReuseMode::GenericCompatible,
+            isolate_network: false,
+            limits: ResourceLimits::default(),
+            enable_preload: false,
+            allowed_domains: Vec::new(),
+            project_dir,
+            always_isolate: false,
+            fs_mode,
+            // Keep the widened carrier empty instead of inventing non-authoritative
+            // backend policy inputs when broker resolution fails.
+            backend_policy: None,
+        },
     }
 }
 
@@ -191,7 +201,6 @@ pub(crate) fn request_world_network_routing(
     }
 }
 
-#[cfg(target_os = "windows")]
 pub(crate) fn world_spec_for_network_policy(
     project_dir: PathBuf,
     fs_mode: WorldFsMode,
@@ -207,6 +216,20 @@ pub(crate) fn world_spec_for_network_policy(
         project_dir,
         always_isolate: false,
         fs_mode,
+        backend_policy: Some(backend_policy_input_for_network_policy(network_policy)),
+    }
+}
+
+pub(crate) fn backend_policy_input_for_network_policy(
+    network_policy: &ResolvedWorldNetworkPolicy,
+) -> BackendPolicyInputV1 {
+    BackendPolicyInputV1 {
+        schema_version: 1,
+        policy_snapshot: backend_policy_snapshot(&network_policy.snapshot),
+        world_network: BackendWorldNetworkRoutingV1 {
+            isolate_network: network_policy.isolate_network,
+            allowed_domains: network_policy.allowed_domains.clone(),
+        },
     }
 }
 
@@ -235,6 +258,58 @@ fn resolve_world_network_policy(
         isolate_network: routing.isolate_network,
         allowed_domains: routing.allowed_domains,
     })
+}
+
+fn backend_policy_snapshot(snapshot: &PolicySnapshotV3) -> BackendPolicySnapshotV3 {
+    BackendPolicySnapshotV3 {
+        schema_version: snapshot.schema_version,
+        net_allowed: snapshot.net_allowed.clone(),
+        world_fs: BackendPolicySnapshotWorldFsV3 {
+            host_visible: snapshot.world_fs.host_visible,
+            fail_closed: BackendPolicySnapshotWorldFsFailClosedV3 {
+                routing: snapshot.world_fs.fail_closed.routing,
+            },
+            deny_enforcement: snapshot
+                .world_fs
+                .deny_enforcement
+                .map(backend_world_fs_deny_enforcement),
+            caged_required: snapshot.world_fs.caged_required,
+            discover: snapshot
+                .world_fs
+                .discover
+                .as_ref()
+                .map(backend_world_fs_dimension),
+            read: snapshot
+                .world_fs
+                .read
+                .as_ref()
+                .map(backend_world_fs_dimension),
+            write: BackendPolicySnapshotWorldFsWriteV3 {
+                enabled: snapshot.world_fs.write.enabled,
+                allow_list: snapshot.world_fs.write.allow_list.clone(),
+                deny_list: snapshot.world_fs.write.deny_list.clone(),
+            },
+        },
+    }
+}
+
+fn backend_world_fs_dimension(
+    dimension: &PolicySnapshotWorldFsDimensionV3,
+) -> BackendPolicySnapshotWorldFsDimensionV3 {
+    BackendPolicySnapshotWorldFsDimensionV3 {
+        allow_list: dimension.allow_list.clone(),
+        deny_list: dimension.deny_list.clone(),
+    }
+}
+
+fn backend_world_fs_deny_enforcement(
+    deny_enforcement: WorldFsDenyEnforcementV3,
+) -> BackendWorldFsDenyEnforcementV3 {
+    match deny_enforcement {
+        WorldFsDenyEnforcementV3::Strict => BackendWorldFsDenyEnforcementV3::Strict,
+        WorldFsDenyEnforcementV3::PreferStrict => BackendWorldFsDenyEnforcementV3::PreferStrict,
+        WorldFsDenyEnforcementV3::Weak => BackendWorldFsDenyEnforcementV3::Weak,
+    }
 }
 
 pub(crate) fn inject_world_fs_enforcement_plan_env(
@@ -484,6 +559,43 @@ mod tests {
 
         assert!(resolved.isolate_network);
         assert!(resolved.allowed_domains.is_empty());
+    }
+
+    #[test]
+    fn world_spec_for_network_policy_populates_backend_policy_from_authoritative_inputs() {
+        let resolved = resolve_world_network_policy(
+            snapshot_with_net_allowed(&[" Example.COM. ", "api.example.com"]),
+            true,
+        )
+        .expect("resolve");
+
+        let spec = world_spec_for_network_policy(
+            std::path::PathBuf::from("/tmp/substrate-policy-snapshot"),
+            WorldFsMode::Writable,
+            &resolved,
+        );
+        let backend_policy = spec
+            .backend_policy
+            .as_ref()
+            .expect("backend policy should be attached to WorldSpec");
+
+        assert!(spec.isolate_network);
+        assert_eq!(
+            spec.allowed_domains,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
+        assert_eq!(
+            backend_policy.policy_snapshot.net_allowed,
+            resolved.snapshot.net_allowed
+        );
+        assert_eq!(
+            backend_policy.world_network.allowed_domains,
+            spec.allowed_domains
+        );
+        assert_eq!(
+            backend_policy.world_network.isolate_network,
+            spec.isolate_network
+        );
     }
 
     #[test]

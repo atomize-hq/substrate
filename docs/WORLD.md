@@ -18,11 +18,11 @@ Two cooperating components:
 - `substrate` (shell): orchestrates execution, tracing, and routing (non‑PTY via REST, PTY via WS)
 - `world-service`: runs inside the target Linux environment and exposes a small API over a Unix domain socket (`/run/substrate.sock`)
 
-On Linux the agent runs directly on the host. On macOS the agent runs inside a Lima VM; the shell ensures transport forwarding (VSock → SSH UDS → SSH TCP) back to the guest socket.
+On Linux the agent runs directly on the host. On macOS the agent runs inside a Lima VM; the shell ensures transport forwarding (prefer VSock, fall back to SSH UDS) back to the guest socket.
 
 Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima environment reproducible.
 
-`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning scripts also wire `SUBSTRATE_HOME` into the service unit and keep that path writable under `ReadWritePaths`, so manager/config/runtime state lands in the same canonical home on Linux host-native and macOS Lima guest paths.
+`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. On macOS/Lima, `scripts/mac/lima-warm.sh` now renders the authoritative guest `substrate-world-service.service`/`.socket` contract from `scripts/mac/lima/units/`, wires `SUBSTRATE_HOME` into that service unit, and keeps that path writable under `ReadWritePaths`, so manager/config/runtime state lands in the same canonical home on Linux host-native and macOS Lima guest paths.
 
 ### Transport boundary and multi-user posture
 
@@ -182,30 +182,45 @@ Deliberate boundary for later lanes:
 
 ## 3) macOS Architecture (Lima)
 
-Substrate on macOS uses a Lima VM (“substrate”) to host the world-service. The shell guarantees the VM, agent, and forwarding layer are ready before routing commands.
+Substrate on macOS uses a Lima VM (“substrate”) to host the world-service. The hardened guest
+listener remains `/run/substrate.sock`; the shell guarantees the VM, agent, and a supported
+host-side forwarding adapter are ready before routing commands.
 Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-service path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
-- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
-  - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` reports health (virtualization, agent socket, service status, forwarding tools).
-  - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
+- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and renders the authoritative guest units from `scripts/mac/lima/units/substrate-world-service.service.tmpl` plus `scripts/mac/lima/units/substrate-world-service.socket` so fresh create and warm/repair load the same systemd contract. That contract writes to `/run/substrate.sock` as the only hardened default guest listener, preserves managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
+  - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` remains the deeper troubleshooting helper once the routed CLI proof below has already failed.
+  - The helper scripts stage the active project path into the guest-local workspace root at `/var/lib/substrate/staged-workspace/current` via `limactl copy`; broad host-home visibility and a mounted `/src` checkout are no longer the hardened default ingress path.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
     `limactl shell substrate systemctl show substrate-world-service.service -p CapabilityBoundingSet -p AmbientCapabilities`
 
+- Routed readiness order for an already provisioned backend
+  1. `substrate host doctor [--json]`
+  2. `substrate world doctor [--json]`
+  3. `substrate world gateway sync|status|restart` (`status --json` is the authoritative machine-readable gateway posture)
+  4. `scripts/mac/smoke.sh` for routed PTY, non-PTY, and replay proof
+  5. `scripts/mac/lima-doctor.sh`, `substrate sudo journalctl ...`, `limactl shell ...`, in-guest `systemctl`, and in-guest `curl` only after routed checks fail or when explicitly doing breakglass diagnosis
+  - This preserves the same-user limitation: Lima still does not provide the Linux ownership boundary even when the routed readiness path is healthy.
+  - Lima documents `limactl shell` as an SSH-backed guest access path and documents plain SSH as an interoperability path for software that expects SSH connectivity; in this slice both remain guest access / breakglass evidence rather than the supported listener contract.
+  - `SUBSTRATE_WORLD_SOCKET` stays advanced/test/breakglass on macOS; it is not the default readiness path.
+
 - Transport selection (host ⇄ guest)
-  1. VSock via `vsock-proxy` (preferred when Virtualization.framework exposes VSock)
-  2. SSH Unix domain socket forwarding (`~/.substrate/sock/agent.sock`)
-  3. SSH TCP forwarding (`127.0.0.1:<port>`)
-  - The backend attempts transports in that order; failure logs include remediation hints and the shell degrades to host execution after a single warning if all transports fail.
+  1. VSock via `vsock-proxy` (preferred when Virtualization.framework exposes VSock; host-visible at `127.0.0.1:17788`)
+  2. SSH Unix domain socket forwarding (`~/.substrate/sock/agent.sock`) as the supported fallback host-side adapter
+  3. retained compatibility references to `127.0.0.1:17788` may still appear, but they do not define an automatic backend fallthrough to raw TCP
+  - The backend prefers VSock and then SSH UDS; failure logs include remediation hints and the shell degrades to host execution after a single warning if the supported adapters fail.
+  - These are host-side adapters back to the same guest socket at `/run/substrate.sock`; they are not additional hardened guest listeners.
+  - Host loopback reachability at `127.0.0.1:17788` is transport-dependent: on the supported path it can be the VSock host-side endpoint, and retained compatibility references may still point at that loopback address, but it is not proof of a guest TCP listener or of an automatic raw TCP fallback. The current default stack intentionally skips SSH TCP fallback unless a guest TCP↔UDS bridge was added explicitly.
   - For async persistent-session startup on macOS, the shell now awaits the backend-owned async
     readiness path before opening `/v1/stream` unless `SUBSTRATE_WORLD_SOCKET` is explicitly
     overriding the transport.
 
 - Logs & diagnostics
-  - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-service -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`.
-  - Forwarding issues surface in shell `DEBUG` logs with the selected transport. `scripts/mac/lima-doctor.sh` mirrors doctor CLI checks.
+  - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-service -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`. Treat both as post-failure/breakglass diagnosis rather than the normal readiness proof.
+  - Forwarding issues surface in shell `DEBUG` logs with the selected transport. `scripts/mac/lima-doctor.sh` mirrors doctor CLI checks after the routed proof path has already been attempted.
 
 - Validation
+  - `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` preserve routed CLI proof priority but also render the authoritative guest units from the same host-side inputs consumed by `scripts/mac/lima-warm.sh` and compare them against the loaded guest `substrate-world-service.service`/`.socket` captured via `systemctl cat`, so fresh-create and repair parity is proven explicitly instead of inferred. When verifying the opt-in netfilter posture, run those parity checks with `SUBSTRATE_WORLD_NETFILTER_ENABLE=1` so the expected render matches the requested host-side contract.
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
   - `scripts/mac/orchestration-smoke.sh` warms Lima, runs the live `world-mac-lima` backend smoke example, and then runs the macOS-targeted orchestration regression tests that cover shared-owner attach/create, replacement, lazy member launch, targeted follow-up reuse, guest-owned cancel, and shared-world mismatch rejection.
   - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.
@@ -388,10 +403,15 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
   - From agent logs: use `world_id` to inspect `/sys/fs/cgroup/substrate/<WORLD_ID>`
 
 - macOS quick validation
-  - `scripts/mac/lima-doctor.sh`
+  - `target/debug/substrate host doctor --json | jq .`
+  - `target/debug/substrate world doctor --json | jq .`
+  - `target/debug/substrate world gateway sync`
+  - `target/debug/substrate world gateway status --json | jq .`
+  - `target/debug/substrate world gateway restart` when validating managed lifecycle recovery after routed proof is already established
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non‑PTY, PTY, replay + fs_diff assertion)
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/orchestration-smoke.sh` (Lima warm + live backend reachability + shared-owner/member-runtime orchestration contract regressions)
-  - `substrate sudo journalctl -u substrate-world-service -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`) to review guest logs
+  - `scripts/mac/lima-doctor.sh` for deeper post-failure diagnosis after routed checks fail
+  - `substrate sudo journalctl -u substrate-world-service -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`) only when guest-level diagnosis is needed
 
 ---
 
@@ -408,7 +428,7 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 - macOS fallback warnings every command
   - Run `scripts/mac/lima-doctor.sh` to confirm virtualization support, VM status, agent socket, and forwarding binaries. Address any `[FAIL]` entries before re-running the shell.
 - macOS vsock unavailable
-  - The backend automatically falls back to SSH UDS/TCP. If VSock is expected, confirm `vsock-proxy` exists in `$PATH` and Lima is running with `vmType: "vz"`.
+  - The backend falls back to SSH UDS; it intentionally skips automatic SSH TCP fallback. If VSock is expected, confirm `vsock-proxy` exists in `$PATH` and Lima is running with `vmType: "vz"`.
 
 ---
 

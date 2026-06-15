@@ -11,7 +11,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
 use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(not(target_os = "windows"))]
 use crate::execution::settings;
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "windows"))]
 use anyhow::Context;
 use anyhow::Result;
 use std::fmt;
@@ -20,6 +20,10 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::OnceLock;
+#[cfg(not(target_os = "windows"))]
+use tokio::net::{TcpStream, UnixStream};
+#[cfg(not(target_os = "windows"))]
+use tokio_tungstenite as tungs;
 use transport_api_types::SharedWorldOwnerSpec;
 use world_api::WorldBackend;
 
@@ -65,6 +69,18 @@ pub struct PlatformWorldContext {
 pub type PersistentSessionReadyFuture =
     Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
 pub type PersistentSessionReadyFn = dyn Fn() -> PersistentSessionReadyFuture + Send + Sync;
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) trait WorldTransportStreamIo:
+    tokio::io::AsyncRead + tokio::io::AsyncWrite
+{
+}
+
+#[cfg(not(target_os = "windows"))]
+impl<T> WorldTransportStreamIo for T where T: tokio::io::AsyncRead + tokio::io::AsyncWrite + ?Sized {}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) type WorldTransportWsIo = Box<dyn WorldTransportStreamIo + Unpin + Send>;
 
 static GLOBAL_CTX: OnceLock<Arc<PlatformWorldContext>> = OnceLock::new();
 
@@ -139,14 +155,64 @@ pub async fn ensure_persistent_session_ready_async(ctx: &PlatformWorldContext) -
     (ctx.ensure_persistent_session_ready_async.as_ref())().await
 }
 
+#[cfg(not(target_os = "windows"))]
+pub(crate) async fn connect_transport_stream_ws(
+    transport: &WorldTransport,
+) -> Result<tungs::WebSocketStream<WorldTransportWsIo>> {
+    match transport {
+        WorldTransport::Unix(path) => {
+            let stream = UnixStream::connect(path)
+                .await
+                .with_context(|| format!("connect world-service UDS ({})", path.display()))?;
+            let url = url::Url::parse("ws://localhost/v1/stream").expect("static ws URL");
+            let io: WorldTransportWsIo = Box::new(stream);
+            let (ws, _resp) = tungs::client_async(url, io)
+                .await
+                .context("ws handshake /v1/stream")?;
+            Ok(ws)
+        }
+        WorldTransport::Tcp { host, port } => {
+            let ws_url = format!("ws://{host}:{port}/v1/stream");
+            let url = url::Url::parse(&ws_url).context("invalid ws URL")?;
+            let stream = TcpStream::connect((host.as_str(), *port))
+                .await
+                .with_context(|| format!("connect world-service TCP ({host}:{port})"))?;
+            let io: WorldTransportWsIo = Box::new(stream);
+            let (ws, _resp) = tungs::client_async(url, io)
+                .await
+                .context("ws handshake /v1/stream")?;
+            Ok(ws)
+        }
+        WorldTransport::Vsock { port } => {
+            let host = "127.0.0.1";
+            let ws_url = format!("ws://{host}:{port}/v1/stream");
+            let url = url::Url::parse(&ws_url).context("invalid ws URL")?;
+            let stream = TcpStream::connect((host, *port)).await.with_context(|| {
+                format!("connect world-service VSock proxy TCP ({host}:{port})")
+            })?;
+            let io: WorldTransportWsIo = Box::new(stream);
+            let (ws, _resp) = tungs::client_async(url, io)
+                .await
+                .context("ws handshake /v1/stream")?;
+            Ok(ws)
+        }
+        #[cfg(target_os = "windows")]
+        WorldTransport::NamedPipe(path) => anyhow::bail!(
+            "named-pipe stream websocket transport not supported here ({})",
+            path.display()
+        ),
+    }
+}
+
 #[cfg(target_os = "macos")]
 pub fn detect() -> Result<PlatformWorldContext> {
+    use world_mac_lima::transport::{
+        managed_host_socket_path, COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
+    };
     use world_mac_lima::MacLimaBackend;
 
     // Default UDS path on host for SSH UDS forwarding
-    let default_sock = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".substrate/sock/agent.sock");
+    let default_sock = managed_host_socket_path();
 
     // Auto-detect transport preference (do not start VM/tunnels here)
     let transport_pref = world_mac_lima::Transport::auto_select().unwrap_or_default();
@@ -154,11 +220,13 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let transport = match transport_pref {
         world_mac_lima::Transport::UnixSocket => WorldTransport::Unix(default_sock.clone()),
         // VSock is proxied to local TCP port by vsock-proxy (host loopback)
-        world_mac_lima::Transport::VSock => WorldTransport::Vsock { port: 17788 },
+        world_mac_lima::Transport::VSock => WorldTransport::Vsock {
+            port: COMPATIBILITY_TCP_PORT,
+        },
         // TCP fallback (if ever used) will be loopback
         world_mac_lima::Transport::TCP => WorldTransport::Tcp {
-            host: "127.0.0.1".into(),
-            port: 17788,
+            host: COMPATIBILITY_TCP_HOST.into(),
+            port: COMPATIBILITY_TCP_PORT,
         },
     };
 

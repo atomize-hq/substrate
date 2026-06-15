@@ -23,7 +23,7 @@ use std::io;
 use substrate_broker::world_fs_mode;
 use substrate_common::agent_events::AgentEvent;
 use substrate_common::WorldRootMode;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use tokio::net::UnixStream;
 #[cfg(target_os = "linux")]
 use tokio::signal::unix::{signal, SignalKind};
@@ -44,6 +44,7 @@ use world_api::WorldBackend;
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
+const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
 const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
 
@@ -769,6 +770,7 @@ pub(super) fn execute_world_pty_over_ws_macos(
                 eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
             }
             normalize_env_for_linux_guest(&mut env_map);
+            apply_macos_staged_workspace_project_dir_override(&mut env_map);
             crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
                 &policy_snapshot,
                 &mut env_map,
@@ -936,33 +938,8 @@ pub(super) fn execute_world_pty_over_ws_macos(
             })
         }
 
-        // Connect according to transport and delegate to generic handler
-        let url = url::Url::parse("ws://localhost/v1/stream").unwrap();
-        match &ctx.transport {
-            pw::WorldTransport::Unix(path) => {
-                let stream = UnixStream::connect(path)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("connect UDS: {}", e))?;
-                let (ws, _resp) = tungs::client_async(url, stream)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("ws handshake: {}", e))?;
-                handle_ws(ws, cmd, span_id).await
-            }
-            pw::WorldTransport::Tcp { host, port } => {
-                let ws_url = format!("ws://{}:{}/v1/stream", host, port);
-                let (ws, _resp) = tungs::connect_async(&ws_url)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
-                handle_ws(ws, cmd, span_id).await
-            }
-            pw::WorldTransport::Vsock { port } => {
-                let ws_url = format!("ws://127.0.0.1:{}/v1/stream", port);
-                let (ws, _resp) = tungs::connect_async(&ws_url)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("ws connect: {}", e))?;
-                handle_ws(ws, cmd, span_id).await
-            }
-        }
+        let ws = pw::connect_transport_stream_ws(&ctx.transport).await?;
+        handle_ws(ws, cmd, span_id).await
     })?;
 
     Ok(code)
@@ -1234,10 +1211,22 @@ fn build_agent_client_and_member_dispatch_request_impl(
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn preserve_world_project_dir_override(
+pub(super) fn preserve_world_project_dir_override(
     env_map: &mut std::collections::HashMap<String, String>,
     cwd_path: &std::path::Path,
 ) {
+    if env_map
+        .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+        .map(|value| value.trim())
+        .filter(|value| {
+            *value == MACOS_STAGED_WORKSPACE_CURRENT
+                || value.starts_with(&format!("{MACOS_STAGED_WORKSPACE_CURRENT}/"))
+        })
+        .is_some()
+    {
+        return;
+    }
+
     let anchor_mode = env_map
         .get("SUBSTRATE_ANCHOR_MODE")
         .and_then(|value| WorldRootMode::parse(value));
@@ -1257,6 +1246,24 @@ fn preserve_world_project_dir_override(
     env_map.insert(
         WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
         project_dir.display().to_string(),
+    );
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn apply_macos_staged_workspace_project_dir_override(
+    env_map: &mut std::collections::HashMap<String, String>,
+) {
+    if env_map
+        .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+        .map(|value| value.trim())
+        .is_some_and(|value| !value.is_empty())
+    {
+        return;
+    }
+
+    env_map.insert(
+        WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+        MACOS_STAGED_WORKSPACE_CURRENT.to_string(),
     );
 }
 
@@ -1320,6 +1327,7 @@ fn build_agent_client_and_request_impl(
             eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
         }
         normalize_env_for_linux_guest(&mut env_map);
+        apply_macos_staged_workspace_project_dir_override(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -1372,6 +1380,7 @@ fn build_agent_client_and_request_impl(
         eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
     }
     normalize_env_for_linux_guest(&mut env_map);
+    apply_macos_staged_workspace_project_dir_override(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -1418,6 +1427,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
             eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
         }
         normalize_env_for_linux_guest(&mut env_map);
+        apply_macos_staged_workspace_project_dir_override(&mut env_map);
         ensure_world_deps_bin_on_path(&mut env_map);
         let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
         let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -1466,6 +1476,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
     }
     normalize_env_for_linux_guest(&mut env_map);
+    apply_macos_staged_workspace_project_dir_override(&mut env_map);
     ensure_world_deps_bin_on_path(&mut env_map);
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
     let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
@@ -2408,6 +2419,28 @@ mod tests {
             Some(value) => std::env::set_var("SUBSTRATE_ANCHOR_PATH", value),
             None => std::env::remove_var("SUBSTRATE_ANCHOR_PATH"),
         }
+    }
+
+    #[test]
+    fn preserve_world_project_dir_override_keeps_explicit_env_override() {
+        let mut env_map = std::collections::HashMap::<String, String>::new();
+        env_map.insert(
+            WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+            "/var/lib/substrate/staged-workspace/current".to_string(),
+        );
+        env_map.insert(
+            "SUBSTRATE_ANCHOR_MODE".to_string(),
+            "follow-cwd".to_string(),
+        );
+
+        preserve_world_project_dir_override(&mut env_map, std::path::Path::new("/"));
+
+        assert_eq!(
+            env_map
+                .get(WORLD_PROJECT_DIR_OVERRIDE_ENV)
+                .map(String::as_str),
+            Some("/var/lib/substrate/staged-workspace/current")
+        );
     }
 
     #[test]

@@ -2559,6 +2559,7 @@ pub(crate) fn build_world_spec(
         project_dir,
         always_isolate,
         fs_mode,
+        backend_policy: None,
     }
 }
 
