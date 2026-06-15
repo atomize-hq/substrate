@@ -59,21 +59,30 @@ pub fn policy_file() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn expected_substrate_home() -> PathBuf {
+        std::env::var_os("SUBSTRATE_HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .expect("home directory for path tests")
+                    .join(SUBSTRATE_DIR_NAME)
+            })
+    }
 
     #[test]
     fn test_substrate_home() {
         let path = substrate_home().unwrap();
-        assert!(path.ends_with(SUBSTRATE_DIR_NAME));
+        assert_eq!(path, expected_substrate_home());
         assert!(path.is_absolute());
     }
 
     #[test]
     fn test_shims_dir() {
         let path = shims_dir().unwrap();
-        assert!(
-            path.ends_with(format!("{SUBSTRATE_DIR_NAME}/{SHIMS_SUBDIR}").as_str())
-                || path.ends_with(format!("{SUBSTRATE_DIR_NAME}\\{SHIMS_SUBDIR}").as_str())
-        );
+        assert_eq!(path, expected_substrate_home().join(SHIMS_SUBDIR));
         assert!(path.is_absolute());
     }
 
@@ -95,14 +104,14 @@ mod tests {
     fn test_lock_file() {
         let path = lock_file().unwrap();
         assert!(path.ends_with(".substrate.lock"));
-        assert!(path.parent().unwrap().ends_with(SUBSTRATE_DIR_NAME));
+        assert_eq!(path.parent(), Some(expected_substrate_home().as_path()));
     }
 
     #[test]
     fn test_config_file() {
         let path = config_file().unwrap();
         assert!(path.ends_with("config.yaml"));
-        assert!(path.parent().unwrap().ends_with(SUBSTRATE_DIR_NAME));
+        assert_eq!(path.parent(), Some(expected_substrate_home().as_path()));
     }
 
     #[test]
