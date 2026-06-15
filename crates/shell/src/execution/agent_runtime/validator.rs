@@ -32,7 +32,10 @@ pub(crate) struct RuntimeSelectionDescriptor {
 
 impl RuntimeSelectionDescriptor {
     pub(crate) fn live_tool_support_posture(&self) -> LiveToolSupportPosture {
-        LiveToolSupportPosture::for_backend_kind(self.backend_kind)
+        LiveToolSupportPosture::for_selected_launch_backend_kind(
+            self.backend_kind,
+            self.execution_scope,
+        )
     }
 }
 
@@ -199,6 +202,7 @@ pub(crate) fn validate_runtime_realizability(
     })
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn resolve_live_tool_support_posture(
     entry: &AgentInventoryEntryV1,
 ) -> std::result::Result<LiveToolSupportPosture, RuntimeRealizabilityError> {
@@ -211,6 +215,23 @@ pub(crate) fn resolve_live_tool_support_posture(
         )?;
 
     Ok(LiveToolSupportPosture::for_backend_kind(backend_kind))
+}
+
+pub(crate) fn resolve_selected_orchestrator_live_tool_support_posture(
+    entry: &AgentInventoryEntryV1,
+) -> std::result::Result<LiveToolSupportPosture, RuntimeRealizabilityError> {
+    let backend_kind =
+        resolve_shell_owned_runtime_family(&entry.file.id, entry.cli_runtime_family()).map_err(
+            |err| RuntimeRealizabilityError {
+                exit_code: 2,
+                reason: err.to_string(),
+            },
+        )?;
+
+    Ok(LiveToolSupportPosture::for_selected_launch_backend_kind(
+        backend_kind,
+        AgentExecutionScope::Host,
+    ))
 }
 
 pub(crate) fn materialize_runtime_descriptor(
@@ -402,16 +423,17 @@ fn _assert_result_type(_: Result<RuntimeSelectionDescriptor>) {}
 mod tests {
     use super::{
         exact_backend_selection_error_exit_code, resolve_live_tool_support_posture,
-        validate_exact_backend_selection, validate_member_selection,
-        validate_runtime_realizability, AgentRuntimeBackendKind, ExactBackendSelectionError,
-        MemberSelectionError, RuntimeSelectionDescriptor, PURE_AGENT_PROTOCOL,
+        resolve_selected_orchestrator_live_tool_support_posture, validate_exact_backend_selection,
+        validate_member_selection, validate_runtime_realizability, AgentRuntimeBackendKind,
+        ExactBackendSelectionError, MemberSelectionError, RuntimeSelectionDescriptor,
+        PURE_AGENT_PROTOCOL,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
     use crate::execution::agent_runtime::dispatch_contract::{
-        LiveToolSupportState, LiveToolValidationState,
+        LiveToolSupportState, LiveToolValidationState, SelectedClaudeCodeUpliftContext,
     };
     use crate::execution::agent_runtime::mapping::LEGACY_PURE_AGENT_PROTOCOL;
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
@@ -906,6 +928,10 @@ mod tests {
             posture.support_state,
             LiveToolSupportState::FirstSupportedFloor
         );
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::inventory_entry()
+        );
     }
 
     #[test]
@@ -929,12 +955,66 @@ mod tests {
             posture.support_state,
             LiveToolSupportState::NotYetGuaranteed
         );
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::inventory_entry()
+        );
         assert!(
             posture
                 .reason
                 .contains("ordinary host-session behavior remains unchanged"),
             "unexpected reason: {}",
             posture.reason
+        );
+    }
+
+    #[test]
+    fn selected_orchestrator_live_tool_support_posture_uses_selected_host_context() {
+        let entry = make_entry_with_runtime_family(
+            "host_orchestrator_alias",
+            AgentExecutionScope::Host,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::ClaudeCode),
+            required_capabilities(),
+        );
+
+        let posture = resolve_selected_orchestrator_live_tool_support_posture(&entry)
+            .expect("posture should resolve");
+        assert_eq!(posture.runtime_family, AgentRuntimeBackendKind::ClaudeCode);
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::Host)
+        );
+        assert_eq!(
+            posture.validation_state,
+            LiveToolValidationState::SmokeValidated
+        );
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::SelectedRuntimeSupported
+        );
+    }
+
+    #[test]
+    fn runtime_selection_descriptor_live_tool_support_posture_tracks_selected_scope_context() {
+        let descriptor = RuntimeSelectionDescriptor {
+            agent_id: "claude_code".to_string(),
+            backend_id: "cli:claude_code".to_string(),
+            backend_kind: AgentRuntimeBackendKind::ClaudeCode,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::World,
+            binary_path: PathBuf::from("/bin/claude"),
+        };
+
+        let posture = descriptor.live_tool_support_posture();
+        assert_eq!(
+            posture.selected_claude_code_uplift_context,
+            SelectedClaudeCodeUpliftContext::selected_launch(AgentExecutionScope::World)
+        );
+        assert_eq!(
+            posture.support_state,
+            LiveToolSupportState::NotYetGuaranteed
         );
     }
 }

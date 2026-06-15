@@ -1,6 +1,7 @@
 # Remaining Scope Consolidated View
 
-Date: `2026-06-10`  
+Date: `2026-06-12`  
+Provenance: originally consolidated on `2026-06-10`; refreshed on `2026-06-11` after Slice `55` Packet `4` closeout and refreshed again on `2026-06-12` after Slice `56` Packet `4` checkpoint-green closeout so this file remains the canonical current-state note even though the filename keeps the original consolidation date.  
 Validated against:
 - historical checkpoint `REMAINING-family-1-scope-2026-05-30.md` (now archived locally during cleanup)
 - historical checkpoint `REMAINING-family-1-scope-2026-05-31-post-slice-34.md` (now archived locally during cleanup)
@@ -18,8 +19,14 @@ Validated against:
 - [PLAN-51.md](./PLAN-51.md)
 - [PLAN-52.md](./PLAN-52.md)
 - [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
+- [PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./PLAN-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)
+- [PLAN-55-broader-caller-surface-contract-freeze.md](./PLAN-55-broader-caller-surface-contract-freeze.md)
 - [SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md](./SPEC-52-internal-runtime-owned-host-orchestrator-tool-adapter-contract-freeze.md)
 - [SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./SPEC-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)
+- [SPEC-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md](./SPEC-54-inventory-selected-second-runtime-family-host-orchestrator-tool-surface-parity.md)
+- [SPEC-55-broader-caller-surface-contract-freeze.md](./SPEC-55-broader-caller-surface-contract-freeze.md)
+- [TASKS-54.md](./TASKS-54.md)
+- [TASKS-55.md](./TASKS-55.md)
 - live runtime code in:
   - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
   - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
@@ -50,7 +57,7 @@ For this note:
 1. **Family 1** means the host-orchestrator to world control-plane stack.
 2. **Host-orchestrator tool surface** means the newer Family-1 sub-seam that exposes the landed internal dispatch/runtime to the live host runtime family.
 3. **Family 2** means the durable deferred-work, obligation-ledger, auto-attach, host-targeting, and host-global ingress/materialization stack.
-4. **Current** means repo truth after the landed Slice `53` closeout state reflected on `2026-06-10`.
+4. **Current** means repo truth after the landed Slice `56` Packet `4` checkpoint-green closeout reflected on `2026-06-12`.
 
 ## How To Use This Note
 
@@ -134,7 +141,7 @@ Current status:
 
 1. historical checkpoint plus detailed seam ledger for Slices `52` and `53`,
 2. still the best slice-local record of the contract-freeze and first-family landing discoveries,
-3. superseded as the **overall** remaining-scope picture now that the Codex-backed first-family landing is closed and the main remaining execution seam has narrowed to second runtime-family parity.
+3. superseded as the **overall** remaining-scope picture now that the Codex-backed first-family landing is closed, selected-host claude_code parity is landed through Slice `54`, and the live follow-through has moved to later docs/smoke or other product-priority choices.
 
 ## Current Repo Truth
 
@@ -186,40 +193,32 @@ Repo-truth consequence:
 
 ## What Is Still Honestly Remaining
 
-### 1. Family 1: second runtime-family parity is the main active execution seam
+### 1. Family 1: second runtime-family parity is now landed baseline truth
 
-The immediate next honest Family-1 implementation seam is:
+Slice `54` closed the previously active Family-1 parity seam:
 
-1. `claude_code` parity for the landed host-orchestrator tool surface.
+1. selected `claude_code` host starts and turns now take the same authoritative host-tool path already proven for the first validated family floor,
+2. the same seven-tool semantic contract, runtime-owned identity injection, and receipt/follow-up rules remain shared,
+3. operator/reporting surfaces can now publish selected-host `claude_code` posture as validated without forcing runtime selection or hard-coding orchestrator identity.
 
-That slice should preserve:
+Repo-truth consequence:
 
-1. the same seven-tool semantic contract,
-2. the same runtime-owned identity injection rules,
-3. the same receipt/follow-up semantics,
-4. the same config/inventory/policy-driven orchestrator selection model,
-5. the same separation between validated support posture and forced runtime selection.
+1. `claude_code` parity should no longer be treated as the next open seam,
+2. future host-tool work should start from multi-family parity as the landed baseline,
+3. public toolbox CLI widening, MCP-first redesign, and hidden-fallback behavior remain out of scope.
 
-What it should **not** reopen:
+### 2. Family 1: broader docs/smoke follow-through still remains, but only when later surface widening changes repo truth
 
-1. transport invention,
-2. MCP-first redesign,
-3. hard-coded orchestrator identity,
-4. public toolbox CLI widening,
-5. already-landed Codex-first validation truth.
-
-### 2. Family 1: broader docs/smoke follow-through still remains, but only after parity or other surface widening
-
-Once later parity or some other live surface widening lands, the tree will still need a bounded follow-up on:
+After Slice `54`, the remaining bounded host-tool follow-through is:
 
 1. broader runtime-family smoke coverage,
 2. broader docs alignment,
-3. operator/runtime truth for whatever the then-current multi-family live surface actually is.
+3. operator/runtime truth updates only when some later live surface widening materially changes repo truth again.
 
 Repo-truth consequence:
 
 1. this is still real remaining scope,
-2. but it is **not** the immediate next slice while parity itself is still missing.
+2. but it is no longer evidence that selected-host `claude_code` parity is missing today.
 
 ### 3. Family 1: optional richer autonomy/message widening is no longer mandatory foundation work
 
@@ -285,18 +284,22 @@ The remaining-scope notes already identified a smaller doc-truth gap around olde
 Repo-truth consequence:
 
 1. this is real cleanup work,
-2. but it is not a production-runtime seam comparable to the remaining Family-1 parity or Family-2 coordination work.
+2. it does not change runtime sequencing or reopen Slice `30` semantics,
+3. and it is not a production-runtime seam comparable to the remaining Family-1 docs/smoke follow-through or Family-2 coordination work.
 
 ## Recommended Next Slice Order
 
 ### Immediate next seam
 
-1. **Family 1: second runtime-family parity for `claude_code`**
+1. **Slice `56` is now closed checkpoint-green**
+   - Slice `54` closed selected-host `claude_code` parity and Slice `55` closed the caller-surface contract freeze.
+   - Slice `56` Packets `1` through `4` are now landed in the current tree: degraded `agent status` stays readable with warnings, strict control surfaces stay fail-closed, participant-aware fallback stays sibling-distinct when evidence exists, and retained legacy handle names are explicitly bounded to compatibility/storage-only posture.
+   - The immediate next Family-1 work is therefore no longer another Packet inside Slice `56`; any follow-on is broader docs/smoke/operator-truth work only when later live-surface widening changes repo truth again.
 
 ### After that
 
 2. **Family 1: broader docs/smoke follow-through**
-   - but only after later parity or some other live surface widening changes repo truth.
+   - but only after later live surface widening changes repo truth again.
 
 ### If the team pivots back to Family 2
 
@@ -341,9 +344,10 @@ Current repo truth is:
 
 1. the older `REMAINING-*` notes are now best read as historical checkpoints, not the current top-level source of truth,
 2. Family 1 foundation work is landed through the first Codex-backed host-tool floor,
-3. the main active Family-1 remaining seam is second runtime-family parity for `claude_code`,
-4. broader Family-1 docs/smoke follow-through comes after that later parity or other live surface widening,
-5. Family 2 local semantics are landed through the first `host_inbox -> local obligation -> router` boundary,
-6. the next likely Family-2 seam, if still needed, is host-global ingress lifecycle coordination rather than reopening local materialization,
-7. broader cross-host delivery, federation, and public/operator UX remain later or optional work,
-8. this document now contains the current overall picture and is the best candidate to keep at top level when the older `REMAINING-*` notes are archived.
+3. selected-host `claude_code` parity is landed through Slice `54`,
+4. Slice `56` Packet `4` is checkpoint-green in the current tree, so there is no remaining Packet inside that hardening seam,
+5. broader Family-1 docs/smoke follow-through is a later bounded update only when some future live surface widening changes repo truth again,
+6. Family 2 local semantics are landed through the first `host_inbox -> local obligation -> router` boundary,
+7. the next likely Family-2 seam, if still needed, is host-global ingress lifecycle coordination rather than reopening local materialization,
+8. broader cross-host delivery, federation, and public/operator UX remain later or optional work,
+9. this document now contains the current overall picture and is the best candidate to keep at top level when the older `REMAINING-*` notes are archived.

@@ -36,7 +36,8 @@ use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipant
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
     materialize_runtime_descriptor, member_selection_error_exit_code,
-    resolve_live_tool_support_posture, validate_member_selection, RuntimeSelectionDescriptor,
+    resolve_live_tool_support_posture, resolve_selected_orchestrator_live_tool_support_posture,
+    validate_member_selection, RuntimeSelectionDescriptor,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::StartupPromptReplayState;
@@ -2809,7 +2810,10 @@ fn build_toolbox_status_report<'a>(
         backend_id: orchestrator.derived_backend_id(),
         role: ORCHESTRATOR_ROLE,
         execution: ExecutionScopeJson { scope: "host" },
-        live_tool_support: live_tool_support_posture_json_for_entry(orchestrator),
+        live_tool_support: live_tool_support_posture_json_for_selected_orchestrator(
+            orchestrator,
+            &context.effective_config,
+        ),
     };
 
     if !context.effective_config.agents.toolbox.enabled {
@@ -3307,6 +3311,9 @@ fn selected_parent_run_candidates<'a>(
     if let Some(selected) = exact.get(&projection.source.parent_identity) {
         return selected.iter().collect();
     }
+    if projection.source.parent_participant_id.is_some() {
+        return Vec::new();
+    }
 
     coarse
         .get(&projection.source.parent_identity.coarse())
@@ -3321,9 +3328,14 @@ fn historical_parent_run_matches(
     coarse: &BTreeMap<StatusIdentityKey, BTreeSet<String>>,
 ) -> bool {
     parent_run_id.is_some_and(|candidate| {
-        exact
+        let exact_match = exact
             .get(parent_identity)
-            .is_some_and(|runs| runs.contains(candidate))
+            .is_some_and(|runs| runs.contains(candidate));
+        if parent_identity.participant_id.is_some() {
+            return exact_match;
+        }
+
+        exact_match
             || coarse
                 .get(&parent_identity.coarse())
                 .is_some_and(|runs| runs.contains(candidate))
@@ -3426,10 +3438,21 @@ fn live_tool_support_posture_json(posture: LiveToolSupportPosture) -> LiveToolSu
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn live_tool_support_posture_json_for_entry(
     entry: &AgentInventoryEntryV1,
 ) -> Option<LiveToolSupportPostureJson> {
     resolve_live_tool_support_posture(entry)
+        .ok()
+        .map(live_tool_support_posture_json)
+}
+
+fn live_tool_support_posture_json_for_selected_orchestrator(
+    entry: &AgentInventoryEntryV1,
+    effective_config: &SubstrateConfig,
+) -> Option<LiveToolSupportPostureJson> {
+    validate_runtime_realizability(entry, effective_config).ok()?;
+    resolve_selected_orchestrator_live_tool_support_posture(entry)
         .ok()
         .map(live_tool_support_posture_json)
 }
@@ -4056,6 +4079,7 @@ mod tests {
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
         AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
+    use crate::execution::agent_runtime::control::ResolvedRuntimeBackendKind;
     use crate::execution::agent_runtime::dispatch_contract::{
         LiveToolSupportState, LiveToolValidationState,
     };
@@ -4375,7 +4399,7 @@ mod tests {
     }
 
     #[test]
-    fn toolbox_status_keeps_non_codex_runtime_readable_while_marking_posture_unvalidated() {
+    fn toolbox_status_keeps_selected_claude_runtime_readable_while_marking_posture_validated() {
         with_state_store(|_| {
             let agent_id = "host_orchestrator_alias";
             let effective_config = SubstrateConfig {
@@ -4420,11 +4444,61 @@ mod tests {
             assert_eq!(posture.runtime_family, "claude_code");
             assert_eq!(
                 posture.validation_state,
-                LiveToolValidationState::NotYetSmokeValidated.as_str()
+                LiveToolValidationState::SmokeValidated.as_str()
             );
             assert_eq!(
                 posture.support_state,
-                LiveToolSupportState::NotYetGuaranteed.as_str()
+                LiveToolSupportState::SelectedRuntimeSupported.as_str()
+            );
+        });
+    }
+
+    #[test]
+    fn toolbox_status_hides_selected_runtime_posture_when_binary_is_unrealizable() {
+        with_state_store(|_| {
+            let agent_id = "host_orchestrator_alias";
+            let effective_config = SubstrateConfig {
+                agents: crate::execution::config_model::AgentsConfig {
+                    enabled: true,
+                    hub: crate::execution::config_model::AgentHubConfig {
+                        orchestrator_agent_id: agent_id.to_string(),
+                        ..Default::default()
+                    },
+                    toolbox: crate::execution::config_model::AgentToolboxConfig {
+                        enabled: true,
+                        bind: crate::execution::config_model::AgentToolboxBindConfig {
+                            transport: AgentToolboxBindTransport::Uds,
+                        },
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let base_policy = Policy {
+                agents_allowed_backends: vec![format!("cli:{agent_id}")],
+                ..Policy::default()
+            };
+            let mut entry =
+                inventory_entry_for_test(agent_id, "claude_code", AgentExecutionScope::Host);
+            entry.file.config.cli.as_mut().expect("cli config").binary =
+                "__definitely_missing_selected_claude_binary__".to_string();
+            let mut inventory = BTreeMap::new();
+            inventory.insert(agent_id.to_string(), entry);
+            let context = AgentCommandContext {
+                effective_config,
+                base_policy,
+                inventory,
+            };
+
+            let report =
+                build_toolbox_status_report(&context).expect("toolbox status should stay readable");
+            assert_eq!(report.eligibility.state, "dependency_unavailable");
+            let orchestrator = report
+                .orchestrator
+                .expect("selected host orchestrator should still be reported");
+            assert!(
+                orchestrator.live_tool_support.is_none(),
+                "toolbox status must not overclaim selected-runtime support when the configured binary is not runtime-realizable"
             );
         });
     }
@@ -4638,7 +4712,8 @@ mod tests {
 
     #[test]
     #[serial]
-    fn build_start_launch_plan_keeps_non_codex_host_prompt_truthful_without_toolbox_contract() {
+    fn build_start_launch_plan_resolves_selected_claude_code_host_backend_without_hidden_fallback()
+    {
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -4657,17 +4732,17 @@ mod tests {
         let mut args = omitted_scope_start_args("cli:claude_code");
         args.prompt_source.prompt = Some("hello from claude start".to_string());
         let plan = build_start_launch_plan(&args, &context)
-            .expect("non-Codex host launch plan should still resolve");
+            .expect("selected claude_code host launch plan should still resolve");
 
         assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
         assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code");
         assert_eq!(
+            plan.helper_plan.descriptor.backend_kind,
+            ResolvedRuntimeBackendKind::ClaudeCode
+        );
+        assert_eq!(
             plan.resolved_contract.execution_scope,
             AgentExecutionScope::Host
-        );
-        assert!(
-            plan.helper_plan.startup_prompt.is_none(),
-            "selected claude_code host starts must keep the existing prompt-turn path instead of staging the first validated Codex-backed toolbox contract"
         );
     }
 

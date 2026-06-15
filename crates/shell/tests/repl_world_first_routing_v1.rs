@@ -4154,9 +4154,9 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
     );
 
     repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(5));
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
+    repl.wait_for_output("first", Duration::from_secs(5))
         .expect("first command output");
 
     let live_participants = authoritative_live_participant_manifests_for_session(

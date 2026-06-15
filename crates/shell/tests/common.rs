@@ -2,8 +2,9 @@
 
 use assert_cmd::Command;
 use serde_json::{json, Value};
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use std::sync::OnceLock;
@@ -47,9 +48,68 @@ pub fn temp_dir(prefix: &str) -> TempDir {
         .expect("failed to allocate integration test temp dir")
 }
 
+fn build_lock_path() -> PathBuf {
+    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
+        PathBuf::from(workspace_dir)
+            .join("target")
+            .join("substrate-test-build.lock")
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target")
+            .join("substrate-test-build.lock")
+    }
+}
+
+struct BuildLock {
+    file: File,
+}
+
+impl BuildLock {
+    fn acquire() -> Self {
+        let path = build_lock_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("failed to create build lock directory");
+        }
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .expect("failed to open build lock file");
+        let lock_result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+        assert_eq!(
+            lock_result,
+            0,
+            "failed to acquire build lock {}: {}",
+            path.display(),
+            std::io::Error::last_os_error()
+        );
+        file.set_len(0).expect("failed to reset build lock file");
+        writeln!(file, "pid={}", std::process::id()).expect("failed to record build lock owner");
+        Self { file }
+    }
+}
+
+impl Drop for BuildLock {
+    fn drop(&mut self) {
+        let unlock_result = unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
+        assert_eq!(
+            unlock_result,
+            0,
+            "failed to release build lock: {}",
+            std::io::Error::last_os_error()
+        );
+        let _ = self.file.flush();
+        let _ = self.file.set_len(0);
+    }
+}
+
 pub fn ensure_substrate_built() {
     static BUILD_ONCE: OnceLock<()> = OnceLock::new();
     BUILD_ONCE.get_or_init(|| {
+        let _build_lock = BuildLock::acquire();
         let status = StdCommand::new("cargo")
             .args(["build", "-p", "substrate"])
             .status()

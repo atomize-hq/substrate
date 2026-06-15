@@ -51,8 +51,8 @@ pub(crate) enum AgentRuntimeOwnershipMode {
 pub(crate) struct AgentRuntimeParticipantHandle {
     // Canonical runtime lineage identifier for this participant row.
     pub participant_id: String,
-    // Legacy compatibility alias kept in-memory for existing callers; do not use as canonical
-    // public terminology in new code.
+    // Compatibility-only temporary mirror retained for existing in-memory/storage consumers.
+    // Canonical operator-facing terminology stays on participant_id.
     #[serde(skip)]
     pub session_handle_id: String,
     pub orchestration_session_id: String,
@@ -69,7 +69,7 @@ pub(crate) struct AgentRuntimeParticipantHandle {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world_generation: Option<u64>,
     // Lineage links use participant_id canonically. The *_session_handle_id fields remain as
-    // compatibility mirrors for legacy reads only.
+    // compatibility-only temporary mirrors for legacy reads and in-memory callers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_participant_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -773,7 +773,8 @@ struct AgentRuntimeParticipantRecordWire {
 
 #[derive(Deserialize)]
 struct AgentRuntimeParticipantHandleWire {
-    // Legacy alias reads remain supported for compatibility; participant_id is canonical.
+    // Legacy alias reads remain supported as a compatibility bridge only; participant_id is
+    // canonical on all new writes and operator-facing surfaces.
     #[serde(alias = "session_handle_id")]
     participant_id: String,
     orchestration_session_id: String,
@@ -1235,6 +1236,42 @@ mod tests {
             Some("ash_prev")
         );
         assert!(participant.handle.orchestrator_participant_id.is_none());
+    }
+
+    #[test]
+    fn canonical_participant_serialization_omits_legacy_handle_field_names() {
+        let participant = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor(AgentExecutionScope::World),
+            "sess_001".to_string(),
+            "ash_member".to_string(),
+            "ash_parent".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            }),
+            "lease_001".to_string(),
+        )
+        .expect("member participant");
+
+        let json = serde_json::to_value(&participant).expect("serialize participant");
+        assert_eq!(
+            json.get("participant_id")
+                .and_then(serde_json::Value::as_str),
+            Some("ash_member")
+        );
+        assert!(
+            json.get("session_handle_id").is_none(),
+            "canonical writes must omit the legacy session_handle_id field name: {json}"
+        );
+        assert!(
+            json.get("parent_session_handle_id").is_none(),
+            "canonical writes must omit the legacy parent_session_handle_id field name: {json}"
+        );
+        assert!(
+            json.get("resumed_from_session_handle_id").is_none(),
+            "canonical writes must omit the legacy resumed_from_session_handle_id field name: {json}"
+        );
     }
 
     #[test]

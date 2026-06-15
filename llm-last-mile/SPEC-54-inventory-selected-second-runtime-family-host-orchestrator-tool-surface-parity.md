@@ -14,7 +14,15 @@ Companion inputs:
 - [DESIGN-host-to-world-steering-policy-matrix.md](./DESIGN-host-to-world-steering-policy-matrix.md)
 - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md)
 Phase: `SPECIFY`  
-Status: proposed for review on `2026-06-11`
+Status: landed and validated on `2026-06-11`
+
+## Implementation closeout
+
+Historical note: the repo-truth gut-check and packet framing below capture the pre-landing problem statement. Current repo truth after Slice `54` validation is:
+
+1. selected `claude_code` host starts and turns now take the authoritative host-tool path without hidden fallback to `codex`,
+2. `substrate agent doctor --json` and `substrate agent toolbox status --json` can report selected-host `claude_code` posture as `smoke_validated` / `selected_runtime_supported`,
+3. broader runtime-family smoke/docs follow-through, public toolbox verbs, internal MCP landing, cross-platform parity decisions, and later Family-2/global-ingress work remain deferred.
 
 ## Assumptions
 

@@ -1612,7 +1612,7 @@ pub(crate) fn mark_runtime_startup_failed(
     let (orchestration_snapshot, manifest_snapshot) = {
         let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
         let controls_parent_session = runtime_controls_parent_session(&manifest_guard.handle.role);
-        if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating {
+        if manifest_guard.handle.state.is_live() {
             manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
         }
         if !manifest_guard.has_valid_ownership() {

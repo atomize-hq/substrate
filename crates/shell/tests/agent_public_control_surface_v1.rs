@@ -54,6 +54,7 @@ struct AgentControlFixture {
     substrate_home: PathBuf,
     workspace_root: PathBuf,
     fake_codex: PathBuf,
+    fake_claude: PathBuf,
 }
 
 fn yaml_quoted_list(items: &[&str], indent: usize) -> String {
@@ -84,12 +85,14 @@ impl AgentControlFixture {
         fs::create_dir_all(&workspace_root).expect("create workspace root");
         fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
         let fake_codex = script_writer(temp.path());
+        let fake_claude = write_fake_claude_script(temp.path());
         Self {
             _temp: temp,
             home,
             substrate_home,
             workspace_root,
             fake_codex,
+            fake_claude,
         }
     }
 
@@ -364,6 +367,49 @@ impl AgentControlFixture {
             .map(|(key, value)| (key.to_string(), value.to_string()))
             .collect()
     }
+
+    fn fake_claude_args_path(&self, invocation: u32) -> PathBuf {
+        self.fake_claude
+            .parent()
+            .expect("fake claude parent")
+            .join(format!("fake-claude-{invocation}.args"))
+    }
+
+    fn fake_claude_prompt_path(&self, invocation: u32) -> PathBuf {
+        self.fake_claude
+            .parent()
+            .expect("fake claude parent")
+            .join(format!("fake-claude-{invocation}.prompt"))
+    }
+
+    fn fake_claude_env_path(&self, invocation: u32) -> PathBuf {
+        self.fake_claude
+            .parent()
+            .expect("fake claude parent")
+            .join(format!("fake-claude-{invocation}.env"))
+    }
+
+    fn read_fake_claude_args(&self, invocation: u32) -> Vec<String> {
+        fs::read_to_string(self.fake_claude_args_path(invocation))
+            .unwrap_or_else(|err| panic!("read fake claude args {invocation}: {err}"))
+            .lines()
+            .map(|line| line.to_string())
+            .collect()
+    }
+
+    fn read_fake_claude_prompt(&self, invocation: u32) -> String {
+        fs::read_to_string(self.fake_claude_prompt_path(invocation))
+            .unwrap_or_else(|err| panic!("read fake claude prompt {invocation}: {err}"))
+    }
+
+    fn read_fake_claude_env(&self, invocation: u32) -> BTreeMap<String, String> {
+        fs::read_to_string(self.fake_claude_env_path(invocation))
+            .unwrap_or_else(|err| panic!("read fake claude env {invocation}: {err}"))
+            .lines()
+            .filter_map(|line| line.split_once('='))
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect()
+    }
 }
 
 fn write_toolbox_config_for_fixture(
@@ -378,6 +424,51 @@ fn write_toolbox_config_for_fixture(
         ),
     )
     .expect("write config.yaml");
+}
+
+fn write_host_runtime_inventory_with_binaries(
+    fixture: &AgentControlFixture,
+    orchestrator_agent_id: &str,
+    backends: &[(&str, &Path)],
+) {
+    fs::create_dir_all(fixture.substrate_home.join("agents")).expect("create agents dir");
+    let inventory_backends = backends
+        .iter()
+        .map(|(agent_id, _)| format!("cli:{agent_id}"))
+        .collect::<Vec<_>>();
+    let inventory_backends_refs = inventory_backends
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let inventory_backends_yaml = yaml_quoted_list(&inventory_backends_refs, 4);
+    fs::write(
+        fixture.substrate_home.join("config.yaml"),
+        format!(
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: {orchestrator_agent_id}\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        ),
+    )
+    .expect("write config.yaml");
+    fs::write(
+        fixture.substrate_home.join("policy.yaml"),
+        format!(
+            "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{inventory_backends_yaml}\n",
+        ),
+    )
+    .expect("write policy.yaml");
+    fs::write(
+        fixture.workspace_root.join(".substrate-profile"),
+        "id: test-policy\nname: Test Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\n",
+    )
+    .expect("write .substrate-profile");
+    for (agent_id, binary) in backends {
+        fs::write(
+            fixture
+                .substrate_home
+                .join(format!("agents/{agent_id}.yaml")),
+            cli_agent_file(agent_id, Some("host"), binary),
+        )
+        .unwrap_or_else(|_| panic!("write {agent_id} agent file"));
+    }
 }
 
 fn cli_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String {
@@ -417,6 +508,23 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
     path
 }
 
+fn write_fake_claude_script(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-claude.sh");
+    let count_path = dir.join("fake-claude.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nARGS_PATH=\"$SCRIPT_DIR/fake-claude-$count.args\"\nPROMPT_PATH=\"$SCRIPT_DIR/fake-claude-$count.prompt\"\nSTDIN_PATH=\"$SCRIPT_DIR/fake-claude-$count.stdin\"\n: > \"$ARGS_PATH\"\nlast_arg=\nfor arg in \"$@\"; do\n  printf '%s\\n' \"$arg\" >> \"$ARGS_PATH\"\n  last_arg=\"$arg\"\ndone\nprintf '%s' \"$last_arg\" > \"$PROMPT_PATH\"\nTOOLBOX_ENDPOINT=\"${{SUBSTRATE_AGENT_TOOLBOX_ENDPOINT-}}\"\nTOOLBOX_VERSION=\"${{SUBSTRATE_AGENT_TOOLBOX_VERSION-}}\"\nTOOLBOX_BOUND=\ncase \"$TOOLBOX_ENDPOINT\" in\n  unix://*)\n    TOOLBOX_SOCKET=\"${{TOOLBOX_ENDPOINT#unix://}}\"\n    if [ -S \"$TOOLBOX_SOCKET\" ]; then\n      TOOLBOX_BOUND=1\n    else\n      TOOLBOX_BOUND=0\n    fi\n    ;;\nesac\n{{\n  printf 'SUBSTRATE_AGENT_TOOLBOX_ENDPOINT=%s\\n' \"$TOOLBOX_ENDPOINT\"\n  printf 'SUBSTRATE_AGENT_TOOLBOX_VERSION=%s\\n' \"$TOOLBOX_VERSION\"\n  printf 'SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_BOUND=%s\\n' \"$TOOLBOX_BOUND\"\n}} > \"$SCRIPT_DIR/fake-claude-$count.env\"\ncat > \"$STDIN_PATH\"\nprintf '{{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"thread-test\"}}\\n'\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"assistant\",\"session_id\":\"thread-test\",\"message\":{{\"content\":[{{\"type\":\"text\",\"text\":\"startup prompt success\"}}]}}}}\\n'\nelse\n  printf '{{\"type\":\"assistant\",\"session_id\":\"thread-test\",\"message\":{{\"content\":[{{\"type\":\"text\",\"text\":\"follow-up prompt success\"}}]}}}}\\n'\nfi\nprintf '{{\"type\":\"user\",\"session_id\":\"thread-test\",\"message\":{{\"content\":[{{\"type\":\"text\",\"text\":\"ack\"}}]}}}}\\n'\nprintf '{{\"type\":\"result\",\"subtype\":\"success\",\"session_id\":\"thread-test\",\"is_error\":false}}\\n'\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  while :; do sleep 1; done\nfi\nexit 0\n",
+        count_path.display(),
+        dir.display()
+    );
+    fs::write(&path, body).expect("write fake claude script");
+    let mut perms = fs::metadata(&path)
+        .expect("fake claude metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake claude permissions");
+    path
+}
+
 fn write_fake_codex_script_exit_after_startup_prompt(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-exit-after-startup-prompt.sh");
     let count_path = dir.join("fake-codex-exit-after-startup-prompt.count");
@@ -431,6 +539,18 @@ fn write_fake_codex_script_exit_after_startup_prompt(dir: &Path) -> PathBuf {
         .permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("set exit-after-startup fake codex permissions");
+    path
+}
+
+fn write_fake_codex_script_exit_after_bootstrap_frames(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-exit-after-bootstrap-frames.sh");
+    let body = "#!/bin/sh\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nexit 0\n";
+    fs::write(&path, body).expect("write exit-after-bootstrap fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("exit-after-bootstrap fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set exit-after-bootstrap fake codex permissions");
     path
 }
 
@@ -526,6 +646,13 @@ fn parse_ndjson_output(output: &Output) -> Vec<Value> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line).expect("stdout should be valid NDJSON"))
         .collect()
+}
+
+fn arg_value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|arg| arg == flag)
+        .and_then(|index| args.get(index + 1))
+        .map(String::as_str)
 }
 
 fn find_ndjson_record<'a>(records: &'a [Value], kind: &str) -> &'a Value {
@@ -2097,6 +2224,273 @@ fn public_start_scope_host_and_disable_capability_flags_persist_narrowed_capabil
 
 #[test]
 #[serial]
+fn public_selected_claude_code_host_start_and_turn_preserve_authoritative_toolbox_surface_without_codex_fallback(
+) {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    write_host_runtime_inventory_with_binaries(
+        &fixture,
+        "claude_code",
+        &[
+            ("codex", &fixture.fake_codex),
+            ("claude_code", &fixture.fake_claude),
+        ],
+    );
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "hello from claude start",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "selected claude_code host start should succeed: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start_accepted = find_ndjson_record(&start_records, "accepted");
+    let start_json = find_ndjson_record(&start_records, "completed");
+    assert_eq!(
+        start_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "selected claude_code host start must stream acceptance before terminal completion: {start_records:?}"
+    );
+    assert_eq!(
+        start_accepted.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        start_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
+    );
+    assert_eq!(
+        start_json.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        start_json.get("session_posture").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        start_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_empty_warnings(start_json);
+
+    let orchestration_session_id = start_json["orchestration_session_id"]
+        .as_str()
+        .expect("start session id")
+        .to_string();
+    let participant_id = start_json["participant_id"]
+        .as_str()
+        .expect("start participant id")
+        .to_string();
+    let persisted_session = fixture.load_orchestration_session(&orchestration_session_id);
+    assert_eq!(
+        persisted_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        Some(participant_id.as_str())
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/startup_prompt/state")
+            .and_then(Value::as_str),
+        Some("completed")
+    );
+    let persisted_participant =
+        fixture.load_participant(&orchestration_session_id, &participant_id);
+    assert_eq!(
+        persisted_participant
+            .pointer("/internal/uaa_session_id")
+            .and_then(Value::as_str),
+        Some("thread-test"),
+        "selected claude_code host start must persist the runtime-owned successor continuity handle"
+    );
+
+    let start_args = fixture.read_fake_claude_args(1);
+    assert!(
+        start_args.iter().any(|arg| arg == "--print"),
+        "selected claude_code host start must use the Claude print entrypoint: {start_args:?}"
+    );
+    assert_eq!(
+        arg_value(&start_args, "--output-format"),
+        Some("stream-json"),
+        "selected claude_code host start must request stream-json output: {start_args:?}"
+    );
+    assert_eq!(
+        arg_value(&start_args, "--permission-mode"),
+        Some("bypassPermissions"),
+        "selected claude_code host start must preserve the non-interactive backend policy contract: {start_args:?}"
+    );
+    assert!(
+        start_args.iter().any(|arg| arg == "--verbose"),
+        "selected claude_code host start must preserve verbose stream framing: {start_args:?}"
+    );
+    assert!(
+        arg_value(&start_args, "--resume").is_none(),
+        "selected claude_code host start must not resume a prior runtime session on the first visible turn: {start_args:?}"
+    );
+    let start_prompt = fixture.read_fake_claude_prompt(1);
+    assert!(
+        start_prompt.contains("hello from claude start"),
+        "selected claude_code host start must preserve the user-visible prompt text: {start_prompt:?}"
+    );
+    assert!(
+        start_prompt.contains("Substrate host toolbox contract:"),
+        "selected claude_code host start must disclose the authoritative host toolbox contract at the non-MCP prompt boundary: {start_prompt:?}"
+    );
+    assert!(
+        start_prompt.contains("run_world_task")
+            && start_prompt.contains("spawn_world_worker")
+            && start_prompt.contains("inspect_world_worker"),
+        "selected claude_code host start must expose the frozen host-tool vocabulary: {start_prompt:?}"
+    );
+    let start_env = fixture.read_fake_claude_env(1);
+    assert_eq!(
+        start_env.get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT").map(String::as_str),
+        Some(expected_toolbox_endpoint(
+            &fixture.substrate_home,
+            &orchestration_session_id,
+        ).as_str()),
+        "selected claude_code host start must receive the authoritative runtime-owned toolbox endpoint env: {start_env:?}"
+    );
+    assert_eq!(
+        start_env.get("SUBSTRATE_AGENT_TOOLBOX_VERSION").map(String::as_str),
+        Some("1"),
+        "selected claude_code host start must receive the authoritative runtime-owned toolbox version env: {start_env:?}"
+    );
+    assert_eq!(
+        start_env
+            .get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_BOUND")
+            .map(String::as_str),
+        Some("1"),
+        "selected claude_code host start must only advertise a live toolbox endpoint once the socket is bound: {start_env:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(1).exists(),
+        "selected claude_code host start must not fall back to the codex binary: {:?}",
+        fixture.fake_codex_args_path(1)
+    );
+
+    let turn_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        &orchestration_session_id,
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "hello from claude turn",
+        "--json",
+    ]);
+    assert!(
+        turn_output.status.success(),
+        "selected claude_code host turn should succeed: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    let turn_accepted = find_ndjson_record(&turn_records, "accepted");
+    let turn_json = find_ndjson_record(&turn_records, "completed");
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "selected claude_code host turn must stream acceptance before terminal completion: {turn_records:?}"
+    );
+    assert_eq!(
+        turn_accepted.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        turn_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
+    );
+    assert_eq!(
+        turn_json.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_empty_warnings(turn_json);
+
+    let turn_args = fixture.read_fake_claude_args(2);
+    assert_eq!(
+        arg_value(&turn_args, "--resume"),
+        Some("thread-test"),
+        "selected claude_code host turn must preserve the persisted runtime-owned session continuity handle: {turn_args:?}"
+    );
+    assert_eq!(
+        arg_value(&turn_args, "--output-format"),
+        Some("stream-json"),
+        "selected claude_code host turn must keep the stream-json framing contract: {turn_args:?}"
+    );
+    assert_eq!(
+        arg_value(&turn_args, "--permission-mode"),
+        Some("bypassPermissions"),
+        "selected claude_code host turn must keep the non-interactive backend policy contract: {turn_args:?}"
+    );
+    let turn_prompt = fixture.read_fake_claude_prompt(2);
+    assert!(
+        turn_prompt.contains("hello from claude turn"),
+        "selected claude_code host turn must preserve the user-visible follow-up prompt text: {turn_prompt:?}"
+    );
+    assert!(
+        turn_prompt.contains("Substrate host toolbox contract:"),
+        "selected claude_code host turn must keep the authoritative host toolbox contract disclosed at the prompt boundary: {turn_prompt:?}"
+    );
+    let turn_env = fixture.read_fake_claude_env(2);
+    assert_eq!(
+        turn_env.get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT").map(String::as_str),
+        Some(expected_toolbox_endpoint(
+            &fixture.substrate_home,
+            &orchestration_session_id,
+        ).as_str()),
+        "selected claude_code host turn must keep using the same runtime-owned toolbox endpoint env: {turn_env:?}"
+    );
+    assert_eq!(
+        turn_env.get("SUBSTRATE_AGENT_TOOLBOX_VERSION").map(String::as_str),
+        Some("1"),
+        "selected claude_code host turn must keep using the same runtime-owned toolbox version env: {turn_env:?}"
+    );
+    assert_eq!(
+        turn_env
+            .get("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_BOUND")
+            .map(String::as_str),
+        Some("1"),
+        "selected claude_code host turn must keep the advertised toolbox endpoint live: {turn_env:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(1).exists(),
+        "selected claude_code host turn must not introduce a hidden codex fallback"
+    );
+
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        &orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        stop_output.status.success(),
+        "selected claude_code host stop should succeed after parity validation: {stop_output:?}"
+    );
+    let stop_json = parse_json_output(&stop_output);
+    assert_eq!(
+        stop_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
+    );
+    assert_empty_warnings(&stop_json);
+}
+
+#[test]
+#[serial]
 fn public_start_and_turn_omit_toolbox_contract_when_surface_is_not_authoritative() {
     for (scenario, toolbox_enabled, transport) in [("disabled", false, "uds"), ("tcp", true, "tcp")]
     {
@@ -3632,6 +4026,112 @@ fn public_start_split_bootstrap_retry_timeout_emits_single_terminal_failure() {
 
 #[test]
 #[serial]
+fn public_start_fails_closed_when_bootstrap_detaches_before_startup_stabilizes() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_exit_after_bootstrap_frames,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from unstable bootstrap",
+        "--json",
+    ]);
+    assert_eq!(
+        start_output.status.code(),
+        Some(1),
+        "bootstrap-only startup must fail closed instead of surfacing a resumable session: {start_output:?}"
+    );
+    let records = parse_ndjson_output(&start_output);
+    assert_eq!(
+        records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "bootstrap-only startup must still surface the accepted envelope before terminal failure: {records:?}"
+    );
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.get("kind").and_then(Value::as_str),
+                    Some("completed" | "failed")
+                )
+            })
+            .count(),
+        1,
+        "bootstrap-only startup must emit exactly one terminal envelope: {records:?}"
+    );
+    assert!(
+        records
+            .iter()
+            .all(|record| record.get("kind").and_then(Value::as_str) != Some("completed")),
+        "bootstrap-only startup must not emit a completed envelope: {records:?}"
+    );
+    let failed = find_ndjson_record(&records, "failed");
+    assert_eq!(failed.get("terminal").and_then(Value::as_bool), Some(true));
+    assert_eq!(failed.get("stage").and_then(Value::as_str), Some("runtime"));
+    assert!(
+        failed
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains("failed to establish attached control ownership")
+                    || message.contains("ended before ownership could be established")
+                    || message.contains("startup prompt stream ended before terminal completion")
+            }),
+        "bootstrap-only startup failure must explain the unstable ownership boundary: {failed}"
+    );
+
+    let orchestration_session_id = records
+        .iter()
+        .find_map(|record| {
+            record
+                .get("orchestration_session_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .expect("bootstrap-only accepted session id");
+    let persisted_session = fixture.load_orchestration_session(&orchestration_session_id);
+    assert_eq!(
+        persisted_session.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        persisted_session.get("posture").and_then(Value::as_str),
+        Some("parked_resumable")
+    );
+    assert_eq!(
+        persisted_session
+            .pointer("/startup_prompt/state")
+            .and_then(Value::as_str),
+        Some("failed")
+    );
+    assert!(
+        persisted_session
+            .get("attached_participant_id")
+            .is_none_or(Value::is_null),
+        "failed bootstrap must not leave stale attached ownership behind: {persisted_session}"
+    );
+
+    let stderr = stderr_text(&start_output);
+    assert!(
+        stderr.contains("failed to establish attached control ownership")
+            || stderr.contains("ended before ownership could be established")
+            || stderr.contains("startup prompt stream ended before terminal completion"),
+        "bootstrap-only startup stderr should explain the unstable ownership boundary: {start_output:?}"
+    );
+}
+
+#[test]
+#[serial]
 fn public_start_persists_detached_session_when_hidden_owner_helper_exits() {
     let fixture =
         AgentControlFixture::new_with_fake_codex(write_fake_codex_script_exit_after_startup_prompt);
@@ -4211,6 +4711,60 @@ fn public_control_rejects_non_orchestration_session_selectors() {
     assert!(
         stderr_text(&turn_internal_output).contains("matched internal.uaa_session_id"),
         "public turn must explain internal uaa selector rejection: {turn_internal_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_help_text_keeps_exact_session_and_backend_selector_contract() {
+    let fixture = AgentControlFixture::new();
+
+    let turn_help = fixture.run(&["agent", "turn", "--help"]);
+    assert!(
+        turn_help.status.success(),
+        "agent turn --help must succeed: {turn_help:?}"
+    );
+    let turn_stdout = String::from_utf8_lossy(&turn_help.stdout);
+    assert!(
+        turn_stdout.contains("exact backend"),
+        "turn help must keep the exact-backend contract explicit: {turn_stdout}"
+    );
+    assert!(
+        turn_stdout.contains("--session <ORCHESTRATION_SESSION_ID>"),
+        "turn help must keep the exact orchestration-session selector explicit: {turn_stdout}"
+    );
+    assert!(
+        turn_stdout.contains("--backend <BACKEND_ID>"),
+        "turn help must keep the exact backend selector explicit: {turn_stdout}"
+    );
+    assert!(
+        !turn_stdout.contains("participant_id")
+            && !turn_stdout.contains("session_handle_id")
+            && !turn_stdout.contains("active_session_handle_id")
+            && !turn_stdout.contains("internal.uaa_session_id"),
+        "turn help must not advertise noncanonical public selectors: {turn_stdout}"
+    );
+
+    let reattach_help = fixture.run(&["agent", "reattach", "--help"]);
+    assert!(
+        reattach_help.status.success(),
+        "agent reattach --help must succeed: {reattach_help:?}"
+    );
+    let reattach_stdout = String::from_utf8_lossy(&reattach_help.stdout);
+    assert!(
+        reattach_stdout.contains("exact orchestration session"),
+        "reattach help must keep the exact orchestration-session contract explicit: {reattach_stdout}"
+    );
+    assert!(
+        reattach_stdout.contains("--session <ORCHESTRATION_SESSION_ID>"),
+        "reattach help must keep the exact orchestration-session selector explicit: {reattach_stdout}"
+    );
+    assert!(
+        !reattach_stdout.contains("participant_id")
+            && !reattach_stdout.contains("session_handle_id")
+            && !reattach_stdout.contains("active_session_handle_id")
+            && !reattach_stdout.contains("internal.uaa_session_id"),
+        "reattach help must not advertise noncanonical public selectors: {reattach_stdout}"
     );
 }
 

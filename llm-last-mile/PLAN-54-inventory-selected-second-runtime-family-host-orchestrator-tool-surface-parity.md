@@ -5,7 +5,15 @@ Source tracker note: [REMAINING-overall-scope-2026-06-10.md](./REMAINING-overall
 Source gap matrix: [AGENT_ORCHESTRATION_GAP_MATRIX.md](../AGENT_ORCHESTRATION_GAP_MATRIX.md)  
 Prior slice: [PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md](./PLAN-53-inventory-selected-first-runtime-family-host-orchestrator-tool-surface-landing.md)  
 Plan type: second runtime-family parity above the first validated Codex-backed host-tool floor  
-Status: proposed for review on `2026-06-11`
+Status: landed and validated on `2026-06-11`
+
+## Closeout outcome
+
+Slice `54` is now the landed baseline for selected-host multi-family host-tool support:
+
+1. selected `claude_code` host starts/turns reuse the same authoritative toolbox env plus prompt-contract disclosure path as the first validated family floor,
+2. selected-host reporting surfaces can publish `claude_code` as `smoke_validated` / `selected_runtime_supported` without overclaiming inventory-entry or world-scope support,
+3. remaining deferred work is later docs/smoke follow-through after future live-surface widening, plus the broader caller-surface, cross-platform, Family-2, and governance tracks already called out below.
 
 ## Objective
 
@@ -50,13 +58,13 @@ What is already landed:
 3. the frozen seven-tool Slice `52` contract,
 4. the first live Codex-backed host-tool floor from Slice `53`,
 5. the landed internal toolbox transport and world-dispatch runtime,
-6. truthful non-Codex support-posture reporting that still says `claude_code` parity is not yet proven.
+6. the Slice `54` selected-host `claude_code` parity proof plus truthful support-posture uplift that stays bounded to selected-host support.
 
-What is still missing:
+What remains bounded follow-through:
 
-1. selected `claude_code` host starts/turns taking the same authoritative live host-tool path,
-2. end-to-end `claude_code` proof that tool calls preserve Slice `52` semantics,
-3. support-posture uplift backed by actual validation instead of by planning prose.
+1. later broader runtime-family smoke coverage only if future live-surface widening changes repo truth,
+2. later docs/operator-truth refresh only when future widening or new support claims reopen this seam,
+3. the separate broader caller-surface, cross-platform, Family-2, and governance tracks already summarized elsewhere in this plan.
 
 ## Locked Decisions
 

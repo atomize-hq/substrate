@@ -1617,20 +1617,20 @@ fn agent_toolbox_status_json_publishes_non_codex_live_tool_posture_without_overc
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/validation_state")
             .and_then(Value::as_str),
-        Some("not_yet_smoke_validated"),
-        "toolbox status must distinguish non-Codex posture from the first validated Codex-backed floor: {json}"
+        Some("smoke_validated"),
+        "toolbox status must publish the validated selected-host claude_code posture once Slice 54 parity is landed: {json}"
     );
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/support_state")
             .and_then(Value::as_str),
-        Some("not_yet_guaranteed"),
-        "toolbox status must not overclaim claude_code parity: {json}"
+        Some("selected_runtime_supported"),
+        "toolbox status must report selected-host claude_code parity without widening the claim beyond that scope: {json}"
     );
     assert!(
         json.pointer("/orchestrator/live_tool_support/reason")
             .and_then(Value::as_str)
-            .is_some_and(|reason| reason.contains("not yet smoke-validated")),
-        "toolbox status must explain the non-Codex posture truthfully: {json}"
+            .is_some_and(|reason| reason.contains("selected-runtime host-tool parity gate is open")),
+        "toolbox status must explain the validated selected-host claude_code posture truthfully: {json}"
     );
 }
 
@@ -5039,22 +5039,22 @@ fn agent_doctor_json_publishes_non_codex_live_tool_posture_without_overclaiming_
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/validation_state")
             .and_then(Value::as_str),
-        Some("not_yet_smoke_validated"),
-        "doctor must distinguish non-Codex posture from the first validated Codex-backed floor: {json}"
+        Some("smoke_validated"),
+        "doctor must publish the validated selected-host claude_code posture once Slice 54 parity is landed: {json}"
     );
     assert_eq!(
         json.pointer("/orchestrator/live_tool_support/support_state")
             .and_then(Value::as_str),
-        Some("not_yet_guaranteed"),
-        "doctor must not overclaim claude_code parity: {json}"
+        Some("selected_runtime_supported"),
+        "doctor must report selected-host claude_code parity without widening the claim beyond that scope: {json}"
     );
     assert!(
         json.pointer("/orchestrator/live_tool_support/reason")
             .and_then(Value::as_str)
             .is_some_and(
-                |reason| reason.contains("ordinary host-session behavior remains unchanged")
+                |reason| reason.contains("selected-runtime host-tool parity gate is open")
             ),
-        "doctor must explain the non-Codex posture truthfully: {json}"
+        "doctor must explain the validated selected-host claude_code posture truthfully: {json}"
     );
 }
 
@@ -6300,6 +6300,83 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
         orchestration_session_id,
         "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
         bad_parent_run_id,
+    );
+}
+
+#[test]
+fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mismatches_run_sibling()
+{
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    let mismatched_parent_run_id = "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "participant_id": "ash_parent_one",
+            "run_id": mismatched_parent_run_id,
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "substrate.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "first pure-agent sibling is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "participant_id": "ash_parent_two",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "substrate.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "second pure-agent sibling is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+            "parent_run_id": mismatched_parent_run_id,
+            "parent_participant_id": "ash_parent_two",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested row must fail instead of coarse-matching the wrong sibling" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_parent_correlation_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+        mismatched_parent_run_id,
     );
 }
 
