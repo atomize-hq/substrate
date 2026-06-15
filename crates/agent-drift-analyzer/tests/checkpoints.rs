@@ -5,7 +5,7 @@ mod support;
 use std::fs;
 
 use agent_drift_analyzer::{
-    AnalyzeRequest, AnalyzeResult, Confidence, ProgressDimension, ProgressSignalCode,
+    AnalyzeRequest, AnalyzeResult, Confidence, ObjectiveRole, ObjectiveSectionKind, ObjectiveTargetKind, ProgressDimension, ProgressSignalCode,
     ProgressStatus, SessionArchetypeLabel,
 };
 use agent_session_compactor::{
@@ -29,7 +29,7 @@ fn checkpoints_are_deterministic_and_session_scoped() {
         first.sessions[0].context.objective.comparison_key,
         first.sessions[0].context.objective.text
     );
-    assert!(first.sessions[0].context.objective.structured.is_none());
+    assert!(first.sessions[0].context.objective.structured.is_some());
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
     assert_eq!(checkpoints[0].session_id, "session-alpha");
@@ -4260,6 +4260,16 @@ fn checkpoints_context_objective_prefers_scope_section_over_subordinate_checklis
     assert_eq!(objective.text, scope);
     assert_ne!(objective.text, prompt);
     assert!(!objective.text.contains("Run this task on a linux machine."));
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && matches!(span.section_kind, ObjectiveSectionKind::Scope)
+            && span.excerpt.contains(scope)
+    }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Verification
+            && span.excerpt.contains("cargo test -p agent-drift-analyzer checkpoints")
+    }));
     assert_eq!(
         objective.verification_commands,
         vec!["cargo test -p agent-drift-analyzer checkpoints -- --nocapture"]
@@ -4305,6 +4315,11 @@ Return with:
     let objective = &result.sessions[0].context.objective;
     assert_eq!(objective.text, concrete_ask);
     assert_ne!(objective.text, prompt);
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert_eq!(
+        structured.target.as_ref().map(|target| target.kind),
+        Some(ObjectiveTargetKind::SkillOrInstructionSurface)
+    );
 }
 
 #[test]

@@ -1,8 +1,15 @@
-use agent_session_compactor::{CompactionKind, CompactionRow, UserMessageRole};
+use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use serde::{Deserialize, Serialize};
 
-use crate::checkpoint::{EvidenceRef, StructuredObjective};
-use crate::context::{directive_rows, evidence_from_row};
+use crate::checkpoint::{
+    Confidence, EvidenceRef, ObjectiveClass, ObjectiveConstraint, ObjectiveConstraintKind,
+    ObjectiveEvidenceSpan, ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind,
+    ObjectiveSourceKind, ObjectiveTarget, ObjectiveTargetKind, ObjectiveUnknown,
+    RequestedDeliverable, RequestedDeliverableKind, StructuredObjective, SuccessCondition,
+};
+use crate::context::directive_rows;
+
+const MAX_OBJECTIVE_CANDIDATE_ROWS: usize = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObjectiveSummary {
@@ -30,37 +37,41 @@ impl ObjectiveSummary {
             evidence,
         }
     }
+
+    fn with_structured(
+        text: String,
+        verification_commands: Vec<String>,
+        evidence: Vec<EvidenceRef>,
+        structured: StructuredObjective,
+    ) -> Self {
+        let comparison_key = text.clone();
+        Self {
+            text,
+            comparison_key,
+            structured: Some(structured),
+            verification_commands,
+            evidence,
+        }
+    }
 }
 
 pub fn extract_objective(rows: &[CompactionRow]) -> ObjectiveSummary {
-    let objective_row = rows
-        .iter()
-        .filter(|row| {
-            matches!(
-                row.kind,
-                CompactionKind::UserMessage | CompactionKind::DeveloperMessage
-            )
-        })
-        .filter(|row| !row.text.trim().is_empty())
-        .max_by_key(|row| objective_score(row))
-        .or_else(|| directive_rows(rows).find(|row| !row.text.trim().is_empty()));
-
-    match objective_row {
-        Some(row) => {
-            let objective_text =
-                extract_section_aware_objective_text(&row.text).unwrap_or_else(|| row.text.clone());
-            ObjectiveSummary::compatibility(
-                objective_text,
-                extract_verification_commands(&row.text),
-                vec![evidence_from_row(row, "literal objective row")],
-            )
-        }
-        None => ObjectiveSummary::compatibility(
+    let Some(decomposition) = decompose_objective_rows(rows) else {
+        return ObjectiveSummary::compatibility(
             "No objective row available".to_string(),
             Vec::new(),
             Vec::new(),
-        ),
-    }
+        );
+    };
+
+    let compatibility = select_compatibility_text(&decomposition)
+        .or_else(|| decomposition.primary_candidate_text())
+        .unwrap_or_else(|| "No objective row available".to_string());
+    let verification_commands = verification_commands_from_decomposition(&decomposition);
+    let evidence = objective_summary_evidence(&decomposition, &compatibility);
+    let structured = assemble_structured_objective(&decomposition, &verification_commands);
+
+    ObjectiveSummary::with_structured(compatibility, verification_commands, evidence, structured)
 }
 
 fn objective_score(row: &CompactionRow) -> (i32, usize, usize) {
@@ -107,214 +118,496 @@ fn objective_score(row: &CompactionRow) -> (i32, usize, usize) {
     (score, text.len(), row.event_index)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum ObjectiveSectionKind {
-    Mission,
-    Constraints,
-    Deliverables,
-    Context,
-    Verification,
-    Checklist,
-    Boilerplate,
-    ToolingInstruction,
-    Unknown,
+#[derive(Debug, Clone)]
+struct ObjectiveDecomposition {
+    candidates: Vec<DirectiveRowCandidate>,
+    sections: Vec<DecomposedObjectiveSection>,
+    clauses: Vec<ObjectiveClause>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ObjectiveSection {
+impl ObjectiveDecomposition {
+    fn primary_candidate_text(&self) -> Option<String> {
+        self.candidates
+            .first()
+            .map(|candidate| candidate.text.trim().to_string())
+            .filter(|text| !text.is_empty())
+    }
+
+    fn section_for_clause(&self, clause: &ObjectiveClause) -> Option<&DecomposedObjectiveSection> {
+        self.sections.iter().find(|section| {
+            section.candidate_index == clause.candidate_index && section.index == clause.section_index
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DirectiveRowCandidate {
+    candidate_index: usize,
+    row_ref: RowRef,
+    source_kind: ObjectiveSourceKind,
+    text: String,
+    score: (i32, usize, usize),
+}
+
+#[derive(Debug, Clone)]
+struct DecomposedObjectiveSection {
+    candidate_index: usize,
+    row_ref: RowRef,
+    source_kind: ObjectiveSourceKind,
+    index: usize,
     kind: ObjectiveSectionKind,
     body: String,
+    confidence: Confidence,
 }
 
-fn extract_section_aware_objective_text(text: &str) -> Option<String> {
-    if !text.contains('\n') {
+#[derive(Debug, Clone)]
+struct ObjectiveClause {
+    candidate_index: usize,
+    row_ref: RowRef,
+    source_kind: ObjectiveSourceKind,
+    section_index: usize,
+    section_kind: ObjectiveSectionKind,
+    text: String,
+    role_candidates: Vec<RoleCandidate>,
+}
+
+#[derive(Debug, Clone)]
+struct RoleCandidate {
+    role: ObjectiveRole,
+    confidence: Confidence,
+    score: i32,
+}
+
+fn decompose_objective_rows(rows: &[CompactionRow]) -> Option<ObjectiveDecomposition> {
+    let candidates = collect_directive_row_candidates(rows);
+    if candidates.is_empty() {
         return None;
     }
 
-    let sections = split_objective_sections(text);
-    if sections.len() < 2 {
-        return None;
+    let mut sections = Vec::new();
+    let mut clauses = Vec::new();
+    for candidate in &candidates {
+        let candidate_sections = split_objective_sections(candidate);
+        for section in candidate_sections {
+            let section_index = sections.len();
+            let mut section = section;
+            section.index = section_index;
+            clauses.extend(split_section_into_clauses(&section));
+            sections.push(section);
+        }
     }
 
-    let mut ranked_sections = sections
+    if sections.is_empty() {
+        return candidates.first().map(|candidate| ObjectiveDecomposition {
+            candidates: candidates.clone(),
+            sections: vec![DecomposedObjectiveSection {
+                candidate_index: candidate.candidate_index,
+                row_ref: candidate.row_ref.clone(),
+                source_kind: candidate.source_kind,
+                index: 0,
+                kind: ObjectiveSectionKind::UnknownSection,
+                body: candidate.text.trim().to_string(),
+                confidence: Confidence::Low,
+            }],
+            clauses: Vec::new(),
+        });
+    }
+
+    Some(ObjectiveDecomposition {
+        candidates,
+        sections,
+        clauses,
+    })
+}
+
+fn collect_directive_row_candidates(rows: &[CompactionRow]) -> Vec<DirectiveRowCandidate> {
+    let mut candidates = rows
         .iter()
-        .filter_map(|section| {
-            let display = display_text_for_section(section)?;
-            let score = section_priority(section, &display);
-            Some((score, display, section.kind))
+        .filter(|row| {
+            matches!(
+                row.kind,
+                CompactionKind::UserMessage | CompactionKind::DeveloperMessage
+            )
+        })
+        .filter(|row| !row.text.trim().is_empty())
+        .map(|row| DirectiveRowCandidate {
+            candidate_index: 0,
+            row_ref: RowRef::from_row(row),
+            source_kind: source_kind_for_row(row),
+            text: row.text.clone(),
+            score: objective_score(row),
         })
         .collect::<Vec<_>>();
 
-    ranked_sections.sort_by(|left, right| right.0.cmp(&left.0));
-
-    let (best_score, best_text, best_kind) = ranked_sections.first()?.clone();
-    let second_score = ranked_sections
-        .get(1)
-        .map(|entry| entry.0)
-        .unwrap_or(i32::MIN);
-
-    if matches!(
-        best_kind,
-        ObjectiveSectionKind::Checklist
-            | ObjectiveSectionKind::Verification
-            | ObjectiveSectionKind::Boilerplate
-            | ObjectiveSectionKind::ToolingInstruction
-    ) {
-        return None;
+    if candidates.is_empty() {
+        candidates = directive_rows(rows)
+            .filter(|row| !row.text.trim().is_empty())
+            .map(|row| DirectiveRowCandidate {
+                candidate_index: 0,
+                row_ref: RowRef::from_row(row),
+                source_kind: source_kind_for_row(row),
+                text: row.text.clone(),
+                score: objective_score(row),
+            })
+            .collect();
     }
 
-    let decisive_mission = best_kind == ObjectiveSectionKind::Mission
-        && looks_like_goal_text(&best_text.to_ascii_lowercase());
-
-    if decisive_mission {
-        if best_score < 700 {
-            return None;
-        }
-    } else if best_score < 650 || best_score - second_score < 100 {
-        return None;
+    candidates.sort_by(|left, right| right.score.cmp(&left.score));
+    candidates.truncate(MAX_OBJECTIVE_CANDIDATE_ROWS);
+    for (index, candidate) in candidates.iter_mut().enumerate() {
+        candidate.candidate_index = index;
     }
-
-    Some(best_text)
+    candidates
 }
 
-fn split_objective_sections(text: &str) -> Vec<ObjectiveSection> {
-    let mut sections = Vec::new();
-    let mut current_kind = ObjectiveSectionKind::Unknown;
-    let mut current_body = String::new();
+fn source_kind_for_row(row: &CompactionRow) -> ObjectiveSourceKind {
+    match row.kind {
+        CompactionKind::UserMessage => {
+            if row.text.trim_start().starts_with("/goal") {
+                ObjectiveSourceKind::ThreadGoal
+            } else {
+                ObjectiveSourceKind::UserPrompt
+            }
+        }
+        CompactionKind::DeveloperMessage | CompactionKind::SystemMessage => {
+            ObjectiveSourceKind::SystemInstruction
+        }
+        CompactionKind::AssistantMessage | CompactionKind::Reasoning => {
+            ObjectiveSourceKind::AssistantContext
+        }
+        CompactionKind::ToolCall | CompactionKind::ToolOutput | CompactionKind::Error => {
+            ObjectiveSourceKind::ToolOutput
+        }
+        CompactionKind::Unknown => ObjectiveSourceKind::UnknownSource,
+    }
+}
 
-    for line in text.lines() {
-        let trimmed = line.trim();
+fn split_objective_sections(candidate: &DirectiveRowCandidate) -> Vec<DecomposedObjectiveSection> {
+    let text = candidate.text.trim();
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    let mut explicit_sections = Vec::<DecomposedObjectiveSection>::new();
+    let mut current_kind = ObjectiveSectionKind::UnknownSection;
+    let mut current_confidence = Confidence::Low;
+    let mut current_body = String::new();
+    let mut saw_header = false;
+
+    for raw_line in text.lines() {
+        let trimmed = raw_line.trim();
         if trimmed.is_empty() {
+            if !current_body.trim().is_empty() && !current_body.ends_with("\n\n") {
+                current_body.push_str("\n\n");
+            }
             continue;
         }
 
-        if let Some((kind, inline_body)) = parse_section_header(trimmed) {
-            push_section(&mut sections, current_kind, &mut current_body);
+        if let Some((kind, confidence, inline_body)) = parse_section_header(trimmed) {
+            saw_header = true;
+            push_decomposed_section(
+                &mut explicit_sections,
+                candidate,
+                current_kind,
+                current_confidence,
+                &mut current_body,
+            );
             current_kind = kind;
+            current_confidence = confidence;
             if let Some(inline_body) = inline_body {
                 current_body.push_str(inline_body);
             }
             continue;
         }
 
-        if !current_body.is_empty() {
+        if !current_body.is_empty() && !current_body.ends_with('\n') {
             current_body.push('\n');
         }
         current_body.push_str(trimmed);
     }
 
-    push_section(&mut sections, current_kind, &mut current_body);
-    sections
+    push_decomposed_section(
+        &mut explicit_sections,
+        candidate,
+        current_kind,
+        current_confidence,
+        &mut current_body,
+    );
+
+    if saw_header && !explicit_sections.is_empty() {
+        explicit_sections
+    } else {
+        vec![DecomposedObjectiveSection {
+            candidate_index: candidate.candidate_index,
+            row_ref: candidate.row_ref.clone(),
+            source_kind: candidate.source_kind,
+            index: 0,
+            kind: synthetic_section_kind(text),
+            body: text.to_string(),
+            confidence: Confidence::Low,
+        }]
+    }
 }
 
-fn parse_section_header(line: &str) -> Option<(ObjectiveSectionKind, Option<&str>)> {
+fn parse_section_header(line: &str) -> Option<(ObjectiveSectionKind, Confidence, Option<&str>)> {
     if line.starts_with("/goal ") {
-        return Some((ObjectiveSectionKind::Mission, Some(line)));
+        return Some((ObjectiveSectionKind::Mission, Confidence::High, Some(line)));
     }
 
     if line.starts_with('#') {
         let title = line.trim_start_matches('#').trim();
         if !title.is_empty() {
-            return Some((classify_section_label(title), None));
+            let classified = classify_section_label(title);
+            return Some((classified.kind, classified.confidence, None));
         }
     }
 
     let (label, remainder) = line.split_once(':')?;
     let label = label.trim();
-    if label.is_empty() || label.split_whitespace().count() > 7 {
+    if label.is_empty() || label.split_whitespace().count() > 9 {
         return None;
     }
 
-    let kind = classify_section_label(label);
-    if matches!(kind, ObjectiveSectionKind::Unknown) && !remainder.trim().is_empty() {
+    let classified = classify_section_label(label);
+    if matches!(classified.kind, ObjectiveSectionKind::UnknownSection) && !remainder.trim().is_empty()
+    {
         return None;
     }
 
     let inline_body = (!remainder.trim().is_empty()).then_some(remainder.trim());
-    Some((kind, inline_body))
+    Some((classified.kind, classified.confidence, inline_body))
 }
 
-fn classify_section_label(label: &str) -> ObjectiveSectionKind {
-    let lowered = label.to_ascii_lowercase();
-
-    if matches!(
-        lowered.as_str(),
-        "scope"
-            | "mission"
-            | "objective"
-            | "goal"
-            | "concrete task ask"
-            | "concrete workspace action request"
-            | "workspace action request"
-            | "task ask"
-            | "task request"
-    ) {
-        return ObjectiveSectionKind::Mission;
-    }
-
-    if lowered.contains("checklist")
-        || lowered.contains("steps")
-        || lowered.contains("plan of attack")
-    {
-        return ObjectiveSectionKind::Checklist;
-    }
-
-    if lowered.contains("verify") || lowered.contains("validation") || lowered.contains("smoke") {
-        return ObjectiveSectionKind::Verification;
-    }
-
-    if lowered.contains("constraint")
-        || lowered.contains("boundary")
-        || lowered.contains("guardrail")
-        || lowered.contains("out of scope")
-        || lowered.contains("execution rules")
-        || lowered.contains("required review scope")
-    {
-        return ObjectiveSectionKind::Constraints;
-    }
-
-    if lowered.contains("return with")
-        || lowered.contains("output")
-        || lowered.contains("deliverable")
-        || lowered.contains("report with")
-    {
-        return ObjectiveSectionKind::Deliverables;
-    }
-
-    if lowered.contains("context")
-        || lowered.contains("read first")
-        || lowered.contains("authoritative docs")
-        || lowered.contains("files to inspect")
-        || lowered.contains("project guidance")
-    {
-        return ObjectiveSectionKind::Context;
-    }
-
-    if lowered.contains("tooling")
-        || lowered.contains("gitnexus")
-        || lowered.contains("skill")
-        || lowered.contains("plugin")
-        || lowered.contains("connector")
-    {
-        return ObjectiveSectionKind::ToolingInstruction;
-    }
-
-    if lowered.contains("agents.md")
-        || lowered.contains("permissions")
-        || lowered.contains("memory")
-        || lowered.contains("safety")
-        || lowered.contains("policy")
-        || lowered.contains("boilerplate")
-    {
-        return ObjectiveSectionKind::Boilerplate;
-    }
-
-    ObjectiveSectionKind::Unknown
-}
-
-fn push_section(
-    sections: &mut Vec<ObjectiveSection>,
+#[derive(Debug, Clone, Copy)]
+struct SectionClassification {
     kind: ObjectiveSectionKind,
+    confidence: Confidence,
+}
+
+fn classify_section_label(label: &str) -> SectionClassification {
+    let normalized = normalize_label(label);
+    let tokens = normalized.split_whitespace().collect::<Vec<_>>();
+
+    let classified = if matches_any_phrase(
+        &normalized,
+        &[
+            "scope",
+            "mission",
+            "objective",
+            "goal",
+            "main task",
+            "primary task",
+            "requested work",
+            "what i need",
+            "request",
+            "ask",
+            "task",
+            "task summary",
+            "work request",
+            "desired outcome",
+            "purpose",
+            "goal for this packet",
+            "concrete task ask",
+            "concrete workspace action request",
+            "workspace action request",
+            "task ask",
+            "task request",
+        ],
+    ) || tokens.iter().any(|token| matches!(*token, "scope" | "mission" | "objective" | "goal"))
+    {
+        let kind = if tokens.iter().any(|token| *token == "scope") {
+            ObjectiveSectionKind::Scope
+        } else {
+            ObjectiveSectionKind::Mission
+        };
+        SectionClassification {
+            kind,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "checklist",
+            "steps",
+            "plan of attack",
+            "procedure",
+            "sequence",
+            "runbook",
+            "implementation steps",
+            "after that",
+        ],
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Checklist,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "verify",
+            "verification",
+            "validation",
+            "smoke",
+            "test",
+            "proof",
+            "acceptance",
+            "verification wall",
+            "commands",
+            "checks",
+            "expected green",
+            "success criteria",
+        ],
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Verification,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "constraint",
+            "constraints",
+            "boundary",
+            "boundaries",
+            "guardrail",
+            "guardrails",
+            "out of scope",
+            "non goals",
+            "rules",
+            "restrictions",
+            "requirements",
+            "must",
+            "must not",
+            "assumptions",
+            "execution rules",
+            "required review scope",
+        ],
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Constraints,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "return with",
+            "output",
+            "deliverable",
+            "deliverables",
+            "report with",
+            "final response",
+            "include",
+            "produce",
+            "write",
+            "create docs",
+            "summary",
+            "output requirements",
+        ],
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Deliverables,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "context",
+            "background",
+            "read first",
+            "relevant docs",
+            "authoritative docs",
+            "files to inspect",
+            "current state",
+            "repo reality",
+            "project guidance",
+        ],
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Context,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "tooling",
+            "gitnexus",
+            "skill",
+            "plugin",
+            "connector",
+            "connectors",
+            "use tool",
+            "use hf cli",
+            "execution environment",
+        ],
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::ToolingInstructions,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "agents md",
+            "permissions",
+            "memory",
+            "safety",
+            "policy",
+            "boilerplate",
+            "system",
+            "developer instruction",
+            "sandbox",
+            "available skills",
+            "capability",
+            "tool namespace",
+        ],
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Boilerplate,
+            confidence: Confidence::High,
+        }
+    } else {
+        SectionClassification {
+            kind: ObjectiveSectionKind::UnknownSection,
+            confidence: Confidence::Low,
+        }
+    };
+
+    classified
+}
+
+fn normalize_label(label: &str) -> String {
+    label
+        .trim()
+        .trim_matches(|c: char| !c.is_ascii_alphanumeric() && !c.is_whitespace())
+        .to_ascii_lowercase()
+        .replace(['_', '-'], " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn matches_any_phrase(text: &str, phrases: &[&str]) -> bool {
+    phrases.iter().any(|phrase| text == *phrase || text.contains(phrase))
+}
+
+fn synthetic_section_kind(text: &str) -> ObjectiveSectionKind {
+    let lowered = text.to_ascii_lowercase();
+    if lowered.starts_with("/goal ") || looks_like_goal_text(&lowered) {
+        ObjectiveSectionKind::Mission
+    } else if looks_like_verification_text(&lowered) {
+        ObjectiveSectionKind::Verification
+    } else if looks_like_constraint_text(&lowered) {
+        ObjectiveSectionKind::Constraints
+    } else {
+        ObjectiveSectionKind::UnknownSection
+    }
+}
+
+fn push_decomposed_section(
+    sections: &mut Vec<DecomposedObjectiveSection>,
+    candidate: &DirectiveRowCandidate,
+    kind: ObjectiveSectionKind,
+    confidence: Confidence,
     body: &mut String,
 ) {
     let trimmed = body.trim();
@@ -323,35 +616,672 @@ fn push_section(
         return;
     }
 
-    sections.push(ObjectiveSection {
+    sections.push(DecomposedObjectiveSection {
+        candidate_index: candidate.candidate_index,
+        row_ref: candidate.row_ref.clone(),
+        source_kind: candidate.source_kind,
+        index: 0,
         kind,
         body: trimmed.to_string(),
+        confidence,
     });
     body.clear();
 }
 
-fn display_text_for_section(section: &ObjectiveSection) -> Option<String> {
-    let body = section.body.trim();
-    if body.is_empty() {
-        return None;
+fn split_section_into_clauses(section: &DecomposedObjectiveSection) -> Vec<ObjectiveClause> {
+    let mut clauses = Vec::new();
+
+    for line in section.body.lines() {
+        let normalized = normalize_clause_line(line);
+        if normalized.is_empty() {
+            continue;
+        }
+
+        for piece in split_clause_line(&normalized) {
+            let text = piece.trim().to_string();
+            if text.is_empty() {
+                continue;
+            }
+            let role_candidates = role_candidates_for_clause(section.kind, &text);
+            clauses.push(ObjectiveClause {
+                candidate_index: section.candidate_index,
+                row_ref: section.row_ref.clone(),
+                source_kind: section.source_kind,
+                section_index: section.index,
+                section_kind: section.kind,
+                text,
+                role_candidates,
+            });
+        }
     }
 
-    if body.starts_with("/goal ") {
-        return Some(body.to_string());
+    if clauses.is_empty() && !section.body.trim().is_empty() {
+        let text = section.body.trim().to_string();
+        clauses.push(ObjectiveClause {
+            candidate_index: section.candidate_index,
+            row_ref: section.row_ref.clone(),
+            source_kind: section.source_kind,
+            section_index: section.index,
+            section_kind: section.kind,
+            text: text.clone(),
+            role_candidates: role_candidates_for_clause(section.kind, &text),
+        });
     }
 
-    let best_line = body
-        .lines()
-        .map(normalize_clause_line)
-        .filter(|line| !line.is_empty())
-        .max_by_key(|line| clause_goal_score(line));
+    clauses
+}
 
-    match best_line {
-        Some(line) if clause_goal_score(&line) >= 80 => Some(line),
-        Some(_) if body.lines().count() == 1 => Some(body.to_string()),
-        Some(_) => Some(body.lines().next()?.trim().to_string()),
-        None => None,
+fn split_clause_line(line: &str) -> Vec<String> {
+    let protected = line
+        .replace(", do not ", ". Do not ")
+        .replace(", must not ", ". Must not ")
+        .replace(", and return ", ". Return ")
+        .replace(", then return ", ". Return ")
+        .replace(" and then ", ". Then ")
+        .replace(" after that ", ". After that ");
+
+    let mut pieces = Vec::new();
+    let mut start = 0usize;
+    let chars = protected.char_indices().collect::<Vec<_>>();
+    for (index, (char_index, ch)) in chars.iter().enumerate() {
+        let char_index = *char_index;
+        let ch = *ch;
+        let is_boundary = matches!(ch, '.' | '?' | '!' | ';')
+            && chars
+                .get(index + 1)
+                .map(|(_, next)| (*next).is_whitespace())
+                .unwrap_or(true);
+        if is_boundary {
+            let end = char_index + ch.len_utf8();
+            let piece = protected[start..end].trim();
+            if !piece.is_empty() {
+                pieces.push(piece.to_string());
+            }
+            start = end;
+        }
     }
+
+    let rest = protected[start..].trim();
+    if !rest.is_empty() {
+        pieces.push(rest.to_string());
+    }
+
+    if pieces.is_empty() {
+        vec![line.to_string()]
+    } else {
+        pieces
+    }
+}
+
+fn role_candidates_for_clause(
+    section_kind: ObjectiveSectionKind,
+    text: &str,
+) -> Vec<RoleCandidate> {
+    let lowered = text.to_ascii_lowercase();
+    let mut candidates = Vec::new();
+
+    let mut push = |role: ObjectiveRole, confidence: Confidence, score: i32| {
+        candidates.push(RoleCandidate {
+            role,
+            confidence,
+            score,
+        });
+    };
+
+    match section_kind {
+        ObjectiveSectionKind::Scope | ObjectiveSectionKind::Mission => {
+            push(ObjectiveRole::Goal, Confidence::High, 900);
+        }
+        ObjectiveSectionKind::Constraints => {
+            push(ObjectiveRole::Constraint, Confidence::High, 850);
+        }
+        ObjectiveSectionKind::Verification => {
+            push(ObjectiveRole::Verification, Confidence::High, 850);
+        }
+        ObjectiveSectionKind::Context => {
+            push(ObjectiveRole::Context, Confidence::High, 700);
+        }
+        ObjectiveSectionKind::Deliverables => {
+            push(ObjectiveRole::OtherRole, Confidence::Medium, 650);
+        }
+        ObjectiveSectionKind::Checklist => {
+            push(ObjectiveRole::OtherRole, Confidence::Medium, 400);
+        }
+        ObjectiveSectionKind::Boilerplate | ObjectiveSectionKind::ToolingInstructions => {
+            push(ObjectiveRole::Context, Confidence::Medium, 300);
+        }
+        ObjectiveSectionKind::UnknownSection => {}
+    }
+
+    if lowered.starts_with("/goal ") || looks_like_goal_text(&lowered) {
+        push(ObjectiveRole::Goal, Confidence::Medium, 650);
+    }
+    if looks_like_constraint_text(&lowered) {
+        push(ObjectiveRole::Constraint, Confidence::High, 800);
+    }
+    if looks_like_verification_text(&lowered) {
+        push(ObjectiveRole::Verification, Confidence::High, 825);
+    }
+    if looks_like_deliverable_text(&lowered) {
+        push(ObjectiveRole::OtherRole, Confidence::Medium, 700);
+    }
+    if looks_like_context_text(&lowered) || looks_like_boilerplate_text(&lowered) {
+        push(ObjectiveRole::Context, Confidence::Medium, 525);
+    }
+
+    if candidates.is_empty() {
+        push(ObjectiveRole::OtherRole, Confidence::Low, 100);
+    }
+
+    candidates.sort_by(|left, right| right.score.cmp(&left.score));
+    candidates.dedup_by(|left, right| left.role == right.role);
+    candidates
+}
+
+fn select_compatibility_text(decomposition: &ObjectiveDecomposition) -> Option<String> {
+    let mut candidates = decomposition
+        .clauses
+        .iter()
+        .filter_map(|clause| {
+            let role = top_role(clause)?;
+            if role.role != ObjectiveRole::Goal {
+                return None;
+            }
+            let score = compatibility_score(decomposition, clause, role);
+            Some((score, clause))
+        })
+        .collect::<Vec<_>>();
+
+    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    let selected = candidates.first().map(|(_, clause)| *clause)?;
+    Some(compatibility_text_for_clause(decomposition, selected))
+}
+
+fn compatibility_score(
+    decomposition: &ObjectiveDecomposition,
+    clause: &ObjectiveClause,
+    role: &RoleCandidate,
+) -> i32 {
+    let mut score = role.score;
+    score += source_priority(clause.source_kind);
+    score += section_goal_priority(clause.section_kind);
+
+    let lowered = clause.text.to_ascii_lowercase();
+    if lowered.starts_with("/goal ") {
+        score += 500;
+    }
+    if looks_like_goal_text(&lowered) {
+        score += 150;
+    }
+    if looks_like_checklist_text(&lowered) {
+        score -= 300;
+    }
+    if looks_like_verification_text(&lowered) {
+        score -= 350;
+    }
+    if looks_like_boilerplate_text(&lowered) && !explicitly_targets_instruction_surface(&lowered) {
+        score -= 250;
+    }
+    if decomposition
+        .section_for_clause(clause)
+        .map(|section| section.confidence == Confidence::High)
+        .unwrap_or(false)
+    {
+        score += 25;
+    }
+
+    score + clause.text.len().min(180) as i32
+}
+
+fn source_priority(source_kind: ObjectiveSourceKind) -> i32 {
+    match source_kind {
+        ObjectiveSourceKind::ThreadGoal => 500,
+        ObjectiveSourceKind::UserPrompt => 450,
+        ObjectiveSourceKind::AssistantContext => 75,
+        ObjectiveSourceKind::UnknownSource => 0,
+        ObjectiveSourceKind::SystemInstruction => -250,
+        ObjectiveSourceKind::ToolOutput => -500,
+    }
+}
+
+fn section_goal_priority(section_kind: ObjectiveSectionKind) -> i32 {
+    match section_kind {
+        ObjectiveSectionKind::Scope | ObjectiveSectionKind::Mission => 500,
+        ObjectiveSectionKind::UnknownSection => 125,
+        ObjectiveSectionKind::Deliverables => 25,
+        ObjectiveSectionKind::Constraints => 0,
+        ObjectiveSectionKind::Context => -50,
+        ObjectiveSectionKind::Checklist => -250,
+        ObjectiveSectionKind::Verification => -400,
+        ObjectiveSectionKind::ToolingInstructions => -450,
+        ObjectiveSectionKind::Boilerplate => -500,
+    }
+}
+
+fn compatibility_text_for_clause(
+    decomposition: &ObjectiveDecomposition,
+    clause: &ObjectiveClause,
+) -> String {
+    if let Some(section) = decomposition.section_for_clause(clause) {
+        let body = section.body.trim();
+        if body.starts_with("/goal ") {
+            return body.split("\n\n").next().unwrap_or(body).trim().to_string();
+        }
+    }
+    clause.text.trim().to_string()
+}
+
+fn assemble_structured_objective(
+    decomposition: &ObjectiveDecomposition,
+    verification_commands: &[String],
+) -> StructuredObjective {
+    let goal_clause = selected_goal_clause(decomposition);
+    let evidence_spans = evidence_spans_from_decomposition(decomposition);
+    let target = goal_clause.map(|clause| ObjectiveTarget {
+        display: target_display_for_goal(&clause.text),
+        kind: target_kind_for_text(&clause.text),
+        paths: extract_inline_paths(&clause.text),
+        symbols: Vec::new(),
+        named_artifacts: extract_named_artifacts(&clause.text),
+        workspace_refs: extract_workspace_refs(&clause.text),
+        evidence: vec![evidence_span_for_clause(clause)],
+        confidence: top_role(clause)
+            .map(|role| role.confidence)
+            .unwrap_or(Confidence::Low),
+    });
+
+    let constraints = decomposition
+        .clauses
+        .iter()
+        .filter(|clause| top_role(clause).map(|role| role.role) == Some(ObjectiveRole::Constraint))
+        .map(|clause| ObjectiveConstraint {
+            display: clause.text.clone(),
+            constraint_kind: constraint_kind_for_text(&clause.text),
+            evidence: vec![evidence_span_for_clause(clause)],
+            confidence: top_role(clause)
+                .map(|role| role.confidence)
+                .unwrap_or(Confidence::Low),
+        })
+        .collect::<Vec<_>>();
+
+    let success_conditions = success_conditions_from_decomposition(decomposition, goal_clause);
+    let deliverables = deliverables_from_decomposition(decomposition);
+    let unknowns = unknowns_for_objective(goal_clause, target.as_ref(), &evidence_spans);
+    let primary_intent = goal_clause
+        .map(|clause| intent_for_text(&clause.text))
+        .unwrap_or(ObjectiveIntent::OtherTask);
+    let confidence = objective_confidence(goal_clause, &evidence_spans);
+
+    StructuredObjective {
+        objective_class: if goal_clause.is_some() {
+            ObjectiveClass::TaskStatement
+        } else {
+            ObjectiveClass::NotTaskStatement
+        },
+        primary_intent,
+        target,
+        constraints,
+        success_conditions,
+        deliverables,
+        verification_commands: verification_commands.to_vec(),
+        evidence_spans,
+        confidence,
+        unknowns,
+    }
+}
+
+fn selected_goal_clause(decomposition: &ObjectiveDecomposition) -> Option<&ObjectiveClause> {
+    let mut candidates = decomposition
+        .clauses
+        .iter()
+        .filter_map(|clause| {
+            let role = top_role(clause)?;
+            if role.role == ObjectiveRole::Goal {
+                Some((compatibility_score(decomposition, clause, role), clause))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    candidates.first().map(|(_, clause)| *clause)
+}
+
+fn evidence_spans_from_decomposition(
+    decomposition: &ObjectiveDecomposition,
+) -> Vec<ObjectiveEvidenceSpan> {
+    let mut spans = Vec::new();
+    for clause in &decomposition.clauses {
+        if let Some(role) = top_role(clause) {
+            if role.role != ObjectiveRole::OtherRole
+                || matches!(clause.section_kind, ObjectiveSectionKind::Deliverables)
+            {
+                spans.push(evidence_span_for_clause(clause));
+            }
+        }
+    }
+    spans
+}
+
+fn evidence_span_for_clause(clause: &ObjectiveClause) -> ObjectiveEvidenceSpan {
+    let role = top_role(clause).cloned().unwrap_or(RoleCandidate {
+        role: ObjectiveRole::OtherRole,
+        confidence: Confidence::Low,
+        score: 0,
+    });
+    ObjectiveEvidenceSpan {
+        row: clause.row_ref.clone(),
+        source_kind: clause.source_kind,
+        section_kind: clause.section_kind,
+        role: role.role,
+        excerpt: clause.text.clone(),
+        start_char: None,
+        end_char: None,
+        confidence: role.confidence,
+    }
+}
+
+fn top_role(clause: &ObjectiveClause) -> Option<&RoleCandidate> {
+    clause.role_candidates.first()
+}
+
+fn success_conditions_from_decomposition(
+    decomposition: &ObjectiveDecomposition,
+    goal_clause: Option<&ObjectiveClause>,
+) -> Vec<SuccessCondition> {
+    let mut conditions = Vec::new();
+    for clause in &decomposition.clauses {
+        let lowered = clause.text.to_ascii_lowercase();
+        let verification_role =
+            top_role(clause).map(|role| role.role) == Some(ObjectiveRole::Verification);
+        if verification_role || lowered.contains("green") || lowered.contains("success") {
+            conditions.push(SuccessCondition {
+                display: clause.text.clone(),
+                evidence: vec![evidence_span_for_clause(clause)],
+                confidence: top_role(clause)
+                    .map(|role| role.confidence)
+                    .unwrap_or(Confidence::Low),
+            });
+        }
+    }
+
+    if conditions.is_empty() {
+        if let Some(goal_clause) = goal_clause {
+            let lowered = goal_clause.text.to_ascii_lowercase();
+            if lowered.contains("ensure") || lowered.contains("validate") {
+                conditions.push(SuccessCondition {
+                    display: goal_clause.text.clone(),
+                    evidence: vec![evidence_span_for_clause(goal_clause)],
+                    confidence: Confidence::Medium,
+                });
+            }
+        }
+    }
+
+    conditions
+}
+
+fn deliverables_from_decomposition(
+    decomposition: &ObjectiveDecomposition,
+) -> Vec<RequestedDeliverable> {
+    decomposition
+        .clauses
+        .iter()
+        .filter(|clause| {
+            matches!(clause.section_kind, ObjectiveSectionKind::Deliverables)
+                || looks_like_deliverable_text(&clause.text.to_ascii_lowercase())
+        })
+        .map(|clause| RequestedDeliverable {
+            display: clause.text.clone(),
+            deliverable_kind: deliverable_kind_for_text(&clause.text),
+            evidence: vec![evidence_span_for_clause(clause)],
+            confidence: Confidence::Medium,
+        })
+        .collect()
+}
+
+fn unknowns_for_objective(
+    goal_clause: Option<&ObjectiveClause>,
+    target: Option<&ObjectiveTarget>,
+    evidence_spans: &[ObjectiveEvidenceSpan],
+) -> Vec<ObjectiveUnknown> {
+    let mut unknowns = Vec::new();
+    if goal_clause.is_none() {
+        unknowns.push(ObjectiveUnknown {
+            field_name: "primary_goal".to_string(),
+            reason: "no grounded goal clause was found".to_string(),
+            evidence: evidence_spans.iter().take(1).cloned().collect(),
+        });
+    }
+    if target.is_none() {
+        unknowns.push(ObjectiveUnknown {
+            field_name: "target".to_string(),
+            reason: "target could not be inferred from a grounded goal clause".to_string(),
+            evidence: evidence_spans.iter().take(1).cloned().collect(),
+        });
+    }
+    unknowns
+}
+
+fn objective_confidence(
+    goal_clause: Option<&ObjectiveClause>,
+    evidence_spans: &[ObjectiveEvidenceSpan],
+) -> Confidence {
+    if let Some(goal_clause) = goal_clause {
+        if matches!(
+            goal_clause.section_kind,
+            ObjectiveSectionKind::Scope | ObjectiveSectionKind::Mission
+        ) && evidence_spans.iter().any(|span| span.role == ObjectiveRole::Goal)
+        {
+            return Confidence::High;
+        }
+        return Confidence::Medium;
+    }
+    Confidence::Low
+}
+
+fn verification_commands_from_decomposition(decomposition: &ObjectiveDecomposition) -> Vec<String> {
+    let mut commands = Vec::new();
+    for clause in &decomposition.clauses {
+        if top_role(clause).map(|role| role.role) == Some(ObjectiveRole::Verification) {
+            for command in extract_verification_commands(&clause.text) {
+                if !commands.iter().any(|existing| existing == &command) {
+                    commands.push(command);
+                }
+            }
+        }
+    }
+
+    if commands.is_empty() {
+        for candidate in &decomposition.candidates {
+            for command in extract_verification_commands(&candidate.text) {
+                if !commands.iter().any(|existing| existing == &command) {
+                    commands.push(command);
+                }
+            }
+        }
+    }
+
+    commands
+}
+
+fn objective_summary_evidence(
+    decomposition: &ObjectiveDecomposition,
+    compatibility: &str,
+) -> Vec<EvidenceRef> {
+    let Some(selected_clause) = decomposition
+        .clauses
+        .iter()
+        .find(|clause| clause.text == compatibility || compatibility.contains(&clause.text))
+        .or_else(|| selected_goal_clause(decomposition))
+    else {
+        return decomposition
+            .candidates
+            .first()
+            .map(|candidate| EvidenceRef {
+                row: candidate.row_ref.clone(),
+                reason: "literal objective row".to_string(),
+            })
+            .into_iter()
+            .collect();
+    };
+
+    vec![EvidenceRef {
+        row: selected_clause.row_ref.clone(),
+        reason: format!(
+            "structured objective {:?} clause in {:?} section",
+            top_role(selected_clause)
+                .map(|role| role.role)
+                .unwrap_or(ObjectiveRole::OtherRole),
+            selected_clause.section_kind
+        ),
+    }]
+}
+
+fn target_display_for_goal(goal: &str) -> String {
+    goal.trim()
+        .trim_start_matches("/goal")
+        .trim_start_matches(|c: char| c == ':' || c.is_whitespace())
+        .trim()
+        .to_string()
+}
+
+fn target_kind_for_text(text: &str) -> ObjectiveTargetKind {
+    let lowered = text.to_ascii_lowercase();
+    if explicitly_targets_instruction_surface(&lowered) {
+        ObjectiveTargetKind::SkillOrInstructionSurface
+    } else if lowered.contains(".rs")
+        || lowered.contains(".md")
+        || lowered.contains("/")
+        || lowered.contains("\\")
+    {
+        ObjectiveTargetKind::FileOrDirectory
+    } else if lowered.contains("crate") || lowered.contains("package") {
+        ObjectiveTargetKind::CrateOrPackage
+    } else if lowered.contains("spec") || lowered.contains("design") || lowered.contains("doc") {
+        ObjectiveTargetKind::SpecOrDesignDoc
+    } else if lowered.contains("test") || lowered.contains("verifier") || lowered.contains("validation") {
+        ObjectiveTargetKind::TestOrVerifier
+    } else {
+        ObjectiveTargetKind::ConceptualTopic
+    }
+}
+
+fn intent_for_text(text: &str) -> ObjectiveIntent {
+    let lowered = text.to_ascii_lowercase();
+    if contains_any(&lowered, &["implement", "add ", "update", "wire", "land ", "build"])
+    {
+        ObjectiveIntent::Implement
+    } else if contains_any(&lowered, &["debug", "fix", "troubleshoot"])
+    {
+        ObjectiveIntent::Debug
+    } else if contains_any(&lowered, &["review", "inspect", "determine whether", "compare", "analyze"])
+    {
+        ObjectiveIntent::Review
+    } else if contains_any(&lowered, &["research", "look up", "survey"])
+    {
+        ObjectiveIntent::Research
+    } else if contains_any(&lowered, &["plan", "design", "spec"])
+    {
+        ObjectiveIntent::Plan
+    } else if contains_any(&lowered, &["validate", "verify", "ensure", "green", "test"])
+    {
+        ObjectiveIntent::Validate
+    } else if contains_any(&lowered, &["docs", "document", "readme"])
+    {
+        ObjectiveIntent::Docs
+    } else {
+        ObjectiveIntent::OtherTask
+    }
+}
+
+fn constraint_kind_for_text(text: &str) -> ObjectiveConstraintKind {
+    let lowered = text.to_ascii_lowercase();
+    if contains_any(&lowered, &["no code", "do not change code", "no-code"])
+    {
+        ObjectiveConstraintKind::NoCode
+    } else if contains_any(&lowered, &["docs only", "docs-only"])
+    {
+        ObjectiveConstraintKind::DocsOnly
+    } else if contains_any(&lowered, &["review only", "review-only"])
+    {
+        ObjectiveConstraintKind::ReviewOnly
+    } else if contains_any(&lowered, &["validate only", "validate-only"])
+    {
+        ObjectiveConstraintKind::ValidateOnly
+    } else if contains_any(&lowered, &["linux", "macos", "windows"])
+    {
+        ObjectiveConstraintKind::PlatformBoundary
+    } else if contains_any(&lowered, &["return with", "output", "format"])
+    {
+        ObjectiveConstraintKind::DeliverableFormat
+    } else if contains_any(&lowered, &["only", "scope", "boundary", "out of scope"])
+    {
+        ObjectiveConstraintKind::ScopeBoundary
+    } else {
+        ObjectiveConstraintKind::OtherConstraint
+    }
+}
+
+fn deliverable_kind_for_text(text: &str) -> RequestedDeliverableKind {
+    let lowered = text.to_ascii_lowercase();
+    if contains_any(&lowered, &["design doc", "design"])
+    {
+        RequestedDeliverableKind::DesignDoc
+    } else if contains_any(&lowered, &["plan", "tasks"])
+    {
+        RequestedDeliverableKind::Plan
+    } else if contains_any(&lowered, &["review", "findings"])
+    {
+        RequestedDeliverableKind::Review
+    } else if contains_any(&lowered, &["validation", "verify", "tests run"])
+    {
+        RequestedDeliverableKind::ValidationReport
+    } else if contains_any(&lowered, &["research", "summary"])
+    {
+        RequestedDeliverableKind::ResearchSummary
+    } else if contains_any(&lowered, &["code", "patch", "changed files"])
+    {
+        RequestedDeliverableKind::CodeChange
+    } else {
+        RequestedDeliverableKind::OtherDeliverable
+    }
+}
+
+fn extract_inline_paths(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|token| token.trim_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '`' | '"' | '\'')))
+        .filter(|token| {
+            token.contains('/')
+                || token.contains('\\')
+                || token.ends_with(".rs")
+                || token.ends_with(".md")
+                || token.ends_with(".toml")
+                || token.ends_with(".json")
+        })
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn extract_named_artifacts(text: &str) -> Vec<String> {
+    let mut artifacts = Vec::new();
+    for needle in ["AGENTS.md", "<skill>", "Available skills", "DESIGN", "README.md"] {
+        if text.contains(needle) {
+            artifacts.push(needle.to_string());
+        }
+    }
+    artifacts
+}
+
+fn extract_workspace_refs(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .filter(|token| token.starts_with('@'))
+        .map(|token| token.trim_matches(|c: char| matches!(c, ',' | '.' | ';' | ':')).to_string())
+        .collect()
+}
+
+fn contains_any(text: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| text.contains(needle))
 }
 
 fn normalize_clause_line(line: &str) -> String {
@@ -360,77 +1290,6 @@ fn normalize_clause_line(line: &str) -> String {
         .trim_start_matches(|c: char| c.is_ascii_digit() || matches!(c, '.' | ')' | '('))
         .trim()
         .to_string()
-}
-
-fn clause_goal_score(line: &str) -> i32 {
-    let lowered = line.to_ascii_lowercase();
-    let mut score = 0;
-
-    if lowered.starts_with("/goal ") {
-        score += 1_000;
-    }
-
-    if looks_like_goal_text(&lowered) {
-        score += 250;
-    }
-
-    if looks_like_constraint_text(&lowered) {
-        score += 80;
-    }
-
-    if looks_like_deliverable_text(&lowered) {
-        score += 60;
-    }
-
-    if looks_like_verification_text(&lowered) {
-        score -= 200;
-    }
-
-    if looks_like_checklist_text(&lowered) {
-        score -= 250;
-    }
-
-    if looks_like_boilerplate_text(&lowered) {
-        score -= 350;
-    }
-
-    score + line.len().min(240) as i32
-}
-
-fn section_priority(section: &ObjectiveSection, display_text: &str) -> i32 {
-    let lowered = display_text.to_ascii_lowercase();
-    let mut score = match section.kind {
-        ObjectiveSectionKind::Mission => 800,
-        ObjectiveSectionKind::Constraints => 575,
-        ObjectiveSectionKind::Deliverables => 525,
-        ObjectiveSectionKind::Context => 250,
-        ObjectiveSectionKind::Verification => 125,
-        ObjectiveSectionKind::Checklist => 75,
-        ObjectiveSectionKind::Boilerplate => -200,
-        ObjectiveSectionKind::ToolingInstruction => -150,
-        ObjectiveSectionKind::Unknown => 350,
-    };
-
-    if looks_like_goal_text(&lowered) {
-        score += 250;
-    }
-    if looks_like_constraint_text(&lowered) {
-        score += 80;
-    }
-    if looks_like_deliverable_text(&lowered) {
-        score += 60;
-    }
-    if looks_like_verification_text(&lowered) {
-        score -= 200;
-    }
-    if looks_like_checklist_text(&lowered) {
-        score -= 250;
-    }
-    if looks_like_boilerplate_text(&lowered) {
-        score -= 350;
-    }
-
-    score + display_text.len().min(240) as i32
 }
 
 fn looks_like_goal_text(text: &str) -> bool {
@@ -450,8 +1309,11 @@ fn looks_like_goal_text(text: &str) -> bool {
         "analyze ",
         "plan ",
         "teach ",
+        "ensure ",
+        "validate ",
         "keep ",
         "stop ",
+        "perform ",
     ]
     .iter()
     .any(|needle| text.contains(needle))
@@ -465,7 +1327,11 @@ fn looks_like_constraint_text(text: &str) -> bool {
         "out of scope",
         "only",
         "must",
+        "must not",
         "keep the work centered",
+        "no code",
+        "review-only",
+        "docs-only",
     ]
     .iter()
     .any(|needle| text.contains(needle))
@@ -474,11 +1340,29 @@ fn looks_like_constraint_text(text: &str) -> bool {
 fn looks_like_deliverable_text(text: &str) -> bool {
     [
         "return with",
+        "return ",
+        "provide ",
         "changed files",
         "tests run",
         "verification commands run",
         "residual risk",
         "recommended commit message",
+        "final response",
+        "output requirements",
+        "report with",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
+}
+
+fn looks_like_context_text(text: &str) -> bool {
+    [
+        "read first",
+        "authoritative docs",
+        "files to inspect",
+        "context",
+        "background",
+        "current state",
     ]
     .iter()
     .any(|needle| text.contains(needle))
@@ -489,6 +1373,10 @@ fn looks_like_verification_text(text: &str) -> bool {
         || text.contains("verification")
         || text.contains("cargo test")
         || text.contains("cargo build")
+        || text.contains("pytest")
+        || text.contains("pnpm test")
+        || text.contains("npm test")
+        || text.contains("vitest")
 }
 
 fn looks_like_checklist_text(text: &str) -> bool {
@@ -498,9 +1386,30 @@ fn looks_like_checklist_text(text: &str) -> bool {
         "run this task on",
         "after implementing",
         "start with",
+        "first ",
+        "then ",
+        "after that",
     ]
     .iter()
     .any(|needle| text.contains(needle))
+}
+
+fn explicitly_targets_instruction_surface(text: &str) -> bool {
+    contains_any(
+        text,
+        &[
+            "agents.md",
+            "<skill>",
+            "available skills",
+            "instruction block",
+            "instructions block",
+            "plugin instructions",
+            "apps (connectors)",
+            "codex desktop context",
+            "safety guardrails",
+            "tooling boilerplate",
+        ],
+    )
 }
 
 fn looks_like_boilerplate_text(text: &str) -> bool {
@@ -534,4 +1443,105 @@ pub fn extract_verification_commands(text: &str) -> Vec<String> {
         cursor = &remainder[end..];
     }
     commands
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_session_compactor::SourceKind;
+    use camino::Utf8PathBuf;
+
+    fn test_row(text: &str) -> CompactionRow {
+        CompactionRow {
+            source_file: Utf8PathBuf::from("/tmp/objective-test/rollout.jsonl"),
+            source_kind: SourceKind::CodexRolloutJsonl,
+            session_id: Some("session".to_string()),
+            turn_id: Some("turn-001".to_string()),
+            event_index: 0,
+            line_number: 1,
+            row_ordinal: 0,
+            timestamp: None,
+            kind: CompactionKind::UserMessage,
+            user_message_role: Some(UserMessageRole::Prompt),
+            dedupe_identity: None,
+            text: text.to_string(),
+            canonical_text: text.to_string(),
+            text_hash_hex: format!("hash-{}", text.split_whitespace().collect::<String>()),
+        }
+    }
+
+    #[test]
+    fn decomposes_dense_single_paragraph_into_goal_constraint_and_deliverable_clauses() {
+        let rows = vec![test_row(
+            "Review SO-2.1, do not change code, identify brittle gaps, and return concrete packet fixes.",
+        )];
+        let summary = extract_objective(&rows);
+        let Some(structured) = summary.structured else { panic!("structured sidecar") };
+        assert_eq!(structured.objective_class, ObjectiveClass::TaskStatement);
+        assert!(structured
+            .evidence_spans
+            .iter()
+            .any(|span| span.role == ObjectiveRole::Goal && span.excerpt.contains("Review SO-2.1")));
+        assert!(structured
+            .constraints
+            .iter()
+            .any(|constraint| constraint.display.contains("Do not change code")));
+        assert!(structured
+            .deliverables
+            .iter()
+            .any(|deliverable| deliverable.display.contains("Return concrete packet fixes")));
+    }
+
+    #[test]
+    fn recognizes_unlisted_mission_headings_without_promoting_checklists() {
+        let rows = vec![test_row(
+            "## What I need\nEnsure the analyzer objective system extracts structured objective fields from long prompts.\n\n## Steps\n- Run this task on a linux machine.",
+        )];
+        let summary = extract_objective(&rows);
+        assert_eq!(
+            summary.text,
+            "Ensure the analyzer objective system extracts structured objective fields from long prompts."
+        );
+        let Some(structured) = summary.structured else { panic!("structured sidecar") };
+        assert!(structured.evidence_spans.iter().any(|span| {
+            span.role == ObjectiveRole::Goal
+                && matches!(span.section_kind, ObjectiveSectionKind::Mission)
+        }));
+        assert!(!summary.text.contains("Run this task on a linux machine"));
+    }
+
+    #[test]
+    fn keeps_verification_command_as_verification_not_goal() {
+        let rows = vec![test_row(
+            "## Scope\nValidate the structured objective sidecar.\n\n## Verification\n- cargo test -p agent-drift-analyzer checkpoints -- --nocapture",
+        )];
+        let summary = extract_objective(&rows);
+        assert_eq!(summary.text, "Validate the structured objective sidecar.");
+        assert_eq!(
+            summary.verification_commands,
+            vec!["cargo test -p agent-drift-analyzer checkpoints -- --nocapture"]
+        );
+        let Some(structured) = summary.structured else { panic!("structured sidecar") };
+        assert!(structured.evidence_spans.iter().any(|span| {
+            span.role == ObjectiveRole::Verification
+                && span.excerpt.contains("cargo test -p agent-drift-analyzer")
+        }));
+        assert!(!structured
+            .target
+            .as_ref()
+            .map(|target| target.display.contains("cargo test"))
+            .unwrap_or(false));
+    }
+
+    #[test]
+    fn preserves_user_requested_instruction_surface_targets() {
+        let rows = vec![test_row(
+            "Review this AGENTS.md instruction block and tell me whether it should change.\n\n# AGENTS.md\nUse the incremental implementation skill.",
+        )];
+        let summary = extract_objective(&rows);
+        let Some(structured) = summary.structured else { panic!("structured sidecar") };
+        let Some(target) = structured.target else { panic!("target") };
+        assert_eq!(target.kind, ObjectiveTargetKind::SkillOrInstructionSurface);
+        assert!(summary.text.contains("Review this AGENTS.md instruction block"));
+    }
 }

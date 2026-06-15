@@ -20,8 +20,11 @@ pub mod scoring;
 
 pub use checkpoint::{
     Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
-    ProgressDimension, ProgressSignal, ProgressSignalCode, ProgressStatus, SessionArchetype,
-    SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength, TaskFrame,
+    ObjectiveClass, ObjectiveConstraint, ObjectiveConstraintKind, ObjectiveEvidenceSpan,
+    ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTarget,
+    ObjectiveTargetKind, ObjectiveUnknown, ProgressDimension, ProgressSignal, ProgressSignalCode,
+    ProgressStatus, RequestedDeliverable, RequestedDeliverableKind, SessionArchetype,
+    SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength, StructuredObjective, SuccessCondition, TaskFrame,
     TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 pub use input::{AnalyzerSurface, BundleSession, InputBundle, InputError};
