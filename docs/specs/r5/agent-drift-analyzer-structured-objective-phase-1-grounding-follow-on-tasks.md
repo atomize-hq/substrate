@@ -104,11 +104,13 @@ downstream migration.
 
 ## SO-G5: Prepare The Objective-Acceptance Harness Seam
 
-- [ ] Task SO-G5.1: Make the objective-acceptance harness the explicit next packet after grounding.
-  - Acceptance: the reconciled docs sequence the next acceptance packet after grounding restoration
-    and require it to validate structured fields, role spans, grounding refs, forbidden promotions,
-    compatibility rendering, and unknown-field correctness.
-  - Verify: Manual review of the updated docs set.
+- [x] Task SO-G5.1: Make the objective-acceptance harness the explicit next packet after grounding.
+  - Acceptance: the reconciled docs name SO-4.1 / SO-4.2 as the next packet boundary after
+    grounding restoration and require that harness to validate structured fields, role spans,
+    grounding refs, forbidden promotions, compatibility rendering, and unknown-field correctness.
+  - Verify:
+    - Manual review of the updated docs set.
+    - `git diff --stat`
   - Files:
     - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
     - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
