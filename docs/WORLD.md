@@ -123,9 +123,15 @@ Deliberate boundary for later lanes:
 - The helper ensures the Linux `substrate` group exists, adds the invoking user when possible,
   and rewrites the socket/service units so `/run/substrate` is recreated as
   `root:substrate 0750`, `/run/substrate.sock` is created as `root:substrate 0660`,
-  and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/`
+  and a systemd `ExecStartPost=` hook reapplies named-user ACLs for the current `substrate`
+  group population whenever the socket is recreated. This preserves the durable
+  `root:substrate 0660` contract while making fresh installs usable immediately from shells
+  whose live supplementary groups are still stale. Managed gateway runtime artifacts under
+  `/run/substrate/substrate-gateway-runtime/`
   stay group-readable (`0750` directories, `0640` files).
-  If it cannot add you automatically it prints `sudo usermod -aG substrate <user>`. Run
+  If it cannot add you automatically it prints `sudo usermod -aG substrate <user>`. If ACL
+  tooling is missing, the helper reports a degraded state and the current shell may still need
+  `exec newgrp substrate`. Run
   `loginctl enable-linger <user>` on hosts with systemd/logind (the script reports the current
   status) so socket activation survives logout or reboot.
 - After provisioning, verify the listener, units, and capabilities:
@@ -134,12 +140,14 @@ Deliberate boundary for later lanes:
   systemctl status substrate-world-service.service --no-pager
   systemctl show substrate-world-service.service -p CapabilityBoundingSet -p AmbientCapabilities
   sudo ls -l /run/substrate.sock
+  sudo getfacl -cp /run/substrate.sock
   sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
   substrate host doctor --json | jq '.host.world_socket'
   substrate --shim-status | grep 'World socket'
   ```
-  The socket listing should show `root substrate 0660`. If it does not, rerun the provisioning
-  helper or the installer to refresh the socket/service units and group membership. Gateway
+  The socket listing should show `root substrate 0660`, and `getfacl` should show any immediate
+  named-user ACL bridge entries with a trailing `+` on `ls -l`. If it does not, rerun the
+  provisioning helper or the installer to refresh the socket/service units and ACL bridge. Gateway
   lifecycle failures that reference `/run/substrate/substrate-gateway-runtime/.../*.log` should
   point at files readable by the `substrate` group after reprovision.
   The host-scoped doctor JSON surfaces `host.world_socket`:
@@ -148,6 +156,13 @@ Deliberate boundary for later lanes:
     "mode": "socket_activation",
     "socket_path": "/run/substrate.sock",
     "socket_exists": true,
+    "access": {
+      "active_process_has_socket_group": false,
+      "account_is_in_socket_group": true,
+      "named_user_acl_grants_rw": true,
+      "authorization_source": "named-user-acl",
+      "status": "ok.named_user_acl"
+    },
     "probe_ok": true,
     "probe_error": null,
     "systemd_error": null,
@@ -165,7 +180,8 @@ Deliberate boundary for later lanes:
   ```
   `substrate --shim-status[ --json]` prints the same detection so operators immediately know
   when socket activation is managing the transport instead of a manual bind. The doctor payload
-  also includes `world_fs_mode` (`writable` or `read_only`) so policy-driven filesystem settings are
+  also distinguishes active-group access from named-user ACL access and reports degraded ACL-tool
+  states, plus `world_fs_mode` (`writable` or `read_only`) so policy-driven filesystem settings are
   visible without digging through trace logs.
   If `world_fs.isolation=full` + `world_fs.mode=writable` allowlisted writes fail with `EPERM`,
   confirm `cap_chown` is present in the service's `CapabilityBoundingSet`/`AmbientCapabilities`

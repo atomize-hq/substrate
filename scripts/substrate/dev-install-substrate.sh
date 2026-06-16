@@ -903,7 +903,7 @@ ensure_substrate_group_membership() {
 
   log "Adding ${invoking_user} to ${target_group} (sudo may prompt)..."
   if run_privileged usermod -aG "${target_group}" "${invoking_user}"; then
-    warn "${invoking_user} added to ${target_group}. Log out/in or run 'newgrp ${target_group}' so shells notice the new membership."
+    warn "${invoking_user} added to ${target_group}. Current-shell access should work immediately when the Linux socket ACL bridge is healthy; if 'substrate host doctor --json' reports degraded ACL state, run 'exec newgrp ${target_group}' or start a fresh login shell."
     record_user_added "${invoking_user}"
   else
     warn "Failed to add ${invoking_user} to ${target_group}; run 'sudo usermod -aG ${target_group} ${invoking_user}' manually."
@@ -1778,9 +1778,9 @@ MSG
 if [[ "${IS_LINUX}" -eq 1 && "${WORLD_ENABLED}" -eq 1 ]] && ((${#HOST_STATE_ADDED_USERS[@]} > 0)); then
   cat <<MSG
 [${SCRIPT_NAME}][WARN] This install added your user to the 'substrate' group.
-[${SCRIPT_NAME}][WARN] The current shell still cannot access /run/substrate.sock until group membership refreshes.
-[${SCRIPT_NAME}][WARN] Start a fresh login shell or run:
-  newgrp substrate
+[${SCRIPT_NAME}][WARN] The Linux socket ACL bridge should make /run/substrate.sock usable immediately.
+[${SCRIPT_NAME}][WARN] If 'substrate host doctor --json' reports degraded ACL state, refresh this shell with:
+  exec newgrp substrate
 Then re-run:
   source ${ENV_FILE}
 

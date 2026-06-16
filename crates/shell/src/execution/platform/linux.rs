@@ -156,11 +156,16 @@ pub(crate) fn host_doctor_main(
             (None, None)
         };
 
-        let permission_denied_help = permission_denied_help(
-            socket_probe_error_kind,
+        let socket_access = diagnose_socket_access(
+            activation_report.socket_exists,
             activation_report.socket_path.as_str(),
             socket_acl.as_ref(),
+            socket_probe_ok,
+            socket_probe_error_kind,
         );
+
+        let permission_denied_help =
+            permission_denied_help(socket_probe_error_kind, socket_access.as_ref());
 
         let socket_json = json!({
             "mode": if activation_report.is_socket_activated() { "socket_activation" } else { "manual" },
@@ -179,6 +184,7 @@ pub(crate) fn host_doctor_main(
                 "mode_octal": acl.mode_octal.as_str(),
             })),
             "socket_acl_error": socket_acl_error,
+            "access": socket_access.as_ref().map(socket_access_json),
             "probe_ok": socket_probe_ok,
             "probe_error": socket_probe_error,
             "probe_error_kind": socket_probe_error_kind.map(|kind| format!("{kind:?}")),
@@ -286,6 +292,13 @@ pub(crate) fn host_doctor_main(
         } else {
             None
         };
+        let socket_access = diagnose_socket_access(
+            activation_report.socket_exists,
+            activation_report.socket_path.as_str(),
+            socket_acl.as_ref(),
+            socket_probe_ok,
+            socket_probe_error_kind,
+        );
 
         info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-service requests)");
         if activation_report.socket_exists {
@@ -318,11 +331,44 @@ pub(crate) fn host_doctor_main(
 
         if let Some(err) = &socket_probe_error {
             info(&format!("world_socket.probe_error: {err}"));
-            if let Some(help) = permission_denied_help(
-                socket_probe_error_kind,
-                activation_report.socket_path.as_str(),
-                socket_acl.as_ref(),
-            ) {
+            if let Some(socket_access) = socket_access.as_ref() {
+                info(&format!(
+                    "world_socket.access: status={} authorization_source={}",
+                    socket_access.status, socket_access.authorization_source
+                ));
+                if let Some(active) = socket_access.active_process_has_socket_group {
+                    info(&format!(
+                        "world_socket.access.active_process_has_socket_group={active}"
+                    ));
+                }
+                if let Some(account) = socket_access.account_is_in_socket_group {
+                    info(&format!(
+                        "world_socket.access.account_is_in_socket_group={account}"
+                    ));
+                }
+                if let Some(named_user_acl) = socket_access.named_user_acl_grants_rw {
+                    info(&format!(
+                        "world_socket.access.named_user_acl_grants_rw={named_user_acl}"
+                    ));
+                }
+                if let Some(contract_ok) = socket_access.contract_ok {
+                    info(&format!("world_socket.access.contract_ok={contract_ok}"));
+                }
+                if let Some(parse_error) = &socket_access.acl_parse_error {
+                    warn(&format!(
+                        "world_socket.access.acl_parse_error={parse_error}"
+                    ));
+                }
+                if !socket_access.getfacl_available || !socket_access.setfacl_available {
+                    warn(&format!(
+                        "world_socket.access.acl_tooling: getfacl_available={} setfacl_available={}",
+                        socket_access.getfacl_available, socket_access.setfacl_available
+                    ));
+                }
+            }
+            if let Some(help) =
+                permission_denied_help(socket_probe_error_kind, socket_access.as_ref())
+            {
                 info(&help);
             }
         }
@@ -465,11 +511,16 @@ pub(crate) fn world_doctor_main(
             (None, None)
         };
 
-        let permission_denied_help = permission_denied_help(
-            socket_probe_error_kind,
+        let socket_access = diagnose_socket_access(
+            activation_report.socket_exists,
             activation_report.socket_path.as_str(),
             socket_acl.as_ref(),
+            socket_probe_ok,
+            socket_probe_error_kind,
         );
+
+        let permission_denied_help =
+            permission_denied_help(socket_probe_error_kind, socket_access.as_ref());
 
         let socket_json = json!({
             "mode": if activation_report.is_socket_activated() { "socket_activation" } else { "manual" },
@@ -488,6 +539,7 @@ pub(crate) fn world_doctor_main(
                 "mode_octal": acl.mode_octal.as_str(),
             })),
             "socket_acl_error": socket_acl_error,
+            "access": socket_access.as_ref().map(socket_access_json),
             "probe_ok": socket_probe_ok,
             "probe_error": socket_probe_error,
             "probe_error_kind": socket_probe_error_kind.map(|kind| format!("{kind:?}")),
@@ -679,6 +731,13 @@ pub(crate) fn world_doctor_main(
         } else {
             None
         };
+        let socket_access = diagnose_socket_access(
+            activation_report.socket_exists,
+            activation_report.socket_path.as_str(),
+            socket_acl.as_ref(),
+            socket_probe_ok,
+            socket_probe_error_kind,
+        );
 
         info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-service requests)");
         if activation_report.socket_exists {
@@ -711,11 +770,44 @@ pub(crate) fn world_doctor_main(
 
         if let Some(err) = &socket_probe_error {
             info(&format!("world_socket.probe_error: {err}"));
-            if let Some(help) = permission_denied_help(
-                socket_probe_error_kind,
-                activation_report.socket_path.as_str(),
-                socket_acl.as_ref(),
-            ) {
+            if let Some(socket_access) = socket_access.as_ref() {
+                info(&format!(
+                    "world_socket.access: status={} authorization_source={}",
+                    socket_access.status, socket_access.authorization_source
+                ));
+                if let Some(active) = socket_access.active_process_has_socket_group {
+                    info(&format!(
+                        "world_socket.access.active_process_has_socket_group={active}"
+                    ));
+                }
+                if let Some(account) = socket_access.account_is_in_socket_group {
+                    info(&format!(
+                        "world_socket.access.account_is_in_socket_group={account}"
+                    ));
+                }
+                if let Some(named_user_acl) = socket_access.named_user_acl_grants_rw {
+                    info(&format!(
+                        "world_socket.access.named_user_acl_grants_rw={named_user_acl}"
+                    ));
+                }
+                if let Some(contract_ok) = socket_access.contract_ok {
+                    info(&format!("world_socket.access.contract_ok={contract_ok}"));
+                }
+                if let Some(parse_error) = &socket_access.acl_parse_error {
+                    warn(&format!(
+                        "world_socket.access.acl_parse_error={parse_error}"
+                    ));
+                }
+                if !socket_access.getfacl_available || !socket_access.setfacl_available {
+                    warn(&format!(
+                        "world_socket.access.acl_tooling: getfacl_available={} setfacl_available={}",
+                        socket_access.getfacl_available, socket_access.setfacl_available
+                    ));
+                }
+            }
+            if let Some(help) =
+                permission_denied_help(socket_probe_error_kind, socket_access.as_ref())
+            {
                 info(&help);
             }
         }
@@ -928,6 +1020,28 @@ struct SocketAclDetails {
     is_socket: bool,
 }
 
+#[derive(Debug, Clone)]
+struct SocketAccessDiagnosis {
+    current_uid: u32,
+    current_user: Option<String>,
+    active_process_has_socket_group: Option<bool>,
+    account_is_in_socket_group: Option<bool>,
+    named_user_acl_grants_rw: Option<bool>,
+    authorization_source: String,
+    status: String,
+    remediation: Option<String>,
+    contract_ok: Option<bool>,
+    getfacl_available: bool,
+    setfacl_available: bool,
+    acl_parse_error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct ParsedSocketAcl {
+    named_users: HashMap<String, u8>,
+    mask: u8,
+}
+
 fn read_socket_acl_details(path: &str) -> io::Result<SocketAclDetails> {
     let metadata = std::fs::symlink_metadata(path)?;
     let owner_uid = metadata.uid();
@@ -944,6 +1058,377 @@ fn read_socket_acl_details(path: &str) -> io::Result<SocketAclDetails> {
         mode_octal,
         is_socket,
     })
+}
+
+fn socket_access_json(diagnosis: &SocketAccessDiagnosis) -> serde_json::Value {
+    json!({
+        "current_uid": diagnosis.current_uid,
+        "current_user": diagnosis.current_user,
+        "active_process_has_socket_group": diagnosis.active_process_has_socket_group,
+        "account_is_in_socket_group": diagnosis.account_is_in_socket_group,
+        "named_user_acl_grants_rw": diagnosis.named_user_acl_grants_rw,
+        "authorization_source": diagnosis.authorization_source,
+        "status": diagnosis.status,
+        "remediation": diagnosis.remediation,
+        "contract_ok": diagnosis.contract_ok,
+        "acl_tooling": {
+            "getfacl_available": diagnosis.getfacl_available,
+            "setfacl_available": diagnosis.setfacl_available,
+        },
+        "acl_parse_error": diagnosis.acl_parse_error,
+    })
+}
+
+fn diagnose_socket_access(
+    socket_exists: bool,
+    socket_path: &str,
+    socket_acl: Option<&SocketAclDetails>,
+    socket_probe_ok: bool,
+    socket_probe_error_kind: Option<io::ErrorKind>,
+) -> Option<SocketAccessDiagnosis> {
+    let current_uid = unsafe { libc::geteuid() } as u32;
+    let current_user = lookup_user_by_uid(current_uid);
+    let getfacl_available = which("getfacl").is_ok();
+    let setfacl_available = which("setfacl").is_ok();
+
+    if !socket_exists {
+        return Some(SocketAccessDiagnosis {
+            current_uid,
+            current_user,
+            active_process_has_socket_group: None,
+            account_is_in_socket_group: None,
+            named_user_acl_grants_rw: None,
+            authorization_source: "denied".to_string(),
+            status: "failed.socket_missing".to_string(),
+            remediation: Some(
+                "provision the Linux world socket so /run/substrate.sock exists".to_string(),
+            ),
+            contract_ok: Some(false),
+            getfacl_available,
+            setfacl_available,
+            acl_parse_error: None,
+        });
+    }
+
+    let socket_acl = socket_acl?;
+    let contract_ok = socket_contract_matches_expected(socket_acl);
+    let active_process_has_socket_group = current_process_has_group(socket_acl.group_gid).ok();
+    let account_is_in_socket_group = current_account_has_group(socket_acl.group_gid)
+        .ok()
+        .flatten();
+    let (named_user_acl_grants_rw, acl_parse_error) = named_user_acl_grants_rw(
+        socket_path,
+        current_uid,
+        current_user.as_deref(),
+        getfacl_available,
+    );
+    let world_access_grants_rw = world_access_grants_rw(socket_acl);
+    let owner_matches = socket_acl.owner_uid == current_uid;
+
+    let authorization_source = if socket_probe_ok {
+        if owner_matches {
+            "owner"
+        } else if active_process_has_socket_group == Some(true) {
+            "active-group"
+        } else if named_user_acl_grants_rw == Some(true) {
+            "named-user-acl"
+        } else if world_access_grants_rw {
+            "other/world"
+        } else {
+            "unknown"
+        }
+    } else {
+        "denied"
+    }
+    .to_string();
+
+    let status = if !contract_ok && !socket_probe_ok {
+        "failed.socket_wrong_owner_group_mode".to_string()
+    } else if socket_probe_ok {
+        if !contract_ok {
+            "degraded.contract_mismatch".to_string()
+        } else {
+            match authorization_source.as_str() {
+                "active-group" => "ok.active_group".to_string(),
+                "named-user-acl" => "ok.named_user_acl".to_string(),
+                "owner" => "ok.owner".to_string(),
+                "other/world" => "ok.other_world".to_string(),
+                _ => "ok".to_string(),
+            }
+        }
+    } else if socket_probe_error_kind == Some(io::ErrorKind::PermissionDenied)
+        && account_is_in_socket_group == Some(true)
+        && active_process_has_socket_group != Some(true)
+        && (!getfacl_available || !setfacl_available)
+    {
+        "degraded.acl_tools_missing".to_string()
+    } else if socket_probe_error_kind == Some(io::ErrorKind::PermissionDenied)
+        && account_is_in_socket_group == Some(true)
+        && active_process_has_socket_group != Some(true)
+        && named_user_acl_grants_rw == Some(false)
+    {
+        "degraded.account_group_member_but_acl_missing".to_string()
+    } else if account_is_in_socket_group == Some(false) {
+        "failed.not_authorized".to_string()
+    } else if socket_probe_error_kind == Some(io::ErrorKind::PermissionDenied) {
+        "failed.permission_denied".to_string()
+    } else {
+        "failed.unreachable".to_string()
+    };
+
+    let remediation = match status.as_str() {
+        "failed.socket_wrong_owner_group_mode" | "degraded.contract_mismatch" => Some(
+            "rerun scripts/linux/world-provision.sh to restore root:substrate 0660 and the socket ACL bridge"
+                .to_string(),
+        ),
+        "degraded.acl_tools_missing" => Some(
+            "install ACL tools on the host or refresh the shell with `exec newgrp substrate`"
+                .to_string(),
+        ),
+        "degraded.account_group_member_but_acl_missing" => Some(
+            "rerun Linux world provisioning to reapply named-user socket ACLs, or refresh the shell with `exec newgrp substrate`"
+                .to_string(),
+        ),
+        "failed.not_authorized" => Some(
+            "add your user to group 'substrate' and reprovision the Linux world socket"
+                .to_string(),
+        ),
+        "failed.permission_denied" => Some(
+            "check the socket ACL and ensure the current shell is authorized via the active substrate group or a named-user ACL"
+                .to_string(),
+        ),
+        "failed.unreachable" => Some(
+            "inspect the world socket and systemd units with `substrate host doctor --json`"
+                .to_string(),
+        ),
+        "failed.socket_missing" => Some(
+            "provision the Linux world socket so /run/substrate.sock exists".to_string(),
+        ),
+        _ => None,
+    };
+
+    Some(SocketAccessDiagnosis {
+        current_uid,
+        current_user,
+        active_process_has_socket_group,
+        account_is_in_socket_group,
+        named_user_acl_grants_rw,
+        authorization_source,
+        status,
+        remediation,
+        contract_ok: Some(contract_ok),
+        getfacl_available,
+        setfacl_available,
+        acl_parse_error,
+    })
+}
+
+fn socket_contract_matches_expected(socket_acl: &SocketAclDetails) -> bool {
+    if socket_acl.owner_uid != 0 || socket_acl.mode_octal != "0660" {
+        return false;
+    }
+    if let Some(expected_gid) = lookup_gid_by_group_name("substrate") {
+        return socket_acl.group_gid == expected_gid;
+    }
+    socket_acl.group_name.as_deref() == Some("substrate")
+}
+
+fn world_access_grants_rw(socket_acl: &SocketAclDetails) -> bool {
+    socket_acl
+        .mode_octal
+        .chars()
+        .last()
+        .and_then(|digit| digit.to_digit(8))
+        .map(|bits| bits & 0o6 == 0o6)
+        .unwrap_or(false)
+}
+
+fn current_process_has_group(target_gid: u32) -> io::Result<bool> {
+    if unsafe { libc::getegid() } as u32 == target_gid {
+        return Ok(true);
+    }
+
+    let count = unsafe { libc::getgroups(0, std::ptr::null_mut()) };
+    if count < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if count == 0 {
+        return Ok(false);
+    }
+
+    let mut groups = vec![0 as libc::gid_t; count as usize];
+    let rc = unsafe { libc::getgroups(count, groups.as_mut_ptr()) };
+    if rc < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(groups.into_iter().any(|gid| gid as u32 == target_gid))
+}
+
+fn current_account_has_group(target_gid: u32) -> io::Result<Option<bool>> {
+    use std::ffi::{CStr, CString};
+    use std::ptr;
+
+    let current_uid = unsafe { libc::geteuid() };
+    let mut pwd: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut result: *mut libc::passwd = ptr::null_mut();
+    let buf_len = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
+    let buf_len = if buf_len <= 0 {
+        16 * 1024
+    } else {
+        buf_len as usize
+    };
+    let mut buf = vec![0u8; buf_len];
+
+    let rc = unsafe {
+        libc::getpwuid_r(
+            current_uid,
+            &mut pwd,
+            buf.as_mut_ptr() as *mut libc::c_char,
+            buf.len(),
+            &mut result,
+        )
+    };
+    if rc != 0 {
+        return Err(io::Error::from_raw_os_error(rc));
+    }
+    if result.is_null() || pwd.pw_name.is_null() {
+        return Ok(None);
+    }
+
+    let user_name = unsafe { CStr::from_ptr(pwd.pw_name) }
+        .to_string_lossy()
+        .into_owned();
+    let primary_gid = pwd.pw_gid;
+    let c_user_name = CString::new(user_name)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "username contained NUL"))?;
+
+    let mut ngroups: libc::c_int = 0;
+    unsafe {
+        libc::getgrouplist(
+            c_user_name.as_ptr(),
+            primary_gid,
+            std::ptr::null_mut(),
+            &mut ngroups,
+        );
+    }
+    if ngroups <= 0 {
+        return Ok(Some(primary_gid as u32 == target_gid));
+    }
+
+    let mut groups = vec![0 as libc::gid_t; ngroups as usize];
+    let rc = unsafe {
+        libc::getgrouplist(
+            c_user_name.as_ptr(),
+            primary_gid,
+            groups.as_mut_ptr(),
+            &mut ngroups,
+        )
+    };
+    if rc == -1 {
+        return Ok(None);
+    }
+
+    groups.truncate(ngroups as usize);
+    Ok(Some(groups.into_iter().any(|gid| gid as u32 == target_gid)))
+}
+
+fn named_user_acl_grants_rw(
+    socket_path: &str,
+    current_uid: u32,
+    current_user: Option<&str>,
+    getfacl_available: bool,
+) -> (Option<bool>, Option<String>) {
+    if !getfacl_available {
+        return (None, None);
+    }
+
+    match read_parsed_socket_acl(socket_path) {
+        Ok(parsed_acl) => {
+            let mut candidates = Vec::new();
+            if let Some(current_user) = current_user {
+                candidates.push(current_user.to_string());
+            }
+            candidates.push(current_uid.to_string());
+
+            for candidate in candidates {
+                if let Some(perms) = parsed_acl.named_users.get(&candidate) {
+                    return (Some(has_read_write_bits(*perms & parsed_acl.mask)), None);
+                }
+            }
+
+            (Some(false), None)
+        }
+        Err(err) => (None, Some(err.to_string())),
+    }
+}
+
+fn read_parsed_socket_acl(path: &str) -> io::Result<ParsedSocketAcl> {
+    let output = Command::new("getfacl").arg("-cp").arg(path).output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let message = if stderr.is_empty() {
+            "getfacl failed".to_string()
+        } else {
+            stderr
+        };
+        return Err(io::Error::other(message));
+    }
+    parse_socket_acl_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn parse_socket_acl_output(output: &str) -> io::Result<ParsedSocketAcl> {
+    let mut named_users = HashMap::new();
+    let mut mask = 0o7u8;
+
+    for raw_line in output.lines() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split(':').collect();
+        match parts.as_slice() {
+            ["user", name, perms] if !name.is_empty() => {
+                named_users.insert((*name).to_string(), parse_permission_bits(perms)?);
+            }
+            ["mask", "", perms] => {
+                mask = parse_permission_bits(perms)?;
+            }
+            ["group", "", perms] => {
+                let _ = parse_permission_bits(perms)?;
+            }
+            ["user", "", perms] | ["other", "", perms] => {
+                let _ = parse_permission_bits(perms)?;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(ParsedSocketAcl { named_users, mask })
+}
+
+fn parse_permission_bits(perms: &str) -> io::Result<u8> {
+    let mut bits = 0u8;
+    let chars: Vec<char> = perms.trim().chars().collect();
+    if chars.len() != 3 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("unexpected ACL permissions: {perms}"),
+        ));
+    }
+    if chars[0] == 'r' {
+        bits |= 0o4;
+    }
+    if chars[1] == 'w' {
+        bits |= 0o2;
+    }
+    if chars[2] == 'x' {
+        bits |= 0o1;
+    }
+    Ok(bits)
+}
+
+fn has_read_write_bits(bits: u8) -> bool {
+    bits & 0o6 == 0o6
 }
 
 fn lookup_user_by_uid(uid: u32) -> Option<String> {
@@ -1020,20 +1505,84 @@ fn lookup_group_by_gid(gid: u32) -> Option<String> {
     }
 }
 
+fn lookup_gid_by_group_name(group_name: &str) -> Option<u32> {
+    use std::ffi::CString;
+    use std::ptr;
+
+    let c_group_name = CString::new(group_name).ok()?;
+    let mut grp: libc::group = unsafe { std::mem::zeroed() };
+    let mut result: *mut libc::group = ptr::null_mut();
+
+    let buf_len = unsafe { libc::sysconf(libc::_SC_GETGR_R_SIZE_MAX) };
+    let buf_len = if buf_len <= 0 {
+        16 * 1024
+    } else {
+        buf_len as usize
+    };
+    let mut buf = vec![0u8; buf_len];
+
+    let rc = unsafe {
+        libc::getgrnam_r(
+            c_group_name.as_ptr(),
+            &mut grp,
+            buf.as_mut_ptr() as *mut libc::c_char,
+            buf.len(),
+            &mut result,
+        )
+    };
+    if rc != 0 || result.is_null() {
+        return None;
+    }
+    Some(grp.gr_gid as u32)
+}
+
 fn permission_denied_help(
     probe_error_kind: Option<io::ErrorKind>,
-    socket_path: &str,
-    socket_acl: Option<&SocketAclDetails>,
+    socket_access: Option<&SocketAccessDiagnosis>,
 ) -> Option<String> {
     if probe_error_kind != Some(io::ErrorKind::PermissionDenied) {
         return None;
     }
 
-    let group = socket_acl
-        .and_then(|acl| acl.group_name.clone())
-        .unwrap_or_else(|| "substrate".to_string());
-
+    let socket_access = socket_access?;
+    let remediation = socket_access.remediation.clone().unwrap_or_else(|| {
+        "check the socket ACL and ensure the current shell is authorized".to_string()
+    });
     Some(format!(
-        "access denied: the socket ACL is the authorization boundary; check `ls -l {socket_path}` and ensure your user is in group '{group}' (re-login required)"
+        "access denied: the socket ACL is the authorization boundary; status={} authorization_source={}; {remediation}",
+        socket_access.status, socket_access.authorization_source
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_socket_acl_output_honors_named_users_and_mask() {
+        let parsed = parse_socket_acl_output(
+            "user::rw-\nuser:spenser:rw-\ngroup::rw-\nmask::r--\nother::---\n",
+        )
+        .unwrap();
+
+        assert_eq!(parsed.mask, 0o4);
+        assert_eq!(parsed.named_users.get("spenser"), Some(&0o6));
+        assert!(!has_read_write_bits(
+            parsed.named_users["spenser"] & parsed.mask
+        ));
+    }
+
+    #[test]
+    fn world_access_detects_world_writable_socket_bits() {
+        let socket_acl = SocketAclDetails {
+            owner_uid: 0,
+            owner_user: Some("root".to_string()),
+            group_gid: 999,
+            group_name: Some("substrate".to_string()),
+            mode_octal: "0666".to_string(),
+            is_socket: true,
+        };
+
+        assert!(world_access_grants_rw(&socket_acl));
+    }
 }

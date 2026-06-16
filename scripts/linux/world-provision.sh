@@ -21,6 +21,9 @@ SOCKET_FS_PATH="/run/substrate.sock"
 INVOKING_USER=""
 INVOKING_HOME=""
 SUBSTRATE_CLI_BIN_PATH=""
+ACL_HELPER_SOURCE_PATH=""
+ACL_HELPER_INSTALL_PATH="/usr/libexec/substrate/substrate-apply-socket-acl"
+ACL_DROPIN_PATH="/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf"
 CODEX_BACKEND_ID="cli:codex"
 CODEX_ACCOUNT_ID_ENV="SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"
 CODEX_ACCESS_TOKEN_ENV="SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN"
@@ -367,7 +370,7 @@ MSG
     fi
     echo "==> Adding ${user} to ${SUBSTRATE_GROUP} (sudo may prompt)"
     if sudo_cmd usermod -aG "${SUBSTRATE_GROUP}" "${user}"; then
-        echo "    Added ${user} to ${SUBSTRATE_GROUP}. Log out/in or run 'newgrp ${SUBSTRATE_GROUP}' to refresh group membership."
+        echo "    Added ${user} to ${SUBSTRATE_GROUP}. Current-shell access should work immediately when the socket ACL bridge is healthy; if host doctor reports degraded ACL state, run 'exec newgrp ${SUBSTRATE_GROUP}' or start a fresh login shell."
     else
         cat <<MSG
 WARNING: Failed to add ${user} to ${SUBSTRATE_GROUP}.
@@ -417,6 +420,58 @@ install_unit() {
     printf '%s\n' "${content}" >"${tmp}"
     sudo_cmd install -Dm0644 "${tmp}" "${destination}"
     rm -f "${tmp}"
+}
+
+active_process_has_group() {
+    local group="$1"
+    local groups
+    groups="$(id -nG 2>/dev/null || true)"
+    [[ " ${groups} " == *" ${group} "* ]]
+}
+
+print_acl_bridge_warning() {
+    cat <<MSG
+WARNING: ACL tooling is unavailable, so immediate first-run access cannot be bridged for stale login sessions.
+Install the host ACL tools, then rerun this provisioner:
+  Debian/Ubuntu: sudo apt install acl
+  Fedora/RHEL:   sudo dnf install acl
+  Arch:          sudo pacman -S acl
+Temporary workaround for the current shell:
+  exec newgrp ${SUBSTRATE_GROUP}
+MSG
+}
+
+verify_socket_acl_bridge() {
+    local user="$1"
+    if [[ -z "${user}" || "${user}" == "root" ]]; then
+        return
+    fi
+    if ! id "${user}" >/dev/null 2>&1; then
+        return
+    fi
+    if ! user_in_group "${user}" "${SUBSTRATE_GROUP}"; then
+        return
+    fi
+    if active_process_has_group "${SUBSTRATE_GROUP}"; then
+        echo "==> Current shell already has active ${SUBSTRATE_GROUP} group membership."
+        return
+    fi
+    if ! command -v getfacl >/dev/null 2>&1; then
+        print_acl_bridge_warning
+        return
+    fi
+
+    local acl_output=""
+    acl_output="$(sudo_cmd getfacl -cp "${SOCKET_FS_PATH}" 2>/dev/null || true)"
+    if grep -Eq "^user:${user}:rw-" <<<"${acl_output}"; then
+        echo "==> Verified named-user ACL bridge for ${user} on ${SOCKET_FS_PATH}."
+    else
+        cat <<MSG
+WARNING: ${user} is authorized in the ${SUBSTRATE_GROUP} account database, but the current shell still lacks an ACL bridge on ${SOCKET_FS_PATH}.
+If access is denied from this session, rerun this provisioner after installing ACL tools or refresh the shell with:
+  exec newgrp ${SUBSTRATE_GROUP}
+MSG
+    fi
 }
 
 usage() {
@@ -487,6 +542,7 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-service"
 GATEWAY_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
 SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate"
+ACL_HELPER_SOURCE_PATH="${REPO_ROOT}/scripts/linux/substrate-apply-socket-acl.sh"
 
 if [[ ${SKIP_BUILD} -eq 0 ]]; then
     echo "==> Building substrate + world-service + substrate-gateway (profile: ${PROFILE})"
@@ -517,6 +573,11 @@ fi
 
 if [[ ${DRY_RUN} -eq 0 && ! -x "${GATEWAY_BIN_PATH}" ]]; then
     echo "substrate-gateway binary not found at ${GATEWAY_BIN_PATH}. Did the build succeed?" >&2
+    exit 1
+fi
+
+if [[ ${DRY_RUN} -eq 0 && ! -f "${ACL_HELPER_SOURCE_PATH}" ]]; then
+    echo "socket ACL helper not found at ${ACL_HELPER_SOURCE_PATH}. Did the repo checkout complete?" >&2
     exit 1
 fi
 
@@ -599,10 +660,17 @@ Service=substrate-world-service.service
 WantedBy=sockets.target
 UNIT
 
+read -r -d '' SOCKET_DROPIN_CONTENT <<'UNIT' || true
+[Socket]
+ExecStartPost=-/usr/libexec/substrate/substrate-apply-socket-acl /run/substrate.sock substrate
+UNIT
+
 echo "==> Installing world-service to /usr/local/bin (sudo will prompt if needed)"
 sudo_cmd install -Dm0755 "${WORLD_AGENT_BIN_PATH}" /usr/local/bin/substrate-world-service
 echo "==> Installing substrate-gateway to /usr/local/bin (no dedicated service)"
 sudo_cmd install -Dm0755 "${GATEWAY_BIN_PATH}" /usr/local/bin/substrate-gateway
+echo "==> Installing socket ACL helper to ${ACL_HELPER_INSTALL_PATH}"
+sudo_cmd install -Dm0755 "${ACL_HELPER_SOURCE_PATH}" "${ACL_HELPER_INSTALL_PATH}"
 
 echo "==> Ensuring runtime directories exist"
 sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
@@ -612,6 +680,7 @@ sudo_cmd install -d -m0755 "${SUBSTRATE_HOME_RW_PATH}"
 echo "==> Writing systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
 install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"
 install_unit "${SOCKET_PATH}" "${SOCKET_UNIT_CONTENT}"
+install_unit "${ACL_DROPIN_PATH}" "${SOCKET_DROPIN_CONTENT}"
 
 echo "==> Reloading systemd and enabling socket activation"
 LEGACY_WORLD_UNIT_PREFIX="substrate-world"
@@ -636,10 +705,18 @@ sudo_cmd systemctl stop substrate-world-service.socket
 sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
 sudo_cmd rm -f "${SOCKET_FS_PATH}"
 sudo_cmd systemctl start substrate-world-service.socket
+sudo_cmd "${ACL_HELPER_INSTALL_PATH}" "${SOCKET_FS_PATH}" "${SUBSTRATE_GROUP}" || true
 sudo_cmd systemctl start substrate-world-service.service
 
 echo "==> ${SOCKET_FS_PATH} listing (should be root:${SUBSTRATE_GROUP} 0660)"
 sudo_cmd ls -l "${SOCKET_FS_PATH}"
+if command -v getfacl >/dev/null 2>&1; then
+    echo "==> ${SOCKET_FS_PATH} ACL"
+    sudo_cmd getfacl -cp "${SOCKET_FS_PATH}" || true
+else
+    print_acl_bridge_warning
+fi
+verify_socket_acl_bridge "${INVOKING_USER}"
 echo "==> Installed gateway binary"
 sudo_cmd ls -l /usr/local/bin/substrate-gateway
 
@@ -662,6 +739,7 @@ print_linger_guidance "${INVOKING_USER}"
 
 echo "==> Provisioning complete"
 echo "    Verify socket with: sudo ls -l ${SOCKET_FS_PATH}"
+echo "    Verify socket ACL: sudo getfacl -cp ${SOCKET_FS_PATH}"
 echo "    Probe capabilities: sudo curl --unix-socket ${SOCKET_FS_PATH} http://localhost/v1/capabilities"
 echo "    Verify gateway lifecycle: $(basename "${substrate_cli:-substrate}") world gateway status --json"
 echo "    Doctor socket block: substrate host doctor --json | jq '.host.world_socket'"
