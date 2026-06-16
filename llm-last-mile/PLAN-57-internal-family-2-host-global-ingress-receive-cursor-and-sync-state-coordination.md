@@ -8,6 +8,19 @@ Plan type: first post-`51` host-global ingress lifecycle-coordination slice
 Phase: `PLAN`  
 Status: proposed on `2026-06-12`
 
+## Post-Slice-60 Refresh Gate (Unmissable)
+
+If Slice `58`, Slice `59`, and Slice `60` land before Slice `57` implementation begins, refresh this Slice `57` plan against live repo truth before executing any packet.
+
+Required refresh after Slice `60` lands:
+
+1. rewrite any stale sequencing language that still presents Slice `57` as the immediate next seam after Slice `56`,
+2. re-check coexistence expectations against the live `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/orchestrator_world_dispatch.rs` because Slice `59` may have changed that seam,
+3. confirm that Slice `57` remains semantically orthogonal to the placement/runtime/compatibility work from Slice `58`/`59`/`60`,
+4. then proceed only if the needed update is limited to sequencing-language refresh plus coexistence-check refresh rather than a true scope rewrite.
+
+Until that refresh is done, do **not** treat this June 2026 plan text as implementation-ready.
+
 ## Objective
 
 Land the next bounded Family-2 seam by introducing source-scoped host-global ingress coordination above the already-landed `host_inbox` layer, so upstream ingress can be durably applied exactly once into canonical local host-inbox state before the existing materialization and router passes consume it.

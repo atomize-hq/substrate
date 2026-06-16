@@ -7,6 +7,21 @@ Phase: `TASKS`
 Execution model: four sequential `/incremental-implementation` sessions  
 Status: proposed on `2026-06-12`
 
+## Post-Slice-60 Refresh Gate (Unmissable)
+
+If Slice `58`, Slice `59`, and Slice `60` land before any Slice `57` packet starts, pause and refresh the Slice `57` spec/plan/tasks set first.
+
+That refresh must happen after Slice `60` lands and before Packet 1 begins.
+
+Minimum refresh checklist:
+
+1. remove or rewrite stale sequencing language that still says Slice `57` is the immediate next slice after Slice `56`,
+2. re-read the live `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/orchestrator_world_dispatch.rs` seam because Slice `59` may have changed coexistence expectations there,
+3. reconfirm that Slice `57` still only needs bounded ingress-coordination work and does not require selector/runtime/compatibility scope from Slice `58`/`59`/`60`,
+4. only then begin Packet 1.
+
+Do **not** start implementation from this task list unchanged if Slice `60` has already landed.
+
 ## Phase Gate
 
 These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `57` have been reviewed and accepted as the bounded source of truth before implementation begins.

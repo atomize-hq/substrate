@@ -14,6 +14,21 @@ Related design stack:
 Phase: `SPECIFY`  
 Status: proposed next slice on `2026-06-12`
 
+## Post-Slice-60 Refresh Gate (Unmissable)
+
+If Slice `58`, Slice `59`, and Slice `60` land before Slice `57` implementation starts, this Slice `57` doc set must be refreshed against live repo truth **before implementation**.
+
+That refresh is required even though Slice `57` remains a different seam.
+
+Minimum required refresh after Slice `60` lands:
+
+1. update sequencing language that still frames Slice `57` as the immediate next slice after Slice `56`,
+2. re-read the live `orchestrator_world_dispatch.rs` seam because Slice `59` may have changed world-dispatch/runtime-truth behavior there,
+3. re-run the coexistence check that Slice `57` still only layers bounded ingress coordination above `host_inbox` and does not accidentally inherit runtime/selector assumptions from Slice `58`/`59`/`60`,
+4. then explicitly confirm that Slice `57` still needs no scope change beyond wording/coexistence refresh.
+
+Do **not** treat the existing June 2026 sequencing language in this doc as implementation-ready truth if Slice `60` has already landed.
+
 ## Assumptions
 
 ASSUMPTIONS I'M MAKING:
