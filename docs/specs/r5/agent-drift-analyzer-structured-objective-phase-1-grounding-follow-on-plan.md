@@ -217,6 +217,7 @@ Manual review of the reconciled docs set.
 ```text
 docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
 docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md
 docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md
 ```
 
