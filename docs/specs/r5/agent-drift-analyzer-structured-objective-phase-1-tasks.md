@@ -51,7 +51,8 @@ rather than deleting the original packet structure.
     `structured: Option<StructuredObjective>`, `verification_commands`, and `evidence`, while all
     current callers still compile and no consumer assumes the sidecar is always present. This
     acceptance is about additive exposure only; semantic `comparison_key` derivation remains open
-    under SO-3.2.
+    under SO-3.2, and the current key is still only a provisional display-text mirror rather than
+    the approved semantic bridge for downstream migration.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
@@ -100,7 +101,8 @@ landed here.
 
 Remaining work note: this section is still open. The live implementation exposes structured state,
 but `comparison_key` still mirrors display text and compatibility text is not yet rendered from the
-structured frame as the semantic authority.
+structured frame as the semantic authority. Treat the current key as a stopgap only; no downstream
+migration may anchor on it until SO-3.2 lands.
 
 - [ ] Task SO-3.1: Render compatibility text from structured state when safe.
   - Acceptance: `ObjectiveSummary.text` becomes a compatibility view over structured state when the
@@ -225,7 +227,8 @@ still missing.
 - [ ] Task SO-X.2: Migrate downstream consumers (`working_set`, `checkpoint/mod.rs`,
       `checkpoint/progress.rs`) only after TaskFrame coexistence lands.
   - Acceptance: a later approved follow-on preserves sidecar presence guards and does not re-create
-    raw-string truth under a new name.
+    raw-string truth under a new name. That migration must remain blocked while the current
+    `comparison_key` still mirrors display text instead of the approved derived semantic key.
   - Verify: to be defined only when the follow-on is approved.
   - Files:
     - `crates/agent-drift-analyzer/src/context/working_set.rs`

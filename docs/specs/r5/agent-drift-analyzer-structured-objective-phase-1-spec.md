@@ -77,6 +77,10 @@ Compatibility rules:
 - the display string is rendered *from* structured state when safe, not treated as semantic
   authority that the sidecar merely decorates.
 
+Current SO-G4 guardrail: the live `comparison_key` is still provisional while it mirrors display
+text. Until SO-3.2 lands and derives the key from structured state, no downstream migration may
+treat the current value as the approved semantic bridge.
+
 ## Tech Stack
 
 - Language: Rust 2021
@@ -248,6 +252,8 @@ Phase 1 uses four validation layers.
 - **Never do:**
   - make classifier or LLM output the semantic authority in Phase 1
   - let compatibility text remain the hidden truth source for new logic
+  - treat the provisional `comparison_key` stopgap as downstream-ready while it still mirrors the
+    display string
   - populate structured fields without supporting evidence
   - treat checklist or boilerplate text as the goal when a broader mission span exists
   - remove the legacy display string before downstream migration is complete

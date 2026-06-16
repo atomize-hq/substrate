@@ -50,7 +50,8 @@ It is a new architecture-valid seam with a different proof wall:
 3. **Keep acceptance close to the design.** The objective-acceptance suite should be committed and
    reviewable, not left as an aspirational future TODO.
 4. **Preserve compatibility honestly.** The legacy string remains available, but new correctness
-   claims should route through structured state plus `comparison_key`.
+   claims should route through structured state plus a derived `comparison_key`. Until SO-3.2
+   lands, the live key remains provisional because it still mirrors display text.
 5. **Defer risky downstream edits.** `working_set`, `checkpoint/mod.rs`, and `checkpoint/progress.rs`
    should stay untouched in Phase 1 unless a later approved follow-on explicitly promotes them.
 
@@ -170,7 +171,8 @@ cargo test -p agent-drift-analyzer -- --nocapture
 This packet family is still open. The live crate exposes `comparison_key`, but the current
 implementation still mirrors display text instead of deriving a stable semantic key from the
 structured frame, and compatibility text is still selected directly from decomposition rather than
-rendered from structured state as the semantic authority.
+rendered from structured state as the semantic authority. Treat the live key as a provisional
+stopgap only; downstream migration must not anchor on it until the dedicated derivation work lands.
 
 ### Scope
 
@@ -331,4 +333,6 @@ These are intentionally out of scope for this plan unless a later approval promo
 2. `context/working_set.rs` path attribution migration
 3. `checkpoint/mod.rs` typed closeout/review/no-code predicates
 4. `checkpoint/progress.rs` comparability migration away from raw objective strings
+   - do not start this migration while `comparison_key` still mirrors display text; wait for the
+     approved SO-3.2 derivation first
 5. any classifier experiment, training pipeline, or model dependency
