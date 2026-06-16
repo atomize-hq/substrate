@@ -9,9 +9,7 @@ use agent_drift_analyzer::{
     ObjectiveTargetKind, ProgressDimension, ProgressSignalCode, ProgressStatus,
     SessionArchetypeLabel,
 };
-use agent_session_compactor::{
-    CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
-};
+use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
 use serde_json::Value;
 use support::{analyze_sample_bundle, load_sample_bundle, BundleFixture};
@@ -4280,6 +4278,108 @@ fn checkpoints_context_objective_prefers_scope_section_over_subordinate_checklis
 }
 
 #[test]
+fn checkpoints_context_objective_uses_specific_section_labels_over_generic_mission_words() {
+    let goal = "Ensure the structured objective sidecar keeps the mission separate from subordinate sections.";
+    let prompt = format!(
+        r#"## What I need
+{goal}
+
+## Task constraints
+- Do not change downstream progress consumers.
+
+## Verification task
+- npm run lint
+
+## Output request
+- Return with changed files and residual risk.
+
+## Implementation steps
+- Inspect objective.rs first."#,
+    );
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"echo objective-section-classification","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(objective.text, goal);
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && matches!(span.section_kind, ObjectiveSectionKind::Mission)
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Constraint
+            && matches!(span.section_kind, ObjectiveSectionKind::Constraints)
+    }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Verification
+            && matches!(span.section_kind, ObjectiveSectionKind::Verification)
+    }));
+    assert_eq!(objective.verification_commands, vec!["npm run lint"]);
+}
+
+#[test]
+fn checkpoints_context_objective_extracts_non_cargo_verification_commands() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "## Scope\nValidate the JS objective verifier command extraction.\n\n## Verification\n- npm run lint\n- pnpm test\n- npx vitest",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"echo objective-verifier-extraction","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(
+        objective.verification_commands,
+        vec!["npm run lint", "pnpm test", "npx vitest"]
+    );
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert_eq!(
+        structured.verification_commands,
+        vec!["npm run lint", "pnpm test", "npx vitest"]
+    );
+}
+
+#[test]
+fn checkpoints_context_objective_leaves_vague_targets_unknown() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", "Look at the stuff above and make it better."),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"echo vague-objective","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let structured = result.sessions[0]
+        .context
+        .objective
+        .structured
+        .as_ref()
+        .expect("structured objective");
+    assert!(structured.target.is_none());
+    assert!(structured
+        .unknowns
+        .iter()
+        .any(|unknown| unknown.field_name == "target"));
+}
+
+#[test]
 fn checkpoints_context_objective_keeps_explicit_tooling_target_inside_mixed_prompt_scaffolding() {
     let concrete_ask =
         "Determine whether the Codex desktop context, plugin instructions, and Apps (Connectors) scaffold should change, and explain only that tooling boilerplate decision.";
@@ -5115,22 +5215,7 @@ fn checkpoints_mark_closeout_scope_narrowing_as_advancing() {
 }
 
 fn analyze_custom_rows(rows: Vec<CompactionRow>) -> AnalyzeResult {
-    let tool_rows = rows
-        .iter()
-        .filter(|row| row.kind == CompactionKind::ToolCall)
-        .take(2)
-        .collect::<Vec<_>>();
-    let dedupe_groups = if tool_rows.len() == 2 {
-        vec![DedupeGroup {
-            kind: CompactionKind::ToolCall,
-            canonical_text_hash_hex: "test-dedupe".to_string(),
-            representative: RowRef::from_row(tool_rows[0]),
-            duplicates: vec![RowRef::from_row(tool_rows[1])],
-        }]
-    } else {
-        Vec::new()
-    };
-    let fixture = BundleFixture::from_rows(rows.clone(), rows, dedupe_groups);
+    let fixture = BundleFixture::from_compact_rows(rows);
     agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
         input_dir: fixture.input_dir.clone(),
         output_dir: fixture.output_dir.clone(),

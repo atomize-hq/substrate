@@ -83,6 +83,11 @@ impl BundleFixture {
         )
     }
 
+    pub fn from_compact_rows(compact_rows: Vec<CompactionRow>) -> Self {
+        let (archival_rows, dedupe_groups) = synthesize_contract_valid_repetition(&compact_rows);
+        Self::from_rows(archival_rows, compact_rows, dedupe_groups)
+    }
+
     pub fn from_rows(
         archival_rows: Vec<CompactionRow>,
         compact_rows: Vec<CompactionRow>,
@@ -400,6 +405,61 @@ fn export_row_ref(row_ref: &RowRef, registry: &TestFileRegistry) -> RowRefV0_2 {
         event_index: row_ref.event_index,
         row_ordinal: row_ref.row_ordinal,
     }
+}
+
+fn synthesize_contract_valid_repetition(
+    compact_rows: &[CompactionRow],
+) -> (Vec<CompactionRow>, Vec<DedupeGroup>) {
+    let mut archival_rows = compact_rows.to_vec();
+    let Some(representative_seed) = compact_rows
+        .iter()
+        .find(|row| row.kind == CompactionKind::ToolCall)
+        .or_else(|| compact_rows.last())
+    else {
+        return (archival_rows, Vec::new());
+    };
+
+    let max_event_index = compact_rows
+        .iter()
+        .map(|row| row.event_index)
+        .max()
+        .unwrap_or(0);
+    let max_line_number = compact_rows
+        .iter()
+        .map(|row| row.line_number)
+        .max()
+        .unwrap_or(0);
+    let representative = synthetic_archival_repeat_row(
+        representative_seed,
+        max_event_index + 1,
+        max_line_number + 1,
+    );
+    let duplicate = synthetic_archival_repeat_row(
+        representative_seed,
+        max_event_index + 2,
+        max_line_number + 2,
+    );
+    let dedupe_groups = vec![DedupeGroup {
+        kind: representative.kind,
+        canonical_text_hash_hex: format!("synthetic-{}", representative.text_hash_hex),
+        representative: RowRef::from_row(&representative),
+        duplicates: vec![RowRef::from_row(&duplicate)],
+    }];
+    archival_rows.push(representative);
+    archival_rows.push(duplicate);
+    (archival_rows, dedupe_groups)
+}
+
+fn synthetic_archival_repeat_row(
+    seed: &CompactionRow,
+    event_index: usize,
+    line_number: usize,
+) -> CompactionRow {
+    let mut row = seed.clone();
+    row.event_index = event_index;
+    row.line_number = line_number;
+    row.row_ordinal = 0;
+    row
 }
 
 fn sample_archival_rows() -> Vec<CompactionRow> {
