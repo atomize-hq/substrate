@@ -1,0 +1,147 @@
+# Tasks: Agent Drift Analyzer Structured Objective Phase 1 Grounding Follow-On
+
+Status: draft task ledger created on 2026-06-16 after validating the live structured-objective
+crate state and the narrow harness-fix landing. Keep each implementation task focused enough to
+stay close to five touched files or fewer, and do not treat this ledger as approval to widen into
+downstream migration.
+
+## SO-G0: Docs Lock
+
+- [x] Task SO-G0.1: Add the grounding follow-on SPEC.
+  - Acceptance:
+    `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-spec.md`
+    exists and captures assumptions, objective, commands, project structure, code style, testing
+    strategy, boundaries, success criteria, and open questions for the bounded follow-on seam.
+  - Verify: Manual review against the architecture, evaluation, migration, and existing phase-1 docs.
+  - Files:
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-spec.md`
+
+- [x] Task SO-G0.2: Add the grounding follow-on PLAN and TASKS.
+  - Acceptance: the follow-on plan and task ledger exist, keep the harness fix intact, and bound
+    the next code seam to additive grounding restoration plus docs reconciliation.
+  - Verify: Manual review against the live crate state and this follow-on spec.
+  - Files:
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md`
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md`
+
+## SO-G1: Restore Additive Grounding Identifiers
+
+- [ ] Task SO-G1.1: Add optional `section_index` / `clause_index` back to `ObjectiveEvidenceSpan`.
+  - Acceptance: `ObjectiveEvidenceSpan` again exposes additive optional section/clause identifiers
+    with serde defaults, and older artifacts remain loadable without requiring the new fields.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+
+- [ ] Task SO-G1.2: Populate section/clause identifiers from the live decomposition path.
+  - Acceptance: the clause-backed evidence path emits `section_index` / `clause_index` for goal,
+    constraint, verification, and context spans when that information exists, while `start_char` /
+    `end_char` remain optional and may stay `None`.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+## SO-G2: Focused Grounding And Heading Regressions
+
+- [ ] Task SO-G2.1: Add focused regressions proving section/clause identifiers are populated.
+  - Acceptance: checkpoint tests assert that at least goal and verification evidence spans carry
+    populated `section_index` / `clause_index` values when clause-backed evidence exists.
+  - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+- [ ] Task SO-G2.2: Add the duplicate-ish grounding ambiguity control.
+  - Acceptance: a control case with similar scope/checklist wording proves the supporting span comes
+    from the correct section/clause rather than only matching excerpt text.
+  - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+- [ ] Task SO-G2.3: Add adversarial heading-classification controls.
+  - Acceptance: focused regressions show `Task constraints`, `Verification task`, `Output request`,
+    `Questions to ask`, and `Implementation steps` do not collapse into generic mission matching,
+    while `What I need` still resolves as a mission-like heading when it contains the real goal.
+  - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+## SO-G3: Reconcile Existing Phase-1 Docs To Landed Reality
+
+- [ ] Task SO-G3.1: Update the phase-1 task ledger so landed work is not still presented as open.
+  - Acceptance: the existing phase-1 tasks doc explicitly distinguishes landed schema bridge,
+    sidecar exposure, section/clause decomposition, and preliminary structured assembly from the
+    remaining grounding hardening, acceptance-harness, and comparison-key work.
+  - Verify: Manual review against the live crate state and `git diff --stat`.
+  - Files:
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
+
+- [ ] Task SO-G3.2: Reconcile the phase-1 plan with the real next seams.
+  - Acceptance: the existing phase-1 plan no longer implies that the entire sidecar stack is still
+    hypothetical, and it names the real remaining seams: grounding restoration, comparison-key
+    derivation, acceptance harness, and deferred downstream migration.
+  - Verify: Manual review against the architecture and migration authorities.
+  - Files:
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
+
+## SO-G4: Lock The Comparison-Key Guardrail
+
+- [ ] Task SO-G4.1: Record that current `comparison_key` is provisional and not the approved
+      semantic bridge.
+  - Acceptance: the docs explicitly state that current `comparison_key` still mirrors display text
+    and must not become the basis for downstream migration until the dedicated derivation packet
+    lands.
+  - Verify: Manual review of the phase-1 spec/plan/tasks plus this follow-on family.
+  - Files:
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md`
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
+
+## SO-G5: Prepare The Objective-Acceptance Harness Seam
+
+- [ ] Task SO-G5.1: Make the objective-acceptance harness the explicit next packet after grounding.
+  - Acceptance: the reconciled docs sequence the next acceptance packet after grounding restoration
+    and require it to validate structured fields, role spans, grounding refs, forbidden promotions,
+    compatibility rendering, and unknown-field correctness.
+  - Verify: Manual review of the updated docs set.
+  - Files:
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
+    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md`
+
+## SO-G6: Validation And Closeout
+
+- [ ] Task SO-G6.1: Run the focused checkpoint wall and the full analyzer wall on the grounding patch.
+  - Acceptance: the additive grounding restoration lands with both the focused checkpoint suite and
+    the full analyzer test wall green.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Files:
+    - no source changes required unless validation exposes a packet-scoped defect
+
+## Deferred / Ask-First
+
+- [ ] Task SO-GX.1: Implement real `start_char` / `end_char` offsets only after the section/clause
+      identifiers are restored and the future packet scope is approved.
+  - Acceptance: a later approved follow-on defines the localization contract and keeps the patch
+    distinct from this additive grounding restoration.
+  - Verify: to be defined only when the follow-on is approved.
+  - Files:
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+    - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
+
+- [ ] Task SO-GX.2: Migrate downstream consumers to `comparison_key` or richer structured state only
+      after the dedicated derivation packet lands.
+  - Acceptance: a later approved follow-on proves that internal comparison no longer depends on the
+    pretty display string and that downstream migration stays additive.
+  - Verify: to be defined only when the follow-on is approved.
+  - Files:
+    - `crates/agent-drift-analyzer/src/context/working_set.rs`
+    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+    - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
