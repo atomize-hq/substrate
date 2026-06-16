@@ -172,8 +172,7 @@ impl PromptFulfillmentBridge {
             .mirror_stdout(false)
             .quiet(true)
             .color_mode(codex::ColorMode::Never)
-            .approval_policy(codex::ApprovalPolicy::Never)
-            .sandbox_mode(codex::SandboxMode::WorkspaceWrite)
+            .dangerously_bypass_approvals_and_sandbox(true)
             .binary(self.binary_path.clone());
         if let Some(working_dir) = current_working_dir()? {
             builder = builder.working_dir(working_dir);
