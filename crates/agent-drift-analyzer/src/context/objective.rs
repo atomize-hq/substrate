@@ -794,7 +794,17 @@ fn role_candidates_for_clause(
         ObjectiveSectionKind::UnknownSection => {}
     }
 
-    if lowered.starts_with("/goal ") || looks_like_goal_text(&lowered) {
+    if !matches!(
+        section_kind,
+        ObjectiveSectionKind::Checklist
+            | ObjectiveSectionKind::Verification
+            | ObjectiveSectionKind::Constraints
+            | ObjectiveSectionKind::Deliverables
+            | ObjectiveSectionKind::Context
+            | ObjectiveSectionKind::ToolingInstructions
+            | ObjectiveSectionKind::Boilerplate
+    ) && (lowered.starts_with("/goal ") || looks_like_goal_text(&lowered))
+    {
         push_role_candidate(
             &mut candidates,
             ObjectiveRole::Goal,

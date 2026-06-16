@@ -4335,6 +4335,115 @@ fn checkpoints_context_objective_uses_specific_section_labels_over_generic_missi
 }
 
 #[test]
+fn checkpoints_context_objective_keeps_duplicate_scope_wording_grounded_to_scope_clause() {
+    let shared_clause =
+        "Review crates/agent-drift-analyzer/src/context/objective.rs before editing.";
+    let prompt = format!(
+        r#"## Checklist
+- {shared_clause}
+- Inspect the nearby checkpoint regressions.
+
+## Scope
+{shared_clause}
+
+## Verification
+- cargo test -p agent-drift-analyzer checkpoints -- --nocapture"#,
+    );
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,260p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    assert_eq!(prompt.matches(shared_clause).count(), 2);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(objective.text, shared_clause);
+    let structured = objective.structured.as_ref().expect("structured objective");
+    let goal_evidence = structured
+        .target
+        .as_ref()
+        .expect("grounded target")
+        .evidence
+        .first()
+        .expect("goal evidence");
+    assert_eq!(goal_evidence.role, ObjectiveRole::Goal);
+    assert_eq!(goal_evidence.section_kind, ObjectiveSectionKind::Scope);
+    assert!(goal_evidence.section_index.is_some());
+    assert!(goal_evidence.clause_index.is_some());
+    assert!(!structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && span.excerpt == shared_clause
+            && matches!(span.section_kind, ObjectiveSectionKind::Checklist)
+    }));
+}
+
+#[test]
+fn checkpoints_context_objective_treats_questions_to_ask_as_non_mission_scaffolding() {
+    let goal = "Ensure the structured objective sidecar keeps the mission separate from nearby question scaffolding.";
+    let prompt = format!(
+        r#"## What I need
+{goal}
+
+## Questions to ask
+- Which packet follows SO-G2?
+- Which docs already describe the acceptance harness?
+
+## Task constraints
+- Do not widen into downstream progress migration.
+
+## Verification task
+- cargo test -p agent-drift-analyzer checkpoints -- --nocapture
+
+## Output request
+- Return with changed files and residual risk.
+
+## Implementation steps
+- Inspect checkpoints.rs first."#,
+    );
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"echo objective-question-heading-control","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(objective.text, goal);
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && matches!(span.section_kind, ObjectiveSectionKind::Mission)
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Constraint
+            && matches!(span.section_kind, ObjectiveSectionKind::Constraints)
+    }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Verification
+            && matches!(span.section_kind, ObjectiveSectionKind::Verification)
+    }));
+    assert!(!structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal && span.excerpt.contains("Which packet follows SO-G2?")
+    }));
+    assert!(!structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && span
+                .excerpt
+                .contains("Which docs already describe the acceptance harness?")
+    }));
+}
+
+#[test]
 fn checkpoints_context_objective_extracts_non_cargo_verification_commands() {
     let result = analyze_custom_rows(vec![
         prompt_row(
