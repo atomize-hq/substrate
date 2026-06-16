@@ -4264,12 +4264,16 @@ fn checkpoints_context_objective_prefers_scope_section_over_subordinate_checklis
         span.role == ObjectiveRole::Goal
             && matches!(span.section_kind, ObjectiveSectionKind::Scope)
             && span.excerpt.contains(scope)
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
     }));
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Verification
             && span
                 .excerpt
                 .contains("cargo test -p agent-drift-analyzer checkpoints")
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
     }));
     assert_eq!(
         objective.verification_commands,
@@ -4312,14 +4316,20 @@ fn checkpoints_context_objective_uses_specific_section_labels_over_generic_missi
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Goal
             && matches!(span.section_kind, ObjectiveSectionKind::Mission)
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
     }));
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Constraint
             && matches!(span.section_kind, ObjectiveSectionKind::Constraints)
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
     }));
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Verification
             && matches!(span.section_kind, ObjectiveSectionKind::Verification)
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
     }));
     assert_eq!(objective.verification_commands, vec!["npm run lint"]);
 }

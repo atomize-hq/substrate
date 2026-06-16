@@ -167,6 +167,7 @@ struct ObjectiveClause {
     row_ref: RowRef,
     source_kind: ObjectiveSourceKind,
     section_index: usize,
+    clause_index: usize,
     section_kind: ObjectiveSectionKind,
     text: String,
     role_candidates: Vec<RoleCandidate>,
@@ -652,11 +653,13 @@ fn split_section_into_clauses(section: &DecomposedObjectiveSection) -> Vec<Objec
                 continue;
             }
             let role_candidates = role_candidates_for_clause(section.kind, &text);
+            let clause_index = clauses.len();
             clauses.push(ObjectiveClause {
                 candidate_index: section.candidate_index,
                 row_ref: section.row_ref.clone(),
                 source_kind: section.source_kind,
                 section_index: section.index,
+                clause_index,
                 section_kind: section.kind,
                 text,
                 role_candidates,
@@ -671,6 +674,7 @@ fn split_section_into_clauses(section: &DecomposedObjectiveSection) -> Vec<Objec
             row_ref: section.row_ref.clone(),
             source_kind: section.source_kind,
             section_index: section.index,
+            clause_index: 0,
             section_kind: section.kind,
             text: text.clone(),
             role_candidates: role_candidates_for_clause(section.kind, &text),
@@ -1055,6 +1059,8 @@ fn evidence_span_for_clause(clause: &ObjectiveClause) -> ObjectiveEvidenceSpan {
         section_kind: clause.section_kind,
         role: role.role,
         excerpt: clause.text.clone(),
+        section_index: Some(clause.section_index),
+        clause_index: Some(clause.clause_index),
         start_char: None,
         end_char: None,
         confidence: role.confidence,
@@ -1779,6 +1785,8 @@ mod tests {
         assert!(structured.evidence_spans.iter().any(|span| {
             span.role == ObjectiveRole::Goal
                 && matches!(span.section_kind, ObjectiveSectionKind::Mission)
+                && span.section_index == Some(0)
+                && span.clause_index == Some(0)
         }));
         assert!(!summary.text.contains("Run this task on a linux machine"));
     }
@@ -1800,6 +1808,8 @@ mod tests {
         assert!(structured.evidence_spans.iter().any(|span| {
             span.role == ObjectiveRole::Verification
                 && span.excerpt.contains("cargo test -p agent-drift-analyzer")
+                && span.section_index == Some(1)
+                && span.clause_index == Some(0)
         }));
         assert!(!structured
             .target
