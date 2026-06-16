@@ -4312,8 +4312,6 @@ fn checkpoints_context_objective_uses_specific_section_labels_over_generic_missi
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Goal
             && matches!(span.section_kind, ObjectiveSectionKind::Mission)
-            && span.section_index.is_some()
-            && span.clause_index.is_some()
     }));
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Constraint

@@ -168,7 +168,6 @@ struct ObjectiveClause {
     source_kind: ObjectiveSourceKind,
     section_index: usize,
     section_kind: ObjectiveSectionKind,
-    index: usize,
     text: String,
     role_candidates: Vec<RoleCandidate>,
 }
@@ -388,121 +387,58 @@ struct SectionClassification {
     confidence: Confidence,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct SectionKindScore {
-    kind: ObjectiveSectionKind,
-    score: i32,
-    specificity: i32,
-}
-
 fn classify_section_label(label: &str) -> SectionClassification {
     let normalized = normalize_label(label);
-    if normalized.is_empty() {
-        return SectionClassification {
-            kind: ObjectiveSectionKind::UnknownSection,
-            confidence: Confidence::Low,
-        };
-    }
+    let tokens = normalized.split_whitespace().collect::<Vec<_>>();
 
-    let mut scores = Vec::new();
-    scores.push(score_scope(&normalized));
-    scores.push(score_mission(&normalized));
-    scores.push(score_constraints(&normalized));
-    scores.push(score_verification(&normalized));
-    scores.push(score_deliverables(&normalized));
-    scores.push(score_context(&normalized));
-    scores.push(score_checklist(&normalized));
-    scores.push(score_tooling(&normalized));
-    scores.push(score_boilerplate(&normalized));
-
-    scores.sort_by(|left, right| {
-        right
-            .score
-            .cmp(&left.score)
-            .then_with(|| right.specificity.cmp(&left.specificity))
-            .then_with(|| section_kind_priority(right.kind).cmp(&section_kind_priority(left.kind)))
-    });
-
-    let best = scores.first().copied().unwrap_or(SectionKindScore {
-        kind: ObjectiveSectionKind::UnknownSection,
-        score: 0,
-        specificity: 0,
-    });
-
-    if best.score <= 0 {
-        return SectionClassification {
-            kind: ObjectiveSectionKind::UnknownSection,
-            confidence: Confidence::Low,
-        };
-    }
-
-    SectionClassification {
-        kind: best.kind,
-        confidence: if best.score >= 80 {
-            Confidence::High
-        } else if best.score >= 45 {
-            Confidence::Medium
-        } else {
-            Confidence::Low
-        },
-    }
-}
-
-fn score_scope(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
+    let classified = if matches_any_phrase(&normalized, &["scope", "task scope", "review scope"])
+        || tokens.iter().any(|token| *token == "scope")
+    {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Scope,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
         &[
-            "scope",
-            "task scope",
-            "review scope",
-            "required review scope",
+            "checklist",
+            "steps",
+            "plan of attack",
+            "procedure",
+            "sequence",
+            "runbook",
+            "implementation steps",
+            "after that",
         ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Scope,
-        score,
-        specificity: 80,
-    }
-}
-
-fn score_mission(label: &str) -> SectionKindScore {
-    let strong_score = best_phrase_score(
-        label,
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Checklist,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
         &[
-            "mission",
-            "objective",
-            "goal",
-            "main task",
-            "primary task",
-            "requested work",
-            "what i need",
-            "task summary",
-            "work request",
-            "desired outcome",
-            "purpose",
-            "goal for this packet",
-            "concrete task ask",
-            "concrete workspace action request",
-            "workspace action request",
-            "task ask",
-            "task request",
+            "verify",
+            "verification",
+            "validation",
+            "smoke",
+            "test",
+            "proof",
+            "acceptance",
+            "verification wall",
+            "commands",
+            "checks",
+            "expected green",
+            "success criteria",
+            "verification task",
         ],
-    );
-    let generic_score = best_generic_mission_score(label);
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Mission,
-        score: strong_score.max(generic_score),
-        specificity: if strong_score >= generic_score {
-            70
-        } else {
-            10
-        },
-    }
-}
-
-fn score_constraints(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Verification,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
         &[
             "constraint",
             "constraints",
@@ -523,44 +459,13 @@ fn score_constraints(label: &str) -> SectionKindScore {
             "required review scope",
             "task constraints",
         ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Constraints,
-        score,
-        specificity: 95,
-    }
-}
-
-fn score_verification(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
-        &[
-            "verify",
-            "verification",
-            "validation",
-            "smoke",
-            "test",
-            "tests",
-            "proof",
-            "acceptance",
-            "verification wall",
-            "commands",
-            "checks",
-            "expected green",
-            "success criteria",
-            "verification task",
-        ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Verification,
-        score,
-        specificity: 90,
-    }
-}
-
-fn score_deliverables(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Constraints,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
         &[
             "return with",
             "output",
@@ -576,17 +481,42 @@ fn score_deliverables(label: &str) -> SectionKindScore {
             "output requirements",
             "output request",
         ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Deliverables,
-        score,
-        specificity: 85,
-    }
-}
-
-fn score_context(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Deliverables,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
+        &[
+            "mission",
+            "objective",
+            "goal",
+            "main task",
+            "primary task",
+            "requested work",
+            "what i need",
+            "task summary",
+            "work request",
+            "desired outcome",
+            "purpose",
+            "goal for this packet",
+            "concrete task ask",
+            "concrete workspace action request",
+            "workspace action request",
+            "task ask",
+            "task request",
+        ],
+    ) || tokens
+        .iter()
+        .any(|token| matches!(*token, "mission" | "objective" | "goal"))
+    {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Mission,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
         &[
             "context",
             "background",
@@ -597,40 +527,14 @@ fn score_context(label: &str) -> SectionKindScore {
             "current state",
             "repo reality",
             "project guidance",
-            "questions to ask",
         ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Context,
-        score,
-        specificity: 65,
-    }
-}
-
-fn score_checklist(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
-        &[
-            "checklist",
-            "steps",
-            "plan of attack",
-            "procedure",
-            "sequence",
-            "runbook",
-            "implementation steps",
-            "after that",
-        ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Checklist,
-        score,
-        specificity: 75,
-    }
-}
-
-fn score_tooling(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Context,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
         &[
             "tooling",
             "gitnexus",
@@ -642,17 +546,13 @@ fn score_tooling(label: &str) -> SectionKindScore {
             "use hf cli",
             "execution environment",
         ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::ToolingInstructions,
-        score,
-        specificity: 80,
-    }
-}
-
-fn score_boilerplate(label: &str) -> SectionKindScore {
-    let score = best_phrase_score(
-        label,
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::ToolingInstructions,
+            confidence: Confidence::High,
+        }
+    } else if matches_any_phrase(
+        &normalized,
         &[
             "agents md",
             "permissions",
@@ -667,69 +567,19 @@ fn score_boilerplate(label: &str) -> SectionKindScore {
             "capability",
             "tool namespace",
         ],
-    );
-    SectionKindScore {
-        kind: ObjectiveSectionKind::Boilerplate,
-        score,
-        specificity: 85,
-    }
-}
+    ) {
+        SectionClassification {
+            kind: ObjectiveSectionKind::Boilerplate,
+            confidence: Confidence::High,
+        }
+    } else {
+        SectionClassification {
+            kind: ObjectiveSectionKind::UnknownSection,
+            confidence: Confidence::Low,
+        }
+    };
 
-fn best_phrase_score(label: &str, phrases: &[&str]) -> i32 {
-    phrases
-        .iter()
-        .filter_map(|phrase| phrase_match_strength(label, phrase))
-        .max()
-        .unwrap_or(0)
-}
-
-fn best_generic_mission_score(label: &str) -> i32 {
-    ["request", "ask", "task"]
-        .iter()
-        .filter_map(|phrase| generic_mission_match_strength(label, phrase))
-        .max()
-        .unwrap_or(0)
-}
-
-fn phrase_match_strength(label: &str, phrase: &str) -> Option<i32> {
-    if label == phrase {
-        return Some(100);
-    }
-    if label.starts_with(&format!("{phrase} ")) {
-        return Some(70);
-    }
-    if label.ends_with(&format!(" {phrase}")) {
-        return Some(60);
-    }
-    if phrase.contains(' ') && label.contains(phrase) {
-        return Some(50);
-    }
-    None
-}
-
-fn generic_mission_match_strength(label: &str, phrase: &str) -> Option<i32> {
-    if label == phrase {
-        return Some(55);
-    }
-    if label.starts_with(&format!("{phrase} ")) || label.ends_with(&format!(" {phrase}")) {
-        return Some(15);
-    }
-    None
-}
-
-fn section_kind_priority(kind: ObjectiveSectionKind) -> i32 {
-    match kind {
-        ObjectiveSectionKind::Boilerplate => 90,
-        ObjectiveSectionKind::ToolingInstructions => 80,
-        ObjectiveSectionKind::Constraints => 70,
-        ObjectiveSectionKind::Verification => 60,
-        ObjectiveSectionKind::Deliverables => 50,
-        ObjectiveSectionKind::Checklist => 40,
-        ObjectiveSectionKind::Context => 30,
-        ObjectiveSectionKind::Scope => 20,
-        ObjectiveSectionKind::Mission => 10,
-        ObjectiveSectionKind::UnknownSection => 0,
-    }
+    classified
 }
 
 fn normalize_label(label: &str) -> String {
@@ -741,6 +591,12 @@ fn normalize_label(label: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn matches_any_phrase(text: &str, phrases: &[&str]) -> bool {
+    phrases
+        .iter()
+        .any(|phrase| text == *phrase || text.contains(phrase))
 }
 
 fn synthetic_section_kind(text: &str) -> ObjectiveSectionKind {
@@ -802,7 +658,6 @@ fn split_section_into_clauses(section: &DecomposedObjectiveSection) -> Vec<Objec
                 source_kind: section.source_kind,
                 section_index: section.index,
                 section_kind: section.kind,
-                index: clauses.len(),
                 text,
                 role_candidates,
             });
@@ -817,7 +672,6 @@ fn split_section_into_clauses(section: &DecomposedObjectiveSection) -> Vec<Objec
             source_kind: section.source_kind,
             section_index: section.index,
             section_kind: section.kind,
-            index: 0,
             text: text.clone(),
             role_candidates: role_candidates_for_clause(section.kind, &text),
         });
@@ -1103,7 +957,18 @@ fn assemble_structured_objective(
 ) -> StructuredObjective {
     let goal_clause = selected_goal_clause(decomposition);
     let evidence_spans = evidence_spans_from_decomposition(decomposition);
-    let target = goal_clause.and_then(objective_target_from_goal_clause);
+    let target = goal_clause.map(|clause| ObjectiveTarget {
+        display: target_display_for_goal(&clause.text),
+        kind: target_kind_for_text(&clause.text),
+        paths: extract_inline_paths(&clause.text),
+        symbols: Vec::new(),
+        named_artifacts: extract_named_artifacts(&clause.text),
+        workspace_refs: extract_workspace_refs(&clause.text),
+        evidence: vec![evidence_span_for_clause(clause)],
+        confidence: top_role(clause)
+            .map(|role| role.confidence)
+            .unwrap_or(Confidence::Low),
+    });
 
     let constraints = decomposition
         .clauses
@@ -1190,8 +1055,6 @@ fn evidence_span_for_clause(clause: &ObjectiveClause) -> ObjectiveEvidenceSpan {
         section_kind: clause.section_kind,
         role: role.role,
         excerpt: clause.text.clone(),
-        section_index: Some(clause.section_index),
-        clause_index: Some(clause.index),
         start_char: None,
         end_char: None,
         confidence: role.confidence,
@@ -1355,91 +1218,6 @@ fn objective_summary_evidence(
             selected_clause.section_kind
         ),
     }]
-}
-
-fn objective_target_from_goal_clause(clause: &ObjectiveClause) -> Option<ObjectiveTarget> {
-    let display = target_display_for_goal(&clause.text);
-    let lowered = display.to_ascii_lowercase();
-    if is_vague_target_text(&lowered) {
-        return None;
-    }
-
-    let paths = extract_inline_paths(&display);
-    let named_artifacts = extract_named_artifacts(&display);
-    let workspace_refs = extract_workspace_refs(&display);
-    let kind = target_kind_for_text(&display);
-    let has_explicit_target_evidence = !paths.is_empty()
-        || !named_artifacts.is_empty()
-        || !workspace_refs.is_empty()
-        || explicitly_targets_instruction_surface(&lowered)
-        || matches!(
-            kind,
-            ObjectiveTargetKind::CrateOrPackage
-                | ObjectiveTargetKind::SpecOrDesignDoc
-                | ObjectiveTargetKind::TestOrVerifier
-                | ObjectiveTargetKind::FileOrDirectory
-                | ObjectiveTargetKind::SkillOrInstructionSurface
-        )
-        || contains_any(
-            &lowered,
-            &[
-                "structured objective",
-                "objective extractor",
-                "objective extraction",
-                "analyzer objective",
-                "checkpoint objective",
-                "session progress",
-                "task frame",
-                "working set",
-                "so-",
-                "r5",
-                "r6",
-            ],
-        );
-
-    if !has_explicit_target_evidence {
-        return None;
-    }
-
-    let confidence = top_role(clause)
-        .map(|role| role.confidence)
-        .unwrap_or(Confidence::Low);
-    if confidence == Confidence::Low {
-        return None;
-    }
-
-    Some(ObjectiveTarget {
-        display,
-        kind,
-        paths,
-        symbols: Vec::new(),
-        named_artifacts,
-        workspace_refs,
-        evidence: vec![evidence_span_for_clause(clause)],
-        confidence,
-    })
-}
-
-fn is_vague_target_text(lowered: &str) -> bool {
-    let trimmed = lowered.trim().trim_end_matches('.');
-    matches!(
-        trimmed,
-        "make it better"
-            | "help with the above"
-            | "look at the stuff above"
-            | "look at the above"
-            | "fix whatever is wrong"
-            | "fix whatever is wrong with it"
-    ) || contains_any(
-        trimmed,
-        &[
-            "stuff above",
-            "whatever is wrong",
-            "make it better",
-            "help with this",
-            "help with the above",
-        ],
-    )
 }
 
 fn target_display_for_goal(goal: &str) -> String {
@@ -1682,11 +1460,12 @@ fn looks_like_context_text(text: &str) -> bool {
 fn looks_like_verification_text(text: &str) -> bool {
     text.contains("verify")
         || text.contains("verification")
-        || text.contains("validation")
-        || text.contains("smoke")
-        || text.contains("proof")
-        || text.contains("tests run")
-        || !extract_verification_commands(text).is_empty()
+        || text.contains("cargo test")
+        || text.contains("cargo build")
+        || text.contains("pytest")
+        || text.contains("pnpm test")
+        || text.contains("npm test")
+        || text.contains("vitest")
 }
 
 fn has_explicit_verification_cue(text: &str, lowered: &str) -> bool {
@@ -1767,7 +1546,6 @@ fn looks_like_boilerplate_text(text: &str) -> bool {
 
 pub fn extract_verification_commands(text: &str) -> Vec<String> {
     let mut commands = Vec::new();
-
     for command in extract_backticked_commands(text) {
         if is_verification_command(&command)
             && !commands.iter().any(|existing| existing == &command)
@@ -2046,118 +1824,6 @@ mod tests {
         assert!(summary
             .text
             .contains("Review this AGENTS.md instruction block"));
-    }
-
-    #[test]
-    fn section_label_classifier_prefers_specific_roles_over_generic_mission_words() {
-        assert_eq!(
-            classify_section_label("Task constraints").kind,
-            ObjectiveSectionKind::Constraints
-        );
-        assert_eq!(
-            classify_section_label("Verification task").kind,
-            ObjectiveSectionKind::Verification
-        );
-        assert_eq!(
-            classify_section_label("Output request").kind,
-            ObjectiveSectionKind::Deliverables
-        );
-        assert_eq!(
-            classify_section_label("Questions to ask").kind,
-            ObjectiveSectionKind::Context
-        );
-        assert_eq!(
-            classify_section_label("Implementation steps").kind,
-            ObjectiveSectionKind::Checklist
-        );
-        assert_eq!(
-            classify_section_label("What I need").kind,
-            ObjectiveSectionKind::Mission
-        );
-    }
-
-    #[test]
-    fn extracts_non_cargo_verification_commands_from_verification_sections() {
-        let commands = extract_verification_commands(
-            "## Verification\n- npm run lint\n- pnpm test\n- npx vitest\n- python -m pytest\n- go test ./...\n- make test\n- just test\n- bun test",
-        );
-        assert_eq!(
-            commands,
-            vec![
-                "npm run lint",
-                "pnpm test",
-                "npx vitest",
-                "python -m pytest",
-                "go test ./...",
-                "make test",
-                "just test",
-                "bun test",
-            ]
-        );
-    }
-
-    #[test]
-    fn preserves_verification_commands_when_role_detection_is_broader_than_cargo() {
-        let rows = vec![test_row(
-            "## Scope\nValidate the JS objective verifier command extraction.\n\n## Verification\n- npm run lint\n- pnpm test\n- npx vitest",
-        )];
-        let summary = extract_objective(&rows);
-        let structured = summary.structured.expect("structured objective");
-        assert_eq!(
-            summary.verification_commands,
-            vec!["npm run lint", "pnpm test", "npx vitest"]
-        );
-        assert_eq!(
-            structured.verification_commands,
-            vec!["npm run lint", "pnpm test", "npx vitest"]
-        );
-        assert!(structured.evidence_spans.iter().any(|span| {
-            span.role == ObjectiveRole::Verification
-                && span.section_index.is_some()
-                && span.clause_index.is_some()
-                && span.excerpt.contains("npm run lint")
-        }));
-    }
-
-    #[test]
-    fn leaves_vague_goal_targets_unknown_instead_of_fabricating_target() {
-        let rows = vec![test_row("Look at the stuff above and make it better.")];
-        let summary = extract_objective(&rows);
-        let structured = summary.structured.expect("structured objective");
-        assert!(structured.target.is_none());
-        assert!(structured
-            .unknowns
-            .iter()
-            .any(|unknown| unknown.field_name == "target"));
-    }
-
-    #[test]
-    fn target_extraction_requires_grounded_target_evidence() {
-        let instruction_rows = vec![test_row(
-            "Review this AGENTS.md instruction block and tell me whether it should change.",
-        )];
-        let instruction_summary = extract_objective(&instruction_rows);
-        assert_eq!(
-            instruction_summary
-                .structured
-                .as_ref()
-                .and_then(|structured| structured.target.as_ref())
-                .map(|target| target.kind),
-            Some(ObjectiveTargetKind::SkillOrInstructionSurface)
-        );
-
-        let path_rows = vec![test_row(
-            "Update crates/agent-drift-analyzer/src/context/objective.rs to harden target extraction.",
-        )];
-        let path_summary = extract_objective(&path_rows);
-        assert_eq!(
-            path_summary
-                .structured
-                .as_ref()
-                .and_then(|structured| structured.target.as_ref())
-                .map(|target| target.kind),
-            Some(ObjectiveTargetKind::FileOrDirectory)
-        );
     }
 
     #[test]

@@ -176,13 +176,7 @@ pub struct ObjectiveEvidenceSpan {
     pub section_kind: ObjectiveSectionKind,
     pub role: ObjectiveRole,
     pub excerpt: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub section_index: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clause_index: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_char: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_char: Option<usize>,
     pub confidence: Confidence,
 }
