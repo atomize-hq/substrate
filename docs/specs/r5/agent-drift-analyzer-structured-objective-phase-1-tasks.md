@@ -1,8 +1,11 @@
 # Tasks: Agent Drift Analyzer Structured Objective Phase 1
 
-Status: draft task ledger created on 2026-06-14 from the structured-objective design stack.
-Architecture owns semantics, evaluation owns acceptance, migration owns landing order, and the
-classifier taxonomy remains deferred for this phase.
+Status: draft task ledger created on 2026-06-14 from the structured-objective design stack;
+reconciled on 2026-06-16 against the live crate snapshot plus the grounding follow-on family
+through `SO-G2`. Architecture owns semantics, evaluation owns acceptance, migration owns landing
+order, and the classifier taxonomy remains deferred for this phase. Keep the original packet
+structure for auditability, but do not treat already-landed SO-1 / SO-2 seams as still-open
+implementation debt.
 
 Keep each task as close as possible to five touched files or fewer. Do not advance to the next task
 until the current task's verification commands are green or the failure is explicitly captured in
@@ -28,7 +31,11 @@ packet notes.
 
 ## SO-1: Schema Bridge And Additive Sidecar
 
-- [ ] Task SO-1.1: Define the phase-1 structured-objective DTOs and evidence-span enums.
+Historical note: this packet's schema bridge and sidecar exposure are already landed in the live
+crate snapshot. The open work now starts later in the ledger; keep these tasks for auditability
+rather than deleting the original packet structure.
+
+- [x] Task SO-1.1: Define the phase-1 structured-objective DTOs and evidence-span enums.
   - Acceptance: shared schema types exist for `StructuredObjective`, field-level supporting enums,
     `ObjectiveEvidenceSpan`, and `ObjectiveUnknown`, and they match the architecture authority's
     minimum semantic coverage.
@@ -39,10 +46,12 @@ packet notes.
     - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
     - `crates/agent-drift-analyzer/src/context/objective.rs`
 
-- [ ] Task SO-1.2: Add `comparison_key` and optional structured sidecar to `ObjectiveSummary`.
+- [x] Task SO-1.2: Add `comparison_key` and optional structured sidecar to `ObjectiveSummary`.
   - Acceptance: `ObjectiveSummary` now exposes `text`, `comparison_key`,
     `structured: Option<StructuredObjective>`, `verification_commands`, and `evidence`, while all
-    current callers still compile and no consumer assumes the sidecar is always present.
+    current callers still compile and no consumer assumes the sidecar is always present. This
+    acceptance is about additive exposure only; semantic `comparison_key` derivation remains open
+    under SO-3.2.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
@@ -53,7 +62,12 @@ packet notes.
 
 ## SO-2: Deterministic Decomposition And Structured Assembly
 
-- [ ] Task SO-2.1: Add section-aware decomposition for long directive rows.
+Historical note: this packet family is already materially landed in the live crate snapshot. The
+follow-on grounding family (`SO-G1` / `SO-G2`) hardened section/clause identifiers and adversarial
+heading coverage without erasing the fact that the original decomposition/assembly seam already
+landed here.
+
+- [x] Task SO-2.1: Add section-aware decomposition for long directive rows.
   - Acceptance: objective extraction can distinguish mission/scope, checklist, verification,
     constraints, deliverables, context, boilerplate, and tooling-instruction sections well enough
     to stop whole-row flattening from hiding the real mission.
@@ -62,7 +76,7 @@ packet notes.
     - `crates/agent-drift-analyzer/src/context/objective.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task SO-2.2: Add clause-role labeling and evidence-span grounding.
+- [x] Task SO-2.2: Add clause-role labeling and evidence-span grounding.
   - Acceptance: clause/sentence units are labeled with `goal`, `constraint`, `verification`,
     `context`, or `other_role`, and each nontrivial structured field records supporting evidence
     spans with source kind and section kind.
@@ -71,7 +85,7 @@ packet notes.
     - `crates/agent-drift-analyzer/src/context/objective.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task SO-2.3: Assemble phase-1 structured fields and preserve ambiguity as unknowns.
+- [x] Task SO-2.3: Assemble phase-1 structured fields and preserve ambiguity as unknowns.
   - Acceptance: phase-1 extraction populates objective class, primary intent, target, constraints,
     success conditions, deliverables, verification commands, confidence, evidence spans, and
     unknowns only when evidence supports them; weak evidence remains unknown.
@@ -83,6 +97,10 @@ packet notes.
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
 ## SO-3: Compatibility Rendering And Deterministic Comparison Key
+
+Remaining work note: this section is still open. The live implementation exposes structured state,
+but `comparison_key` still mirrors display text and compatibility text is not yet rendered from the
+structured frame as the semantic authority.
 
 - [ ] Task SO-3.1: Render compatibility text from structured state when safe.
   - Acceptance: `ObjectiveSummary.text` becomes a compatibility view over structured state when the
@@ -107,6 +125,9 @@ packet notes.
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
 ## SO-4: Objective Acceptance Harness
+
+Remaining work note: this harness has not landed yet. The planned `objective_acceptance` test file
+and fixture families are still absent from the current crate snapshot.
 
 - [ ] Task SO-4.1: Add the objective-acceptance test harness and fixture loader.
   - Acceptance: `tests/objective_acceptance.rs` exists, can load committed objective-acceptance
@@ -164,6 +185,10 @@ packet notes.
     - `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/locked-acceptance/**`
 
 ## SO-6: Full Phase-1 Validation And Honest Closeout
+
+Remaining work note: honest closeout still depends on finishing SO-3 and SO-4 / SO-5 first; do
+not mark this packet family done while compatibility/comparison-key work or the acceptance wall is
+still missing.
 
 - [ ] Task SO-6.1: Run the full phase-1 validation wall.
   - Acceptance: formatting, clippy, focused checkpoint regressions, objective acceptance, and the

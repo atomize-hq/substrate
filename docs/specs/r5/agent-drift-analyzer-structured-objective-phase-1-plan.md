@@ -1,8 +1,9 @@
 # Plan: Agent Drift Analyzer Structured Objective Phase 1
 
-Status: draft plan created on 2026-06-14 from the structured-objective design stack. The map doc
-was used only as a routing overview; architecture owns semantics, evaluation owns acceptance,
-migration owns landing order, and classifier taxonomy remains deferred for this phase.
+Status: draft plan created on 2026-06-14 from the structured-objective design stack; reconciled
+on 2026-06-16 against the live crate snapshot plus the grounding follow-on family through `SO-G2`.
+The map doc was used only as a routing overview; architecture owns semantics, evaluation owns
+acceptance, migration owns landing order, and classifier taxonomy remains deferred for this phase.
 
 ## Objective
 
@@ -57,11 +58,12 @@ It is a new architecture-valid seam with a different proof wall:
 
 ```text
 phase-1 docs lock
-  -> schema bridge (`StructuredObjective`, `comparison_key`, optional sidecar)
-  -> deterministic decomposition and frame assembly
-  -> compatibility rendering from structured state
-  -> objective-acceptance harness + committed fixtures
-  -> full analyzer regression closeout
+  -> schema bridge (`StructuredObjective`, `comparison_key`, optional sidecar) [landed]
+  -> deterministic decomposition and preliminary structured assembly [landed]
+  -> grounding identifier restoration + adversarial heading proof [landed later via `SO-G1`/`SO-G2`]
+  -> compatibility rendering from structured state + deterministic `comparison_key` derivation [remaining]
+  -> objective-acceptance harness + committed fixtures [remaining]
+  -> full analyzer regression closeout [remaining]
 
 explicitly deferred:
   -> TaskFrame coexistence
@@ -92,6 +94,13 @@ Manual review only.
 
 ## SO-1: Schema Bridge And Additive Sidecar
 
+### Reconciled Live Status (2026-06-16)
+
+This seam is already landed in the live crate snapshot: `StructuredObjective`, the supporting
+semantic enums, additive `ObjectiveEvidenceSpan` / `ObjectiveUnknown` schema, and
+`ObjectiveSummary.{comparison_key, structured}` all exist today. Keep this section as historical
+packet structure, but do not treat the schema bridge or sidecar exposure as open backlog anymore.
+
 ### Scope
 
 - define phase-1 `StructuredObjective` DTOs, evidence-span enums, and unknown representation
@@ -121,6 +130,13 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ## SO-2: Deterministic Section/Clause Decomposition And Structured Assembly
 
+### Reconciled Live Status (2026-06-16)
+
+This seam is also already materially landed: the current `context/objective.rs` path performs
+section-aware decomposition, clause-role labeling, evidence-span grounding, and preliminary
+structured assembly with unknown preservation. Later grounding hardening was tracked in the
+follow-on `SO-G1` / `SO-G2` family rather than by pretending original `SO-2` work never existed.
+
 ### Scope
 
 - decompose candidate directive text into sections and clause/sentence units
@@ -149,6 +165,13 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ## SO-3: Compatibility Rendering And Comparison-Key Derivation
 
+### Current Remaining Gap
+
+This packet family is still open. The live crate exposes `comparison_key`, but the current
+implementation still mirrors display text instead of deriving a stable semantic key from the
+structured frame, and compatibility text is still selected directly from decomposition rather than
+rendered from structured state as the semantic authority.
+
 ### Scope
 
 - render `ObjectiveSummary.text` from structured state when the evidence is strong enough
@@ -176,6 +199,12 @@ cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
 ## SO-4: Objective Acceptance Harness And Fixture Contract
+
+### Current Remaining Gap
+
+This packet family is still open. `crates/agent-drift-analyzer/tests/objective_acceptance.rs` and
+the `tests/fixtures/objective_acceptance/**` corpus are not present yet, so the committed
+acceptance wall promised by Phase 1 remains future work.
 
 ### Scope
 
@@ -237,6 +266,12 @@ cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
 ## SO-6: Full Phase-1 Validation And Closeout Review
+
+### Current Remaining Gap
+
+This closeout packet is still blocked on the unfinished compatibility/comparison-key work and the
+missing objective-acceptance harness. It should remain open until those remaining seams land and
+the analyzer-local validation wall can be run honestly.
 
 ### Scope
 
