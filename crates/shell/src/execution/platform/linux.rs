@@ -1261,7 +1261,7 @@ fn current_process_has_group(target_gid: u32) -> io::Result<bool> {
     if rc < 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(groups.into_iter().any(|gid| gid as u32 == target_gid))
+    Ok(groups.into_iter().any(|gid| gid == target_gid))
 }
 
 fn current_account_has_group(target_gid: u32) -> io::Result<Option<bool>> {
@@ -1312,7 +1312,7 @@ fn current_account_has_group(target_gid: u32) -> io::Result<Option<bool>> {
         );
     }
     if ngroups <= 0 {
-        return Ok(Some(primary_gid as u32 == target_gid));
+        return Ok(Some(primary_gid == target_gid));
     }
 
     let mut groups = vec![0 as libc::gid_t; ngroups as usize];
@@ -1329,7 +1329,7 @@ fn current_account_has_group(target_gid: u32) -> io::Result<Option<bool>> {
     }
 
     groups.truncate(ngroups as usize);
-    Ok(Some(groups.into_iter().any(|gid| gid as u32 == target_gid)))
+    Ok(Some(groups.into_iter().any(|gid| gid == target_gid)))
 }
 
 fn named_user_acl_grants_rw(
@@ -1533,7 +1533,7 @@ fn lookup_gid_by_group_name(group_name: &str) -> Option<u32> {
     if rc != 0 || result.is_null() {
         return None;
     }
-    Some(grp.gr_gid as u32)
+    Some(grp.gr_gid)
 }
 
 fn permission_denied_help(
