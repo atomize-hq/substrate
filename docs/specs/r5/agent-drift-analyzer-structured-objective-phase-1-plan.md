@@ -1,7 +1,7 @@
 # Plan: Agent Drift Analyzer Structured Objective Phase 1
 
 Status: draft plan created on 2026-06-14 from the structured-objective design stack; reconciled
-on 2026-06-16 against the live crate snapshot plus the grounding follow-on family through `SO-G2`.
+on 2026-06-16 against the live crate snapshot plus the grounding follow-on family through `SO-G5`.
 The map doc was used only as a routing overview; architecture owns semantics, evaluation owns
 acceptance, migration owns landing order, and classifier taxonomy remains deferred for this phase.
 
@@ -173,6 +173,9 @@ implementation still mirrors display text instead of deriving a stable semantic 
 structured frame, and compatibility text is still selected directly from decomposition rather than
 rendered from structured state as the semantic authority. Treat the live key as a provisional
 stopgap only; downstream migration must not anchor on it until the dedicated derivation work lands.
+After the grounding follow-on closes, however, this is no longer the next packet to start: the
+objective-acceptance harness boundary in SO-4 comes first so the remaining semantic work lands
+against an explicit acceptance wall instead of another vague future TODO.
 
 ### Scope
 
@@ -206,7 +209,10 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 This packet family is still open. `crates/agent-drift-analyzer/tests/objective_acceptance.rs` and
 the `tests/fixtures/objective_acceptance/**` corpus are not present yet, so the committed
-acceptance wall promised by Phase 1 remains future work.
+acceptance wall promised by Phase 1 remains future work. Once the grounding follow-on family lands,
+SO-4.1 and SO-4.2 are the explicit next packet boundary even though SO-3 remains unfinished:
+future packet agents should start by standing up this harness contract before widening into SO-5
+fixture expansion or downstream migration.
 
 ### Scope
 
@@ -215,6 +221,8 @@ acceptance wall promised by Phase 1 remains future work.
 - codify the fixture directory contract for `design-set`, `locked-acceptance`, and
   `stretch-external`
 - assert the required summary metrics and forbidden-promotion surfaces
+- require the harness contract to validate structured fields, role spans, grounding refs,
+  forbidden promotions, compatibility rendering, and unknown-field correctness
 
 ### Primary Files
 
@@ -227,7 +235,8 @@ crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/**
 ### Why Before Fixture Expansion
 
 The harness and contract must exist before a bounded set of cases can be added safely and reviewed
-for drift.
+for drift. This is also the explicit next acceptance packet after grounding restoration, so later
+SO-3 and SO-5 work has a concrete wall to target instead of another implied sequence step.
 
 ### Verification
 

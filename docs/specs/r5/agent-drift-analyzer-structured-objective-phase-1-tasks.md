@@ -2,7 +2,7 @@
 
 Status: draft task ledger created on 2026-06-14 from the structured-objective design stack;
 reconciled on 2026-06-16 against the live crate snapshot plus the grounding follow-on family
-through `SO-G2`. Architecture owns semantics, evaluation owns acceptance, migration owns landing
+through `SO-G5`. Architecture owns semantics, evaluation owns acceptance, migration owns landing
 order, and the classifier taxonomy remains deferred for this phase. Keep the original packet
 structure for auditability, but do not treat already-landed SO-1 / SO-2 seams as still-open
 implementation debt.
@@ -102,7 +102,9 @@ landed here.
 Remaining work note: this section is still open. The live implementation exposes structured state,
 but `comparison_key` still mirrors display text and compatibility text is not yet rendered from the
 structured frame as the semantic authority. Treat the current key as a stopgap only; no downstream
-migration may anchor on it until SO-3.2 lands.
+migration may anchor on it until SO-3.2 lands. Once the grounding follow-on closes, this is not
+the next packet to start; SO-4.1 and SO-4.2 become the explicit next acceptance boundary so the
+remaining semantic work is judged against a committed harness instead of implied future cleanup.
 
 - [ ] Task SO-3.1: Render compatibility text from structured state when safe.
   - Acceptance: `ObjectiveSummary.text` becomes a compatibility view over structured state when the
@@ -129,12 +131,14 @@ migration may anchor on it until SO-3.2 lands.
 ## SO-4: Objective Acceptance Harness
 
 Remaining work note: this harness has not landed yet. The planned `objective_acceptance` test file
-and fixture families are still absent from the current crate snapshot.
+and fixture families are still absent from the current crate snapshot. After the grounding
+follow-on family, SO-4.1 and SO-4.2 are the explicit next packet to start; do not skip directly to
+SO-5 fixture seeding or later migration work.
 
 - [ ] Task SO-4.1: Add the objective-acceptance test harness and fixture loader.
   - Acceptance: `tests/objective_acceptance.rs` exists, can load committed objective-acceptance
     fixtures deterministically, and asserts the fixture directory contract for the three evaluation
-    families.
+    families. This is the first packet to start after the grounding follow-on closes.
   - Verify: `cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/objective_acceptance.rs`
@@ -144,13 +148,17 @@ and fixture families are still absent from the current crate snapshot.
 - [ ] Task SO-4.2: Encode the objective-acceptance expected-shape contract.
   - Acceptance: the harness checks structured-field expectations, role spans, grounding refs,
     forbidden promotions, compatibility rendering, and unknown-field correctness from committed
-    fixture metadata rather than relying on one exact objective string.
+    fixture metadata rather than relying on one exact objective string, and it defines the concrete
+    acceptance wall that later SO-3 and SO-5 work must satisfy.
   - Verify: `cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/objective_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/README.md`
 
 ## SO-5: Seed The Locked Acceptance Wall
+
+Packet-ordering note: do not start SO-5 until SO-4.1 and SO-4.2 have landed as the explicit
+post-grounding harness boundary.
 
 - [ ] Task SO-5.1: Add WDAP linux and macOS locked-acceptance seeds.
   - Acceptance: the committed objective-acceptance corpus includes the required WDAP kickoff seeds,

@@ -206,9 +206,11 @@ Manual review of the reconciled docs set.
 ### Scope
 
 - define the next packet entry criteria for the objective-acceptance harness
-- require the harness to consume grounded fields, role spans, grounding refs, forbidden-promotion
+- require the harness to consume structured fields, role spans, grounding refs, forbidden-promotion
   expectations, compatibility rendering, and unknown-field correctness
 - keep this family from silently widening into full fixture expansion unless separately approved
+- name the next packet entry point explicitly as SO-4.1 / SO-4.2 under the reconciled phase-1
+  ledger rather than leaving the handoff implied by packet numbering alone
 
 ### Primary Files
 
@@ -217,6 +219,14 @@ docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
 docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md
 ```
+
+### Explicit Handoff After This Packet
+
+- the next packet to start after the grounding family closes is SO-4.1 / SO-4.2 in the reconciled
+  phase-1 docs
+- that packet's acceptance wall must cover structured fields, role spans, grounding refs,
+  forbidden promotions, compatibility rendering, and unknown-field correctness
+- SO-5 fixture growth remains blocked until the SO-4 harness boundary exists
 
 ### Why Separate From The Grounding Patch
 
