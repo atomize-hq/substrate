@@ -5,6 +5,10 @@ Related authorities:
 - [CODEX_WORLD_DISPATCH_GAP_WRITEUP.md](../CODEX_WORLD_DISPATCH_GAP_WRITEUP.md)
 - [SPEC-58-placement-aware-agent-inventory-and-selector-contract.md](./SPEC-58-placement-aware-agent-inventory-and-selector-contract.md)
 - [PLAN-58-placement-aware-agent-inventory-and-selector-contract.md](./PLAN-58-placement-aware-agent-inventory-and-selector-contract.md)
+- [`/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/CHANGELOG.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/CHANGELOG.md)
+- [`/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/crates/agent_api/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/crates/agent_api/src/lib.rs)
+- [`/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/crates/agent_api/src/runtime_support.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/crates/agent_api/src/runtime_support.rs)
+- [`/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/docs/specs/unified-agent-api/runtime-support-contract.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/unified-agent-api/docs/specs/unified-agent-api/runtime-support-contract.md)
 - [docs/reference/world/deps/README.md](../docs/reference/world/deps/README.md)
 - [docs/reference/world/deps/provisioning.md](../docs/reference/world/deps/provisioning.md)
 - [docs/reference/world/deps/authoring_packages.md](../docs/reference/world/deps/authoring_packages.md)
@@ -24,11 +28,12 @@ ASSUMPTIONS I'M MAKING:
 
 1. The active `cli:codex_world` failure is a guest-runtime/bootstrap gap, not a world-binding gap.
 2. This slice must be implemented **before** Slice 58 code lands, but its contract must survive the later placement-aware cutover where `cli:codex-world` is derived from logical agent id plus placement.
-3. The preferred delivery path is a **Substrate-owned** world-deps `install.method: script` package that pulls official Codex Linux release artifacts rather than relying on host npm/NVM state.
+3. The preferred delivery path is a **Substrate-owned** world-deps `install.method: script` package named `codex-runtime` that pulls official Codex Linux release artifacts rather than relying on host npm/NVM state.
 4. The current repo truth does **not** require world refresh/restart after `substrate world deps current sync`; sync is the apply step unless new evidence proves otherwise.
 5. The downloadable Linux Codex binary may or may not be fully self-contained in the target guest; this slice must require explicit guest verification instead of assuming either outcome.
 6. Exact backend ids, policy allowlists, and host/world fail-closed separation remain unchanged in this slice; selector migration belongs to Slice 58.
 7. The installer/runtime provisioning surface should be future-expandable, so the public flag shape should be generic to agent runtime family rather than Codex-specific.
+8. Substrate should resolve the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.6"`, imported as `agent_api`), because `0.3.6` is the minimum published line for the Codex runtime-version API surface this slice needs, and Substrate must not duplicate runtime version-selection logic or read generated UAA files directly.
 
 If any of these are wrong, correct them before implementation.
 
@@ -50,10 +55,11 @@ This slice does **not** redesign selector grammar, perform the placement-aware i
 ## Tech Stack
 
 - Rust workspace (`cargo`)
-- `crates/shell` runtime selection, validator, world-deps, and installer-adjacent shell flows
+- `crates/shell` runtime selection, validator, world-deps, UAA-backed version resolution, and installer-adjacent shell flows
 - `crates/world-service` member bootstrap/runtime execution
 - world-deps inventory + script packages under Substrate-managed prefixes
 - shell installers under `scripts/substrate/`
+- published `unified-agent-api = "=0.3.6"` crate with the `codex` feature enabled, imported in Rust as `agent_api`
 - `llm-last-mile/` planning authority
 
 ## Commands
@@ -62,6 +68,16 @@ Build:
 
 ```bash
 cargo build --workspace
+```
+
+Test:
+
+```bash
+cargo test -p shell agent_runtime::validator -- --nocapture
+cargo test -p shell dispatch_contract -- --nocapture
+cargo test -p shell world_deps -- --nocapture
+cargo test -p world-service member_runtime -- --nocapture
+cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 ```
 
 Format:
@@ -76,14 +92,11 @@ Lint:
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Targeted validation/runtime test wall once implemented:
+Dev / focused iteration:
 
 ```bash
-cargo test -p shell agent_runtime::validator -- --nocapture
 cargo test -p shell dispatch_contract -- --nocapture
 cargo test -p shell world_deps -- --nocapture
-cargo test -p world-service member_runtime -- --nocapture
-cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 ```
 
 Repo-truth checks:
@@ -115,8 +128,18 @@ crates/world-service/src/gateway_runtime.rs
 crates/shell/src/builtins/world_deps/
   Runtime package inventory, sync/install logic, and wrapper behavior for guest-visible tools.
 
+crates/shell/tests/
+crates/world-service/tests/
+  Integration and contract coverage for the validator/dispatch/runtime path that Slice 59 is expected to keep green.
+
+Cargo.toml / dependency wiring
+  Slice 59 must bump the published `unified-agent-api` line from the current `=0.3.5` repo truth to `=0.3.6`, keep the `codex` feature enabled, align any already-exact sibling UAA pins in the touched manifests, and call the public runtime-support API from Substrate code rather than reading generated files.
+
 docs/reference/world/deps/
   Stable operator contract for enable/provision/sync flows and package authoring.
+
+docs/INSTALLATION.md
+  Operator-facing install/provision/sync truth that must stay aligned with the new installer flags.
 
 scripts/substrate/install-substrate.sh
 scripts/substrate/install.sh
@@ -171,6 +194,10 @@ The current failing `exit 127` proves the guest cannot actually execute the host
 
 world-deps already supports script-installed runnable packages under `/var/lib/substrate/world-deps/...` with stable entrypoints exposed via `/var/lib/substrate/world-deps/bin`.
 
+### 4. The current repo still pins UAA to `=0.3.5`
+
+The active Substrate manifests still pin `unified-agent-api` to `=0.3.5` (with matching exact sibling UAA pins where present), so Slice 59 must explicitly bump that dependency wiring to `=0.3.6` before it can rely on the published Codex runtime-version API surface.
+
 ## Contract
 
 ### 1. World-scoped CLI launchability must be guest-visible truth
@@ -202,11 +229,37 @@ Rules:
 
 1. Substrate owns the package definition and install script,
 2. installation happens through world-deps `install.method: script`,
-3. package content lives under `/var/lib/substrate/world-deps/<package>`,
+3. the package/bundle name is `codex-runtime`,
+4. package content lives under `/var/lib/substrate/world-deps/<package>`,
 4. runnable entrypoint resolves via `/var/lib/substrate/world-deps/bin/codex`,
 5. artifact retrieval targets official Codex release artifacts, with GitHub Releases as the expected source of the downloadable Linux binary.
 
-### 4. Guest artifact verification is mandatory, not implied
+### 4. Validated version selection must come from the public UAA Rust API
+
+This slice must not let Substrate invent or duplicate Codex version-selection policy.
+
+Rules:
+
+1. Substrate must depend on the published crate package `unified-agent-api = "=0.3.6"` with the `codex` feature enabled, and any already-exact sibling UAA pins in the touched manifests must move to `=0.3.6` in the same change,
+2. Substrate must use the public Rust crate path `agent_api`,
+3. Substrate must determine the exact target triple it intends to install for, then call `resolve_runtime_support("codex", target_triple)`,
+4. Substrate must use `record.version` from the returned `RuntimeSupportRecord` as the validated version it acquires,
+5. Substrate may call `list_runtime_support("codex")` for introspection, diagnostics, or tests, but must not re-implement downstream selection logic,
+6. Substrate must **not** read `runtime_support_data.rs`, `cli_manifests/**`, or any other generated/internal UAA file directly,
+7. if UAA returns `UnknownRuntimeFamily`, `UnsupportedTargetTriple`, or `MissingValidatedRuntime`, Substrate must fail closed and surface that the runtime is unsupported for the requested guest target.
+
+### 5. Substrate owns artifact URL, checksum, extraction, and install logic
+
+Using UAA for version selection does not move the binary workflow out of Substrate.
+
+Rules:
+
+1. Substrate owns the download URL construction, artifact fetch, checksum verification, extraction, cache, and install logic,
+2. Substrate must not use a floating “latest” release lookup for Codex runtime installation,
+3. Substrate’s package metadata or equivalent package-owned install configuration must be the source of truth for artifact URL template, target mapping, and expected checksum verification inputs keyed by the UAA-resolved version and target triple,
+4. checksum verification is mandatory before installing the fetched artifact into the world-deps prefix.
+
+### 6. Guest artifact verification is mandatory, not implied
 
 The slice must freeze the verification seam, not hand-wave it.
 
@@ -216,7 +269,7 @@ Rules:
 2. if the binary still needs Node or other guest runtime pieces, the package must widen into a `codex-runtime` bundle (or equivalent) that provisions the required pieces explicitly,
 3. the implementation must record which path was proven, rather than leaving both possibilities implied.
 
-### 5. Operator flow remains inventory -> enable -> provision if needed -> sync
+### 7. Operator flow remains inventory -> enable -> provision if needed -> sync
 
 This slice must preserve current world-deps operator truth.
 
@@ -228,7 +281,7 @@ Rules:
 4. `substrate world deps current sync` remains the runtime apply step,
 5. this slice must not assume world refresh/restart is required after sync without new evidence.
 
-### 6. Installers must expose install-time runtime provisioning on both surfaces
+### 8. Installers must expose install-time runtime provisioning on both surfaces
 
 Rules:
 
@@ -240,7 +293,7 @@ Rules:
 6. docs/help must state that the flag includes sync rather than leaving a hidden post-install step,
 7. the behavior must be the same conceptually across dev and prod even if implementation plumbing differs.
 
-### 7. Slice 59 must align forward to Slice 58 without waiting for Slice 58
+### 9. Slice 59 must align forward to Slice 58 without waiting for Slice 58
 
 Rules:
 
@@ -271,12 +324,12 @@ Rules:
 
 1. A world-scoped Codex backend is considered launchable only when guest runtime truth is satisfied.
 2. Missing guest runtime truth fails closed before retained worker bootstrap with explicit remediation.
-3. Substrate-owned world-deps packaging can install Codex into the guest from official release artifacts.
-4. The implementation explicitly proves whether the Linux artifact is self-contained or requires a wider runtime bundle.
-5. Prod and dev installers both expose a documented install-time provisioning flag for this runtime.
-6. Slice 59 lands cleanly before Slice 58 implementation, and Slice 58 can later migrate shape/selectors without reopening the runtime contract.
+3. Substrate resolves the validated Codex version through the published `0.3.6` UAA Rust API instead of duplicating version-selection logic downstream.
+4. Substrate-owned world-deps packaging can install Codex into the guest from official release artifacts, using Substrate-owned checksum verification and install logic.
+5. The implementation explicitly proves whether the Linux artifact is self-contained or requires a wider runtime bundle.
+6. Prod and dev installers both expose a documented install-time provisioning flag for this runtime.
+7. Slice 59 lands cleanly before Slice 58 implementation, and Slice 58 can later migrate shape/selectors without reopening the runtime contract.
 
 ## Open Questions
 
-1. Should the package name be `codex`, `codex-runtime`, or another bundle-oriented name if guest prerequisites are needed?
-2. If Slice 58 keeps temporary compatibility aliases, how long should Slice 59 diagnostics refer to old vs new exact ids during transition?
+1. If Slice 58 keeps temporary compatibility aliases, how long should Slice 59 diagnostics refer to old vs new exact ids during transition?

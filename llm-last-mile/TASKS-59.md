@@ -33,7 +33,7 @@ Session goal:
   - Verify:
     - `cargo test -p shell agent_runtime::validator -- --nocapture`
     - `cargo test -p shell dispatch_contract -- --nocapture`
-  - Expected files touched:
+  - Files:
     - [`crates/shell/src/execution/agent_runtime/validator.rs`](../crates/shell/src/execution/agent_runtime/validator.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
 
@@ -42,7 +42,7 @@ Session goal:
   - Verify:
     - `cargo test -p shell agent_runtime::validator -- --nocapture`
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
-  - Expected files touched:
+  - Files:
     - [`crates/shell/src/execution/agent_runtime/validator.rs`](../crates/shell/src/execution/agent_runtime/validator.rs)
     - relevant runtime/control-surface tests
 
@@ -68,21 +68,33 @@ Session goal:
 ### Tasks
 
 - [ ] Task 2.1: Author the Codex world-deps package/bundle and install script
-  - Acceptance: a Substrate-owned world-deps package or bundle can install Codex under `/var/lib/substrate/world-deps/<package>` and expose `/var/lib/substrate/world-deps/bin/codex`; artifact sourcing targets official release artifacts.
+  - Acceptance: a Substrate-owned world-deps package or bundle named `codex-runtime` can install Codex under `/var/lib/substrate/world-deps/<package>` and expose `/var/lib/substrate/world-deps/bin/codex`; artifact sourcing targets official release artifacts.
   - Verify:
     - `cargo test -p shell world_deps -- --nocapture`
     - manual dry-run/package inspection as appropriate for the package authoring path
-  - Expected files touched:
+  - Files:
     - world-deps package inventory under the relevant inventory tree
     - associated install script(s)
     - [`docs/reference/world/deps/authoring_packages.md`](../docs/reference/world/deps/authoring_packages.md) only if operator contract examples need updating
 
-- [ ] Task 2.2: Record the verified runtime dependency posture
-  - Acceptance: the implementation explicitly proves one of two outcomes: (a) the Linux Codex artifact is self-contained in the guest, or (b) the package widens into a runtime bundle that includes the required guest runtime dependencies.
+- [ ] Task 2.2: Bump the published UAA dependency wiring to `0.3.6`
+  - Acceptance: every Slice 59-touched manifest that already pins UAA exactly now resolves `unified-agent-api = "=0.3.6"` and aligned exact sibling UAA crates at `=0.3.6`, and the lockfile reflects that published dependency update.
+  - Verify:
+    - `rg -n 'unified-agent-api.*0\\.3\\.6|unified-agent-api-codex.*0\\.3\\.6|unified-agent-api-claude-code.*0\\.3\\.6' /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.lock`
+  - Files:
+    - [`crates/shell/Cargo.toml`](../crates/shell/Cargo.toml)
+    - [`crates/gateway/Cargo.toml`](../crates/gateway/Cargo.toml)
+    - [`crates/world-service/Cargo.toml`](../crates/world-service/Cargo.toml)
+    - [`Cargo.lock`](../Cargo.lock)
+
+- [ ] Task 2.3: Integrate UAA-backed validated version selection and record the verified runtime dependency posture
+  - Acceptance: Substrate uses the published `0.3.6` `codex`-feature surface, calls `agent_api::resolve_runtime_support("codex", target_triple)`, uses `record.version` as the validated version to acquire, does not read generated/internal UAA files directly, and explicitly proves one of two outcomes: (a) the Linux Codex artifact is self-contained in the guest, or (b) the package widens into a runtime bundle that includes the required guest runtime dependencies.
   - Verify:
     - package-level smoke proof in the target guest environment
     - `cargo test -p shell world_deps -- --nocapture`
-  - Expected files touched:
+    - targeted tests for the UAA-backed version-resolution call path if added in Substrate
+  - Files:
+    - Substrate dependency/runtime-selection code that invokes UAA
     - package inventory / script files
     - nearby docs or implementation notes that state the verified outcome
 
@@ -93,7 +105,8 @@ Packet 2 is complete only when:
 1. the guest-visible `codex` entrypoint resolves from `/var/lib/substrate/world-deps/bin`,
 2. package installs are idempotent,
 3. the verified self-contained-vs-bundle outcome is explicit,
-4. the path does not rely on host NVM/npm state.
+4. the path does not rely on host NVM/npm state,
+5. version selection comes from the published `unified-agent-api = "=0.3.6"` Rust API rather than downstream duplicated logic.
 
 Do not start Packet 3 until Packet 2 verification is green.
 
@@ -112,7 +125,7 @@ Session goal:
   - Verify:
     - installer help/usage inspection
     - targeted script tests or dry-run validation if available
-  - Expected files touched:
+  - Files:
     - [`scripts/substrate/install-substrate.sh`](../scripts/substrate/install-substrate.sh)
     - [`scripts/substrate/install.sh`](../scripts/substrate/install.sh)
     - [`docs/INSTALLATION.md`](../docs/INSTALLATION.md)
@@ -122,7 +135,7 @@ Session goal:
   - Verify:
     - installer help/usage inspection
     - targeted script tests or dry-run validation if available
-  - Expected files touched:
+  - Files:
     - [`scripts/substrate/dev-install-substrate.sh`](../scripts/substrate/dev-install-substrate.sh)
     - [`scripts/substrate/world-enable.sh`](../scripts/substrate/world-enable.sh)
     - [`docs/INSTALLATION.md`](../docs/INSTALLATION.md)
@@ -159,7 +172,7 @@ Session goal:
     - `cargo test -p world-service member_runtime -- --nocapture`
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
     - packet-specific guest smoke proof command(s) captured in the implementation session
-  - Expected files touched:
+  - Files:
     - no planned source edits; this is the validation gate after the implementation packets above.
 
 ### Packet 4 Checkpoint

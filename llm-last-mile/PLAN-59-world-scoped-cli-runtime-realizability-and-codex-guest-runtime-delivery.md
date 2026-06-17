@@ -38,8 +38,9 @@ Slice 59 therefore **precedes** Slice 58 implementation even though Slice 58 is 
 
 1. World-scoped CLI launchability becomes guest-visible truth instead of host `which` truth.
 2. Missing guest runtime becomes an early validator/materialization error with remediation.
-3. Codex guest runtime delivery uses a Substrate-owned world-deps script package that pulls official release artifacts.
-4. Prod and dev installers gain the generic public flag shape `--provision-agent-runtime <runtime_family>`, even though this slice only implements the `codex` value.
+3. Codex guest runtime delivery uses a Substrate-owned world-deps script package named `codex-runtime` that pulls official release artifacts.
+4. Substrate resolves the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.6"`, Rust path `agent_api`) and keeps binary workflow ownership locally; `0.3.6` is the minimum published line for the Codex runtime-version API surface this slice needs.
+5. Prod and dev installers gain the generic public flag shape `--provision-agent-runtime <runtime_family>`, even though this slice only implements the `codex` value.
 
 ### What does not change
 
@@ -85,28 +86,33 @@ Goal:
 
 1. make Codex guest-visible through world-deps script packaging,
 2. pin the install prefix and entrypoint contract,
-3. prove whether the Linux release binary is self-contained or whether the package must widen into a runtime bundle.
+3. resolve the validated Codex version through UAA’s public runtime-support API after bumping the published `unified-agent-api` line to `=0.3.6`,
+4. prove whether the Linux release binary is self-contained or whether the package must widen into a runtime bundle.
 
 Primary touch surface:
 
 1. world-deps inventory/package definitions under Substrate-managed inventory,
 2. package install scripts,
-3. world-deps inventory/surface tests,
-4. operator docs for authoring/runtime flows.
+3. Substrate dependency/runtime-selection code that calls into UAA’s public Rust API,
+4. world-deps inventory/surface tests,
+5. operator docs for authoring/runtime flows.
 
 Required changes:
 
-1. define the Codex package or bundle name,
-2. install under `/var/lib/substrate/world-deps/<package>`,
-3. expose `/var/lib/substrate/world-deps/bin/codex`,
-4. fetch official release artifacts from the chosen source,
-5. document the verified self-contained-vs-bundle outcome.
+1. define the package/bundle as `codex-runtime`,
+2. bump the published `unified-agent-api` dependency line to `=0.3.6` (plus any already-aligned exact sibling UAA pins in the touched manifests), keep the `codex` feature enabled, and use `agent_api::resolve_runtime_support("codex", target_triple)` to resolve the validated version,
+3. keep artifact URL construction, checksum verification, extraction, cache, and install logic in Substrate,
+4. install under `/var/lib/substrate/world-deps/<package>`,
+5. expose `/var/lib/substrate/world-deps/bin/codex`,
+6. fetch official release artifacts from the chosen source,
+7. document the verified self-contained-vs-bundle outcome.
 
 Verification checkpoint:
 
 1. the package/bundle installs idempotently,
 2. the guest-visible `codex` entrypoint resolves from the world-deps bin prefix,
-3. the implementation records which runtime-dependency posture was proven.
+3. the implementation records which runtime-dependency posture was proven,
+4. Substrate resolves against the published `0.3.6` UAA surface and does not duplicate version-selection logic outside the public UAA API.
 
 ### Phase 3: Add Installer-Time Runtime Provisioning And Doc It
 
@@ -170,7 +176,7 @@ Exit criteria:
 Limited parallelism that is acceptable:
 
 1. artifact-source research and package-script drafting may happen while validator contract wording is being finalized,
-2. prod/dev installer flag naming can be designed while package authoring is underway,
+2. UAA integration for validated version resolution can be developed while package authoring is underway,
 3. but code landing remains sequential because the runtime truth wall should exist before package and installer work claim success.
 
 ## Risks
