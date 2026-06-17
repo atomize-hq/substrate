@@ -1621,7 +1621,10 @@ fn render_codex_runtime_install_script_v1(
     spec: &CodexRuntimeInstallSpecV1,
 ) -> String {
     template
-        .replace("__SUBSTRATE_CODEX_PACKAGE_NAME__", CODEX_RUNTIME_PACKAGE_NAME)
+        .replace(
+            "__SUBSTRATE_CODEX_PACKAGE_NAME__",
+            CODEX_RUNTIME_PACKAGE_NAME,
+        )
         .replace("__SUBSTRATE_CODEX_ARCHIVE_NAME__", &spec.archive_name)
         .replace("__SUBSTRATE_CODEX_ARCHIVE_URL__", &spec.archive_url)
         .replace("__SUBSTRATE_CODEX_ARCHIVE_SHA256__", &spec.archive_sha256)

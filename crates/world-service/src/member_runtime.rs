@@ -958,17 +958,6 @@ fn map_wrapper_error(err: AgentWrapperError) -> anyhow::Error {
             agent_kind,
             capability,
         } => anyhow!("member runtime backend {agent_kind} does not support {capability}"),
-        AgentWrapperError::UnknownRuntimeFamily { runtime_family } => {
-            anyhow!("unknown runtime family: {runtime_family}")
-        }
-        AgentWrapperError::UnsupportedTargetTriple {
-            runtime_family,
-            target_triple,
-        } => anyhow!("unsupported target triple for {runtime_family}: {target_triple}"),
-        AgentWrapperError::MissingValidatedRuntime {
-            runtime_family,
-            target_triple,
-        } => anyhow!("missing validated runtime for {runtime_family}: {target_triple}"),
         AgentWrapperError::InvalidAgentKind { message }
         | AgentWrapperError::InvalidRequest { message }
         | AgentWrapperError::Backend { message } => anyhow!(message),
