@@ -238,7 +238,13 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
         let mut context = assemble_context(&window);
         if let Some(objective) = narrowed_objective_summary(&window.compact_rows) {
-            context.objective = objective;
+            if context.objective.structured.is_some() {
+                context.objective = context
+                    .objective
+                    .with_compatibility_display_from(&objective);
+            } else {
+                context.objective = objective;
+            }
         }
         let task_frame = infer_task_frame(&context);
         let delegation =
@@ -3205,6 +3211,53 @@ mod tests {
             interval.verification_attempts[0].target_scope.tests,
             vec!["checkpoints".to_string()]
         );
+    }
+
+    #[test]
+    fn checkpoints_preserve_structured_objective_when_narrowing_runs() {
+        let prompt = "## Scope\nValidate the structured objective sidecar.\n\n## Verification\n- cargo test -p agent-drift-analyzer checkpoints -- --nocapture";
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![
+                row(0, CompactionKind::UserMessage, prompt),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    "{\"command\":\"echo structured-objective-checkpoint\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+            compact_rows: vec![
+                row(0, CompactionKind::UserMessage, prompt),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    "{\"command\":\"echo structured-objective-checkpoint\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 1);
+
+        let objective = &analyses[0].current.context.objective;
+        assert!(objective.text.contains("Validate the structured objective sidecar."));
+
+        let structured = objective.structured.as_ref().expect("structured objective");
+        assert!(structured.evidence_spans.iter().any(|span| {
+            span.role == crate::checkpoint::ObjectiveRole::Goal
+                && matches!(span.section_kind, crate::checkpoint::ObjectiveSectionKind::Scope)
+                && span.excerpt.contains("Validate the structured objective sidecar.")
+                && span.section_index.is_some()
+                && span.clause_index.is_some()
+        }));
+        assert!(structured.evidence_spans.iter().any(|span| {
+            span.role == crate::checkpoint::ObjectiveRole::Verification
+                && span
+                    .excerpt
+                    .contains("cargo test -p agent-drift-analyzer checkpoints")
+                && span.section_index.is_some()
+                && span.clause_index.is_some()
+        }));
     }
 
     #[test]

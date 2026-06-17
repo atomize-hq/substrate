@@ -53,6 +53,23 @@ impl ObjectiveSummary {
             evidence,
         }
     }
+
+    pub(crate) fn with_compatibility_display_from(&self, compatibility: &ObjectiveSummary) -> Self {
+        let mut summary = self.clone();
+        summary.text = compatibility.text.clone();
+        summary.comparison_key = compatibility.comparison_key.clone();
+        for command in &compatibility.verification_commands {
+            if !summary.verification_commands.contains(command) {
+                summary.verification_commands.push(command.clone());
+            }
+        }
+        for evidence in &compatibility.evidence {
+            if !summary.evidence.contains(evidence) {
+                summary.evidence.push(evidence.clone());
+            }
+        }
+        summary
+    }
 }
 
 pub fn extract_objective(rows: &[CompactionRow]) -> ObjectiveSummary {
