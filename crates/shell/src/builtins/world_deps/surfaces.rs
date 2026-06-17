@@ -1310,6 +1310,15 @@ mod tests {
     }
 
     #[test]
+    fn world_deps_codex_runtime_guest_arch_mapping_normalizes_arm64() {
+        assert_eq!(
+            map_codex_runtime_target_triple_for_guest_arch_v1("arm64")
+                .expect("normalize arm64 guest arch"),
+            "aarch64-unknown-linux-musl"
+        );
+    }
+
+    #[test]
     fn world_deps_codex_runtime_script_records_self_contained_posture() {
         let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
             .expect("resolve validated codex runtime");
@@ -1545,9 +1554,16 @@ fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> R
 }
 
 fn current_codex_runtime_target_triple_v1() -> Result<&'static str> {
-    match std::env::consts::ARCH {
-        "x86_64" => Ok("x86_64-unknown-linux-musl"),
-        "aarch64" => Ok("aarch64-unknown-linux-musl"),
+    let guest_arch = run_world_command_output_for_deps("uname -m", Some("/tmp"))
+        .context("failed to inspect guest architecture for codex runtime selection")?;
+    let guest_arch = guest_arch.stdout.trim();
+    map_codex_runtime_target_triple_for_guest_arch_v1(guest_arch)
+}
+
+fn map_codex_runtime_target_triple_for_guest_arch_v1(guest_arch: &str) -> Result<&'static str> {
+    match guest_arch {
+        "x86_64" | "amd64" => Ok("x86_64-unknown-linux-musl"),
+        "aarch64" | "arm64" => Ok("aarch64-unknown-linux-musl"),
         arch => Err(config_model::user_error(format!(
             "world deps package '{}' is unsupported for guest arch '{}' because Substrate cannot derive a validated Codex guest target triple",
             CODEX_RUNTIME_PACKAGE_NAME, arch
