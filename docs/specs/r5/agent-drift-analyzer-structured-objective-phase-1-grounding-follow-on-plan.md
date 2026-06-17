@@ -1,9 +1,9 @@
 # Plan: Agent Drift Analyzer Structured Objective Phase 1 Grounding Follow-On
 
 Status: draft plan created on 2026-06-16 after reviewing the current crate snapshot, the narrow
-harness-fix landing, and the structured-objective design stack. This plan assumes the harness fix
-is correct and keeps the follow-on bounded to additive grounding restoration plus docs/acceptance
-sequencing.
+harness-fix landing, and the structured-objective design stack; reconciled on 2026-06-17 after the
+grounding follow-on family landed through `SO-G6`. This plan now serves as the historical
+closeout/handoff record for the bounded grounding family.
 
 ## Objective
 

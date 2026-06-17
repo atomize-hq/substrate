@@ -1,6 +1,12 @@
 # Structured Objective Phase 1 Packet Prompts
-Status: draft orchestration prompts created on 2026-06-14 for the active unchecked packets in `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`.
-These prompts intentionally cover the actionable packets `SO-1.1` through `SO-6.2`. Already-landed docs-lock packets `SO-0.*` are excluded, and deferred ask-first packets `SO-X.*` remain excluded until separately approved.
+Status: draft orchestration prompts created on 2026-06-14 and reconciled on 2026-06-17 against the
+live `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` ledger after the
+grounding follow-on family closed through `SO-G6`.
+These prompts intentionally cover the phase-1 packets `SO-1.1` through `SO-6.2`. Already-landed
+docs-lock packets `SO-0.*` are excluded, and deferred ask-first packets `SO-X.*` remain excluded
+until separately approved. Packet numbering below preserves phase-1 task order for auditability;
+the live post-grounding restart point is Packet 8 / `SO-4.1`, and the later `SO-3.*` semantic
+packets should only start after the `SO-4.1` / `SO-4.2` harness boundary exists.
 Shared authority for all packets:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
 - docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
@@ -827,7 +833,8 @@ Your job is done only when Packet `SO-2.3` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-3.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-3.1` only, assuming Packets `SO-1.1` through `SO-2.3` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-3.1` only, assuming the
+grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -877,7 +884,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-3.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-2.3` are already landed.
+/goal Implement Packet `SO-3.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -989,7 +996,9 @@ Your job is done only when Packet `SO-3.1` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-3.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-3.2` only, assuming Packets `SO-1.1` through `SO-3.1` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-3.2` only, assuming the
+grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-3.1` are
+already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -1039,7 +1048,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-3.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-3.1` are already landed.
+/goal Implement Packet `SO-3.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-3.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1151,7 +1160,9 @@ Your job is done only when Packet `SO-3.2` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-4.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-4.1` only, assuming Packets `SO-1.1` through `SO-3.2` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-4.1` only, assuming the
+grounding follow-on family through `SO-G6` is already landed and no later `SO-4.2+` packet has
+started.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -1201,7 +1212,7 @@ cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-4.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-3.2` are already landed.
+/goal Implement Packet `SO-4.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` is already landed and no later `SO-4.2+` packet has started.
 
 Use the `$incremental-implementation` skill.
 
@@ -1315,7 +1326,8 @@ Your job is done only when Packet `SO-4.1` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-4.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-4.2` only, assuming Packets `SO-1.1` through `SO-4.1` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-4.2` only, assuming the
+grounding follow-on family through `SO-G6` and Packet `SO-4.1` are already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -1363,7 +1375,7 @@ cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-4.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-4.1` are already landed.
+/goal Implement Packet `SO-4.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` and Packet `SO-4.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1475,7 +1487,8 @@ Your job is done only when Packet `SO-4.2` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-5.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-5.1` only, assuming Packets `SO-1.1` through `SO-4.2` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-5.1` only, assuming the
+grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -1525,7 +1538,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-5.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-4.2` are already landed.
+/goal Implement Packet `SO-5.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1637,7 +1650,9 @@ Your job is done only when Packet `SO-5.1` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-5.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-5.2` only, assuming Packets `SO-1.1` through `SO-5.1` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-5.2` only, assuming the
+grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-5.1` are
+already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -1686,7 +1701,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-5.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-5.1` are already landed.
+/goal Implement Packet `SO-5.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-5.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1798,7 +1813,9 @@ Your job is done only when Packet `SO-5.2` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-5.3` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-5.3` only, assuming Packets `SO-1.1` through `SO-5.2` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-5.3` only, assuming the
+grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, `SO-5.1`, and
+`SO-5.2` are already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -1849,7 +1866,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-5.3` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-5.2` are already landed.
+/goal Implement Packet `SO-5.3` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, `SO-5.1`, and `SO-5.2` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1962,7 +1979,9 @@ Your job is done only when Packet `SO-5.3` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-6.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-6.1` only, assuming Packets `SO-1.1` through `SO-5.3` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-6.1` only, assuming the
+grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and
+`SO-3.2`, and Packets `SO-5.1` through `SO-5.3` are already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -2014,7 +2033,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-6.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-5.3` are already landed.
+/goal Implement Packet `SO-6.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and `SO-3.2`, and Packets `SO-5.1` through `SO-5.3` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -2126,7 +2145,9 @@ Your job is done only when Packet `SO-6.1` is review-clean and every non-empty i
 ````text
 /goal Land Packet `SO-6.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `SO-6.2` only, assuming Packets `SO-1.1` through `SO-6.1` are already landed.
+You are the orchestration agent. Stay strictly scoped to Packet `SO-6.2` only, assuming the
+grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and
+`SO-3.2`, Packets `SO-5.1` through `SO-5.3`, and Packet `SO-6.1` are already landed.
 
 Packet authority:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
@@ -2175,7 +2196,7 @@ Manual review of the landed phase-1 docs and code diff
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-6.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-6.1` are already landed.
+/goal Implement Packet `SO-6.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and `SO-3.2`, Packets `SO-5.1` through `SO-5.3`, and Packet `SO-6.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 

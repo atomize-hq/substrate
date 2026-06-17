@@ -1,8 +1,8 @@
 # Tasks: Agent Drift Analyzer Structured Objective Phase 1
 
 Status: draft task ledger created on 2026-06-14 from the structured-objective design stack;
-reconciled on 2026-06-16 against the live crate snapshot plus the grounding follow-on family
-through `SO-G5`. Architecture owns semantics, evaluation owns acceptance, migration owns landing
+reconciled on 2026-06-17 against the live crate snapshot plus the grounding follow-on family
+through `SO-G6`. Architecture owns semantics, evaluation owns acceptance, migration owns landing
 order, and the classifier taxonomy remains deferred for this phase. Keep the original packet
 structure for auditability, but do not treat already-landed SO-1 / SO-2 seams as still-open
 implementation debt.

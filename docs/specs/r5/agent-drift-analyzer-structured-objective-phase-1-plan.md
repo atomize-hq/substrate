@@ -1,7 +1,7 @@
 # Plan: Agent Drift Analyzer Structured Objective Phase 1
 
 Status: draft plan created on 2026-06-14 from the structured-objective design stack; reconciled
-on 2026-06-16 against the live crate snapshot plus the grounding follow-on family through `SO-G5`.
+on 2026-06-17 against the live crate snapshot plus the grounding follow-on family through `SO-G6`.
 The map doc was used only as a routing overview; architecture owns semantics, evaluation owns
 acceptance, migration owns landing order, and classifier taxonomy remains deferred for this phase.
 

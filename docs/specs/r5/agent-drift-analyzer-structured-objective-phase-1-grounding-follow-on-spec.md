@@ -1,8 +1,9 @@
 # Spec: Agent Drift Analyzer Structured Objective Phase 1 Grounding Follow-On
 
 Status: draft spec created on 2026-06-16 after verifying the live crate state, the current
-structured-objective design stack, and the narrow harness-fix landing. This follow-on keeps the
-harness fix intact and defines the next bounded structured-objective seam.
+structured-objective design stack, and the narrow harness-fix landing; reconciled on 2026-06-17
+after the grounding follow-on family landed through `SO-G6`. This follow-on keeps the harness fix
+intact and now stands as the bounded grounding-family spec of record.
 
 Authority order for this follow-on:
 `DESIGN-r5-structured-objective-architecture.md` owns semantic shape,

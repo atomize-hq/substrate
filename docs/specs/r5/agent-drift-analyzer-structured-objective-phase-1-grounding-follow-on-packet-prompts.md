@@ -1,9 +1,10 @@
 # Structured Objective Phase 1 Grounding Follow-On Packet Prompts
-Status: draft orchestration prompts created on 2026-06-16 for the active unchecked packets in
-`docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md`.
-These prompts intentionally cover actionable packets `SO-G1` through `SO-G6`. Already-landed
-docs-lock packet `SO-G0.*` is excluded, and deferred ask-first packets `SO-GX.*` remain excluded
-until separately approved.
+Status: draft orchestration prompts created on 2026-06-16 for the then-active unchecked packets in
+`docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md`;
+reconciled on 2026-06-17 after the grounding follow-on family landed through `SO-G6`. These
+prompts now remain as the historical orchestration artifact for packets `SO-G1` through `SO-G6`.
+Already-landed docs-lock packet `SO-G0.*` is excluded, and deferred ask-first packets `SO-GX.*`
+remain excluded until separately approved.
 
 Shared authority for all packets:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md

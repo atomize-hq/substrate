@@ -1,9 +1,9 @@
 # Tasks: Agent Drift Analyzer Structured Objective Phase 1 Grounding Follow-On
 
 Status: draft task ledger created on 2026-06-16 after validating the live structured-objective
-crate state and the narrow harness-fix landing. Keep each implementation task focused enough to
-stay close to five touched files or fewer, and do not treat this ledger as approval to widen into
-downstream migration.
+crate state and the narrow harness-fix landing; reconciled on 2026-06-17 after the grounding
+follow-on family landed through `SO-G6`. Keep this ledger as the historical closeout record for the
+bounded grounding family rather than as an active implementation queue.
 
 ## SO-G0: Docs Lock
 
@@ -26,7 +26,7 @@ downstream migration.
 
 ## SO-G1: Restore Additive Grounding Identifiers
 
-- [ ] Task SO-G1.1: Add optional `section_index` / `clause_index` back to `ObjectiveEvidenceSpan`.
+- [x] Task SO-G1.1: Add optional `section_index` / `clause_index` back to `ObjectiveEvidenceSpan`.
   - Acceptance: `ObjectiveEvidenceSpan` again exposes additive optional section/clause identifiers
     with serde defaults, and older artifacts remain loadable without requiring the new fields.
   - Verify:
@@ -36,7 +36,7 @@ downstream migration.
     - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
     - `crates/agent-drift-analyzer/src/context/objective.rs`
 
-- [ ] Task SO-G1.2: Populate section/clause identifiers from the live decomposition path.
+- [x] Task SO-G1.2: Populate section/clause identifiers from the live decomposition path.
   - Acceptance: the clause-backed evidence path emits `section_index` / `clause_index` for goal,
     constraint, verification, and context spans when that information exists, while `start_char` /
     `end_char` remain optional and may stay `None`.
@@ -49,21 +49,21 @@ downstream migration.
 
 ## SO-G2: Focused Grounding And Heading Regressions
 
-- [ ] Task SO-G2.1: Add focused regressions proving section/clause identifiers are populated.
+- [x] Task SO-G2.1: Add focused regressions proving section/clause identifiers are populated.
   - Acceptance: checkpoint tests assert that at least goal and verification evidence spans carry
     populated `section_index` / `clause_index` values when clause-backed evidence exists.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task SO-G2.2: Add the duplicate-ish grounding ambiguity control.
+- [x] Task SO-G2.2: Add the duplicate-ish grounding ambiguity control.
   - Acceptance: a control case with similar scope/checklist wording proves the supporting span comes
     from the correct section/clause rather than only matching excerpt text.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task SO-G2.3: Add adversarial heading-classification controls.
+- [x] Task SO-G2.3: Add adversarial heading-classification controls.
   - Acceptance: focused regressions show `Task constraints`, `Verification task`, `Output request`,
     `Questions to ask`, and `Implementation steps` do not collapse into generic mission matching,
     while `What I need` still resolves as a mission-like heading when it contains the real goal.
@@ -73,7 +73,7 @@ downstream migration.
 
 ## SO-G3: Reconcile Existing Phase-1 Docs To Landed Reality
 
-- [ ] Task SO-G3.1: Update the phase-1 task ledger so landed work is not still presented as open.
+- [x] Task SO-G3.1: Update the phase-1 task ledger so landed work is not still presented as open.
   - Acceptance: the existing phase-1 tasks doc explicitly distinguishes landed schema bridge,
     sidecar exposure, section/clause decomposition, and preliminary structured assembly from the
     remaining grounding hardening, acceptance-harness, and comparison-key work.
@@ -81,7 +81,7 @@ downstream migration.
   - Files:
     - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
 
-- [ ] Task SO-G3.2: Reconcile the phase-1 plan with the real next seams.
+- [x] Task SO-G3.2: Reconcile the phase-1 plan with the real next seams.
   - Acceptance: the existing phase-1 plan no longer implies that the entire sidecar stack is still
     hypothetical, and it names the real remaining seams: grounding restoration, comparison-key
     derivation, acceptance harness, and deferred downstream migration.
@@ -91,7 +91,7 @@ downstream migration.
 
 ## SO-G4: Lock The Comparison-Key Guardrail
 
-- [ ] Task SO-G4.1: Record that current `comparison_key` is provisional and not the approved
+- [x] Task SO-G4.1: Record that current `comparison_key` is provisional and not the approved
       semantic bridge.
   - Acceptance: the docs explicitly state that current `comparison_key` still mirrors display text
     and must not become the basis for downstream migration until the dedicated derivation packet
@@ -118,7 +118,7 @@ downstream migration.
 
 ## SO-G6: Validation And Closeout
 
-- [ ] Task SO-G6.1: Run the focused checkpoint wall and the full analyzer wall on the grounding patch.
+- [x] Task SO-G6.1: Run the focused checkpoint wall and the full analyzer wall on the grounding patch.
   - Acceptance: the additive grounding restoration lands with both the focused checkpoint suite and
     the full analyzer test wall green.
   - Verify:
