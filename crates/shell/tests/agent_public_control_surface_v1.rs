@@ -29,6 +29,7 @@ use support::{
 use tempfile::TempDir;
 
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
+const CODEX_WORLD_GUEST_ENTRYPOINT: &str = "/var/lib/substrate/world-deps/bin/codex";
 #[cfg(unix)]
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
 const TOOLBOX_UNIX_PATH_FALLBACK_THRESHOLD: usize = 100;
@@ -133,6 +134,33 @@ impl AgentControlFixture {
             &["ephemeral", "retained"],
             &[],
         );
+    }
+
+    fn write_runtime_inventory_with_explicit_member_binary(
+        &self,
+        member_agent_id: &str,
+        member_binary: &Path,
+    ) {
+        self.write_runtime_inventory_with_member_backend_and_world_dispatch(
+            Some(member_agent_id),
+            true,
+            &[
+                "run_world_task",
+                "spawn_world_worker",
+                "continue_world_worker",
+            ],
+            &["ephemeral", "retained"],
+            &[],
+        );
+        fs::write(
+            self.substrate_home
+                .join(format!("agents/{member_agent_id}.yaml")),
+            format!(
+                "version: 1\nid: {member_agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: world\n  cli:\n    runtime_family: codex\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                member_binary.display()
+            ),
+        )
+        .unwrap_or_else(|_| panic!("write {member_agent_id} agent file with explicit binary"));
     }
 
     fn write_runtime_inventory_with_member_backend_and_world_dispatch(
@@ -472,13 +500,19 @@ fn write_host_runtime_inventory_with_binaries(
 }
 
 fn cli_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String {
+    let binary_value =
+        if scope == Some("world") && runtime_family_for_fixture_agent(agent_id) == "codex" {
+            CODEX_WORLD_GUEST_ENTRYPOINT.to_string()
+        } else {
+            binary.display().to_string()
+        };
     let execution_scope = scope
         .map(|scope| format!("  execution:\n    scope: {scope}\n"))
         .unwrap_or_default();
     let runtime_family = runtime_family_for_fixture_agent(agent_id);
     format!(
         "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-        binary.display()
+        binary_value
     )
 }
 
@@ -5090,6 +5124,80 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
     assert!(
         detached_world_stderr.contains("substrate agent reattach --session sess_world_detached"),
         "detached world rejection must direct callers through reattach before world follow-up resumes: {detached_world_output:?}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn world_member_bootstrap_fails_closed_with_remediation_when_codex_world_keeps_host_binary_truth() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_with_explicit_member_binary("codex_world", &fixture.fake_codex);
+
+    let socket_home = tempfile::Builder::new()
+        .prefix("sac-world-missing-runtime-")
+        .tempdir_in("/tmp")
+        .expect("socket tempdir");
+    let socket_path = socket_home.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &socket_path,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-public-world-turn".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+    let mut repl = PtyRepl::spawn_with_world_socket(&fixture, &socket_path);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_output("substrate>", Duration::from_secs(2))
+        .expect("prompt");
+
+    let host_runtime_launch_offset = repl_output_len(&repl);
+    repl.send_line("::cli:codex start retained host runtime");
+    wait_for_shell_owned_session_ready(
+        &fixture,
+        &repl,
+        host_runtime_launch_offset,
+        Duration::from_secs(5),
+    );
+
+    let world_turn_offset = repl_output_len(&repl);
+    repl.send_line("::cli:codex_world member targeted first turn");
+    wait_for_output_after(
+        &repl,
+        "substrate>",
+        world_turn_offset,
+        Duration::from_secs(5),
+    )
+    .expect("prompt after failed world bootstrap");
+
+    let output = repl_output_string(&repl);
+    let delta = &output[world_turn_offset..];
+    assert!(
+        delta.contains("not runtime-realizable in world scope"),
+        "world bootstrap failure must surface the world-scoped runtime classifier: {delta}"
+    );
+    assert!(
+        delta.contains(CODEX_WORLD_GUEST_ENTRYPOINT),
+        "world bootstrap failure must name the guest entrypoint contract: {delta}"
+    );
+    assert!(
+        delta.contains("substrate world deps current sync"),
+        "world bootstrap failure must point to world-deps remediation: {delta}"
+    );
+    assert!(
+        delta.contains("host-local truth"),
+        "world bootstrap failure must distinguish host truth from world truth: {delta}"
+    );
+
+    let guard = records.lock().expect("lock world-service records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        0,
+        "world bootstrap must fail before any member dispatch reaches world-service: {guard:#?}"
     );
 }
 

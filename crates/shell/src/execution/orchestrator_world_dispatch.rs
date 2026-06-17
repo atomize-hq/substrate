@@ -4496,12 +4496,15 @@ mod tests {
     ) {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("create agents dir");
-        let scope = match scope {
-            AgentExecutionScope::Host => "host",
-            AgentExecutionScope::World => "world",
+        let (scope, binary) = match scope {
+            AgentExecutionScope::Host => ("host", "/bin/sh"),
+            AgentExecutionScope::World => (
+                "world",
+                crate::execution::agent_runtime::validator::CODEX_WORLD_GUEST_ENTRYPOINT,
+            ),
         };
         let raw = format!(
-            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: codex\n    binary: /bin/sh\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: true\n"
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: codex\n    binary: {binary}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: true\n"
         );
         fs::write(agents_dir.join(format!("{agent_id}.yaml")), raw).expect("write agent file");
     }
@@ -5040,7 +5043,7 @@ mod tests {
             "orchestrator_participant_id": "orch_dispatch",
             "internal": {
                 "resolved_agent_kind": "codex",
-                "resolved_binary_path": "/usr/bin/codex",
+                "resolved_binary_path": crate::execution::agent_runtime::validator::CODEX_WORLD_GUEST_ENTRYPOINT,
                 "shell_owner_pid": 42,
                 "lease_token": "lease_member",
                 "cancel_supported": true,
@@ -12896,6 +12899,19 @@ agents:
 
     #[cfg(target_os = "linux")]
     fn inventory_entry(agent_id: &str, scope: AgentExecutionScope) -> AgentInventoryEntryV1 {
+        let binary = if scope == AgentExecutionScope::World && agent_id == "codex_world" {
+            crate::execution::agent_runtime::validator::CODEX_WORLD_GUEST_ENTRYPOINT
+        } else {
+            "sh"
+        };
+        inventory_entry_with_binary(agent_id, scope, binary)
+    }
+
+    fn inventory_entry_with_binary(
+        agent_id: &str,
+        scope: AgentExecutionScope,
+        binary: &str,
+    ) -> AgentInventoryEntryV1 {
         AgentInventoryEntryV1 {
             path: PathBuf::from(format!("{agent_id}.yaml")),
             file: AgentFileV1 {
@@ -12907,7 +12923,7 @@ agents:
                     protocol: Some("substrate.agent.session".to_string()),
                     execution: AgentExecutionConfigV1 { scope: Some(scope) },
                     cli: Some(AgentCliConfigV1 {
-                        binary: "sh".to_string(),
+                        binary: binary.to_string(),
                         mode: Some(AgentCliMode::Persistent),
                         runtime_family: Some(AgentCliRuntimeFamily::Codex),
                     }),
@@ -13417,6 +13433,54 @@ agents:
         assert_eq!(
             err.to_string(),
             "unsupported_platform_or_posture: backend 'cli:codex_world' resolves only to a host-scoped runtime; run_world_task requires an exact world-scoped backend"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dispatch_contract_fails_closed_before_bootstrap_when_world_codex_keeps_host_binary_truth() {
+        let temp = tempdir().expect("tempdir");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex_world".to_string(),
+            inventory_entry_with_binary("codex_world", AgentExecutionScope::World, "sh"),
+        );
+        let context = InternalDispatchContext {
+            effective_config: SubstrateConfig::default(),
+            base_policy: Policy {
+                agents_allowed_backends: vec!["cli:codex_world".to_string()],
+                ..Policy::default()
+            },
+            inventory,
+        };
+
+        let contract = resolve_world_dispatch_contract(
+            temp.path(),
+            &context,
+            &sample_request(),
+            "run_world_task",
+        )
+        .expect("world-scoped contract should resolve before runtime gating");
+        let err =
+            crate::execution::agent_runtime::validator::materialize_runtime_descriptor(&contract)
+                .expect_err("host-only world binary truth must fail closed before bootstrap");
+
+        assert_eq!(err.exit_code, 4);
+        assert!(
+            err.reason
+                .contains(crate::execution::agent_runtime::validator::CODEX_WORLD_GUEST_ENTRYPOINT),
+            "unexpected reason: {}",
+            err.reason
+        );
+        assert!(
+            err.reason.contains("host-local truth"),
+            "unexpected reason: {}",
+            err.reason
+        );
+        assert!(
+            err.reason.contains("substrate world deps current sync"),
+            "unexpected reason: {}",
+            err.reason
         );
     }
 

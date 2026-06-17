@@ -20,6 +20,8 @@ use super::mapping::{
     PURE_AGENT_PROTOCOL,
 };
 
+pub(crate) const CODEX_WORLD_GUEST_ENTRYPOINT: &str = "/var/lib/substrate/world-deps/bin/codex";
+
 #[derive(Clone, Debug)]
 pub(crate) struct RuntimeSelectionDescriptor {
     pub agent_id: String,
@@ -184,20 +186,16 @@ pub(crate) fn validate_runtime_realizability(
                 entry.file.id
             ),
         })?;
-    let binary_path = which::which(binary).map_err(|err| RuntimeRealizabilityError {
-        exit_code: 4,
-        reason: format!(
-            "selected runtime '{}' is not runtime-realizable because config.cli.binary '{}' did not resolve on the host: {}",
-            entry.file.id, binary, err
-        ),
-    })?;
+    let execution_scope = entry.effective_scope(effective_config);
+    let binary_path =
+        resolve_runtime_binary_path(&entry.file.id, backend_kind, execution_scope, binary)?;
 
     Ok(RuntimeSelectionDescriptor {
         agent_id: entry.file.id.clone(),
         backend_id: entry.derived_backend_id(),
         backend_kind,
         protocol,
-        execution_scope: entry.effective_scope(effective_config),
+        execution_scope,
         binary_path,
     })
 }
@@ -274,13 +272,12 @@ pub(crate) fn materialize_runtime_descriptor(
             contract.agent_id
         ),
             })?;
-    let binary_path = which::which(binary).map_err(|err| RuntimeRealizabilityError {
-        exit_code: 4,
-        reason: format!(
-            "selected runtime '{}' is not runtime-realizable because config.cli.binary '{}' did not resolve on the host: {}",
-            contract.agent_id, binary, err
-        ),
-    })?;
+    let binary_path = resolve_runtime_binary_path(
+        &contract.agent_id,
+        contract.backend_kind,
+        contract.execution_scope,
+        binary,
+    )?;
 
     Ok(RuntimeSelectionDescriptor {
         agent_id: contract.agent_id.clone(),
@@ -289,6 +286,52 @@ pub(crate) fn materialize_runtime_descriptor(
         protocol: contract.protocol.clone(),
         execution_scope: contract.execution_scope,
         binary_path,
+    })
+}
+
+fn resolve_runtime_binary_path(
+    agent_id: &str,
+    backend_kind: AgentRuntimeBackendKind,
+    execution_scope: AgentExecutionScope,
+    configured_binary: &str,
+) -> std::result::Result<PathBuf, RuntimeRealizabilityError> {
+    match (backend_kind, execution_scope) {
+        (AgentRuntimeBackendKind::Codex, AgentExecutionScope::World) => {
+            resolve_world_scoped_codex_binary_path(agent_id, configured_binary)
+        }
+        _ => resolve_host_runtime_binary_path(agent_id, configured_binary),
+    }
+}
+
+fn resolve_host_runtime_binary_path(
+    agent_id: &str,
+    configured_binary: &str,
+) -> std::result::Result<PathBuf, RuntimeRealizabilityError> {
+    which::which(configured_binary).map_err(|err| RuntimeRealizabilityError {
+        exit_code: 4,
+        reason: format!(
+            "selected runtime '{}' is not runtime-realizable because config.cli.binary '{}' did not resolve on the host: {}",
+            agent_id, configured_binary, err
+        ),
+    })
+}
+
+fn resolve_world_scoped_codex_binary_path(
+    agent_id: &str,
+    configured_binary: &str,
+) -> std::result::Result<PathBuf, RuntimeRealizabilityError> {
+    if configured_binary == CODEX_WORLD_GUEST_ENTRYPOINT {
+        return Ok(PathBuf::from(CODEX_WORLD_GUEST_ENTRYPOINT));
+    }
+
+    Err(RuntimeRealizabilityError {
+        exit_code: 4,
+        reason: format!(
+            "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is required for the world-scoped Codex runtime and config.cli.binary '{}' still describes host-local truth; install the world runtime and rerun 'substrate world deps current sync'",
+            agent_id,
+            CODEX_WORLD_GUEST_ENTRYPOINT,
+            configured_binary,
+        ),
     })
 }
 
@@ -426,7 +469,7 @@ mod tests {
         resolve_selected_orchestrator_live_tool_support_posture, validate_exact_backend_selection,
         validate_member_selection, validate_runtime_realizability, AgentRuntimeBackendKind,
         ExactBackendSelectionError, MemberSelectionError, RuntimeSelectionDescriptor,
-        PURE_AGENT_PROTOCOL,
+        CODEX_WORLD_GUEST_ENTRYPOINT, PURE_AGENT_PROTOCOL,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
@@ -469,10 +512,27 @@ mod tests {
         runtime_family: Option<AgentCliRuntimeFamily>,
         capabilities: AgentCapabilitiesV1,
     ) -> AgentInventoryEntryV1 {
-        let test_binary = std::env::current_exe()
-            .expect("current test binary should resolve")
-            .display()
-            .to_string();
+        let test_binary = test_binary_for(scope, runtime_family.clone());
+        make_entry_with_runtime_family_and_binary(
+            agent_id,
+            scope,
+            protocol,
+            cli_mode,
+            runtime_family,
+            &test_binary,
+            capabilities,
+        )
+    }
+
+    fn make_entry_with_runtime_family_and_binary(
+        agent_id: &str,
+        scope: AgentExecutionScope,
+        protocol: Option<&str>,
+        cli_mode: AgentCliMode,
+        runtime_family: Option<AgentCliRuntimeFamily>,
+        binary: &str,
+        capabilities: AgentCapabilitiesV1,
+    ) -> AgentInventoryEntryV1 {
         AgentInventoryEntryV1 {
             path: PathBuf::from(format!("{agent_id}.yaml")),
             file: AgentFileV1 {
@@ -484,7 +544,7 @@ mod tests {
                     protocol: protocol.map(str::to_string),
                     execution: AgentExecutionConfigV1 { scope: Some(scope) },
                     cli: Some(AgentCliConfigV1 {
-                        binary: test_binary,
+                        binary: binary.to_string(),
                         mode: Some(cli_mode),
                         runtime_family,
                     }),
@@ -493,6 +553,21 @@ mod tests {
                 },
                 policy_overlay: None,
             },
+        }
+    }
+
+    fn test_binary_for(
+        scope: AgentExecutionScope,
+        runtime_family: Option<AgentCliRuntimeFamily>,
+    ) -> String {
+        match (scope, runtime_family) {
+            (AgentExecutionScope::World, Some(AgentCliRuntimeFamily::Codex)) => {
+                CODEX_WORLD_GUEST_ENTRYPOINT.to_string()
+            }
+            _ => std::env::current_exe()
+                .expect("current test binary should resolve")
+                .display()
+                .to_string(),
         }
     }
 
@@ -902,6 +977,110 @@ mod tests {
         );
         assert!(
             !error.reason.contains("runtime_family"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    fn validate_runtime_realizability_rejects_world_scoped_codex_host_truth_with_remediation() {
+        let config = SubstrateConfig::default();
+        let host_binary = std::env::current_exe()
+            .expect("current test binary should resolve")
+            .display()
+            .to_string();
+        let entry = make_entry_with_runtime_family_and_binary(
+            "codex_world",
+            AgentExecutionScope::World,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::Codex),
+            &host_binary,
+            required_capabilities(),
+        );
+
+        let error = validate_runtime_realizability(&entry, &config).expect_err("must fail");
+        assert_eq!(error.exit_code, 4);
+        assert!(
+            error
+                .reason
+                .contains("not runtime-realizable in world scope"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains(CODEX_WORLD_GUEST_ENTRYPOINT),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("substrate world deps current sync"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("host-local truth"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    fn validate_runtime_realizability_accepts_world_scoped_codex_guest_entrypoint_contract() {
+        let config = SubstrateConfig::default();
+        let entry = make_entry_with_runtime_family(
+            "codex_world",
+            AgentExecutionScope::World,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::Codex),
+            required_capabilities(),
+        );
+
+        let descriptor =
+            validate_runtime_realizability(&entry, &config).expect("world codex should resolve");
+        assert_eq!(
+            descriptor.binary_path,
+            PathBuf::from(CODEX_WORLD_GUEST_ENTRYPOINT)
+        );
+    }
+
+    #[test]
+    fn validate_exact_backend_selection_fails_closed_when_world_codex_keeps_host_binary_truth() {
+        let config = SubstrateConfig::default();
+        let host_binary = std::env::current_exe()
+            .expect("current test binary should resolve")
+            .display()
+            .to_string();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex_world".to_string(),
+            make_entry_with_runtime_family_and_binary(
+                "codex_world",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                Some(AgentCliRuntimeFamily::Codex),
+                &host_binary,
+                required_capabilities(),
+            ),
+        );
+
+        let error = validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::World,
+            "cli:codex_world",
+        )
+        .expect_err("must fail closed");
+        assert_eq!(exact_backend_selection_error_exit_code(&error), 4);
+        assert!(
+            error.reason.contains(CODEX_WORLD_GUEST_ENTRYPOINT),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("substrate world deps current sync"),
             "unexpected reason: {}",
             error.reason
         );
