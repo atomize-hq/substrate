@@ -611,7 +611,7 @@ mod tests {
         runtime_family: Option<AgentCliRuntimeFamily>,
         capabilities: AgentCapabilitiesV1,
     ) -> AgentInventoryEntryV1 {
-        let test_binary = test_binary_for(scope, runtime_family.clone());
+        let test_binary = test_binary_for(scope, runtime_family);
         make_entry_with_runtime_family_and_binary(
             agent_id,
             scope,
