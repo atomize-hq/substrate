@@ -1375,11 +1375,15 @@ Packet `B5.2` scope only:
 - capture the next-packet handoff honestly so `SO-3.1` / `SO-3.2` are clearly next and `SO-4` / `SO-5` remain blocked on `SO-3`
 - keep this packet docs-only unless a tiny routing-note update outside the packet docs is strictly required
 - preserve auditability instead of silently rewriting packet history
+- update the older phase-1 task ledger so it does not read as if `SO-2.1` / `SO-2.2` / `SO-2.3`
+  are still untouched greenfield work instead of already-landed preliminary assembly refined by
+  `SO-2.3B-refine`
 
 Primary files for this packet:
 - docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-spec.md
 - docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-plan.md
 - docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - docs/specs/r5/R5_75/MAP.md (only if a narrow routing-note touch is strictly required)
 
 Out of scope:
@@ -1419,6 +1423,9 @@ You are landing only Packet `B5.2`:
 - capture the next-packet handoff honestly so `SO-3.1` / `SO-3.2` are clearly next and `SO-4` / `SO-5` remain blocked on `SO-3`
 - keep this packet docs-only unless a tiny routing-note update outside the packet docs is strictly required
 - preserve auditability instead of silently rewriting packet history
+- update the older phase-1 task ledger so it records `SO-2.3B-refine` as a refinement over
+  already-landed preliminary structured assembly rather than leaving `SO-2.1` / `SO-2.2` /
+  `SO-2.3` looking like untouched greenfield backlog
 
 Authoritative docs to read first:
 - docs/specs/r5/R5_75/MAP.md
@@ -1435,6 +1442,7 @@ Authoritative docs to read first:
 
 Files to inspect before editing:
 - docs/specs/r5/R5_75/MAP.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-spec.md
 - docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-plan.md
 - docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md
@@ -1482,6 +1490,10 @@ Review only Packet `B5.2` from:
 Focus:
 - whether the handoff states clearly that `SO-3.1` / `SO-3.2` are next
 - whether `SO-4` and `SO-5` remain explicitly blocked on `SO-3`
+- whether packet closeout notes make clear that `SO-2.3B-refine` refined already-landed
+  preliminary structured assembly rather than competing with a greenfield `SO-2`
+- whether the older phase-1 task ledger no longer reads as if `SO-2.1` / `SO-2.2` / `SO-2.3` are
+  still untouched greenfield work
 - whether the closeout wording is honest and narrowly scoped rather than silently rewriting history
 
 Review the docs diff and closeout honesty first; there is no code path to inspect unless the packet widened improperly.

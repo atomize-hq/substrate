@@ -281,7 +281,10 @@ This packet is done only when all of the following are true:
    the earlier behavior packets.
 5. `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` and
    `cargo test -p agent-drift-analyzer -- --nocapture` are green.
-6. The packet stays bounded enough that `SO-3` remains the next packet after closeout.
+6. The packet stays bounded enough that `SO-3` remains the next packet after closeout, `SO-4` /
+   `SO-5` stay blocked on `SO-3`, and closeout notes update the older phase-1 task ledger so
+   `SO-2.1` / `SO-2.2` / `SO-2.3` are not misread as untouched greenfield work competing with this
+   refinement packet.
 
 ## Open Questions
 

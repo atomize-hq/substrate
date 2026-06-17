@@ -70,7 +70,9 @@ rather than deleting the original packet structure.
 Historical note: this packet family is already materially landed in the live crate snapshot. The
 follow-on grounding family (`SO-G1` / `SO-G2`) hardened section/clause identifiers and adversarial
 heading coverage without erasing the fact that the original decomposition/assembly seam already
-landed here.
+landed here. `SO-2.3B-refine` is the later corrective continuation of this already-landed
+preliminary structured assembly; do not read `SO-2.1` / `SO-2.2` / `SO-2.3` below as untouched
+greenfield backlog or as a competing implementation plan.
 
 - [x] Task SO-2.1: Add section-aware decomposition for long directive rows.
   - Acceptance: objective extraction can distinguish mission/scope, checklist, verification,
@@ -110,7 +112,8 @@ migration may anchor on it until SO-3.2 lands. After the grounding follow-on clo
 immediate packet is `SO-2.3B-refine`, which preserves structured state through checkpoint
 narrowing, tightens target honesty, and aligns verification grounding before the compatibility/key
 projection work begins. Once `SO-2.3B-refine` lands, `SO-3.1` and `SO-3.2` are the next packet
-boundary before `SO-4` and `SO-5`.
+boundary before `SO-4` and `SO-5`. Do not start `SO-4` / `SO-5` from this ledger until that
+`SO-3` boundary has actually landed.
 
 - [ ] Task SO-3.1: Render compatibility text from structured state when safe.
   - Acceptance: `ObjectiveSummary.text` becomes a compatibility view over structured state when the

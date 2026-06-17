@@ -267,6 +267,10 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 - confirm the packet stayed analyzer-local and did not silently widen into `SO-3`, `SO-4`, or
   downstream migration work
 - record `SO-3.1` / `SO-3.2` as the next packet boundary after closeout
+- update the stale phase-1 task ledger so it records `SO-2.3B-refine` as a corrective refinement
+  over already-landed preliminary structured assembly rather than leaving `SO-2.1` / `SO-2.2` /
+  `SO-2.3` looking like untouched greenfield backlog
+- keep `SO-4` / `SO-5` explicitly blocked on `SO-3` landing first
 
 ### Verification
 

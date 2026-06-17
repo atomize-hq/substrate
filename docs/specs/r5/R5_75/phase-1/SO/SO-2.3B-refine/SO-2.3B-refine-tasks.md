@@ -160,8 +160,14 @@ Shared explicit-target anchor contract for `B2.1` / `B2.2`:
     - no source changes required unless validation exposes a packet-scoped defect
 
 - [ ] Task B5.2: Capture the next-packet handoff honestly.
-  - Acceptance: packet closeout notes or follow-on docs make clear that `SO-3.1` / `SO-3.2` are
-    next, while `SO-4` and `SO-5` remain blocked on `SO-3` landing first.
+  - Acceptance:
+    - packet closeout notes record that `SO-2.3B-refine` refined already-landed preliminary
+      structured assembly rather than starting a competing greenfield plan
+    - `SO-3.1` / `SO-3.2` are clearly next
+    - `SO-4` / `SO-5` remain blocked until `SO-3` lands
+    - the older phase-1 task ledger no longer reads as if `SO-2.1` / `SO-2.2` / `SO-2.3` are all
+      still greenfield work
   - Verify: manual review of the packet docs and any touched routing note.
   - Files:
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
     - no additional files required unless closeout notes are updated during landing
