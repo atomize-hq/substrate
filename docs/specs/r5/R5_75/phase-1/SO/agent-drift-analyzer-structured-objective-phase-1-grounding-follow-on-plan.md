@@ -201,38 +201,40 @@ recreate raw-string truth under a more official name.
 
 Manual review of the reconciled docs set.
 
-## SO-G5: Bootstrap The Next Objective-Acceptance Packet Boundary
+## SO-G5: Bootstrap The Next Structured-Objective Packet Boundary
 
 ### Scope
 
-- define the next packet entry criteria for the objective-acceptance harness
-- require the harness to consume structured fields, role spans, grounding refs, forbidden-promotion
-  expectations, compatibility rendering, and unknown-field correctness
-- keep this family from silently widening into full fixture expansion unless separately approved
-- name the next packet entry point explicitly as SO-4.1 / SO-4.2 under the reconciled phase-1
-  ledger rather than leaving the handoff implied by packet numbering alone
+- define the next packet entry criteria after the grounding family closes
+- make the immediate corrective bridge packet explicit as `SO-2.3B-refine`
+- record that `SO-3.1` / `SO-3.2` follow `SO-2.3B-refine`, and that the `objective_acceptance`
+  harness remains a later `SO-4` boundary rather than the next packet
+- keep this family from silently widening into harness or fixture implementation unless separately
+  approved
 
 ### Primary Files
 
 ```text
-docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
-docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md
-docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md
+docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md
+docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md
+docs/specs/r5/R5_75/MAP.md
 ```
 
 ### Explicit Handoff After This Packet
 
-- the next packet to start after the grounding family closes is SO-4.1 / SO-4.2 in the reconciled
-  phase-1 docs
-- that packet's acceptance wall must cover structured fields, role spans, grounding refs,
-  forbidden promotions, compatibility rendering, and unknown-field correctness
+- the next packet to start after the grounding family closes is `SO-2.3B-refine` in the
+  reconciled phase-1 docs
+- after `SO-2.3B-refine`, the next packet boundary is `SO-3.1` / `SO-3.2`
+- only after `SO-3` lands does `SO-4.1` / `SO-4.2` become the acceptance-harness boundary
 - SO-5 fixture growth remains blocked until the SO-4 harness boundary exists
 
 ### Why Separate From The Grounding Patch
 
-Grounding restoration is a small code patch. The acceptance harness is larger and deserves a clean
-handoff boundary instead of becoming opportunistic scope creep.
+Grounding restoration is a small code patch. The next steps after it now split into a corrective
+bridge packet, then the compatibility/comparison packet, then the harness packet; those boundaries
+should remain explicit instead of becoming opportunistic scope creep.
 
 ### Verification
 

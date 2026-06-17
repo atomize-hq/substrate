@@ -207,12 +207,22 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ### Current Remaining Gap
 
-This packet family is still open. `crates/agent-drift-analyzer/tests/objective_acceptance.rs` and
-the `tests/fixtures/objective_acceptance/**` corpus are not present yet, so the committed
-acceptance wall promised by Phase 1 remains future work. Once the grounding follow-on family lands,
-SO-4.1 and SO-4.2 are the explicit next packet boundary even though SO-3 remains unfinished:
-future packet agents should start by standing up this harness contract before widening into SO-5
-fixture expansion or downstream migration.
+This packet family is still open. The live crate now has additive structured-objective state,
+section/clause decomposition, and grounding identifiers, but the checkpoint bridge still erases the
+richer sidecar during narrowing, weak goal clauses can still overclaim `target`, and verification
+extraction is not yet fully locked to grounded clause evidence. In addition, `SO-3` remains open:
+`comparison_key` still mirrors display text and compatibility rendering is not yet projected from
+structured state. The `objective_acceptance` harness is also still absent.
+
+The reconciled next-packet order is therefore:
+
+1. `SO-2.3B-refine` — preserve structured state through checkpoint narrowing, stop target
+   fabrication, align verification grounding with extraction, and land the proving regressions in
+   the same behavior packets.
+2. `SO-3.1` / `SO-3.2` — render compatibility text from structured state when safe and derive
+   deterministic `comparison_key` from structured semantic state.
+3. `SO-4.1` / `SO-4.2` — add the objective-acceptance harness and expected-shape contract.
+4. `SO-5.*` — seed the locked acceptance families only after the harness exists.
 
 ### Scope
 
@@ -232,17 +242,19 @@ crates/agent-drift-analyzer/tests/support/mod.rs
 crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/**
 ```
 
-### Why Before Fixture Expansion
-
-The harness and contract must exist before a bounded set of cases can be added safely and reviewed
-for drift. This is also the explicit next acceptance packet after grounding restoration, so later
-SO-3 and SO-5 work has a concrete wall to target instead of another implied sequence step.
-
 ### Verification
 
 ```bash
 cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 ```
+
+### Why After `SO-2.3B-refine` And `SO-3`
+
+The corrective bridge packet must land before `SO-3` so compatibility rendering and
+`comparison_key` do not rest on a checkpoint path that still erases or overclaims structured state.
+`SO-3` must land before `SO-4` so the acceptance harness validates the intended Phase-1 semantics
+(including compatibility rendering and semantic comparison) rather than silently defining them
+after the fact.
 
 ## SO-5: Seed The Locked Acceptance Wall
 

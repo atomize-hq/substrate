@@ -241,5 +241,6 @@ This follow-on uses four validation layers:
    `section_index` / `clause_index`, or should it be a later dedicated localization follow-on?
 2. Should the existing phase-1 packet-prompt artifact be regenerated immediately after the plan/task
    ledger is reconciled, or is a docs-only warning sufficient until implementation packets are approved?
-3. Resolved by SO-G5: continue the future objective-acceptance harness as SO-4.1 / SO-4.2 under
-   the reconciled phase-1 docs rather than opening a separate SPEC/PLAN/TASKS family first.
+3. Resolved by SO-G5: continue the post-grounding sequence as `SO-2.3B-refine` first, then
+   `SO-3.1` / `SO-3.2`, then the future objective-acceptance harness as `SO-4.1` / `SO-4.2` under
+   the reconciled phase-1 docs rather than skipping directly to the harness boundary.

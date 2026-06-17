@@ -1,0 +1,134 @@
+# Tasks: SO-2.3B-refine Structured Objective Bridge Honesty
+
+Status: TASKS artifact created on 2026-06-17 after the packet-local SPEC and PLAN were written.
+This is a docs-first implementation ledger for the next bounded packet inside `R5.75-1`. Do not
+advance to `SO-3` until this packet is checkpoint-green and its residual risks are explicit.
+
+Keep each task as close as possible to five touched files or fewer. Stay analyzer-local unless a
+small compile-safe bridge proves unavoidable.
+
+## Packet Boundary
+
+This packet covers only:
+
+- checkpoint narrowing preservation,
+- target honesty,
+- verification-role grounding alignment,
+- targeted checkpoint regressions,
+- final combined-case regression audit,
+- packet closeout and handoff to `SO-3`.
+
+This packet does **not** cover:
+
+- compatibility rendering from structured state,
+- deterministic `comparison_key` derivation,
+- `objective_acceptance` harness/fixtures,
+- TaskFrame coexistence,
+- working-set / downstream progress migration,
+- classifier/runtime work.
+
+## B0: Docs Lock
+
+- [x] Task B0.1: Create the packet-local SPEC / PLAN / TASKS set.
+  - Acceptance: this directory contains a self-consistent `SPEC`, `PLAN`, and `TASKS` set that
+    makes the packet boundary, assumptions, and next-packet order explicit before any code changes.
+  - Verify: manual review of the three packet docs.
+  - Files:
+    - `docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-spec.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-plan.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md`
+
+## B1: Preserve Structured Objective Through Checkpoint Narrowing
+
+- [ ] Task B1.1: Stop checkpoint narrowing from erasing structured state and prove it in the same packet.
+  - Acceptance: `checkpoint_analyses(...)` no longer overwrites a richer structured
+    `context.objective` with `ObjectiveSummary::compatibility(...)`; when structured extraction
+    succeeds, the narrowed checkpoint objective preserves structured semantics instead of collapsing
+    back to text-only state; and a targeted regression demonstrates that
+    `analysis.current.context.objective.structured.is_some()` survives checkpoint narrowing while
+    the grounded evidence still carries section/clause identifiers.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+## B2: Stop Target Fabrication
+
+- [ ] Task B2.1: Separate grounded goal selection from explicit target extraction and prove vague-target unknown behavior.
+  - Acceptance: the packet can keep a real grounded goal while leaving `target == None` when no
+    explicit target evidence exists; `ObjectiveUnknown { field_name: "target", ... }` remains the
+    honest fallback instead of a fabricated conceptual target; and a vague review/analyze/fix
+    regression proves the unknown behavior in the same packet.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+- [ ] Task B2.2: Preserve explicit concrete targets and prove the preservation matrix in the same packet.
+  - Acceptance: explicit file/directory, instruction-surface, spec/doc, test/verifier,
+    crate/package, and workspace-ref targets still survive extraction after the honesty tightening;
+    and the packet lands the explicit-target preservation regression matrix proving those target
+    families remain intact.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+## B3: Align Verification Grounding With Verification Extraction
+
+- [ ] Task B3.1: Make verification-bearing clauses discoverable without a dedicated heading and prove it in the same packet.
+  - Acceptance: bullet-only or inline verifier clauses that contain command-like verification work
+    can produce grounded verification evidence even when the section is `Mission`, `Scope`, or
+    `UnknownSection`; and the packet lands a bullet-only / inline verifier-role regression proving
+    that behavior.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+- [ ] Task B3.2: Prefer clause-grounded verification extraction over whole-row fallback and prove it in the same packet.
+  - Acceptance: `verification_commands` come from role-grounded clauses when such clauses exist,
+    while whole-candidate fallback remains only a conservative backup path; and the packet lands a
+    clause-grounded extraction regression proving the preference directly.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/src/context/objective.rs`
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+## B4: Final Coverage Audit
+
+- [ ] Task B4.1: Audit final coverage and add any missing combined-case regressions.
+  - Acceptance: after B1-B3 land, the packet audits the remaining proof surface and adds only the
+    missing combined-case or residual regressions needed to make the family fully reviewable and
+    durable; B4 does not carry the core proof load for B1-B3.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - Files:
+    - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+    - minimal packet-scoped code files only if required to make the final combined-case audit honest
+
+## B5: Packet Closeout
+
+- [ ] Task B5.1: Run the packet verification wall.
+  - Acceptance: focused checkpoint regressions and the full analyzer suite are green on the landed
+    packet.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Files:
+    - no source changes required unless validation exposes a packet-scoped defect
+
+- [ ] Task B5.2: Capture the next-packet handoff honestly.
+  - Acceptance: packet closeout notes or follow-on docs make clear that `SO-3.1` / `SO-3.2` are
+    next, while `SO-4` and `SO-5` remain blocked on `SO-3` landing first.
+  - Verify: manual review of the packet docs and any touched routing note.
+  - Files:
+    - no additional files required unless closeout notes are updated during landing

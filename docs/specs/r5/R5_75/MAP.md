@@ -1,6 +1,6 @@
 # R5.75 Map: Sequential Pre-R6 Hardening And Validation
 
-Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings.
+Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack so the map reflects the current active seam and next-packet order honestly.
 
 ## Objective
 
@@ -12,6 +12,22 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 2. Native `.codex/sessions/rollout-*.jsonl` sessions remain the primary behavior authority.
 3. The adapted Hugging Face export corpus remains secondary robustness evidence only; it is useful for hardening but does not redefine native Codex rollout semantics.
 4. `R5.5` landed meaningful improvements, but the validation handoff proved the family is not yet ready to declare “fully landed and R6-ready.”
+
+## Current Live Routing Note (2026-06-17)
+
+- `R5.75-0` is landed history.
+- The current active seam is still `R5.75-1`, now routed through
+  `docs/specs/r5/R5_75/phase-1/SO/` rather than directly to `R5.75-2`.
+- The live crate already has real section/clause decomposition, preliminary structured assembly,
+  and grounding follow-on work through `SO-G6`, so this is no longer just a narrow
+  `normalized_objective_text(...)` stopgap.
+- However, `R5.75-1` is still open because the checkpoint path currently collapses the richer
+  sidecar back to a compatibility-only summary during narrowing, weak goal clauses can still
+  overclaim `target`, and verification-command extraction is not yet locked to the grounded
+  role/evidence wall that Phase 1 expects.
+- Therefore the next work is **not** `R5.75-2`. The next work stays inside `R5.75-1` and follows
+  the structured-objective packet order described below: `SO-2.3B-refine` -> `SO-3` -> `SO-4` ->
+  `SO-5`, then only after that promotion gate may `R5.75-2` begin.
 
 ## Required Fixes Adopted Into R5.75
 
@@ -193,11 +209,16 @@ Objective selection is still too row-level. Giant pasted user prompts can still 
 - prefer `/goal`, short imperative asks, and clear workspace/action-target phrases over whole pasted bodies
 - remove the current bias that can let longer same-priority candidates win just because they are longer
 - preserve user-requested boilerplate targets when the actual task is to analyze or edit the boilerplate itself
+- carry the richer structured-objective sidecar through checkpoint narrowing instead of erasing it
+- keep weak target evidence unknown instead of fabricating a conceptual target
+- align verification-command extraction with grounded verification-role spans before acceptance is locked
 
 ### Primary Files
 
 - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+- `crates/agent-drift-analyzer/src/context/objective.rs`
 - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+- `docs/specs/r5/R5_75/phase-1/SO/*`
 
 ### Automated Gate
 
@@ -205,6 +226,42 @@ Objective selection is still too row-level. Giant pasted user prompts can still 
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 cargo test -p agent-drift-analyzer -- --nocapture
 ```
+
+### Reconciled Live Status (2026-06-17)
+
+The original condensation work is no longer the whole story for `R5.75-1`. The live crate already
+contains additive structured-objective state, section/clause decomposition, unknown preservation,
+and grounding follow-on work. What remains open inside `R5.75-1` is the semantic honesty and
+acceptance wall around that structure:
+
+- the checkpoint narrowing bridge still overwrites `context.objective` with a
+  compatibility-only summary,
+- `target` assembly still overclaims from weak goal clauses,
+- `comparison_key` still mirrors display text,
+- compatibility text is not yet rendered from structured state as the semantic authority,
+- and the committed `objective_acceptance` harness/fixture contract is still absent.
+
+### Remaining `R5.75-1` Landing Order Before `R5.75-2`
+
+1. **`SO-2.3B-refine` / `SO-Bridge-1`**
+   - preserve the structured sidecar through checkpoint narrowing,
+   - stop weak goal clauses from fabricating `target`,
+   - align verification-role grounding with verifier-command extraction.
+2. **`SO-3.1` / `SO-3.2`**
+   - render compatibility text from structured state when safe,
+   - derive deterministic `comparison_key` from structured semantic state.
+3. **`SO-4.1` / `SO-4.2`**
+   - add `tests/objective_acceptance.rs`,
+   - lock the expected-shape contract for structured fields, grounding, forbidden promotions,
+     compatibility rendering, and unknown-field correctness.
+4. **`SO-5.*`**
+   - seed the locked acceptance corpus: WDAP, preserved boilerplate-target cases, concise `/goal`,
+     review/no-code, and planning/docs families.
+
+Ordering note: even though earlier local packet docs briefly put `SO-4` ahead of `SO-3`, the
+current architecture and migration authorities make `SO-3` the better prerequisite. Compatibility
+rendering and `comparison_key` derivation are Phase-1 semantics that the acceptance harness should
+validate, not a stopgap the harness silently defines after the fact.
 
 ### Manual Smoke Check Before Promoting To R5.75-2
 
@@ -226,7 +283,16 @@ Expected smoke outcome:
 
 ### Promotion Gate
 
-Do not begin `R5.75-2` until all four named objective repros show the true concrete task in smoke review and no preserved-boilerplate regression appears in targeted tests.
+Do not begin `R5.75-2` until all of the following are true:
+
+- the named condensation smoke repros still resolve to the true concrete task instead of pasted
+  scaffold bodies,
+- preserved-boilerplate targets still hold in targeted regressions,
+- checkpoint narrowing no longer erases the structured sidecar,
+- weak target evidence stays unknown instead of being fabricated into `target`,
+- `SO-3.1` / `SO-3.2` land so compatibility text and `comparison_key` come from structured state,
+- `SO-4.1` / `SO-4.2` land so `objective_acceptance` becomes a committed wall,
+- `SO-5` seeds the locked acceptance families required for `R5.75-1` closeout.
 
 ## R5.75-2: Sparse Readable Session Fail-Open
 
@@ -436,6 +502,9 @@ Do not open `R6` until all of the following are true:
 
 - `R5.75-0` authority docs are honest about landed `R5.5` work and remaining `R5.75` scope
 - giant prompt objective repros condense to the concrete task instead of pasted scaffold bodies
+- the `R5.75-1` structured-objective subfamily is closed honestly: checkpoint narrowing preserves
+  structured state, weak targets remain unknown when evidence is weak, compatibility rendering and
+  `comparison_key` come from structured semantics, and the objective-acceptance wall is committed
 - sparse readable sessions fail open conservatively instead of hard-aborting the analyzer
 - delegated parent-visible sessions stay stable and conservative under limited child visibility
 - zero-verifier exploratory sessions no longer flap into troubleshooting/dead-end overclaim

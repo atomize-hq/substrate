@@ -102,19 +102,20 @@ bounded grounding family rather than as an active implementation queue.
     - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
     - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
 
-## SO-G5: Prepare The Objective-Acceptance Harness Seam
+## SO-G5: Prepare The Next Structured-Objective Packet Seam
 
-- [x] Task SO-G5.1: Make the objective-acceptance harness the explicit next packet after grounding.
-  - Acceptance: the reconciled docs name SO-4.1 / SO-4.2 as the next packet boundary after
-    grounding restoration and require that harness to validate structured fields, role spans,
-    grounding refs, forbidden promotions, compatibility rendering, and unknown-field correctness.
+- [x] Task SO-G5.1: Make `SO-2.3B-refine` the explicit next packet after grounding.
+  - Acceptance: the reconciled docs name `SO-2.3B-refine` as the next packet boundary after
+    grounding restoration, then `SO-3.1` / `SO-3.2`, and only then `SO-4.1` / `SO-4.2` for the
+    objective-acceptance harness.
   - Verify:
     - Manual review of the updated docs set.
     - `git diff --stat`
   - Files:
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md`
+    - `docs/specs/r5/R5_75/MAP.md`
 
 ## SO-G6: Validation And Closeout
 
