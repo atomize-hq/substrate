@@ -1323,7 +1323,10 @@ mod tests {
         let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
             .expect("resolve validated codex runtime");
 
-        let script = build_codex_runtime_install_script_v1(&spec);
+        let script = render_codex_runtime_install_script_v1(
+            crate::builtins::world_deps::inventory::codex_runtime_install_script_template_v1(),
+            &spec,
+        );
         assert!(
             script.contains("self-contained"),
             "expected script to record the verified self-contained posture: {script}"
@@ -1387,7 +1390,10 @@ mod tests {
             .expect("sha256 token")
             .to_string();
 
-        let script = build_codex_runtime_install_script_v1(&spec)
+        let script = render_codex_runtime_install_script_v1(
+            crate::builtins::world_deps::inventory::codex_runtime_install_script_template_v1(),
+            &spec,
+        )
             .replace(
                 "/var/lib/substrate/world-deps",
                 world_deps_root.to_str().expect("world deps root utf8"),
@@ -1514,7 +1520,13 @@ fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> R
     if pkg.name == CODEX_RUNTIME_PACKAGE_NAME {
         let target_triple = current_codex_runtime_target_triple_v1()?;
         let spec = resolve_codex_runtime_install_spec_for_target_v1(target_triple)?;
-        return Ok(build_codex_runtime_install_script_v1(&spec));
+        let template = pkg.install.script.as_deref().ok_or_else(|| {
+            config_model::user_error(format!(
+                "invalid deps inventory: package '{}' must declare an install.script template",
+                pkg.name
+            ))
+        })?;
+        return Ok(render_codex_runtime_install_script_v1(template, &spec));
     }
 
     if let Some(path_raw) = &pkg.install.script_path {
@@ -1556,6 +1568,12 @@ fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> R
 fn current_codex_runtime_target_triple_v1() -> Result<&'static str> {
     let guest_arch = run_world_command_output_for_deps("uname -m", Some("/tmp"))
         .context("failed to inspect guest architecture for codex runtime selection")?;
+    if guest_arch.exit != 0 {
+        return Err(anyhow!(
+            "failed to inspect guest architecture for codex runtime selection: {}",
+            output_snippet_for_error(&guest_arch)
+        ));
+    }
     let guest_arch = guest_arch.stdout.trim();
     map_codex_runtime_target_triple_for_guest_arch_v1(guest_arch)
 }
@@ -1598,71 +1616,17 @@ fn resolve_codex_runtime_install_spec_for_target_v1(
     }
 }
 
-fn build_codex_runtime_install_script_v1(spec: &CodexRuntimeInstallSpecV1) -> String {
-    format!(
-        r#"#!/usr/bin/env bash
-set -euo pipefail
-
-# Verified Packet 2 runtime posture: the official Codex musl release is self-contained
-# in the guest for `codex --version`, so this package installs only the Codex binary and
-# does not widen into a Node/npm runtime bundle.
-world_deps_root="/var/lib/substrate/world-deps"
-world_deps_bin="${{world_deps_root}}/bin"
-package_root="${{world_deps_root}}/{package_name}"
-package_bin="${{package_root}}/bin"
-downloads_root="${{package_root}}/downloads"
-installed_binary="${{package_bin}}/codex"
-archive_name="{archive_name}"
-archive_path="${{downloads_root}}/${{archive_name}}"
-archive_url="{archive_url}"
-archive_sha256="{archive_sha256}"
-codex_version="{version}"
-target_triple="{target_triple}"
-
-mkdir -p "${{world_deps_bin}}" "${{package_bin}}" "${{downloads_root}}"
-
-if [ -x "${{installed_binary}}" ] && "${{installed_binary}}" --version 2>/dev/null | grep -Fq "${{codex_version}}"; then
-  ln -sf "${{installed_binary}}" "${{world_deps_bin}}/codex"
-  exit 0
-fi
-
-if [ ! -f "${{archive_path}}" ] || ! echo "${{archive_sha256}}  ${{archive_path}}" | sha256sum -c - >/dev/null 2>&1; then
-  tmp_archive="${{archive_path}}.tmp"
-  rm -f "${{tmp_archive}}"
-  curl -fsSL --retry 3 --location "${{archive_url}}" -o "${{tmp_archive}}"
-  echo "${{archive_sha256}}  ${{tmp_archive}}" | sha256sum -c -
-  mv "${{tmp_archive}}" "${{archive_path}}"
-fi
-
-stage_dir="$(mktemp -d "${{package_root}}/.stage.${{target_triple}}.XXXXXX")"
-trap 'rm -rf "${{stage_dir}}"' EXIT
-tar -xzf "${{archive_path}}" -C "${{stage_dir}}"
-
-resolved_binary=""
-if [ -x "${{stage_dir}}/codex" ]; then
-  resolved_binary="${{stage_dir}}/codex"
-elif [ -x "${{stage_dir}}/codex-${{target_triple}}" ]; then
-  resolved_binary="${{stage_dir}}/codex-${{target_triple}}"
-else
-  resolved_binary="$(find "${{stage_dir}}" -type f \( -name codex -o -name "codex-${{target_triple}}" \) | head -n 1 || true)"
-fi
-
-if [ -z "${{resolved_binary}}" ]; then
-  echo "substrate: world deps package '{package_name}' did not contain a codex binary for target ${{target_triple}}" >&2
-  exit 1
-fi
-
-install -m 0755 "${{resolved_binary}}" "${{installed_binary}}"
-"${{installed_binary}}" --version | grep -F "${{codex_version}}" >/dev/null
-ln -sf "${{installed_binary}}" "${{world_deps_bin}}/codex"
-"#,
-        package_name = CODEX_RUNTIME_PACKAGE_NAME,
-        archive_name = spec.archive_name,
-        archive_url = spec.archive_url,
-        archive_sha256 = spec.archive_sha256,
-        version = spec.version,
-        target_triple = spec.target_triple,
-    )
+fn render_codex_runtime_install_script_v1(
+    template: &str,
+    spec: &CodexRuntimeInstallSpecV1,
+) -> String {
+    template
+        .replace("__SUBSTRATE_CODEX_PACKAGE_NAME__", CODEX_RUNTIME_PACKAGE_NAME)
+        .replace("__SUBSTRATE_CODEX_ARCHIVE_NAME__", &spec.archive_name)
+        .replace("__SUBSTRATE_CODEX_ARCHIVE_URL__", &spec.archive_url)
+        .replace("__SUBSTRATE_CODEX_ARCHIVE_SHA256__", &spec.archive_sha256)
+        .replace("__SUBSTRATE_CODEX_VERSION__", &spec.version)
+        .replace("__SUBSTRATE_CODEX_TARGET_TRIPLE__", &spec.target_triple)
 }
 
 struct WrapperFileV1 {
