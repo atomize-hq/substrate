@@ -2,7 +2,9 @@
 
 Status: TASKS artifact created on 2026-06-17 after the packet-local SPEC and PLAN were written.
 This is a docs-first implementation ledger for the next bounded packet inside `R5.75-1`. Do not
-advance to `SO-3` until this packet is checkpoint-green and its residual risks are explicit.
+advance to `SO-3` until structured state survives checkpoint narrowing, target honesty is fixed,
+verification grounding is role-backed, the packet verification wall is green, and residual risks
+are explicit.
 
 Keep each task as close as possible to five touched files or fewer. Stay analyzer-local unless a
 small compile-safe bridge proves unavoidable.
@@ -56,6 +58,7 @@ This packet does **not** cover:
     identifiers.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - `crates/agent-drift-analyzer/src/context/objective.rs`
@@ -74,6 +77,7 @@ Shared explicit-target anchor contract for `B2.1` / `B2.2`:
     instructions
   - workspace refs such as `@shared-cab-app`
   - named packet/work item identifiers only when directly tied to the requested task
+  - specific named conceptual artifact/topic spans only when the span itself is explicit
 - Not enough by itself:
   - `this`
   - `it`
@@ -81,6 +85,10 @@ Shared explicit-target anchor contract for `B2.1` / `B2.2`:
   - `what landed`
   - `the current issue`
   - the entire goal sentence copied as target
+
+Never derive `ObjectiveTargetKind::ConceptualTopic` from the whole goal clause alone; the
+conservative fallback for weak review/analyze/fix clauses is `target == None` unless a specific
+named conceptual artifact/topic span is present.
 
 - [ ] Task B2.1: Separate grounded goal selection from explicit target extraction and prove vague-target unknown behavior.
   - Acceptance:
@@ -90,6 +98,9 @@ Shared explicit-target anchor contract for `B2.1` / `B2.2`:
       instruction-surface target
     - pronoun-only or copied-whole-goal fallbacks do not become `target` unless a separate
       accepted explicit anchor is present
+    - `ObjectiveTargetKind::ConceptualTopic` is not synthesized from the whole goal clause; weak
+      review/analyze/fix clauses fall back to `target == None` unless a specific named conceptual
+      artifact/topic span is present
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
@@ -99,10 +110,10 @@ Shared explicit-target anchor contract for `B2.1` / `B2.2`:
 
 - [ ] Task B2.2: Preserve explicit concrete targets and prove the preservation matrix in the same packet.
   - Acceptance: explicit file/directory, instruction-surface, spec/doc, test/verifier,
-    crate/package, workspace-ref, and directly tied packet/work-item targets still survive
-    extraction after the honesty tightening; and the packet lands the explicit-target preservation
-    regression matrix proving those target families remain intact without reopening vague-target
-    fabrication.
+    crate/package, workspace-ref, directly tied packet/work-item targets, and specific named
+    conceptual artifact/topic spans still survive extraction after the honesty tightening; and the
+    packet lands the explicit-target preservation regression matrix proving those target families
+    remain intact without reopening vague-target fabrication.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
@@ -128,7 +139,9 @@ Shared explicit-target anchor contract for `B2.1` / `B2.2`:
   - Acceptance: `verification_commands` come from any clause carrying a verification role
     candidate when such clauses exist, not only from clauses where `Verification` is the top role,
     while whole-candidate fallback remains only a conservative backup path; and the packet lands a
-    clause-grounded extraction regression proving the preference directly.
+    clause-grounded extraction regression proving the preference directly, including a mixed-role
+    sentence such as `Review the objective extractor, run make test, and return concrete fixes.`
+    that resolves to goal / verification / deliverable spans while still capturing `make test`.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
@@ -163,7 +176,9 @@ Shared explicit-target anchor contract for `B2.1` / `B2.2`:
   - Acceptance:
     - packet closeout notes record that `SO-2.3B-refine` refined already-landed preliminary
       structured assembly rather than starting a competing greenfield plan
-    - `SO-3.1` / `SO-3.2` are clearly next
+    - `SO-3.1` / `SO-3.2` are clearly next only because structured state survives checkpoint
+      narrowing, target honesty is fixed, verification grounding is role-backed, the packet
+      verification wall is green, and residual risks are documented
     - `SO-4` / `SO-5` remain blocked until `SO-3` lands
     - the older phase-1 task ledger no longer reads as if `SO-2.1` / `SO-2.2` / `SO-2.3` are all
       still greenfield work

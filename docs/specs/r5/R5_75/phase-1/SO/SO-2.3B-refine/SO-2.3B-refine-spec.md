@@ -186,6 +186,8 @@ Explicit target anchor contract for this packet:
     instructions
   - workspace refs such as `@shared-cab-app`
   - named packet/work item identifiers only when directly tied to the requested task
+- specific named conceptual artifact/topic spans only when the span itself is explicit; do not
+  synthesize `ObjectiveTargetKind::ConceptualTopic` from the whole goal clause
 - Not enough by itself:
   - `this`
   - `it`
@@ -206,13 +208,15 @@ This packet uses four validation layers.
    - `B2.1` proves vague targets remain unknown while at least one obvious explicit target case
      still survives
    - `B2.2` proves the broader explicit-target preservation matrix across file/directory,
-     instruction-surface, spec/doc, test/verifier, crate/package, workspace-ref, and directly tied
-     packet/work-item targets
+     instruction-surface, spec/doc, test/verifier, crate/package, workspace-ref, directly tied
+     packet/work-item targets, and specific named conceptual artifact/topic spans
    - `B3.1` proves bullet-only or unheaded verifier clauses receive a verification role candidate
      with evidence, not just suppressed goal behavior
    - `B3.2` proves clause-grounded extraction is preferred when grounded verifier clauses exist,
-     and that `verification_commands` are collected from any clause carrying that verification role
-     candidate
+     that `verification_commands` are collected from any clause carrying that verification role
+     candidate, and that a mixed-role sentence such as `Review the objective extractor, run make
+     test, and return concrete fixes.` splits into goal / verification / deliverable spans while
+     still capturing `make test`
 
 2. **Final coverage audit / combined-case regressions**
    - `B4.1` audits the remaining proof surface after the behavior packets land
@@ -268,23 +272,29 @@ This packet is done only when all of the following are true:
    least one obvious explicit target case. Accepted explicit target evidence is limited to
    repo-relative file/directory paths, crate/package names with cues, spec/design/doc names or
    doc paths, test/verifier targets when the task is about the test/verifier itself, instruction
-   surfaces, workspace refs, and directly tied packet/work-item identifiers; pronoun-only or
-   copied-whole-goal fallbacks are not enough by themselves. `B2.2` proves the broader
-   explicit-target preservation matrix.
+   surfaces, workspace refs, directly tied packet/work-item identifiers, and specific named
+   conceptual artifact/topic spans. Do not set `ObjectiveTargetKind::ConceptualTopic` from the
+   whole goal clause; the fallback for weak review/analyze/fix clauses is `target == None`, not
+   `ConceptualTopic`. Pronoun-only or copied-whole-goal fallbacks are not enough by themselves.
+   `B2.2` proves the broader explicit-target preservation matrix.
 3. Verification-command clauses produce verification-role evidence spans even when there is no
    dedicated `Verification` heading. When `has_explicit_verification_cue(...)` is true, the clause
    receives an `ObjectiveRole::Verification` role candidate with evidence rather than merely
    suppressing `ObjectiveRole::Goal`; clause-grounded extraction is preferred when grounded
-   verifier clauses exist; and `verification_commands` are collected from any clause carrying a
-   verification role candidate, not only from clauses where `Verification` is the top role.
+   verifier clauses exist; `verification_commands` are collected from any clause carrying a
+   verification role candidate, not only from clauses where `Verification` is the top role; and a
+   mixed-role sentence such as `Review the objective extractor, run make test, and return concrete
+   fixes.` still resolves to goal / verification / deliverable spans while capturing `make test`.
 4. `B4.1` closes any remaining combined-case proof gaps rather than carrying the core proof load for
    the earlier behavior packets.
 5. `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` and
    `cargo test -p agent-drift-analyzer -- --nocapture` are green.
-6. The packet stays bounded enough that `SO-3` remains the next packet after closeout, `SO-4` /
-   `SO-5` stay blocked on `SO-3`, and closeout notes update the older phase-1 task ledger so
-   `SO-2.1` / `SO-2.2` / `SO-2.3` are not misread as untouched greenfield work competing with this
-   refinement packet.
+6. The packet stays bounded enough that `SO-3` remains the next packet after closeout only once
+   structured state survives checkpoint narrowing, target honesty is fixed, verification grounding
+   is role-backed, the packet verification wall is green, residual risks are documented, and
+   closeout notes update the older phase-1 task ledger so `SO-2.1` / `SO-2.2` / `SO-2.3` are not
+   misread as untouched greenfield work competing with this refinement packet. `SO-4` / `SO-5`
+   stay blocked on `SO-3` until those closeout conditions are explicit.
 
 ## Open Questions
 

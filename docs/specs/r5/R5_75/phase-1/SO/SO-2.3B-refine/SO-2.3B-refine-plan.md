@@ -124,6 +124,7 @@ being erased in the main checkpoint path.
 
 ```bash
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
 ## B2: Stop Target Fabrication From Weak Goal Clauses
@@ -142,6 +143,9 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
   - workspace refs such as `@shared-cab-app`
   - named packet/work item identifiers only when directly tied to the requested task
 - keep vague review/analyze/fix asks grounded as goals while leaving `target` unknown
+- do not set `ObjectiveTargetKind::ConceptualTopic` from the whole goal clause unless there is a
+  specific named conceptual artifact or topic span; weak review/analyze/fix clauses fall back to
+  `target == None`
 - add the vague-target regression in the same packet so the unknown behavior is reviewable and proven
 - include one minimal explicit-target guard so the tightening proves it did not nuke all explicit
   target extraction; one obvious file-path or instruction-surface survivor is enough here
@@ -161,7 +165,7 @@ crates/agent-drift-analyzer/tests/checkpoints.rs
 - preserve explicit concrete targets after the unknown gate is tightened
 - expand the explicit-target preservation regression matrix in the same packet across
   file/directory, instruction-surface, spec/doc, test/verifier, crate/package, workspace-ref, and
-  directly tied packet/work-item targets
+  directly tied packet/work-item targets, plus specific named conceptual artifact/topic spans
 - treat this packet as preservation work, not as a reopening of vague-target fabrication behavior
 
 ### B2.2 Primary Files
@@ -211,6 +215,9 @@ crates/agent-drift-analyzer/tests/checkpoints.rs
   from clauses where `Verification` is the top role
 - add the clause-grounded extraction regression in the same packet so the preference is proven when
   the behavior lands
+- include one mixed-role regression such as `Review the objective extractor, run make test, and
+  return concrete fixes.` so the packet proves goal / verification / deliverable separation while
+  still capturing `make test`
 
 ### B3.2 Primary Files
 
@@ -235,6 +242,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ### Scope
 
+- treat B4 as coverage consolidation, not the first proof for B1-B3
 - audit the proof surface after B1-B3 land
 - identify any missing combined-case regressions or residual packet-proof gaps
 - add only the missing regressions needed to make the overall packet family fully reviewable and
@@ -266,7 +274,9 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 - rerun the packet verification wall
 - confirm the packet stayed analyzer-local and did not silently widen into `SO-3`, `SO-4`, or
   downstream migration work
-- record `SO-3.1` / `SO-3.2` as the next packet boundary after closeout
+- record `SO-3.1` / `SO-3.2` as the next packet boundary after closeout only if structured state
+  survives checkpoint narrowing, target honesty is fixed, verification grounding is role-backed,
+  the packet verification wall is green, and residual risks are documented
 - update the stale phase-1 task ledger so it records `SO-2.3B-refine` as a corrective refinement
   over already-landed preliminary structured assembly rather than leaving `SO-2.1` / `SO-2.2` /
   `SO-2.3` looking like untouched greenfield backlog

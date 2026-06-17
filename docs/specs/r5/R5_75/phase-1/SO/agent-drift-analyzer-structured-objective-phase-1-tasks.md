@@ -111,9 +111,10 @@ structured frame as the semantic authority. Treat the current key as a stopgap o
 migration may anchor on it until SO-3.2 lands. After the grounding follow-on closes, the next
 immediate packet is `SO-2.3B-refine`, which preserves structured state through checkpoint
 narrowing, tightens target honesty, and aligns verification grounding before the compatibility/key
-projection work begins. Once `SO-2.3B-refine` lands, `SO-3.1` and `SO-3.2` are the next packet
-boundary before `SO-4` and `SO-5`. Do not start `SO-4` / `SO-5` from this ledger until that
-`SO-3` boundary has actually landed.
+projection work begins. Once `SO-2.3B-refine` lands with structured preservation, target honesty,
+role-backed verification grounding, a green packet verification wall, and documented residual
+risks, `SO-3.1` and `SO-3.2` are the next packet boundary before `SO-4` and `SO-5`. Do not start
+`SO-4` / `SO-5` from this ledger until that `SO-3` boundary has actually landed.
 
 - [ ] Task SO-3.1: Render compatibility text from structured state when safe.
   - Acceptance: `ObjectiveSummary.text` becomes a compatibility view over structured state when the

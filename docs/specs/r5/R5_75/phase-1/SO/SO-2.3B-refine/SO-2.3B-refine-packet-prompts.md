@@ -25,21 +25,25 @@ Global rules for every packet prompt below:
    first.
 3. Every implementation or fix subagent prompt must start with `/goal ` and must explicitly tell
    the subagent to use the `$incremental-implementation` skill.
-4. After the implementation work is landed, the orchestration agent must commit before dispatching
+4. Every implementation prompt should carry a one-line packet invariant near the top, and every
+   implementation/fix subagent must stop and report a blocker instead of widening scope if the
+   packet cannot be completed without touching an out-of-scope downstream consumer or starting
+   deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work.
+5. After the implementation work is landed, the orchestration agent must commit before dispatching
    review. If a packet is verification-only and no files changed, do not invent an empty commit;
    instead record honestly that no implementation commit was needed.
-5. The orchestration agent must then spawn a fresh `GPT-5.4` subagent on `high` for review.
-6. Every review subagent prompt must start with `/goal ` and must explicitly tell the subagent to
+6. The orchestration agent must then spawn a fresh `GPT-5.4` subagent on `high` for review.
+7. Every review subagent prompt must start with `/goal ` and must explicitly tell the subagent to
    use the `$code-review-and-quality` skill.
-7. If the review subagent flags issues, the orchestration agent must spawn a fresh `GPT-5.4`
+8. If the review subagent flags issues, the orchestration agent must spawn a fresh `GPT-5.4`
    `high` fix subagent whose prompt starts with `/goal ` and explicitly uses the
    `$incremental-implementation` skill.
-8. Commit every non-empty implementation/fix batch before sending a fresh review subagent back
+9. Commit every non-empty implementation/fix batch before sending a fresh review subagent back
    through the loop. Do not advance to the next packet until the current packet is committed and a
    fresh review subagent reports it review-clean, or for verification-only packets with no file
    changes, explicitly reports there was nothing to commit.
-9. Run `gitnexus_detect_changes()` before every real commit.
-10. Before editing any Rust function, method, enum, struct, helper, or other indexed symbol, the
+10. Run `gitnexus_detect_changes()` before every real commit.
+11. Before editing any Rust function, method, enum, struct, helper, or other indexed symbol, the
     implementation/fix subagent must honor the repo GitNexus rule: run impact analysis first and
     report any HIGH or CRITICAL blast radius before proceeding.
 
@@ -113,6 +117,7 @@ Required verification wall for Packet `B1.1`:
 
 ```bash
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
 Implementation subagent prompt to send:
@@ -121,6 +126,8 @@ Implementation subagent prompt to send:
 /goal Implement Packet `B1.1` only from `docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the docs-lock task `B0.1` is already landed and no later `B2.*+` packet has started.
 
 Use the `$incremental-implementation` skill.
+
+Packet invariant: after `B1.1`, no checkpoint path may replace a structured `ObjectiveSummary` with a compatibility-only summary when structured extraction succeeded.
 
 You are landing only Packet `B1.1`:
 - stop `checkpoint_analyses(...)` from overwriting a richer structured objective with `ObjectiveSummary::compatibility(...)`
@@ -164,6 +171,7 @@ Execution rules:
 - treat the richer objective produced by `assemble_context(&window)` as the semantic authority when
   it already has `structured`; do not replace it with compatibility-only state
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B1.1` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -270,14 +278,17 @@ Packet authority:
 
 Packet `B2.1` scope only:
 - separate grounded goal selection from explicit target extraction
+- do not set `ObjectiveTargetKind::ConceptualTopic` from the whole goal clause unless there is a
+  specific named conceptual artifact or topic span; the fallback for weak review/analyze/fix
+  clauses is `target == None`, not `ConceptualTopic`
 - leave `target == None` plus `ObjectiveUnknown { field_name: "target", ... }` when no explicit target evidence exists
 - land the vague-target regression in the same packet so the unknown behavior is proven before review
 - include one minimal explicit-target guard so the packet proves it did not erase all target
   extraction; one obvious file-path or instruction-surface survivor is enough here
 - treat explicit target anchors as limited to repo-relative file/directory paths, crate/package
   names with cues, spec/design/doc names or doc paths, test/verifier targets when the task is
-  about the test/verifier itself, instruction surfaces, workspace refs, and directly tied
-  packet/work-item identifiers
+  about the test/verifier itself, instruction surfaces, workspace refs, directly tied
+  packet/work-item identifiers, and specific named conceptual artifact/topic spans
 - treat `this`, `it`, `the above`, `what landed`, `the current issue`, or the entire goal sentence
   copied as target as insufficient by themselves
 
@@ -318,16 +329,21 @@ Implementation subagent prompt to send:
 
 Use the `$incremental-implementation` skill.
 
+Packet invariant: after `B2.1`, weak review/analyze/fix clauses may keep a real goal but must leave `target == None` unless an accepted explicit anchor is present.
+
 You are landing only Packet `B2.1`:
 - separate grounded goal selection from explicit target extraction
+- do not set `ObjectiveTargetKind::ConceptualTopic` from the whole goal clause unless there is a
+  specific named conceptual artifact or topic span; the fallback for weak review/analyze/fix
+  clauses is `target == None`, not `ConceptualTopic`
 - leave `target == None` plus `ObjectiveUnknown { field_name: "target", ... }` when no explicit target evidence exists
 - land the vague-target regression in the same packet so the unknown behavior is proven before review
 - include one minimal explicit-target guard so the packet proves it did not erase all target
   extraction; one obvious file-path or instruction-surface survivor is enough here
 - only treat the following as accepted explicit target anchors: repo-relative file/directory paths,
   crate/package names with cues, spec/design/doc names or doc paths, test/verifier targets when
-  the task is about the test/verifier itself, instruction surfaces, workspace refs, and directly
-  tied packet/work-item identifiers
+  the task is about the test/verifier itself, instruction surfaces, workspace refs, directly tied
+  packet/work-item identifiers, and specific named conceptual artifact/topic spans
 - treat `this`, `it`, `the above`, `what landed`, `the current issue`, or the entire goal sentence
   copied as target as insufficient by themselves unless a separate accepted anchor is present
 
@@ -363,6 +379,7 @@ Execution rules:
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B2.1` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -467,7 +484,7 @@ Packet authority:
 - AGENTS.md
 
 Packet `B2.2` scope only:
-- preserve explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package, and workspace-ref targets after the unknown gate tightening
+- preserve explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package, workspace-ref, directly tied packet/work-item, and specific named conceptual artifact/topic targets after the unknown gate tightening
 - land the explicit-target preservation regression matrix in the same packet
 - treat this packet as preservation work, not as a reopening of vague-target fabrication behavior
 - preserve directly tied packet/work-item identifiers when they are the real requested target
@@ -511,8 +528,10 @@ Implementation subagent prompt to send:
 
 Use the `$incremental-implementation` skill.
 
+Packet invariant: after `B2.2`, the `B2.1` honesty gate stays intact while grounded explicit file/doc/test/instruction/crate/workspace/packet/conceptual targets still survive.
+
 You are landing only Packet `B2.2`:
-- preserve explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package, and workspace-ref targets after the unknown gate tightening
+- preserve explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package, workspace-ref, directly tied packet/work-item, and specific named conceptual artifact/topic targets after the unknown gate tightening
 - land the explicit-target preservation regression matrix in the same packet
 - treat this packet as preservation work, not as a reopening of vague-target fabrication behavior
 - preserve directly tied packet/work-item identifiers when they are the real requested target
@@ -551,6 +570,7 @@ Execution rules:
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B2.2` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -578,8 +598,8 @@ Review only Packet `B2.2` from:
 
 Focus:
 - whether explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package,
-  workspace-ref, and directly tied packet/work-item targets still resolve correctly after the
-  unknown gate was tightened
+  workspace-ref, directly tied packet/work-item, and specific named conceptual artifact/topic
+  targets still resolve correctly after the unknown gate was tightened
 - whether the explicit-target preservation matrix is present in the same packet
 - whether weak references such as `this`, `it`, `the above`, `what landed`, `the current issue`,
   or copied-whole-goal targets still stay out of the explicit-target bucket by themselves
@@ -696,6 +716,8 @@ Implementation subagent prompt to send:
 
 Use the `$incremental-implementation` skill.
 
+Packet invariant: after `B3.1`, unheaded or inline verifier clauses with explicit verification cues must receive verification-role evidence rather than only losing `Goal`.
+
 You are landing only Packet `B3.1`:
 - make command-like verifier clauses discoverable without a dedicated `Verification` heading
 - allow bullet-only or inline verifier clauses in `Mission`, `Scope`, or `UnknownSection` contexts to produce grounded verification evidence
@@ -734,6 +756,7 @@ Execution rules:
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B3.1` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -839,6 +862,7 @@ Packet `B3.2` scope only:
 - collect `verification_commands` from any clause carrying a verification role candidate, not only from clauses where `Verification` is the top role
 - keep whole-candidate fallback only as a conservative backup path
 - land the clause-grounded extraction regression in the same packet so the preference is proven when the behavior lands
+- include a mixed-role regression such as `Review the objective extractor, run make test, and return concrete fixes.` so the packet proves goal / verification / deliverable separation while still capturing `make test`
 
 Primary files for this packet:
 - crates/agent-drift-analyzer/src/context/objective.rs
@@ -877,11 +901,14 @@ Implementation subagent prompt to send:
 
 Use the `$incremental-implementation` skill.
 
+Packet invariant: after `B3.2`, `verification_commands` come from grounded verification clauses before any whole-row fallback, including mixed-role sentences.
+
 You are landing only Packet `B3.2`:
 - prefer clause-grounded verification extraction when a verification-bearing clause exists
 - collect `verification_commands` from any clause carrying a verification role candidate, not only from clauses where `Verification` is the top role
 - keep whole-candidate fallback only as a conservative backup path
 - land the clause-grounded extraction regression in the same packet so the preference is proven when the behavior lands
+- include a mixed-role regression such as `Review the objective extractor, run make test, and return concrete fixes.` so the packet proves goal / verification / deliverable separation while still capturing `make test`
 
 Authoritative docs to read first:
 - docs/specs/r5/R5_75/MAP.md
@@ -915,6 +942,7 @@ Execution rules:
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B3.2` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -943,6 +971,7 @@ Review only Packet `B3.2` from:
 Focus:
 - whether `verification_commands` now come from any clause carrying a verification role candidate when such clauses exist
 - whether the packet includes the clause-grounded proving regression in the same packet
+- whether the packet covers a mixed-role sentence such as `Review the objective extractor, run make test, and return concrete fixes.` with the expected goal / verification / deliverable split and captured `make test` command
 - whether whole-row fallback remains conservative and secondary rather than the hidden authority
 
 Review the clause-grounded extraction regression first, then the implementation diff.
@@ -1015,6 +1044,7 @@ Packet authority:
 - AGENTS.md
 
 Packet `B4.1` scope only:
+- treat B4 as coverage consolidation, not the first proof for B1-B3
 - audit the remaining proof surface after B1-B3 land
 - add only any missing combined-case or residual regressions needed to make the packet family fully reviewable and durable
 - keep the packet centered on `crates/agent-drift-analyzer/tests/checkpoints.rs` unless a tiny packet-scoped fix is required to make the final audit honest
@@ -1055,7 +1085,10 @@ Implementation subagent prompt to send:
 
 Use the `$incremental-implementation` skill.
 
+Packet invariant: after `B4.1`, the packet family has no missing combined-case proof gaps, but B4 must not become the first proof for B1-B3 behavior.
+
 You are landing only Packet `B4.1`:
+- treat B4 as coverage consolidation, not the first proof for B1-B3
 - audit the remaining proof surface after B1-B3 land
 - add only any missing combined-case or residual regressions needed to make the packet family fully reviewable and durable
 - keep the packet centered on `crates/agent-drift-analyzer/tests/checkpoints.rs` unless a tiny packet-scoped fix is required to make the final audit honest
@@ -1093,6 +1126,7 @@ Execution rules:
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B4.1` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -1120,6 +1154,7 @@ Review only Packet `B4.1` from:
 
 Focus:
 - whether the packet audits final coverage instead of carrying the core proof load for earlier behavior packets
+- whether B4 stays a consolidation packet rather than silently becoming the first proof for B1-B3
 - whether any added regressions are truly missing combined-case coverage rather than deferred core proof
 - whether the packet stayed regression-audit-focused and reviewable
 
@@ -1234,6 +1269,8 @@ Implementation subagent prompt to send:
 
 Use the `$incremental-implementation` skill.
 
+Packet invariant: after `B5.1`, the full `SO-2.3B-refine` verification wall is green and any defect fixes stayed strictly packet-scoped.
+
 You are landing only Packet `B5.1`:
 - run the packet verification wall for the fully landed `SO-2.3B-refine` packet family
 - treat this as verification-first work: no implementation changes are needed unless the verification wall exposes a packet-scoped defect
@@ -1272,6 +1309,7 @@ Execution rules:
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B5.1` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -1356,7 +1394,7 @@ Your job is done only when Packet `B5.1` is review-clean and every non-empty imp
 ````text
 /goal Land Packet `B5.2` from `docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
-You are the orchestration agent. Stay strictly scoped to Packet `B5.2` only, assuming Packets `B1.1` through `B5.1` are already landed and the packet family is checkpoint-green.
+You are the orchestration agent. Stay strictly scoped to Packet `B5.2` only, assuming Packets `B1.1` through `B5.1` are already landed, the packet verification wall is green, and the closeout evidence can show structured preservation, target honesty, verification grounding, and residual risks explicitly.
 
 Packet authority:
 - docs/specs/r5/R5_75/MAP.md
@@ -1372,7 +1410,7 @@ Packet authority:
 - AGENTS.md
 
 Packet `B5.2` scope only:
-- capture the next-packet handoff honestly so `SO-3.1` / `SO-3.2` are clearly next and `SO-4` / `SO-5` remain blocked on `SO-3`
+- capture the next-packet handoff honestly so `SO-3.1` / `SO-3.2` are clearly next only because structured state survives checkpoint narrowing, target honesty is fixed, verification grounding is role-backed, the packet verification wall is green, and residual risks are documented; `SO-4` / `SO-5` remain blocked on `SO-3`
 - keep this packet docs-only unless a tiny routing-note update outside the packet docs is strictly required
 - preserve auditability instead of silently rewriting packet history
 - update the older phase-1 task ledger so it does not read as if `SO-2.1` / `SO-2.2` / `SO-2.3`
@@ -1415,12 +1453,14 @@ manual review of the landed packet docs and any narrow routing-note update
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `B5.2` only from `docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `B1.1` through `B5.1` are already landed and the packet family is checkpoint-green.
+/goal Implement Packet `B5.2` only from `docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `B1.1` through `B5.1` are already landed, the packet verification wall is green, and the closeout evidence can show structured preservation, target honesty, verification grounding, and residual risks explicitly.
 
 Use the `$incremental-implementation` skill.
 
+Packet invariant: after `B5.2`, `SO-3` is named next only because structured preservation, target honesty, verification grounding, verification-wall green status, and residual-risk documentation are all explicit.
+
 You are landing only Packet `B5.2`:
-- capture the next-packet handoff honestly so `SO-3.1` / `SO-3.2` are clearly next and `SO-4` / `SO-5` remain blocked on `SO-3`
+- capture the next-packet handoff honestly so `SO-3.1` / `SO-3.2` are clearly next only because structured state survives checkpoint narrowing, target honesty is fixed, verification grounding is role-backed, the packet verification wall is green, and residual risks are documented; `SO-4` / `SO-5` remain blocked on `SO-3`
 - keep this packet docs-only unless a tiny routing-note update outside the packet docs is strictly required
 - preserve auditability instead of silently rewriting packet history
 - update the older phase-1 task ledger so it records `SO-2.3B-refine` as a refinement over
@@ -1462,6 +1502,7 @@ Execution rules:
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
+- if completing this packet would require touching an out-of-scope downstream consumer or starting deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work, stop and report the blocker instead of widening scope
 - run the required Packet `B5.2` verification wall
 
 Return with: changed files, verification commands run, residual risks if any, and the exact commit message you recommend.
@@ -1488,7 +1529,7 @@ Review only Packet `B5.2` from:
 - AGENTS.md
 
 Focus:
-- whether the handoff states clearly that `SO-3.1` / `SO-3.2` are next
+- whether the handoff states clearly that `SO-3.1` / `SO-3.2` are next only because structured preservation, target honesty, verification grounding, verification-wall green status, and residual-risk documentation are explicit
 - whether `SO-4` and `SO-5` remain explicitly blocked on `SO-3`
 - whether packet closeout notes make clear that `SO-2.3B-refine` refined already-landed
   preliminary structured assembly rather than competing with a greenfield `SO-2`
