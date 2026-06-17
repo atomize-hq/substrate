@@ -1628,7 +1628,7 @@ if [ -x "${{stage_dir}}/codex" ]; then
 elif [ -x "${{stage_dir}}/codex-${{target_triple}}" ]; then
   resolved_binary="${{stage_dir}}/codex-${{target_triple}}"
 else
-  resolved_binary="$(find "${{stage_dir}}" -type f \\( -name codex -o -name "codex-${{target_triple}}" \\) | head -n 1 || true)"
+  resolved_binary="$(find "${{stage_dir}}" -type f \( -name codex -o -name "codex-${{target_triple}}" \) | head -n 1 || true)"
 fi
 
 if [ -z "${{resolved_binary}}" ]; then
