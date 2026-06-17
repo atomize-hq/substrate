@@ -26,6 +26,8 @@ use support::MemberDispatchStreamScript;
 use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
 
+const TEST_CODEX_WORLD_GUEST_ENTRYPOINT: &str = "/var/lib/substrate/world-deps/bin/codex";
+
 #[cfg(target_os = "macos")]
 const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
 
@@ -417,6 +419,9 @@ fn write_orchestrator_and_exact_world_member_runtime_world_config_with_toolbox(
     toolbox_enabled: bool,
 ) {
     fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    if member_runtime_family == "codex" {
+        install_test_world_scoped_codex_runtime(home_substrate, fake_member);
+    }
     let toolbox_section = if toolbox_enabled {
         "  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n"
     } else {
@@ -657,10 +662,32 @@ fn write_member_runtime_policy_with_member_backend(
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn runtime_agent_yaml(agent_id: &str, scope: &str, binary: &Path, runtime_family: &str) -> String {
+    let binary_path = if scope == "world" && runtime_family == "codex" {
+        TEST_CODEX_WORLD_GUEST_ENTRYPOINT.to_string()
+    } else {
+        binary.display().to_string()
+    };
     format!(
         "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-        binary.display()
+        binary_path
     )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn install_test_world_scoped_codex_runtime(home_substrate: &Path, source_binary: &Path) {
+    let bin_dir = home_substrate.join("world-deps-bin");
+    fs::create_dir_all(&bin_dir).expect("create fake world deps bin dir");
+    let guest_binary = bin_dir.join("codex");
+    fs::copy(source_binary, &guest_binary).expect("copy fake guest codex");
+    let mut perms = fs::metadata(&guest_binary)
+        .expect("fake guest codex metadata")
+        .permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+    }
+    fs::set_permissions(&guest_binary, perms).expect("set fake guest codex permissions");
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2288,6 +2315,10 @@ impl PtyRepl {
         cmd.env("HOME", home_dir);
         cmd.env("USERPROFILE", home_dir);
         cmd.env("SUBSTRATE_HOME", substrate_home);
+        let test_world_deps_bin = substrate_home.join("world-deps-bin");
+        if test_world_deps_bin.join("codex").exists() {
+            cmd.env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &test_world_deps_bin);
+        }
         cmd.env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path());
         cmd.env("SUBSTRATE_CAGED", "0");
         cmd.arg("--uncaged");
