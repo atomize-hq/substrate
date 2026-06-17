@@ -12936,6 +12936,7 @@ agents:
         inventory_entry_with_binary(agent_id, scope, binary)
     }
 
+    #[cfg(target_os = "linux")]
     fn inventory_entry_with_binary(
         agent_id: &str,
         scope: AgentExecutionScope,

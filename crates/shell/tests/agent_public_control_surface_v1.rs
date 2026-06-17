@@ -152,6 +152,7 @@ impl AgentControlFixture {
         );
     }
 
+    #[cfg(target_os = "linux")]
     fn write_runtime_inventory_with_explicit_member_binary(
         &self,
         member_agent_id: &str,
