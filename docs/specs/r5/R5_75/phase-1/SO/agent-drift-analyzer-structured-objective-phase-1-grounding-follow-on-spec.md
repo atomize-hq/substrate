@@ -198,6 +198,7 @@ This follow-on uses four validation layers:
 ## Boundaries
 
 - **Always:**
+  - verify any prior packet tasks named as prerequisites are already landed in live repo state and tests before editing; if one is missing, stop and report it instead of compensating inside the later packet
   - preserve the landed harness fix and centralized fixture repair,
   - keep `ObjectiveEvidenceSpan` changes additive and backward-compatible,
   - run the focused checkpoint wall before calling any packet complete,

@@ -6,6 +6,10 @@ to the active pre-`R6` implementation queue.
 Keep each task narrow, reviewable, and scoped to the objective-condensation seam. Do not widen
 into fail-open behavior, delegated-parent stabilization, or adapted fixture-family expansion.
 
+Packet prerequisite rule: when a packet prompt names earlier `R5.75-1.x` work as already landed,
+verify that prerequisite in live code/tests before editing. If the earlier packet is missing or
+incomplete, stop and report it instead of compensating inside the later packet.
+
 ## R5.75-1: Objective Condensation And Target Extraction
 
 - [x] Task R5.75-1.1: Add regressions for giant pasted user prompts whose concrete ask appears

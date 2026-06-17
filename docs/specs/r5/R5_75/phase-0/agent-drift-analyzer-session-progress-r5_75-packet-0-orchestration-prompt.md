@@ -119,6 +119,11 @@ Files to inspect before editing:
 - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
 - `docs/specs/hybrid-drift-sentinel-implementation-order.md` only if it still names the active next family
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly within Packet `R5.75-0`
 - keep the packet docs-only

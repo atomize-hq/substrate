@@ -11,6 +11,10 @@ Keep each task as close as possible to five touched files or fewer. Do not advan
 until the current task's verification commands are green or the failure is explicitly captured in
 packet notes.
 
+Packet prerequisite rule: when a phase-1 packet prompt names earlier packets as already landed,
+verify those prerequisite tasks in live code/tests before editing. If a prerequisite is missing,
+stop and report it instead of letting the later packet absorb the earlier bug.
+
 ## SO-0: Docs Lock
 
 - [x] Task SO-0.1: Add the phase-1 SPEC.

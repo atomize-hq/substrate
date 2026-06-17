@@ -126,8 +126,23 @@ crates/agent-drift-analyzer/tests/checkpoints.rs
 
 ## Code Style
 
-Prefer narrow, staged helpers that preserve evidence-bearing state instead of patching behavior with
-another broad string fallback.
+Prefer preservation-first bridge logic that keeps evidence-bearing state intact instead of
+defaulting to re-extraction or another broad string fallback.
+
+Preferred `B1.1` implementation shape:
+
+- Preserve the `ObjectiveSummary` already produced by `assemble_context(&window)` when it already
+  contains `structured`.
+- Do not replace that richer state with `ObjectiveSummary::compatibility(...)`.
+- Do not re-run objective extraction over a different row slice unless the implementation proves
+  the slice is equivalent and preserves sidecar state, `verification_commands`, `unknowns`, and
+  evidence spans.
+- If legacy narrowing is still needed for checkpoint display compatibility, layer only the display
+  text / comparison fallback in a helper that preserves `structured`, `verification_commands`,
+  `unknowns`, and evidence spans.
+
+Simplified reduced sketch only (acceptable as an example, but not the default implementation
+guidance):
 
 ```rust
 fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary> {
@@ -141,6 +156,9 @@ fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary
 
 Packet-specific conventions:
 
+- Treat the bridge bug as overwrite, not extraction absence: `assemble_context(...)` already
+  produces richer objective state and checkpoint narrowing must preserve it whenever that state is
+  present.
 - Preserve structured/evidence/unknown state when narrowing; do not collapse back to
   `ObjectiveSummary::compatibility(...)` if structured extraction already succeeded.
 - Separate goal selection from target extraction; a grounded goal may exist while `target` stays
@@ -183,6 +201,7 @@ semantics in `SO-4`, not to be partially bootstrapped here.
 ## Boundaries
 
 - **Always do:**
+  - verify any prior packet tasks named as prerequisites are already landed in live repo state and tests before editing; if one is missing, stop and report it instead of compensating inside the later packet
   - preserve structured/evidence/unknown state when narrowing if structured extraction already exists
   - leave weak target evidence unknown rather than guessing
   - keep the packet analyzer-local and reviewable
@@ -208,7 +227,9 @@ semantics in `SO-4`, not to be partially bootstrapped here.
 This packet is done only when all of the following are true:
 
 1. `checkpoint_analyses(...)` no longer overwrites a richer structured objective with a
-   compatibility-only summary, and the same packet proves the behavior with a focused regression.
+   compatibility-only summary; it preserves the richer `assemble_context(&window).objective` when
+   `structured` is already present, and the same packet proves the behavior with a focused
+   regression.
 2. `target` is emitted only when explicit target evidence exists; vague review/analyze/fix prompts
    keep `target == None` and record `ObjectiveUnknown { field_name: "target", ... }`, and the
    target packets prove both the unknown and explicit-target behaviors.
@@ -223,10 +244,10 @@ This packet is done only when all of the following are true:
 
 ## Open Questions
 
-1. Should checkpoint narrowing simply preserve `extract_objective(rows)` whenever it already yields
-   structured state, or should it preserve structured state while still layering a narrower legacy
-   display string on top? The default for this packet is to prefer the preserved structured summary
-   unless a concrete regression proves the narrower display string is required.
+1. If a display-only legacy narrowing is still needed, should it layer only `text` /
+   `comparison_key` while leaving `structured`, `verification_commands`, `unknowns`, and evidence
+   untouched? The preferred direction for this packet is yes; only a concrete regression should
+   justify anything broader.
 2. If a narrowed compatibility string and the richer structured evidence disagree, should the packet
    always prefer structured state and force a regression to explain the mismatch? This packet
    assumes yes.

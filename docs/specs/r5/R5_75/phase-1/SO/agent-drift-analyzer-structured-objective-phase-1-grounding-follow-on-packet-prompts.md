@@ -99,6 +99,11 @@ GitNexus rules:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-G1`
 - keep the patch additive and backward-compatible
@@ -195,6 +200,11 @@ GitNexus rules:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay test-first and packet-scoped
 - keep any code changes minimal and directly justified by the new regressions
@@ -286,6 +296,11 @@ Read first:
 - docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md
 - docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md
 - AGENTS.md
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - docs-only unless a tiny clarification elsewhere is strictly required
@@ -380,6 +395,11 @@ Read first:
 - docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md
 - AGENTS.md
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - docs-only
 - no new code, no hidden downstream migration, no packet-prompt regeneration
@@ -468,6 +488,11 @@ Read first:
 - docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-plan.md
 - docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-grounding-follow-on-tasks.md
 - AGENTS.md
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - docs-only
@@ -562,6 +587,11 @@ GitNexus rules:
 - if a validation-discovered fix requires editing any indexed Rust symbol, run impact analysis first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit if files changed
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - validation first

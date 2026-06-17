@@ -29,6 +29,9 @@ and broader downstream migration until the sidecar proves itself.
    no model runtime, and no dependency work should be folded into this landing.
 7. Unknowns are a success condition. If the extractor is unsure, it should preserve evidence and
    leave the field unknown rather than guess.
+8. Phase-1 packet prompts must verify any named earlier packet prerequisites against live
+   code/tests before editing; later packets stop/report missing prerequisite work instead of
+   silently absorbing it.
 
 ## Why This Phase Is Separate From The Current Stopgap
 
@@ -51,7 +54,9 @@ It is a new architecture-valid seam with a different proof wall:
    reviewable, not left as an aspirational future TODO.
 4. **Preserve compatibility honestly.** The legacy string remains available, but new correctness
    claims should route through structured state plus a derived `comparison_key`. Until SO-3.2
-   lands, the live key remains provisional because it still mirrors display text.
+   lands, the live key remains provisional because it still mirrors display text. The checkpoint
+   bridge must preserve the richer `assemble_context(...)` objective when structured state already
+   exists; legacy narrowing is fallback/display-only, not semantic truth replacement.
 5. **Defer risky downstream edits.** `working_set`, `checkpoint/mod.rs`, and `checkpoint/progress.rs`
    should stay untouched in Phase 1 unless a later approved follow-on explicitly promotes them.
 
@@ -62,6 +67,7 @@ phase-1 docs lock
   -> schema bridge (`StructuredObjective`, `comparison_key`, optional sidecar) [landed]
   -> deterministic decomposition and preliminary structured assembly [landed]
   -> grounding identifier restoration + adversarial heading proof [landed later via `SO-G1`/`SO-G2`]
+  -> bridge-honesty corrective packet (`SO-2.3B-refine`) [remaining]
   -> compatibility rendering from structured state + deterministic `comparison_key` derivation [remaining]
   -> objective-acceptance harness + committed fixtures [remaining]
   -> full analyzer regression closeout [remaining]
@@ -173,9 +179,11 @@ implementation still mirrors display text instead of deriving a stable semantic 
 structured frame, and compatibility text is still selected directly from decomposition rather than
 rendered from structured state as the semantic authority. Treat the live key as a provisional
 stopgap only; downstream migration must not anchor on it until the dedicated derivation work lands.
-After the grounding follow-on closes, however, this is no longer the next packet to start: the
-objective-acceptance harness boundary in SO-4 comes first so the remaining semantic work lands
-against an explicit acceptance wall instead of another vague future TODO.
+After the grounding follow-on closes, however, this is also not the next packet to start: the
+bridge-honesty corrective packet `SO-2.3B-refine` comes first so checkpoint narrowing preserves the
+structured objective that `assemble_context(...)` already built. Only after that corrective bridge
+lands should `SO-3` start, and `SO-4` remains after `SO-3` so the acceptance harness validates the
+corrected semantics rather than silently defining them after the fact.
 
 ### Scope
 
@@ -208,11 +216,12 @@ cargo test -p agent-drift-analyzer -- --nocapture
 ### Current Remaining Gap
 
 This packet family is still open. The live crate now has additive structured-objective state,
-section/clause decomposition, and grounding identifiers, but the checkpoint bridge still erases the
-richer sidecar during narrowing, weak goal clauses can still overclaim `target`, and verification
-extraction is not yet fully locked to grounded clause evidence. In addition, `SO-3` remains open:
-`comparison_key` still mirrors display text and compatibility rendering is not yet projected from
-structured state. The `objective_acceptance` harness is also still absent.
+section/clause decomposition, and grounding identifiers, but the checkpoint bridge still overwrites
+the richer `assemble_context(window)` objective during narrowing, weak goal clauses can still
+overclaim `target`, and verification extraction is not yet fully locked to grounded clause
+evidence. In addition, `SO-3` remains open: `comparison_key` still mirrors display text and
+compatibility rendering is not yet projected from structured state. The `objective_acceptance`
+harness is also still absent.
 
 The reconciled next-packet order is therefore:
 

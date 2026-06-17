@@ -21,10 +21,11 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 - The live crate already has real section/clause decomposition, preliminary structured assembly,
   and grounding follow-on work through `SO-G6`, so this is no longer just a narrow
   `normalized_objective_text(...)` stopgap.
-- However, `R5.75-1` is still open because the checkpoint path currently collapses the richer
-  sidecar back to a compatibility-only summary during narrowing, weak goal clauses can still
-  overclaim `target`, and verification-command extraction is not yet locked to the grounded
-  role/evidence wall that Phase 1 expects.
+- However, `R5.75-1` is still open because the checkpoint path currently overwrites the richer
+  `assemble_context(window)` objective with a compatibility-only summary during narrowing instead
+  of preserving that structured sidecar and only falling back when structure is absent; weak goal
+  clauses can still overclaim `target`, and verification-command extraction is not yet locked to
+  the grounded role/evidence wall that Phase 1 expects.
 - Therefore the next work is **not** `R5.75-2`. The next work stays inside `R5.75-1` and follows
   the structured-objective packet order described below: `SO-2.3B-refine` -> `SO-3` -> `SO-4` ->
   `SO-5`, then only after that promotion gate may `R5.75-2` begin.
@@ -69,6 +70,15 @@ Secondary adapted-external evidence bundle:
   - `9c1512861c25cef1`
   - `097d97e914ca220f`
   - `da59436e63915185`
+
+## Shared Packet-Prompt Precondition Rule
+
+Any packet prompt in this `R5.75` stack that names earlier packets/tasks as already landed must
+make that prerequisite operational rather than prose-only:
+
+- verify the named prerequisite packets/tasks against live repo state before editing,
+- stop and report the missing prerequisite if the earlier landing is absent or incomplete, and
+- do not let a later packet silently absorb or repair missing earlier-packet work.
 
 ## Shared Verification Ladder
 
@@ -234,8 +244,9 @@ contains additive structured-objective state, section/clause decomposition, unkn
 and grounding follow-on work. What remains open inside `R5.75-1` is the semantic honesty and
 acceptance wall around that structure:
 
-- the checkpoint narrowing bridge still overwrites `context.objective` with a
-  compatibility-only summary,
+- the checkpoint narrowing bridge still overwrites the richer `assemble_context(window)` objective
+  with a compatibility-only summary instead of preserving structured state and using legacy
+  narrowing only as fallback/display layering,
 - `target` assembly still overclaims from weak goal clauses,
 - `comparison_key` still mirrors display text,
 - compatibility text is not yet rendered from structured state as the semantic authority,
@@ -244,7 +255,8 @@ acceptance wall around that structure:
 ### Remaining `R5.75-1` Landing Order Before `R5.75-2`
 
 1. **`SO-2.3B-refine` / `SO-Bridge-1`**
-   - preserve the structured sidecar through checkpoint narrowing,
+   - preserve the structured `assemble_context(window)` objective through checkpoint narrowing,
+   - keep legacy narrowed text fallback-only and display-only if it is still needed,
    - stop weak goal clauses from fabricating `target`,
    - align verification-role grounding with verifier-command extraction.
 2. **`SO-3.1` / `SO-3.2`**
@@ -503,8 +515,9 @@ Do not open `R6` until all of the following are true:
 - `R5.75-0` authority docs are honest about landed `R5.5` work and remaining `R5.75` scope
 - giant prompt objective repros condense to the concrete task instead of pasted scaffold bodies
 - the `R5.75-1` structured-objective subfamily is closed honestly: checkpoint narrowing preserves
-  structured state, weak targets remain unknown when evidence is weak, compatibility rendering and
-  `comparison_key` come from structured semantics, and the objective-acceptance wall is committed
+  the richer assembled structured objective instead of replacing it with compatibility-only state,
+  weak targets remain unknown when evidence is weak, compatibility rendering and `comparison_key`
+  come from structured semantics, and the objective-acceptance wall is committed
 - sparse readable sessions fail open conservatively instead of hard-aborting the analyzer
 - delegated parent-visible sessions stay stable and conservative under limited child visibility
 - zero-verifier exploratory sessions no longer flap into troubleshooting/dead-end overclaim

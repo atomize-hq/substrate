@@ -22,6 +22,9 @@ to the concrete task ask instead of to giant pasted prompt/scaffold bodies.
    can still serialize as an unhelpfully giant body.
 4. Preserved boilerplate-target requests are part of the correctness wall, not optional niceties.
 5. No new fixture family, schema bump, or compactor contract change belongs in this packet.
+6. Packet prompts must treat earlier landed packets as prerequisite claims to verify, not
+   assumptions to trust; if `R5.75-1.x` prerequisite work is missing in live code/tests, the later
+   packet stops and reports that gap instead of silently repairing it.
 
 ## Scope Classification
 

@@ -236,6 +236,7 @@ way that plausibly affects downstream presentation.
 ## Boundaries
 
 - Always:
+  - verify any prior packet tasks named as prerequisites are already landed in live repo state and tests before editing; if one is missing, stop and report it instead of compensating inside the later packet
   - keep the packet scoped to checkpoint objective condensation / target extraction
   - preserve deliberate boilerplate-target requests as first-class objectives
   - use native-session behavior as the primary authority

@@ -78,7 +78,9 @@ Packet authority:
 
 Packet `B1.1` scope only:
 - stop `checkpoint_analyses(...)` from overwriting a richer structured objective with `ObjectiveSummary::compatibility(...)`
-- preserve structured semantics through the checkpoint narrowing bridge when structured extraction succeeds
+- preserve the richer `assemble_context(&window).objective` when it already carries `structured`
+- treat legacy narrowed summary behavior as fallback-only; if needed for display, it must not drop `structured`, `verification_commands`, `unknowns`, or evidence spans
+- do not default to re-running objective extraction over a different row slice unless equivalence and preservation are explicitly proven
 - land the focused regression in the same packet proving `analysis.current.context.objective.structured.is_some()` survives narrowing and keeps section/clause grounding
 
 Primary files for this packet:
@@ -105,6 +107,7 @@ Hard rules:
 10. Commit every non-empty fix batch before sending a fresh review subagent back through the review loop.
 11. Run `gitnexus_detect_changes()` before every commit.
 12. Do not start the next packet until `B1.1` is review-clean.
+13. Do not let the implementation miss the actual defect: the bug is bridge overwrite, not “structured extraction cannot produce structure.”
 
 Required verification wall for Packet `B1.1`:
 
@@ -121,7 +124,9 @@ Use the `$incremental-implementation` skill.
 
 You are landing only Packet `B1.1`:
 - stop `checkpoint_analyses(...)` from overwriting a richer structured objective with `ObjectiveSummary::compatibility(...)`
-- preserve structured semantics through the checkpoint narrowing bridge when structured extraction succeeds
+- preserve the richer `assemble_context(&window).objective` when it already carries `structured`
+- treat legacy narrowed summary behavior as fallback-only; if needed for display, it must not drop `structured`, `verification_commands`, `unknowns`, or evidence spans
+- do not default to re-running objective extraction over a different row slice unless equivalence and preservation are explicitly proven
 - land the focused regression in the same packet proving `analysis.current.context.objective.structured.is_some()` survives narrowing and keeps section/clause grounding
 
 Authoritative docs to read first:
@@ -147,10 +152,17 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `B1.1`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
+- treat the richer objective produced by `assemble_context(&window)` as the semantic authority when
+  it already has `structured`; do not replace it with compatibility-only state
 - if this packet is verification-first or docs-only, keep any fixes tightly packet-scoped
 - run the required Packet `B1.1` verification wall
 
@@ -178,7 +190,10 @@ Review only Packet `B1.1` from:
 - AGENTS.md
 
 Focus:
-- whether the narrowing bridge preserves `structured` instead of collapsing back to compatibility-only state
+- whether the narrowing bridge preserves the richer `assemble_context(&window).objective` when it
+  already has `structured`, instead of collapsing back to compatibility-only state
+- whether any legacy narrowed text is layered only as display fallback without dropping
+  `verification_commands`, `unknowns`, or evidence spans
 - whether the packet includes the proving regression in the same packet rather than deferring proof
 - whether the regression would fail if checkpoint narrowing regressed back to text-only behavior
 
@@ -215,6 +230,8 @@ Rules:
 - fix only the flagged Packet `B1.1` issues
 - keep the work packet-scoped
 - do not broaden into later packets or deferred `SO-3.*` / `SO-4.*` / `SO-5.*` work
+- preserve the richer objective from `assemble_context(&window)` when it already contains
+  `structured`; do not reintroduce compatibility-only overwrite or re-extraction-default behavior
 - run impact analysis before editing affected Rust symbols
 - rerun the required Packet `B1.1` verification wall
 - run `gitnexus_detect_changes()` before handing back for commit
@@ -319,6 +336,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `B2.1`
@@ -493,6 +515,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `B2.2`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -664,6 +691,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `B3.1`
@@ -838,6 +870,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `B3.2`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -1010,6 +1047,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `B4.1`
@@ -1184,6 +1226,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `B5.1`
@@ -1362,6 +1409,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `B5.2`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -1445,4 +1497,3 @@ Your job is done only when Packet `B5.2` is review-clean and every non-empty imp
 ````
 
 ---
-

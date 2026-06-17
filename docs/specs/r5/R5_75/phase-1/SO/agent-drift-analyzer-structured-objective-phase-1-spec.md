@@ -237,6 +237,7 @@ Phase 1 uses four validation layers.
 ## Boundaries
 
 - **Always do:**
+  - verify any prior packet tasks named as prerequisites are already landed in live repo state and tests before editing; if one is missing, stop and report it instead of compensating inside the later packet
   - keep Phase 1 deterministic and dependency-free
   - preserve evidence spans for every nontrivial structured field
   - keep the sidecar additive and optional

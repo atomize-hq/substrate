@@ -5,8 +5,9 @@ grounding follow-on family closed through `SO-G6`.
 These prompts intentionally cover the phase-1 packets `SO-1.1` through `SO-6.2`. Already-landed
 docs-lock packets `SO-0.*` are excluded, and deferred ask-first packets `SO-X.*` remain excluded
 until separately approved. Packet numbering below preserves phase-1 task order for auditability;
-the live post-grounding restart point is Packet 8 / `SO-4.1`, and the later `SO-3.*` semantic
-packets should only start after the `SO-4.1` / `SO-4.2` harness boundary exists.
+however, the live post-grounding restart no longer begins inside this historical sequence. The
+active restart now goes through the dedicated `SO-2.3B-refine` packet prompts, and only after that
+subfamily lands should the remaining `SO-3.*` / `SO-4.*` prompts below be reused as applicable.
 Shared authority for all packets:
 - docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
 - docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
@@ -100,6 +101,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `SO-1.1`
@@ -266,6 +272,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-1.2`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -426,6 +437,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `SO-2.1`
@@ -588,6 +604,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-2.2`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -749,6 +770,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `SO-2.3`
@@ -913,6 +939,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-3.1`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -1076,6 +1107,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `SO-3.2`
@@ -1243,6 +1279,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-4.1`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -1403,6 +1444,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `SO-4.2`
@@ -1567,6 +1613,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-5.1`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -1729,6 +1780,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `SO-5.2`
@@ -1896,6 +1952,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-5.3`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -2062,6 +2123,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `SO-6.1`
 - use `$incremental-implementation` to keep the work slice-sized and verification-backed
@@ -2224,6 +2290,11 @@ GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `SO-6.2`

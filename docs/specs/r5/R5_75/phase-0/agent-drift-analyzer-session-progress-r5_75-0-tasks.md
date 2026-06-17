@@ -5,6 +5,10 @@ Status: landed/closed on 2026-06-12 for the first sequential `R5.75` landing.
 This packet is docs-only and exists to reconcile authority before the later analyzer-semantic
 packets start landing. Keep each task reviewable and avoid widening into code changes.
 
+Packet prerequisite rule: when a later packet prompt names `R5.75-0` as already landed, verify
+that docs-lock prerequisite against live repo state before editing. If it is missing, stop and
+report the gap instead of compensating inside the later packet.
+
 ## R5.75-0: R5.5 Status Reconciliation And Authority Cleanup
 
 - [x] Task R5.75-0.1: Add landed-status reconciliation language to the `R5.5` plan.

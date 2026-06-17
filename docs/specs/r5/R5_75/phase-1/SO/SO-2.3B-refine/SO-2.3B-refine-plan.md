@@ -33,6 +33,9 @@ Land a bounded corrective packet that:
 7. The packet should avoid widening into compatibility rendering policy, `comparison_key`
    derivation, fixture-family work, or downstream consumers unless a tiny compile-safe bridge is
    unavoidable.
+8. Every downstream behavior packet must verify its named prerequisite packets against live
+   code/tests before editing; if a prerequisite is missing, stop/report that gap instead of letting
+   the later packet compensate for it.
 
 ## Why This Packet Exists Before SO-3 And SO-4
 
@@ -92,10 +95,14 @@ Manual review only.
 
 ### Scope
 
-- update `narrowed_objective_summary(...)` so it does not reduce a richer structured summary to
-  `ObjectiveSummary::compatibility(...)`
-- keep the current checkpoint narrowing behavior only as a fallback when structured extraction truly
-  cannot provide structured state
+- preserve the richer `context.objective` already produced by `assemble_context(&window)` when it
+  carries `structured`
+- do not replace that richer state with `ObjectiveSummary::compatibility(...)`
+- keep legacy narrowed summary behavior only as a fallback when structured state is truly absent, or
+  as a display-only layering step that does not drop `structured`, `verification_commands`,
+  `unknowns`, or evidence spans
+- do not default to re-running objective extraction over a different row slice unless equivalence
+  and state preservation are explicit and proven
 - preserve evidence-bearing semantics (`structured`, `verification_commands`, `unknowns`, and the
   relevant evidence sources) through the bridge
 - add the focused regression in the same packet proving structured state survives checkpoint narrowing
@@ -256,6 +263,8 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Mitigation:
 
 - keep this packet focused on preserving structured state first,
+- if a narrower visible string is still needed, layer it as display-only fallback without erasing
+  the richer structured sidecar,
 - add the bridge-preservation regression in B1.1 so the packet proves its intent before review,
 - defer compatibility rendering policy changes to `SO-3`.
 

@@ -20,6 +20,9 @@ docs honest about what already landed, what remains, and why `R5.75` must comple
 4. Root landing-order docs must name `R5.75` as the current active family and keep `R6` closed.
 5. If a secondary root-order doc is still actively naming the next family, it should be kept in
    sync in this packet rather than deferred.
+6. Any later packet prompt that treats `R5.75-0` as already landed must verify that prerequisite
+   against live repo state before editing and must stop/report if the docs-lock landing is missing
+   instead of compensating inside the later packet.
 
 ## Scope Classification
 

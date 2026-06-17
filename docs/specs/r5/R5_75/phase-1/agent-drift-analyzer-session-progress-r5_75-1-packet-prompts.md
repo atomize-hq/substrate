@@ -122,6 +122,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `R5.75-1.1`
 - keep the change reviewable and regression-focused
@@ -266,6 +271,11 @@ GitNexus requirements:
 - before modifying any Rust function or helper, run impact analysis on the symbol first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `R5.75-1.2`
@@ -412,6 +422,11 @@ GitNexus requirements:
 - before modifying any function, method, enum, or exported struct, run impact analysis first
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `R5.75-1.3`
@@ -563,6 +578,11 @@ GitNexus requirements:
 - report any HIGH or CRITICAL blast radius before proceeding
 - run `gitnexus_detect_changes()` before handing back for commit
 
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
+
 Execution rules:
 - stay strictly inside Packet `R5.75-1.4`
 - preserve deliberate boilerplate-target requests while condensing large chosen rows
@@ -703,6 +723,11 @@ Read first:
 - `docs/specs/r5/R5_75/agent-drift-analyzer-session-progress-r5_75-1-plan.md`
 - `docs/specs/r5/R5_75/agent-drift-analyzer-session-progress-r5_75-1-tasks.md`
 - `AGENTS.md`
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `R5.75-1.5`
@@ -847,6 +872,11 @@ Read first:
 - `docs/specs/r5/R5_75/agent-drift-analyzer-session-progress-r5_75-1-plan.md`
 - `docs/specs/r5/R5_75/agent-drift-analyzer-session-progress-r5_75-1-tasks.md`
 - `AGENTS.md`
+
+Precondition check:
+- Confirm the prior packet tasks named in this prompt are landed in code and tests before editing.
+- If a prerequisite is missing, stop and report the missing prerequisite instead of compensating
+  inside this packet.
 
 Execution rules:
 - stay strictly inside Packet `R5.75-1.6`

@@ -179,6 +179,7 @@ This packet does not require new fixtures or replay-contract changes.
 ## Boundaries
 
 - Always:
+  - verify any prior packet tasks named as prerequisites are already landed in live repo state and tests before editing; if one is missing, stop and report it instead of compensating inside the later packet
   - keep the packet scoped to doc/authority reconciliation
   - preserve honest history about what `R5.5` planned vs. what later landed
   - keep root landing-order docs synchronized with the new `R5.75` family

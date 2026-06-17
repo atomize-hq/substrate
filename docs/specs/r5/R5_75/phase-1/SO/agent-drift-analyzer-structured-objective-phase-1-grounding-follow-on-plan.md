@@ -26,6 +26,9 @@ phase-1 planning docs so the next implementation packets are reviewable and hone
 6. The objective-acceptance harness should be the next meaningful acceptance seam after grounding
    restoration, but this family does not silently widen into a full acceptance implementation unless
    explicitly approved.
+7. Grounding follow-on packet prompts must verify named earlier packets against live code/tests
+   before editing; if a prerequisite is missing, the later packet stops and reports it rather than
+   compensating inside that packet.
 
 ## Why This Follow-On Exists
 

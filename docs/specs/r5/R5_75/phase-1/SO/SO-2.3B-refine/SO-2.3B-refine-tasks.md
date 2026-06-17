@@ -7,6 +7,10 @@ advance to `SO-3` until this packet is checkpoint-green and its residual risks a
 Keep each task as close as possible to five touched files or fewer. Stay analyzer-local unless a
 small compile-safe bridge proves unavoidable.
 
+Packet prerequisite rule: when a packet prompt names earlier `B*` tasks as already landed, verify
+those prerequisite tasks in live code/tests before editing. If one is missing, stop and report it
+instead of compensating inside the later packet.
+
 ## Packet Boundary
 
 This packet covers only:
@@ -41,12 +45,15 @@ This packet does **not** cover:
 ## B1: Preserve Structured Objective Through Checkpoint Narrowing
 
 - [ ] Task B1.1: Stop checkpoint narrowing from erasing structured state and prove it in the same packet.
-  - Acceptance: `checkpoint_analyses(...)` no longer overwrites a richer structured
-    `context.objective` with `ObjectiveSummary::compatibility(...)`; when structured extraction
-    succeeds, the narrowed checkpoint objective preserves structured semantics instead of collapsing
-    back to text-only state; and a targeted regression demonstrates that
-    `analysis.current.context.objective.structured.is_some()` survives checkpoint narrowing while
-    the grounded evidence still carries section/clause identifiers.
+  - Acceptance: `checkpoint_analyses(...)` preserves the richer `context.objective` already
+    produced by `assemble_context(&window)` when that summary contains `structured`, instead of
+    overwriting it with `ObjectiveSummary::compatibility(...)`; any legacy narrowed summary remains
+    fallback-only and may layer display text only if `structured`, `verification_commands`,
+    `unknowns`, and evidence spans survive intact; the packet does not default to re-running
+    extraction over a different row slice unless it proves equivalence and preservation; and a
+    targeted regression demonstrates that `analysis.current.context.objective.structured.is_some()`
+    survives checkpoint narrowing while the grounded evidence still carries section/clause
+    identifiers.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:

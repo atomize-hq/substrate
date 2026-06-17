@@ -5,6 +5,10 @@ crate state and the narrow harness-fix landing; reconciled on 2026-06-17 after t
 follow-on family landed through `SO-G6`. Keep this ledger as the historical closeout record for the
 bounded grounding family rather than as an active implementation queue.
 
+Packet prerequisite rule: when a grounding follow-on prompt names earlier packets as already
+landed, verify that prerequisite in live code/tests before editing. If it is missing, stop and
+report the gap instead of compensating inside the later packet.
+
 ## SO-G0: Docs Lock
 
 - [x] Task SO-G0.1: Add the grounding follow-on SPEC.
