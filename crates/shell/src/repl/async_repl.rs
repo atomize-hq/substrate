@@ -6141,9 +6141,18 @@ async fn start_member_runtime_with_prepared(
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
     if let Some(prepared) = prepared.as_mut() {
         if prepared.prompt_fulfillment.is_none() {
+            let mut launch_descriptor = prepared.descriptor.clone();
+            if launch_descriptor.execution_scope == AgentExecutionScope::World
+                && launch_descriptor.backend_kind == AgentRuntimeBackendKind::Codex
+            {
+                if let Some(world_deps_bin) = std::env::var_os("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+                {
+                    launch_descriptor.binary_path = PathBuf::from(world_deps_bin).join("codex");
+                }
+            }
             prepared.prompt_fulfillment = Some(
                 crate::execution::prompt_fulfillment::PromptFulfillmentBridge::for_descriptor(
-                    &prepared.descriptor,
+                    &launch_descriptor,
                 )
                 .map_err(|err| RuntimeBootstrapFailure {
                     exit_code: 1,
@@ -10068,6 +10077,31 @@ mod tests {
     }
 
     #[cfg(unix)]
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<std::ffi::OsString>,
+    }
+
+    #[cfg(unix)]
+    impl EnvVarGuard {
+        fn set_path(key: &'static str, path: &Path) -> Self {
+            let original = std::env::var_os(key);
+            std::env::set_var(key, path);
+            Self { key, original }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[cfg(unix)]
     fn write_fake_codex_script(temp: &TempDir, keep_alive: bool) -> PathBuf {
         let path = temp.path().join("fake-codex.sh");
         let body = if keep_alive {
@@ -10170,6 +10204,24 @@ mod tests {
         perms.set_mode(0o755);
         fs::set_permissions(&path, perms).expect("set fake codex permissions");
         path
+    }
+
+    #[cfg(unix)]
+    fn install_test_world_scoped_codex_runtime(
+        temp: &TempDir,
+        source_binary: &Path,
+    ) -> EnvVarGuard {
+        let bin_dir = temp.path().join("world-deps-bin");
+        fs::create_dir_all(&bin_dir).expect("create fake world deps bin dir");
+        let guest_binary = bin_dir.join("codex");
+        fs::copy(source_binary, &guest_binary).expect("copy fake guest codex");
+        let mut perms = fs::metadata(&guest_binary)
+            .expect("fake guest codex metadata")
+            .permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        fs::set_permissions(&guest_binary, perms).expect("set fake guest codex permissions");
+        EnvVarGuard::set_path("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &bin_dir)
     }
 
     #[cfg(unix)]
@@ -10314,9 +10366,14 @@ mod tests {
         runtime_family: &str,
         binary: &Path,
     ) -> String {
+        let binary_path = if scope == "world" && runtime_family == "codex" {
+            crate::execution::agent_runtime::validator::CODEX_WORLD_GUEST_ENTRYPOINT.to_string()
+        } else {
+            binary.display().to_string()
+        };
         format!(
             "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            binary.display()
+            binary_path
         )
     }
 
@@ -11533,6 +11590,8 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         write_runtime_inventory_with_world_member(
@@ -11633,6 +11692,8 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -11842,6 +11903,8 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -12037,6 +12100,8 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -12491,6 +12556,8 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -13361,6 +13428,8 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -13688,6 +13757,8 @@ mod tests {
         let fake_orchestrator =
             write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         write_runtime_inventory_with_world_member(
@@ -13806,6 +13877,8 @@ mod tests {
         let fake_orchestrator =
             write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         write_runtime_inventory_with_world_member(
@@ -13872,6 +13945,8 @@ mod tests {
         let fake_orchestrator =
             write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         write_runtime_inventory_with_world_member(
