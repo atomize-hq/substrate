@@ -61,8 +61,8 @@ This plan removes that mismatch by pairing each behavior packet with its own pro
 ```text
 packet docs lock
   -> B1.1 preserve structured state through checkpoint narrowing + prove it
-  -> B2.1 tighten vague-target extraction + prove unknown behavior
-  -> B2.2 preserve explicit concrete targets + prove the matrix
+  -> B2.1 tighten vague-target extraction + prove unknown behavior without erasing all explicit targets
+  -> B2.2 preserve the broader explicit-target families + prove the full matrix
   -> B3.1 align unheaded verifier role grounding + prove it
   -> B3.2 prefer clause-grounded verifier extraction + prove it
   -> B4.1 audit final proof surface + add any missing combined-case regressions
@@ -132,10 +132,22 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 
 - split goal selection from target extraction
 - add a dedicated target-evidence gate so `ObjectiveTarget` is emitted only when explicit anchors
-  exist (file path, crate/package, spec/doc, test/verifier, instruction surface, workspace ref,
-  or similarly concrete evidence)
+  exist:
+  - repo-relative file or directory paths
+  - crate/package names with crate/package cues
+  - spec/design/doc names or markdown/doc paths
+  - test/verifier target names when the task is about the test/verifier itself
+  - instruction surfaces such as `AGENTS.md`, `<skill>`, `Available skills`, or profile/plugin
+    instructions
+  - workspace refs such as `@shared-cab-app`
+  - named packet/work item identifiers only when directly tied to the requested task
 - keep vague review/analyze/fix asks grounded as goals while leaving `target` unknown
 - add the vague-target regression in the same packet so the unknown behavior is reviewable and proven
+- include one minimal explicit-target guard so the tightening proves it did not nuke all explicit
+  target extraction; one obvious file-path or instruction-surface survivor is enough here
+- treat `this`, `it`, `the above`, `what landed`, `the current issue`, or the entire goal sentence
+  copied as target as insufficient by themselves; those cases should stay unknown unless one of the
+  accepted anchors above is also present
 
 ### B2.1 Primary Files
 
@@ -147,8 +159,10 @@ crates/agent-drift-analyzer/tests/checkpoints.rs
 ### B2.2 Scope
 
 - preserve explicit concrete targets after the unknown gate is tightened
-- add the explicit-target preservation regression matrix in the same packet so the tightening cannot
-  silently regress file/instruction-surface/spec-doc/test/workspace targets
+- expand the explicit-target preservation regression matrix in the same packet across
+  file/directory, instruction-surface, spec/doc, test/verifier, crate/package, workspace-ref, and
+  directly tied packet/work-item targets
+- treat this packet as preservation work, not as a reopening of vague-target fabrication behavior
 
 ### B2.2 Primary Files
 
@@ -177,6 +191,9 @@ cargo test -p agent-drift-analyzer -- --nocapture
   explicit `Verification` heading
 - stop depending exclusively on `top_role(...) == Verification` where that loses meaningful role
   evidence
+- when `has_explicit_verification_cue(...)` is true, require the clause to receive an
+  `ObjectiveRole::Verification` role candidate with evidence rather than merely suppressing
+  `ObjectiveRole::Goal`
 - add the bullet-only / inline verifier-role regression in the same packet
 
 ### B3.1 Primary Files
@@ -190,6 +207,8 @@ crates/agent-drift-analyzer/tests/checkpoints.rs
 
 - prefer clause-grounded extraction to candidate-row fallback whenever a verification-bearing clause
   exists
+- collect `verification_commands` from any clause carrying a verification role candidate, not only
+  from clauses where `Verification` is the top role
 - add the clause-grounded extraction regression in the same packet so the preference is proven when
   the behavior lands
 
@@ -273,15 +292,23 @@ Mitigation:
 Mitigation:
 
 - pair B2.1 and B2.2 so the unknown gate and explicit-target preservation are both proven,
-- treat file paths, crate/package names, spec/doc names, instruction surfaces, verifier targets,
-  and workspace refs as accepted explicit anchors.
+- make B2.1 prove the unknown gate did not erase all explicit-target extraction by preserving at
+  least one obvious file-path or instruction-surface case, and
+- treat B2.2 as the broader preservation matrix across file/directory, instruction-surface,
+  spec/doc, test/verifier, crate/package, workspace-ref, and directly tied packet/work-item
+  anchors,
+- keep pronoun-only or copied-whole-goal phrases in the unknown bucket unless a separate accepted
+  explicit anchor is present.
 
 ### Risk: verification grounding stays coupled to a single top-role heuristic
 
 Mitigation:
 
 - allow verification discovery through role-candidate presence rather than only top-role status,
-- cover bullet-only / inline verifier role in B3.1 and clause-grounded extraction in B3.2.
+- make B3.1 require explicit verification-role candidate assignment with evidence when
+  `has_explicit_verification_cue(...)` is true, and
+- make B3.2 collect `verification_commands` from any clause carrying that verification role
+  candidate instead of relying only on top-role winners.
 
 ### Risk: the packet widens into SO-3/SO-4 work because the files are adjacent
 

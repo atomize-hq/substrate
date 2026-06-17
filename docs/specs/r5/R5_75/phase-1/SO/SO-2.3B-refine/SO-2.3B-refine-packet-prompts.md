@@ -272,6 +272,14 @@ Packet `B2.1` scope only:
 - separate grounded goal selection from explicit target extraction
 - leave `target == None` plus `ObjectiveUnknown { field_name: "target", ... }` when no explicit target evidence exists
 - land the vague-target regression in the same packet so the unknown behavior is proven before review
+- include one minimal explicit-target guard so the packet proves it did not erase all target
+  extraction; one obvious file-path or instruction-surface survivor is enough here
+- treat explicit target anchors as limited to repo-relative file/directory paths, crate/package
+  names with cues, spec/design/doc names or doc paths, test/verifier targets when the task is
+  about the test/verifier itself, instruction surfaces, workspace refs, and directly tied
+  packet/work-item identifiers
+- treat `this`, `it`, `the above`, `what landed`, `the current issue`, or the entire goal sentence
+  copied as target as insufficient by themselves
 
 Primary files for this packet:
 - crates/agent-drift-analyzer/src/context/objective.rs
@@ -314,6 +322,14 @@ You are landing only Packet `B2.1`:
 - separate grounded goal selection from explicit target extraction
 - leave `target == None` plus `ObjectiveUnknown { field_name: "target", ... }` when no explicit target evidence exists
 - land the vague-target regression in the same packet so the unknown behavior is proven before review
+- include one minimal explicit-target guard so the packet proves it did not erase all target
+  extraction; one obvious file-path or instruction-surface survivor is enough here
+- only treat the following as accepted explicit target anchors: repo-relative file/directory paths,
+  crate/package names with cues, spec/design/doc names or doc paths, test/verifier targets when
+  the task is about the test/verifier itself, instruction surfaces, workspace refs, and directly
+  tied packet/work-item identifiers
+- treat `this`, `it`, `the above`, `what landed`, `the current issue`, or the entire goal sentence
+  copied as target as insufficient by themselves unless a separate accepted anchor is present
 
 Authoritative docs to read first:
 - docs/specs/r5/R5_75/MAP.md
@@ -375,6 +391,10 @@ Review only Packet `B2.1` from:
 Focus:
 - whether vague review/analyze/fix prompts now keep `target` unknown instead of fabricating a conceptual topic
 - whether the packet includes the vague-target proving regression in the same packet
+- whether at least one obvious explicit target case still survives so the packet did not nuke all
+  target extraction
+- whether pronoun-only or copied-whole-goal references stay unknown unless a separate accepted
+  explicit anchor is present
 - whether the packet stayed scoped to target honesty rather than widening into compatibility or verifier work
 
 Review the new vague-target regression first, then the implementation diff.
@@ -450,6 +470,9 @@ Packet `B2.2` scope only:
 - preserve explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package, and workspace-ref targets after the unknown gate tightening
 - land the explicit-target preservation regression matrix in the same packet
 - treat this packet as preservation work, not as a reopening of vague-target fabrication behavior
+- preserve directly tied packet/work-item identifiers when they are the real requested target
+- do not treat `this`, `it`, `the above`, `what landed`, `the current issue`, or the entire goal
+  sentence copied as target as sufficient target evidence by themselves
 
 Primary files for this packet:
 - crates/agent-drift-analyzer/src/context/objective.rs
@@ -492,6 +515,9 @@ You are landing only Packet `B2.2`:
 - preserve explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package, and workspace-ref targets after the unknown gate tightening
 - land the explicit-target preservation regression matrix in the same packet
 - treat this packet as preservation work, not as a reopening of vague-target fabrication behavior
+- preserve directly tied packet/work-item identifiers when they are the real requested target
+- do not promote `this`, `it`, `the above`, `what landed`, `the current issue`, or the entire goal
+  sentence copied as target unless a separate accepted explicit anchor is present
 
 Authoritative docs to read first:
 - docs/specs/r5/R5_75/MAP.md
@@ -551,9 +577,13 @@ Review only Packet `B2.2` from:
 - AGENTS.md
 
 Focus:
-- whether explicit concrete targets still resolve correctly after the unknown gate was tightened
+- whether explicit file/directory, instruction-surface, spec/doc, test/verifier, crate/package,
+  workspace-ref, and directly tied packet/work-item targets still resolve correctly after the
+  unknown gate was tightened
 - whether the explicit-target preservation matrix is present in the same packet
-- whether the packet preserves instruction-surface and workspace-ref style targets without reopening vague target fabrication
+- whether weak references such as `this`, `it`, `the above`, `what landed`, `the current issue`,
+  or copied-whole-goal targets still stay out of the explicit-target bucket by themselves
+- whether the packet stays preservation-only rather than reopening vague target fabrication
 
 Review the explicit-target preservation matrix first, then the implementation diff.
 List findings by severity.
@@ -627,6 +657,7 @@ Packet authority:
 Packet `B3.1` scope only:
 - make command-like verifier clauses discoverable without a dedicated `Verification` heading
 - allow bullet-only or inline verifier clauses in `Mission`, `Scope`, or `UnknownSection` contexts to produce grounded verification evidence
+- when `has_explicit_verification_cue(...)` is true, require the clause to receive an `ObjectiveRole::Verification` role candidate with evidence rather than merely suppressing `ObjectiveRole::Goal`
 - land the bullet-only / inline verifier-role regression in the same packet
 
 Primary files for this packet:
@@ -668,6 +699,7 @@ Use the `$incremental-implementation` skill.
 You are landing only Packet `B3.1`:
 - make command-like verifier clauses discoverable without a dedicated `Verification` heading
 - allow bullet-only or inline verifier clauses in `Mission`, `Scope`, or `UnknownSection` contexts to produce grounded verification evidence
+- when `has_explicit_verification_cue(...)` is true, require the clause to receive an `ObjectiveRole::Verification` role candidate with evidence rather than merely suppressing `ObjectiveRole::Goal`
 - land the bullet-only / inline verifier-role regression in the same packet
 
 Authoritative docs to read first:
@@ -729,6 +761,7 @@ Review only Packet `B3.1` from:
 
 Focus:
 - whether unheaded verifier clauses can now produce grounded verification-role evidence
+- whether `has_explicit_verification_cue(...)` now causes an `ObjectiveRole::Verification` role candidate with evidence instead of only suppressing `ObjectiveRole::Goal`
 - whether the packet includes the bullet-only / inline verifier-role proving regression in the same packet
 - whether the packet stayed focused on role discoverability rather than broader extraction changes
 
@@ -803,6 +836,7 @@ Packet authority:
 
 Packet `B3.2` scope only:
 - prefer clause-grounded verification extraction when a verification-bearing clause exists
+- collect `verification_commands` from any clause carrying a verification role candidate, not only from clauses where `Verification` is the top role
 - keep whole-candidate fallback only as a conservative backup path
 - land the clause-grounded extraction regression in the same packet so the preference is proven when the behavior lands
 
@@ -845,6 +879,7 @@ Use the `$incremental-implementation` skill.
 
 You are landing only Packet `B3.2`:
 - prefer clause-grounded verification extraction when a verification-bearing clause exists
+- collect `verification_commands` from any clause carrying a verification role candidate, not only from clauses where `Verification` is the top role
 - keep whole-candidate fallback only as a conservative backup path
 - land the clause-grounded extraction regression in the same packet so the preference is proven when the behavior lands
 
@@ -906,7 +941,7 @@ Review only Packet `B3.2` from:
 - AGENTS.md
 
 Focus:
-- whether `verification_commands` now come from role-grounded clauses when such clauses exist
+- whether `verification_commands` now come from any clause carrying a verification role candidate when such clauses exist
 - whether the packet includes the clause-grounded proving regression in the same packet
 - whether whole-row fallback remains conservative and secondary rather than the hidden authority
 

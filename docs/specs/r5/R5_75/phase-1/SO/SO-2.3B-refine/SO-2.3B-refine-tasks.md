@@ -63,11 +63,33 @@ This packet does **not** cover:
 
 ## B2: Stop Target Fabrication
 
+Shared explicit-target anchor contract for `B2.1` / `B2.2`:
+
+- Accepted explicit target anchors for this packet:
+  - repo-relative file or directory paths
+  - crate/package names with crate/package cues
+  - spec/design/doc names or markdown/doc paths
+  - test/verifier target names when the task is about the test/verifier itself
+  - instruction surfaces such as `AGENTS.md`, `<skill>`, `Available skills`, or profile/plugin
+    instructions
+  - workspace refs such as `@shared-cab-app`
+  - named packet/work item identifiers only when directly tied to the requested task
+- Not enough by itself:
+  - `this`
+  - `it`
+  - `the above`
+  - `what landed`
+  - `the current issue`
+  - the entire goal sentence copied as target
+
 - [ ] Task B2.1: Separate grounded goal selection from explicit target extraction and prove vague-target unknown behavior.
-  - Acceptance: the packet can keep a real grounded goal while leaving `target == None` when no
-    explicit target evidence exists; `ObjectiveUnknown { field_name: "target", ... }` remains the
-    honest fallback instead of a fabricated conceptual target; and a vague review/analyze/fix
-    regression proves the unknown behavior in the same packet.
+  - Acceptance:
+    - vague review/analyze/fix prompts can keep a real goal while leaving `target == None`
+    - `ObjectiveUnknown { field_name: "target", ... }` is present
+    - at least one obvious explicit target case still survives, such as a file path or
+      instruction-surface target
+    - pronoun-only or copied-whole-goal fallbacks do not become `target` unless a separate
+      accepted explicit anchor is present
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
@@ -77,9 +99,10 @@ This packet does **not** cover:
 
 - [ ] Task B2.2: Preserve explicit concrete targets and prove the preservation matrix in the same packet.
   - Acceptance: explicit file/directory, instruction-surface, spec/doc, test/verifier,
-    crate/package, and workspace-ref targets still survive extraction after the honesty tightening;
-    and the packet lands the explicit-target preservation regression matrix proving those target
-    families remain intact.
+    crate/package, workspace-ref, and directly tied packet/work-item targets still survive
+    extraction after the honesty tightening; and the packet lands the explicit-target preservation
+    regression matrix proving those target families remain intact without reopening vague-target
+    fabrication.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
@@ -91,8 +114,10 @@ This packet does **not** cover:
 - [ ] Task B3.1: Make verification-bearing clauses discoverable without a dedicated heading and prove it in the same packet.
   - Acceptance: bullet-only or inline verifier clauses that contain command-like verification work
     can produce grounded verification evidence even when the section is `Mission`, `Scope`, or
-    `UnknownSection`; and the packet lands a bullet-only / inline verifier-role regression proving
-    that behavior.
+    `UnknownSection`; when `has_explicit_verification_cue(...)` is true, the clause receives an
+    `ObjectiveRole::Verification` role candidate with evidence instead of merely suppressing
+    `ObjectiveRole::Goal`; and the packet lands a bullet-only / inline verifier-role regression
+    proving that behavior.
   - Verify:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
@@ -100,7 +125,8 @@ This packet does **not** cover:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
 - [ ] Task B3.2: Prefer clause-grounded verification extraction over whole-row fallback and prove it in the same packet.
-  - Acceptance: `verification_commands` come from role-grounded clauses when such clauses exist,
+  - Acceptance: `verification_commands` come from any clause carrying a verification role
+    candidate when such clauses exist, not only from clauses where `Verification` is the top role,
     while whole-candidate fallback remains only a conservative backup path; and the packet lands a
     clause-grounded extraction regression proving the preference directly.
   - Verify:

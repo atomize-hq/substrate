@@ -165,10 +165,36 @@ Packet-specific conventions:
   unknown.
 - Prefer helpers like `has_role(clause, ObjectiveRole::Verification)` over single top-role checks
   when verification grounding is semantically explicit.
+- When `has_explicit_verification_cue(...)` is true, the clause must receive an
+  `ObjectiveRole::Verification` role candidate with evidence; it must not merely suppress
+  `ObjectiveRole::Goal`.
+- `verification_commands` should be collected from any clause carrying a verification role
+  candidate, not only from clauses where `Verification` is the top role.
 - Add focused regressions for every corrected heuristic in the same behavior packet so the packet
   does not depend on prose-only intent during review.
 - Use the final audit packet only to cover missing combined cases or proof gaps that the earlier
   behavior packets did not already lock down.
+
+Explicit target anchor contract for this packet:
+
+- Accepted explicit target anchors:
+  - repo-relative file or directory paths
+  - crate/package names with crate/package cues
+  - spec/design/doc names or markdown/doc paths
+  - test/verifier target names when the task is about the test/verifier itself
+  - instruction surfaces such as `AGENTS.md`, `<skill>`, `Available skills`, or profile/plugin
+    instructions
+  - workspace refs such as `@shared-cab-app`
+  - named packet/work item identifiers only when directly tied to the requested task
+- Not enough by itself:
+  - `this`
+  - `it`
+  - `the above`
+  - `what landed`
+  - `the current issue`
+  - the entire goal sentence copied as target
+- If the packet cannot ground `target` to one of the accepted anchors above, conservative
+  omission/unknown is the correct outcome and `ObjectiveUnknown` should remain present.
 
 ## Testing Strategy
 
@@ -177,10 +203,16 @@ This packet uses four validation layers.
 1. **Behavior-packet checkpoint regressions**
    - extend `crates/agent-drift-analyzer/tests/checkpoints.rs`
    - `B1.1` proves structured state survives checkpoint narrowing
-   - `B2.1` proves vague targets remain unknown
-   - `B2.2` proves explicit file/instruction-surface/spec-doc/test/workspace targets still survive
-   - `B3.1` proves bullet-only or unheaded verifier clauses produce verification-role evidence
-   - `B3.2` proves clause-grounded extraction is preferred when grounded verifier clauses exist
+   - `B2.1` proves vague targets remain unknown while at least one obvious explicit target case
+     still survives
+   - `B2.2` proves the broader explicit-target preservation matrix across file/directory,
+     instruction-surface, spec/doc, test/verifier, crate/package, workspace-ref, and directly tied
+     packet/work-item targets
+   - `B3.1` proves bullet-only or unheaded verifier clauses receive a verification role candidate
+     with evidence, not just suppressed goal behavior
+   - `B3.2` proves clause-grounded extraction is preferred when grounded verifier clauses exist,
+     and that `verification_commands` are collected from any clause carrying that verification role
+     candidate
 
 2. **Final coverage audit / combined-case regressions**
    - `B4.1` audits the remaining proof surface after the behavior packets land
@@ -231,11 +263,20 @@ This packet is done only when all of the following are true:
    `structured` is already present, and the same packet proves the behavior with a focused
    regression.
 2. `target` is emitted only when explicit target evidence exists; vague review/analyze/fix prompts
-   keep `target == None` and record `ObjectiveUnknown { field_name: "target", ... }`, and the
-   target packets prove both the unknown and explicit-target behaviors.
+   keep `target == None` and record `ObjectiveUnknown { field_name: "target", ... }`; `B2.1`
+   proves that unknown behavior without nuking all explicit-target extraction by preserving at
+   least one obvious explicit target case. Accepted explicit target evidence is limited to
+   repo-relative file/directory paths, crate/package names with cues, spec/design/doc names or
+   doc paths, test/verifier targets when the task is about the test/verifier itself, instruction
+   surfaces, workspace refs, and directly tied packet/work-item identifiers; pronoun-only or
+   copied-whole-goal fallbacks are not enough by themselves. `B2.2` proves the broader
+   explicit-target preservation matrix.
 3. Verification-command clauses produce verification-role evidence spans even when there is no
-   dedicated `Verification` heading, and clause-grounded extraction is preferred when grounded
-   verifier clauses exist.
+   dedicated `Verification` heading. When `has_explicit_verification_cue(...)` is true, the clause
+   receives an `ObjectiveRole::Verification` role candidate with evidence rather than merely
+   suppressing `ObjectiveRole::Goal`; clause-grounded extraction is preferred when grounded
+   verifier clauses exist; and `verification_commands` are collected from any clause carrying a
+   verification role candidate, not only from clauses where `Verification` is the top role.
 4. `B4.1` closes any remaining combined-case proof gaps rather than carrying the core proof load for
    the earlier behavior packets.
 5. `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` and
