@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use substrate_broker::Policy;
@@ -320,19 +320,61 @@ fn resolve_world_scoped_codex_binary_path(
     agent_id: &str,
     configured_binary: &str,
 ) -> std::result::Result<PathBuf, RuntimeRealizabilityError> {
-    if configured_binary == CODEX_WORLD_GUEST_ENTRYPOINT {
-        return Ok(PathBuf::from(CODEX_WORLD_GUEST_ENTRYPOINT));
+    if configured_binary != CODEX_WORLD_GUEST_ENTRYPOINT {
+        return Err(RuntimeRealizabilityError {
+            exit_code: 4,
+            reason: format!(
+                "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is required for the world-scoped Codex runtime and config.cli.binary '{}' still describes host-local truth; install the world runtime and rerun 'substrate world deps current sync'",
+                agent_id,
+                CODEX_WORLD_GUEST_ENTRYPOINT,
+                configured_binary,
+            ),
+        });
     }
 
-    Err(RuntimeRealizabilityError {
-        exit_code: 4,
-        reason: format!(
-            "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is required for the world-scoped Codex runtime and config.cli.binary '{}' still describes host-local truth; install the world runtime and rerun 'substrate world deps current sync'",
-            agent_id,
-            CODEX_WORLD_GUEST_ENTRYPOINT,
-            configured_binary,
-        ),
-    })
+    let probe_path = world_scoped_codex_guest_entrypoint_probe_path();
+    if !guest_entrypoint_is_available(probe_path.as_path()) {
+        return Err(RuntimeRealizabilityError {
+            exit_code: 4,
+            reason: format!(
+                "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is unavailable; install the world runtime and rerun 'substrate world deps current sync'",
+                agent_id,
+                CODEX_WORLD_GUEST_ENTRYPOINT,
+            ),
+        });
+    }
+
+    Ok(PathBuf::from(CODEX_WORLD_GUEST_ENTRYPOINT))
+}
+
+fn world_scoped_codex_guest_entrypoint_probe_path() -> PathBuf {
+    const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    let world_deps_bin = std::env::var("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_WORLD_DEPS_BIN.to_string());
+    Path::new(&world_deps_bin).join("codex")
+}
+
+fn guest_entrypoint_is_available(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 pub(crate) fn validate_member_selection(
@@ -480,8 +522,65 @@ mod tests {
     };
     use crate::execution::agent_runtime::mapping::LEGACY_PURE_AGENT_PROTOCOL;
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
+    use serial_test::serial;
     use std::collections::BTreeMap;
+    use std::ffi::OsString;
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
+    use std::sync::OnceLock;
+    use tempfile::TempDir;
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set_path(key: &'static str, value: &std::path::Path) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = self.previous.as_ref() {
+                std::env::set_var(self.key, previous);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    fn test_world_codex_runtime_bin() -> &'static PathBuf {
+        static TEST_WORLD_DEPS_BIN: OnceLock<PathBuf> = OnceLock::new();
+        TEST_WORLD_DEPS_BIN.get_or_init(|| {
+            let temp = TempDir::new().expect("tempdir for world codex runtime");
+            let bin_dir = temp.path().to_path_buf();
+            let codex = bin_dir.join("codex");
+            fs::write(&codex, "#!/bin/sh\nexit 0\n").expect("write fake guest codex");
+            #[cfg(unix)]
+            {
+                let mut perms = fs::metadata(&codex)
+                    .expect("guest codex metadata")
+                    .permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&codex, perms).expect("guest codex permissions");
+            }
+            let leaked = Box::leak(Box::new(temp));
+            leaked.path().to_path_buf()
+        })
+    }
+
+    fn set_test_world_codex_runtime() -> EnvVarGuard {
+        EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        )
+    }
 
     fn make_entry(
         agent_id: &str,
@@ -621,7 +720,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn validate_member_selection_returns_descriptor_for_unique_world_member() {
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
         inventory.insert(
@@ -643,7 +745,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn validate_member_selection_resolves_alias_backend_to_canonical_runtime_family() {
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
         inventory.insert(
@@ -665,7 +770,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn validate_member_selection_prefers_world_alias_while_host_codex_remains_distinct() {
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
         inventory.insert(
@@ -813,7 +921,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn validate_exact_backend_selection_bypasses_world_ambiguity_when_backend_matches_exactly() {
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
         inventory.insert(
@@ -848,7 +959,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn validate_exact_backend_selection_preserves_codex_world_alias_identity() {
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
         inventory.insert(
@@ -1026,7 +1140,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn validate_runtime_realizability_accepts_world_scoped_codex_guest_entrypoint_contract() {
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
         let entry = make_entry_with_runtime_family(
             "codex_world",
@@ -1042,6 +1159,44 @@ mod tests {
         assert_eq!(
             descriptor.binary_path,
             PathBuf::from(CODEX_WORLD_GUEST_ENTRYPOINT)
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn validate_runtime_realizability_rejects_world_scoped_codex_when_guest_entrypoint_is_absent() {
+        let _env_guard = crate::execution::world_env_guard();
+        let config = SubstrateConfig::default();
+        let temp = TempDir::new().expect("tempdir for absent guest entrypoint");
+        let _world_codex_guard =
+            EnvVarGuard::set_path("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", temp.path());
+
+        let entry = make_entry_with_runtime_family_and_binary(
+            "codex_world",
+            AgentExecutionScope::World,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::Codex),
+            CODEX_WORLD_GUEST_ENTRYPOINT,
+            required_capabilities(),
+        );
+
+        let error = validate_runtime_realizability(&entry, &config).expect_err("must fail");
+        assert_eq!(error.exit_code, 4);
+        assert!(
+            error.reason.contains("guest entrypoint"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("is unavailable"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("substrate world deps current sync"),
+            "unexpected reason: {}",
+            error.reason
         );
     }
 

@@ -4366,6 +4366,31 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn test_world_codex_runtime_bin() -> &'static std::path::PathBuf {
+        static TEST_WORLD_DEPS_BIN: std::sync::OnceLock<std::path::PathBuf> =
+            std::sync::OnceLock::new();
+        TEST_WORLD_DEPS_BIN.get_or_init(|| {
+            let temp = tempdir().expect("tempdir for world codex runtime");
+            let bin_dir = temp.path().join("bin");
+            fs::create_dir_all(&bin_dir).expect("create fake world deps bin dir");
+            let codex = bin_dir.join("codex");
+            fs::write(&codex, "#!/bin/sh\nexit 0\n").expect("write fake guest codex");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                let mut perms = fs::metadata(&codex)
+                    .expect("guest codex metadata")
+                    .permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&codex, perms).expect("guest codex permissions");
+            }
+            let leaked = Box::leak(Box::new(temp));
+            leaked.path().join("bin")
+        })
+    }
+
+    #[cfg(target_os = "linux")]
     struct SocketActivationOverrideGuard {
         env_guard: Option<EnvVarGuard>,
     }
@@ -9583,6 +9608,10 @@ agents:
     async fn dispatch_contract_continue_world_worker_fork_command_submits_rendered_prompt_to_exact_retained_source(
     ) {
         let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_world_dispatch_policy_with_fork_commands(
@@ -13564,6 +13593,11 @@ agents:
     #[serial]
     async fn dispatch_contract_fork_world_worker_returns_typed_lineage_after_authoritative_bootstrap(
     ) {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -13740,6 +13774,11 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_fork_world_worker_rolls_back_child_when_lineage_persist_fails() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(

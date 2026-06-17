@@ -54,6 +54,7 @@ struct AgentControlFixture {
     home: PathBuf,
     substrate_home: PathBuf,
     workspace_root: PathBuf,
+    fake_world_deps_bin: PathBuf,
     fake_codex: PathBuf,
     fake_claude: PathBuf,
 }
@@ -86,12 +87,23 @@ impl AgentControlFixture {
         fs::create_dir_all(&workspace_root).expect("create workspace root");
         fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
         let fake_codex = script_writer(temp.path());
+        let fake_world_deps_bin = temp.path().join("world-deps-bin");
+        fs::create_dir_all(&fake_world_deps_bin).expect("create fake world deps bin");
+        let fake_world_codex = fake_world_deps_bin.join("codex");
+        fs::copy(&fake_codex, &fake_world_codex).expect("copy fake world codex");
+        let mut world_codex_perms = fs::metadata(&fake_world_codex)
+            .expect("fake world codex metadata")
+            .permissions();
+        world_codex_perms.set_mode(0o755);
+        fs::set_permissions(&fake_world_codex, world_codex_perms)
+            .expect("set fake world codex permissions");
         let fake_claude = write_fake_claude_script(temp.path());
         Self {
             _temp: temp,
             home,
             substrate_home,
             workspace_root,
+            fake_world_deps_bin,
             fake_codex,
             fake_claude,
         }
@@ -102,6 +114,10 @@ impl AgentControlFixture {
         cmd.env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env(
+                "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+                &self.fake_world_deps_bin,
+            )
             .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
             .env("SHIM_TRACE_LOG", self.trace_path());
         cmd
@@ -1677,6 +1693,10 @@ impl PtyRepl {
         cmd.env("HOME", &fixture.home);
         cmd.env("USERPROFILE", &fixture.home);
         cmd.env("SUBSTRATE_HOME", &fixture.substrate_home);
+        cmd.env(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            &fixture.fake_world_deps_bin,
+        );
         cmd.env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path());
         cmd.env("SHIM_TRACE_LOG", fixture.trace_path());
         cmd.env_remove("SHIM_ORIGINAL_PATH");
