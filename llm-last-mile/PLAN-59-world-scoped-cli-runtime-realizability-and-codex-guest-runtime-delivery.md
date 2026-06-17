@@ -14,8 +14,9 @@ This plan must land:
 
 1. fail-closed validation/remediation,
 2. Substrate-owned guest runtime delivery through world-deps,
-3. prod/dev installer-time provisioning support,
-4. and end-to-end proof that the world runtime is guest-visible and not inherited from host NVM/npm state.
+3. a remediation packet that closes unsupported-guest and host-runtime leakage gaps before installer work proceeds,
+4. prod/dev installer-time provisioning support,
+5. and end-to-end proof that the world runtime is guest-visible and not inherited from host NVM/npm state.
 
 ## Plan Summary
 
@@ -26,9 +27,10 @@ So the correct sequence is:
 1. freeze the runtime-realizability contract,
 2. land the fail-closed validator/materialization wall,
 3. land the world-deps Codex package or runtime bundle,
-4. land installer support and docs,
-5. prove the path end-to-end,
-6. only after that, let Slice 58 change the config/selector shape.
+4. land a remediation packet that makes unsupported-guest behavior and host-vs-world runtime separation review-clean,
+5. land installer support and docs,
+6. prove the path end-to-end,
+7. only after that, let Slice 58 change the config/selector shape.
 
 Slice 59 therefore **precedes** Slice 58 implementation even though Slice 58 is already specified.
 
@@ -40,7 +42,8 @@ Slice 59 therefore **precedes** Slice 58 implementation even though Slice 58 is 
 2. Missing guest runtime becomes an early validator/materialization error with remediation.
 3. Codex guest runtime delivery uses a Substrate-owned world-deps script package named `codex-runtime` that pulls official release artifacts.
 4. Substrate resolves the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.6"`, Rust path `agent_api`) and keeps binary workflow ownership locally; `0.3.6` is the minimum published line for the Codex runtime-version API surface this slice needs.
-5. Prod and dev installers gain the generic public flag shape `--provision-agent-runtime <runtime_family>`, even though this slice only implements the `codex` value.
+5. Unsupported guest tuples must fail closed and must never be treated as satisfied by host Codex runtime truth.
+6. Prod and dev installers gain the generic public flag shape `--provision-agent-runtime <runtime_family>`, even though this slice only implements the `codex` value.
 
 ### What does not change
 
@@ -114,6 +117,35 @@ Verification checkpoint:
 3. the implementation records which runtime-dependency posture was proven,
 4. Substrate resolves against the published `0.3.6` UAA surface and does not duplicate version-selection logic outside the public UAA API.
 
+### Phase 2.5: Close The Unsupported-Guest And Host-Leakage Review Gap
+
+Goal:
+
+1. make the guest target derivation and fail-closed boundary explicit enough to resolve the Packet 2 review disagreement,
+2. prove that unsupported guest tuples fail closed instead of silently widening to host-runtime truth,
+3. preserve the separation between host-scoped Codex runtime truth and world-scoped Codex runtime truth on mixed-platform hosts.
+
+Primary touch surface:
+
+1. `crates/shell/src/builtins/world_deps/`
+2. `crates/shell/src/execution/agent_runtime/validator.rs`
+3. adjacent dispatch/runtime-selection tests
+4. Slice 59 docs and prompt/task wording only where the new remediation gate must be explicit
+
+Required changes:
+
+1. make the world-runtime guest target derivation explicit and bounded to actual guest posture,
+2. fail closed with stable unsupported-guest diagnostics when UAA has no validated support for the requested guest tuple,
+3. add regression proof that host Codex presence on `PATH` cannot satisfy the world-runtime contract,
+4. make the host-vs-world Codex runtime separation explicit enough that mixed-platform hosts are not misread as using one interchangeable binary.
+
+Verification checkpoint:
+
+1. unsupported guest tuples fail closed before the world runtime is treated as installed or launchable,
+2. host Codex on `PATH` does not make world Codex runtime truth pass,
+3. supported guest tuples remain green,
+4. Packet 2’s remaining review finding is resolved without widening into installer or Slice 58 work.
+
 ### Phase 3: Add Installer-Time Runtime Provisioning And Doc It
 
 Goal:
@@ -170,14 +202,16 @@ Exit criteria:
 
 1. Phase 1 must land before any package delivery proof can be honest.
 2. Phase 2 must land before installer flags can provision anything real.
-3. Phase 3 must land before final operator-facing verification is complete.
-4. Slice 58 implementation remains blocked on Phase 4 being green.
+3. Phase 2.5 must land before installer support can honestly claim review-clean world-runtime semantics.
+4. Phase 3 must land before final operator-facing verification is complete.
+5. Slice 58 implementation remains blocked on Phase 4 being green.
 
 Limited parallelism that is acceptable:
 
 1. artifact-source research and package-script drafting may happen while validator contract wording is being finalized,
 2. UAA integration for validated version resolution can be developed while package authoring is underway,
-3. but code landing remains sequential because the runtime truth wall should exist before package and installer work claim success.
+3. broader UAA target-support research can happen in parallel with Packet 2.5 remediation design,
+4. but code landing remains sequential because the runtime truth wall and remediation gate should exist before package and installer work claim success.
 
 ## Risks
 
@@ -208,7 +242,17 @@ Mitigation:
 1. make the flag include sync and write that behavior explicitly into help/docs,
 2. test help text and examples, not just implementation behavior.
 
-### Risk 4: Slice 59 drifts into Slice 58
+### Risk 4: Mixed-platform hosts blur host and guest Codex runtime truth
+
+If macOS/Lima or another mixed-platform posture is treated as “Codex already exists on the host, so world Codex is effectively supported,” review and operator truth will drift away from the fail-closed slice contract.
+
+Mitigation:
+
+1. keep host and world runtime truth explicitly separate in code, tests, and docs,
+2. fail closed on unsupported guest tuples even when host Codex is present,
+3. treat any broader guest-target support expansion as a deliberate published-support decision, not an implicit local fallback.
+
+### Risk 5: Slice 59 drifts into Slice 58
 
 If this slice starts renaming backends or changing selector surfaces, it will mix runtime truth with config-shape migration and make rollback/review harder.
 

@@ -4,15 +4,16 @@ Source spec: [SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-run
 Source plan: [PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md](./PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md)  
 Related follow-on: [SPEC-58-placement-aware-agent-inventory-and-selector-contract.md](./SPEC-58-placement-aware-agent-inventory-and-selector-contract.md)  
 Phase: `TASKS`  
-Execution model: four sequential `/incremental-implementation` sessions  
+Execution model: five sequential `/incremental-implementation` sessions  
 Status: draft for review
 
 ## Execution Packets
 
-This slice should be implemented as four sequential packets:
+This slice should be implemented as five sequential packets:
 
 1. fail-closed validator/remediation wall,
 2. Codex world-deps package or runtime bundle,
+2.5. remediation of unsupported-guest and host-runtime leakage gaps,
 3. prod/dev installer-time provisioning surfaces,
 4. final end-to-end proof and handoff to Slice 58.
 
@@ -108,7 +109,49 @@ Packet 2 is complete only when:
 4. the path does not rely on host NVM/npm state,
 5. version selection comes from the published `unified-agent-api = "=0.3.6"` Rust API rather than downstream duplicated logic.
 
-Do not start Packet 3 until Packet 2 verification is green.
+Do not start Packet 2.5 until Packet 2 verification is green.
+
+## Packet 2.5: Unsupported-Guest Fail-Closed And Host/World Separation Remediation
+
+Session goal:
+
+1. resolve the remaining Packet 2 review disagreement around unsupported guest tuples,
+2. prove host Codex truth cannot leak into world Codex truth,
+3. keep mixed-platform host/runtime posture explicit before installer work begins.
+
+### Tasks
+
+- [ ] Task 2.5.1: Fail closed on unsupported guest tuples with explicit guest-target truth
+  - Acceptance: Substrate derives the intended world-runtime guest target from the actual guest posture it is provisioning for, and if UAA does not publish validated support for that tuple Substrate fails closed with explicit unsupported-guest diagnostics instead of silently remapping, broadening, or treating host runtime truth as sufficient.
+  - Verify:
+    - `cargo test -p shell world_deps -- --nocapture`
+    - `cargo test -p shell dispatch_contract -- --nocapture`
+    - targeted guest-target resolution tests added for the Packet 2.5 seam
+  - Files:
+    - narrow world-deps/runtime-selection code under [`crates/shell/src/builtins/world_deps/`](../crates/shell/src/builtins/world_deps/)
+    - adjacent runtime-selection seams only if required to keep guest-target truth explicit
+    - nearby tests covering unsupported guest tuples
+
+- [ ] Task 2.5.2: Prove host Codex cannot satisfy world runtime truth and make the separation explicit
+  - Acceptance: tests and diagnostics prove that host `codex` availability on `PATH` can satisfy only host-scoped/orchestrator Codex truth and never the world-scoped Codex runtime contract; mixed-platform postures that may need both a host Codex binary and a Linux guest Codex binary are treated as two distinct contracts.
+  - Verify:
+    - `cargo test -p shell world_deps -- --nocapture`
+    - `cargo test -p shell agent_runtime::validator -- --nocapture`
+    - targeted regression tests for host-PATH leakage and mixed host/world runtime separation
+  - Files:
+    - the narrowest runtime/world-deps diagnostics seams needed for Packet 2.5
+    - nearby tests or implementation notes that make the host-vs-world separation undeniable
+
+### Packet 2.5 Checkpoint
+
+Packet 2.5 is complete only when:
+
+1. unsupported guest tuples fail closed before Substrate claims the world runtime is installed or launchable,
+2. host Codex presence on `PATH` does not make world Codex runtime truth pass,
+3. host-scoped and world-scoped Codex runtime truth remain explicitly separate, including on mixed-platform hosts,
+4. the remaining Packet 2 review disagreement is resolved without widening into installer work or Slice 58 migration.
+
+Do not start Packet 3 until Packet 2.5 verification is green.
 
 ## Packet 3: Prod/Dev Installer-Time Provisioning Support
 
@@ -187,9 +230,10 @@ Packet 4 is complete only when:
 ## Cross-Packet Dependency Order
 
 1. Packet 1 blocks Packet 2.
-2. Packet 2 blocks Packet 3.
-3. Packet 3 blocks Packet 4.
-4. Packet 4 must be green before Slice 58 implementation starts.
+2. Packet 2 blocks Packet 2.5.
+3. Packet 2.5 blocks Packet 3.
+4. Packet 3 blocks Packet 4.
+5. Packet 4 must be green before Slice 58 implementation starts.
 
 ## Inter-Packet Review Rules
 

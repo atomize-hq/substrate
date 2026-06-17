@@ -34,6 +34,7 @@ ASSUMPTIONS I'M MAKING:
 6. Exact backend ids, policy allowlists, and host/world fail-closed separation remain unchanged in this slice; selector migration belongs to Slice 58.
 7. The installer/runtime provisioning surface should be future-expandable, so the public flag shape should be generic to agent runtime family rather than Codex-specific.
 8. Substrate should resolve the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.6"`, imported as `agent_api`), because `0.3.6` is the minimum published line for the Codex runtime-version API surface this slice needs, and Substrate must not duplicate runtime version-selection logic or read generated UAA files directly.
+9. The published `0.3.6` UAA Codex runtime-support surface may validate fewer guest tuples than upstream Codex officially ships, and Slice 59 must remain semantically honest under that narrower published support truth instead of widening silently through host-runtime leakage.
 
 If any of these are wrong, correct them before implementation.
 
@@ -48,7 +49,9 @@ This slice must answer:
 3. what fail-closed error/remediation appears when only a host-local runtime exists,
 4. how Substrate installs a guest-visible Codex runtime inside the world,
 5. how prod/dev installers expose install-time provisioning of that runtime,
-6. and how all of the above align with the later placement-aware inventory shape from Slice 58.
+6. how unsupported guest target tuples fail closed without leaking to host-runtime truth,
+7. how host-scoped Codex runtime truth remains separate from world-scoped Codex runtime truth on mixed-platform hosts,
+8. and how all of the above align with the later placement-aware inventory shape from Slice 58.
 
 This slice does **not** redesign selector grammar, perform the placement-aware inventory cutover, or invent a first-class artifact transport system beyond the existing world-deps script-package contract.
 
@@ -248,7 +251,19 @@ Rules:
 6. Substrate must **not** read `runtime_support_data.rs`, `cli_manifests/**`, or any other generated/internal UAA file directly,
 7. if UAA returns `UnknownRuntimeFamily`, `UnsupportedTargetTriple`, or `MissingValidatedRuntime`, Substrate must fail closed and surface that the runtime is unsupported for the requested guest target.
 
-### 5. Substrate owns artifact URL, checksum, extraction, and install logic
+### 5. Unsupported guest tuples must fail closed without leaking to host runtime truth
+
+The world-scoped Codex runtime contract must remain honest even when upstream official assets exist for more tuples than the currently published UAA validated surface.
+
+Rules:
+
+1. Substrate must derive the intended world-runtime guest target from the actual guest OS/arch contract it is provisioning for, not from whichever host Codex binary happens to exist,
+2. if the requested guest tuple is unsupported or lacks validated UAA truth, Substrate must fail closed before claiming the world runtime is provisioned or launchable,
+3. host `codex` availability on `PATH` may satisfy only the host-scoped/orchestrator Codex runtime contract; it must never satisfy the world-scoped Codex runtime contract,
+4. on mixed-platform hosts such as macOS + Lima, Slice 59 must preserve the separation between host Codex runtime truth and Linux guest Codex runtime truth even if both runtimes are needed in the same overall product flow,
+5. diagnostics, tests, and installer/operator wording must make that host-vs-world separation explicit enough that review cannot interpret host-runtime leakage as valid world support.
+
+### 6. Substrate owns artifact URL, checksum, extraction, and install logic
 
 Using UAA for version selection does not move the binary workflow out of Substrate.
 
@@ -259,7 +274,7 @@ Rules:
 3. Substrate’s package metadata or equivalent package-owned install configuration must be the source of truth for artifact URL template, target mapping, and expected checksum verification inputs keyed by the UAA-resolved version and target triple,
 4. checksum verification is mandatory before installing the fetched artifact into the world-deps prefix.
 
-### 6. Guest artifact verification is mandatory, not implied
+### 7. Guest artifact verification is mandatory, not implied
 
 The slice must freeze the verification seam, not hand-wave it.
 
@@ -269,7 +284,7 @@ Rules:
 2. if the binary still needs Node or other guest runtime pieces, the package must widen into a `codex-runtime` bundle (or equivalent) that provisions the required pieces explicitly,
 3. the implementation must record which path was proven, rather than leaving both possibilities implied.
 
-### 7. Operator flow remains inventory -> enable -> provision if needed -> sync
+### 8. Operator flow remains inventory -> enable -> provision if needed -> sync
 
 This slice must preserve current world-deps operator truth.
 
@@ -281,7 +296,7 @@ Rules:
 4. `substrate world deps current sync` remains the runtime apply step,
 5. this slice must not assume world refresh/restart is required after sync without new evidence.
 
-### 8. Installers must expose install-time runtime provisioning on both surfaces
+### 9. Installers must expose install-time runtime provisioning on both surfaces
 
 Rules:
 
@@ -293,7 +308,7 @@ Rules:
 6. docs/help must state that the flag includes sync rather than leaving a hidden post-install step,
 7. the behavior must be the same conceptually across dev and prod even if implementation plumbing differs.
 
-### 9. Slice 59 must align forward to Slice 58 without waiting for Slice 58
+### 10. Slice 59 must align forward to Slice 58 without waiting for Slice 58
 
 Rules:
 
@@ -305,6 +320,7 @@ Rules:
 
 - **Always do:**
   - fail closed before world member bootstrap when guest runtime truth is missing,
+  - fail closed before install or launch when the requested guest tuple lacks published validated support,
   - keep world-deps writes confined to `/var/lib/substrate/world-deps` and `/tmp`,
   - make remediation/operator steps explicit in user-facing diagnostics,
   - keep prod/dev installer flag behavior documented and consistent.
@@ -316,6 +332,7 @@ Rules:
 
 - **Never do:**
   - rely on host NVM/npm paths as authoritative world runtime truth,
+  - let a host Codex binary satisfy a world Codex support check, install check, or launchability check,
   - silently fall back from world-scoped runtime to host-scoped runtime,
   - bake placement-aware selector migration into this slice,
   - write world-deps package installers that mutate `$HOME`, `/usr`, `/etc`, or other non-Substrate-managed paths.
@@ -326,10 +343,13 @@ Rules:
 2. Missing guest runtime truth fails closed before retained worker bootstrap with explicit remediation.
 3. Substrate resolves the validated Codex version through the published `0.3.6` UAA Rust API instead of duplicating version-selection logic downstream.
 4. Substrate-owned world-deps packaging can install Codex into the guest from official release artifacts, using Substrate-owned checksum verification and install logic.
-5. The implementation explicitly proves whether the Linux artifact is self-contained or requires a wider runtime bundle.
-6. Prod and dev installers both expose a documented install-time provisioning flag for this runtime.
-7. Slice 59 lands cleanly before Slice 58 implementation, and Slice 58 can later migrate shape/selectors without reopening the runtime contract.
+5. Unsupported guest target tuples fail closed with explicit unsupported-target diagnostics and do not leak to host-runtime truth.
+6. Host-scoped Codex runtime truth and world-scoped Codex runtime truth remain explicitly separate, including on mixed-platform hosts that may need both runtimes.
+7. The implementation explicitly proves whether the Linux artifact is self-contained or requires a wider runtime bundle.
+8. Prod and dev installers both expose a documented install-time provisioning flag for this runtime.
+9. Slice 59 lands cleanly before Slice 58 implementation, and Slice 58 can later migrate shape/selectors without reopening the runtime contract.
 
 ## Open Questions
 
-1. If Slice 58 keeps temporary compatibility aliases, how long should Slice 59 diagnostics refer to old vs new exact ids during transition?
+1. Should Slice 59 itself widen published UAA Codex guest-target support (for example `aarch64-unknown-linux-musl`) before installer parity claims extend to mixed-platform hosts, or should that remain a prerequisite follow-on outside this slice?
+2. If Slice 58 keeps temporary compatibility aliases, how long should Slice 59 diagnostics refer to old vs new exact ids during transition?
