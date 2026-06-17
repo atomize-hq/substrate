@@ -4497,6 +4497,74 @@ fn checkpoints_context_objective_leaves_vague_targets_unknown() {
 }
 
 #[test]
+fn checkpoints_context_objective_keeps_review_goal_but_leaves_weak_target_unknown() {
+    let prompt = "We just completed implementing the entire handbook extraction phase set and I need you to review what landed in the codebase vs the planning docs and intended end state and validate/invalidate if it landed correctly and completely";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' HANDBOOK_ENGINE_EXTRACTION_PLAN.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/handbook-engine-extraction-slice-map.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 0"),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert!(objective
+        .text
+        .contains("review what landed in the codebase"));
+
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert!(structured
+        .evidence_spans
+        .iter()
+        .any(|span| span.role == ObjectiveRole::Goal));
+    assert!(structured.target.is_none());
+    assert!(structured
+        .unknowns
+        .iter()
+        .any(|unknown| unknown.field_name == "target"));
+}
+
+#[test]
+fn checkpoints_context_objective_preserves_explicit_file_target_without_copying_whole_goal() {
+    let prompt = "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only for Packet B2.1 target honesty and return concrete findings.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,260p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    let structured = objective.structured.as_ref().expect("structured objective");
+    let target = structured.target.as_ref().expect("explicit target");
+
+    assert_eq!(target.kind, ObjectiveTargetKind::FileOrDirectory);
+    assert_eq!(
+        target.display,
+        "crates/agent-drift-analyzer/src/context/objective.rs"
+    );
+    assert_ne!(target.display, objective.text);
+    assert!(structured
+        .unknowns
+        .iter()
+        .all(|unknown| unknown.field_name != "target"));
+}
+
+#[test]
 fn checkpoints_context_objective_keeps_explicit_tooling_target_inside_mixed_prompt_scaffolding() {
     let concrete_ask =
         "Determine whether the Codex desktop context, plugin instructions, and Apps (Connectors) scaffold should change, and explain only that tooling boilerplate decision.";

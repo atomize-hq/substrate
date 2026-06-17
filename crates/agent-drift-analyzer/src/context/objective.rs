@@ -988,18 +988,7 @@ fn assemble_structured_objective(
 ) -> StructuredObjective {
     let goal_clause = selected_goal_clause(decomposition);
     let evidence_spans = evidence_spans_from_decomposition(decomposition);
-    let target = goal_clause.map(|clause| ObjectiveTarget {
-        display: target_display_for_goal(&clause.text),
-        kind: target_kind_for_text(&clause.text),
-        paths: extract_inline_paths(&clause.text),
-        symbols: Vec::new(),
-        named_artifacts: extract_named_artifacts(&clause.text),
-        workspace_refs: extract_workspace_refs(&clause.text),
-        evidence: vec![evidence_span_for_clause(clause)],
-        confidence: top_role(clause)
-            .map(|role| role.confidence)
-            .unwrap_or(Confidence::Low),
-    });
+    let target = goal_clause.and_then(explicit_target_for_clause);
 
     let constraints = decomposition
         .clauses
@@ -1169,7 +1158,7 @@ fn unknowns_for_objective(
     if target.is_none() {
         unknowns.push(ObjectiveUnknown {
             field_name: "target".to_string(),
-            reason: "target could not be inferred from a grounded goal clause".to_string(),
+            reason: "target could not be inferred from explicit target evidence in a grounded goal clause".to_string(),
             evidence: evidence_spans.iter().take(1).cloned().collect(),
         });
     }
@@ -1261,6 +1250,130 @@ fn target_display_for_goal(goal: &str) -> String {
         .to_string()
 }
 
+#[derive(Debug, Clone)]
+struct ExplicitTargetAnchor {
+    display: String,
+    kind: ObjectiveTargetKind,
+    paths: Vec<String>,
+    named_artifacts: Vec<String>,
+    workspace_refs: Vec<String>,
+}
+
+fn explicit_target_for_clause(clause: &ObjectiveClause) -> Option<ObjectiveTarget> {
+    let anchor = explicit_target_anchor_for_text(&clause.text)?;
+    Some(ObjectiveTarget {
+        display: anchor.display,
+        kind: anchor.kind,
+        paths: anchor.paths,
+        symbols: Vec::new(),
+        named_artifacts: anchor.named_artifacts,
+        workspace_refs: anchor.workspace_refs,
+        evidence: vec![evidence_span_for_clause(clause)],
+        confidence: top_role(clause)
+            .map(|role| role.confidence)
+            .unwrap_or(Confidence::Low),
+    })
+}
+
+fn explicit_target_anchor_for_text(text: &str) -> Option<ExplicitTargetAnchor> {
+    let goal = target_display_for_goal(text);
+    if goal.is_empty() {
+        return None;
+    }
+
+    let lowered = goal.to_ascii_lowercase();
+    if is_insufficient_target_reference(&lowered) {
+        return None;
+    }
+
+    let named_artifacts = extract_named_artifacts(&goal);
+    if !named_artifacts.is_empty() {
+        return Some(ExplicitTargetAnchor {
+            display: named_artifacts.join(", "),
+            kind: ObjectiveTargetKind::SkillOrInstructionSurface,
+            paths: extract_inline_paths(&goal),
+            named_artifacts,
+            workspace_refs: extract_workspace_refs(&goal),
+        });
+    }
+
+    let paths = extract_inline_paths(&goal);
+    if let Some(path) = paths.first() {
+        let kind = if looks_like_doc_path(path) {
+            ObjectiveTargetKind::SpecOrDesignDoc
+        } else {
+            ObjectiveTargetKind::FileOrDirectory
+        };
+        return Some(ExplicitTargetAnchor {
+            display: path.clone(),
+            kind,
+            paths,
+            named_artifacts: Vec::new(),
+            workspace_refs: extract_workspace_refs(&goal),
+        });
+    }
+
+    let workspace_refs = extract_workspace_refs(&goal);
+    if let Some(workspace_ref) = workspace_refs.first() {
+        return Some(ExplicitTargetAnchor {
+            display: workspace_ref.clone(),
+            kind: ObjectiveTargetKind::RepoSlice,
+            paths: Vec::new(),
+            named_artifacts: Vec::new(),
+            workspace_refs,
+        });
+    }
+
+    if let Some(identifier) = extract_work_item_identifier(&goal) {
+        return Some(ExplicitTargetAnchor {
+            display: identifier.clone(),
+            kind: ObjectiveTargetKind::RepoSlice,
+            paths: Vec::new(),
+            named_artifacts: vec![identifier],
+            workspace_refs: Vec::new(),
+        });
+    }
+
+    if let Some(crate_or_package) = extract_crate_or_package_target(&goal) {
+        return Some(ExplicitTargetAnchor {
+            display: crate_or_package.clone(),
+            kind: ObjectiveTargetKind::CrateOrPackage,
+            paths: Vec::new(),
+            named_artifacts: vec![crate_or_package],
+            workspace_refs: Vec::new(),
+        });
+    }
+
+    if let Some(doc_target) = extract_named_doc_target(&goal) {
+        return Some(ExplicitTargetAnchor {
+            display: doc_target.clone(),
+            kind: ObjectiveTargetKind::SpecOrDesignDoc,
+            paths: Vec::new(),
+            named_artifacts: vec![doc_target],
+            workspace_refs: Vec::new(),
+        });
+    }
+
+    if let Some(test_target) = extract_named_test_or_verifier_target(&goal) {
+        return Some(ExplicitTargetAnchor {
+            display: test_target.clone(),
+            kind: ObjectiveTargetKind::TestOrVerifier,
+            paths: Vec::new(),
+            named_artifacts: vec![test_target],
+            workspace_refs: Vec::new(),
+        });
+    }
+
+    let conceptual_target = extract_named_conceptual_target(&goal)?;
+    Some(ExplicitTargetAnchor {
+        display: conceptual_target.clone(),
+        kind: target_kind_for_text(&conceptual_target),
+        paths: Vec::new(),
+        named_artifacts: vec![conceptual_target],
+        workspace_refs: Vec::new(),
+    })
+}
+
 fn target_kind_for_text(text: &str) -> ObjectiveTargetKind {
     let lowered = text.to_ascii_lowercase();
     if explicitly_targets_instruction_surface(&lowered) {
@@ -1283,6 +1396,261 @@ fn target_kind_for_text(text: &str) -> ObjectiveTargetKind {
     } else {
         ObjectiveTargetKind::ConceptualTopic
     }
+}
+
+fn looks_like_doc_path(path: &str) -> bool {
+    let lowered = path.to_ascii_lowercase();
+    lowered.ends_with(".md")
+        || lowered.contains("/docs/")
+        || lowered.starts_with("docs/")
+        || lowered.contains("/specs/")
+        || lowered.starts_with("specs/")
+}
+
+fn is_insufficient_target_reference(text: &str) -> bool {
+    matches!(
+        text.trim(),
+        "this" | "it" | "the above" | "what landed" | "the current issue"
+    )
+}
+
+fn extract_work_item_identifier(text: &str) -> Option<String> {
+    cleaned_target_tokens(text)
+        .into_iter()
+        .find(|token| looks_like_work_item_identifier(token))
+}
+
+fn looks_like_work_item_identifier(token: &str) -> bool {
+    let cleaned = clean_target_token(token);
+    !cleaned.is_empty()
+        && !cleaned.contains('/')
+        && cleaned.chars().any(|ch| ch.is_ascii_alphabetic())
+        && cleaned.chars().any(|ch| ch.is_ascii_digit())
+        && (cleaned.contains('-') || cleaned.contains('.'))
+}
+
+fn extract_crate_or_package_target(text: &str) -> Option<String> {
+    extract_neighbor_target_for_cues(text, &["crate", "package"])
+}
+
+fn extract_named_doc_target(text: &str) -> Option<String> {
+    let tokens = cleaned_target_tokens(text);
+    let lowered = tokens
+        .iter()
+        .map(|token| token.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    for (index, token) in lowered.iter().enumerate() {
+        if !matches!(
+            token.as_str(),
+            "spec" | "specs" | "design" | "doc" | "docs" | "plan" | "plans" | "tasks"
+        ) {
+            continue;
+        }
+
+        if let Some(previous) = index
+            .checked_sub(1)
+            .and_then(|prev| tokens.get(prev))
+            .filter(|candidate| looks_like_explicit_named_target(candidate))
+        {
+            return Some(format!("{previous} {}", normalize_target_kind_label(token)));
+        }
+
+        if let Some(next) = tokens
+            .get(index + 1)
+            .filter(|candidate| looks_like_explicit_named_target(candidate))
+        {
+            return Some(format!("{} {next}", normalize_target_kind_label(token)));
+        }
+    }
+
+    None
+}
+
+fn extract_named_test_or_verifier_target(text: &str) -> Option<String> {
+    let tokens = cleaned_target_tokens(text);
+    let lowered = tokens
+        .iter()
+        .map(|token| token.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    for (index, token) in lowered.iter().enumerate() {
+        if !matches!(
+            token.as_str(),
+            "test" | "tests" | "verifier" | "verification" | "harness" | "suite"
+        ) {
+            continue;
+        }
+
+        if let Some(previous) = index
+            .checked_sub(1)
+            .and_then(|prev| tokens.get(prev))
+            .filter(|candidate| looks_like_explicit_named_target(candidate))
+        {
+            return Some(format!("{previous} {}", normalize_target_kind_label(token)));
+        }
+
+        if let Some(next) = tokens
+            .get(index + 1)
+            .filter(|candidate| looks_like_explicit_named_target(candidate))
+        {
+            return Some(format!("{} {next}", normalize_target_kind_label(token)));
+        }
+    }
+
+    None
+}
+
+fn normalize_target_kind_label(token: &str) -> &str {
+    match token {
+        "specs" => "spec",
+        "docs" => "doc",
+        "plans" => "plan",
+        "tests" => "test",
+        _ => token,
+    }
+}
+
+fn extract_neighbor_target_for_cues(text: &str, cues: &[&str]) -> Option<String> {
+    let tokens = cleaned_target_tokens(text);
+    let lowered = tokens
+        .iter()
+        .map(|token| token.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    for (index, token) in lowered.iter().enumerate() {
+        if !cues.iter().any(|cue| cue == token) {
+            continue;
+        }
+
+        if let Some(next) = tokens
+            .get(index + 1)
+            .filter(|candidate| looks_like_explicit_named_target(candidate))
+        {
+            return Some(next.clone());
+        }
+
+        if let Some(previous) = index
+            .checked_sub(1)
+            .and_then(|prev| tokens.get(prev))
+            .filter(|candidate| looks_like_explicit_named_target(candidate))
+        {
+            return Some(previous.clone());
+        }
+    }
+
+    None
+}
+
+fn extract_named_conceptual_target(text: &str) -> Option<String> {
+    let tokens = cleaned_target_tokens(text);
+    let lowered = tokens
+        .iter()
+        .map(|token| token.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    for (index, token) in lowered.iter().enumerate() {
+        if !matches!(
+            token.as_str(),
+            "sidecar"
+                | "extractor"
+                | "system"
+                | "architecture"
+                | "migration"
+                | "harness"
+                | "schema"
+                | "pipeline"
+                | "workflow"
+        ) {
+            continue;
+        }
+
+        let mut start = index.saturating_sub(3);
+        while start < index
+            && matches!(
+                lowered[start].as_str(),
+                "the"
+                    | "a"
+                    | "an"
+                    | "this"
+                    | "that"
+                    | "review"
+                    | "analyze"
+                    | "fix"
+                    | "validate"
+                    | "implement"
+                    | "determine"
+                    | "inspect"
+                    | "compare"
+                    | "explain"
+                    | "plan"
+                    | "debug"
+                    | "troubleshoot"
+                    | "perform"
+                    | "ensure"
+                    | "keep"
+                    | "stop"
+                    | "add"
+                    | "update"
+            )
+        {
+            start += 1;
+        }
+
+        if start >= index {
+            continue;
+        }
+
+        let phrase = tokens[start..=index].join(" ");
+        if phrase.split_whitespace().count() >= 2
+            && !is_insufficient_target_reference(&phrase.to_ascii_lowercase())
+        {
+            return Some(phrase);
+        }
+    }
+
+    None
+}
+
+fn cleaned_target_tokens(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(clean_target_token)
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+fn clean_target_token(token: &str) -> String {
+    token
+        .trim_matches(|c: char| {
+            matches!(
+                c,
+                ',' | '.' | ';' | ':' | '`' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}'
+            )
+        })
+        .to_string()
+}
+
+fn looks_like_explicit_named_target(token: &str) -> bool {
+    let cleaned = clean_target_token(token);
+    if cleaned.is_empty() {
+        return false;
+    }
+
+    let lowered = cleaned.to_ascii_lowercase();
+    if is_insufficient_target_reference(&lowered) {
+        return false;
+    }
+
+    cleaned.starts_with('@')
+        || cleaned.contains('/')
+        || cleaned.contains('\\')
+        || cleaned.contains("::")
+        || cleaned.contains('_')
+        || cleaned.ends_with(".md")
+        || cleaned.ends_with(".rs")
+        || looks_like_work_item_identifier(&cleaned)
+        || cleaned.chars().filter(|ch| ch.is_ascii_uppercase()).count() >= 2
+        || (cleaned.contains('-') && cleaned.chars().any(|ch| ch.is_ascii_alphabetic()))
 }
 
 fn intent_for_text(text: &str) -> ObjectiveIntent {
@@ -1363,29 +1731,62 @@ fn extract_inline_paths(text: &str) -> Vec<String> {
         .map(|token| {
             token.trim_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '`' | '"' | '\''))
         })
-        .filter(|token| {
-            token.contains('/')
-                || token.contains('\\')
-                || token.ends_with(".rs")
-                || token.ends_with(".md")
-                || token.ends_with(".toml")
-                || token.ends_with(".json")
-        })
+        .filter(|token| looks_like_repo_path_token(token))
         .map(ToString::to_string)
         .collect()
 }
 
+fn looks_like_repo_path_token(token: &str) -> bool {
+    if token.ends_with(".rs")
+        || token.ends_with(".md")
+        || token.ends_with(".toml")
+        || token.ends_with(".json")
+    {
+        return true;
+    }
+
+    if token.starts_with("./")
+        || token.starts_with("../")
+        || token.starts_with('/')
+        || token.contains('\\')
+    {
+        return true;
+    }
+
+    if !token.contains('/') {
+        return false;
+    }
+
+    let segments = token
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    segments.len() >= 3
+        || segments.iter().any(|segment| {
+            segment.contains('.')
+                || segment.contains('_')
+                || segment.contains('-')
+                || segment.chars().any(|ch| ch.is_ascii_digit())
+        })
+}
+
 fn extract_named_artifacts(text: &str) -> Vec<String> {
     let mut artifacts = Vec::new();
-    for needle in [
-        "AGENTS.md",
-        "<skill>",
-        "Available skills",
-        "DESIGN",
-        "README.md",
+    let lowered = text.to_ascii_lowercase();
+    for (needle, display) in [
+        ("agents.md", "AGENTS.md"),
+        ("<skill>", "<skill>"),
+        ("available skills", "Available skills"),
+        ("plugin instructions", "plugin instructions"),
+        ("apps (connectors)", "Apps (Connectors)"),
+        ("codex desktop context", "Codex desktop context"),
+        ("safety guardrails", "safety guardrails"),
+        ("tooling boilerplate", "tooling boilerplate"),
+        ("instruction block", "instruction block"),
+        ("instructions block", "instructions block"),
     ] {
-        if text.contains(needle) {
-            artifacts.push(needle.to_string());
+        if lowered.contains(needle) && !artifacts.iter().any(|existing| existing == display) {
+            artifacts.push(display.to_string());
         }
     }
     artifacts
