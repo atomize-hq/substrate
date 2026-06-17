@@ -8104,7 +8104,9 @@ fn runtime_bootstrap_failure_from_wrapper_error(
         agent_api::AgentWrapperError::UnknownRuntimeFamily { runtime_family } => {
             RuntimeBootstrapFailure {
                 exit_code: 4,
-                message: format!("unknown runtime family: {runtime_family}"),
+                message: format!(
+                    "failed to bootstrap shell-owned orchestrator runtime: unsupported runtime family '{runtime_family}'"
+                ),
             }
         }
         agent_api::AgentWrapperError::UnsupportedTargetTriple {
@@ -8112,14 +8114,18 @@ fn runtime_bootstrap_failure_from_wrapper_error(
             target_triple,
         } => RuntimeBootstrapFailure {
             exit_code: 4,
-            message: format!("unsupported target triple for {runtime_family}: {target_triple}"),
+            message: format!(
+                "failed to bootstrap shell-owned orchestrator runtime: target triple '{target_triple}' is unsupported for runtime family '{runtime_family}'"
+            ),
         },
         agent_api::AgentWrapperError::MissingValidatedRuntime {
             runtime_family,
             target_triple,
         } => RuntimeBootstrapFailure {
             exit_code: 4,
-            message: format!("missing validated runtime for {runtime_family}: {target_triple}"),
+            message: format!(
+                "failed to bootstrap shell-owned orchestrator runtime: target triple '{target_triple}' has no validated runtime for runtime family '{runtime_family}'"
+            ),
         },
         agent_api::AgentWrapperError::Backend { message } => RuntimeBootstrapFailure {
             exit_code: if message.to_ascii_lowercase().contains("timeout") {

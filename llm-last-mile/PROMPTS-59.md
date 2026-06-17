@@ -108,7 +108,7 @@ Use these source docs as authority:
 
 Mission:
 - Land Slice 59 Packet 2 only: Codex Guest Runtime Package Or Runtime Bundle.
-- Do not start Packet 3.
+- Do not start Packet 2.5.
 - Keep the slice bounded to the `codex-runtime` world-deps package, the published `unified-agent-api = "=0.3.6"` dependency bump, UAA-backed validated version selection, and explicit proof of self-contained-vs-bundle runtime posture.
 
 Before editing:
@@ -176,7 +176,7 @@ Packet 2 checkpoint:
 - version selection comes from the published `unified-agent-api = "=0.3.6"` Rust API rather than downstream duplicated logic
 
 Implementation subagent prompt:
-/goal Land Slice 59 Packet 2 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md first. Work only on Task 2.1, Task 2.2, and Task 2.3. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed in the world-deps package/install seams, crates/shell/Cargo.toml, crates/gateway/Cargo.toml, crates/world-service/Cargo.toml, Cargo.lock, and the narrowest Substrate runtime-selection code that must call `agent_api::resolve_runtime_support(\"codex\", target_triple)`. Keep Packet 3 and Packet 4 work out of scope, and do not land installer flag surfaces, Slice 58 migration, host-runtime fallback, or floating latest-release resolution. Run cargo test -p shell world_deps -- --nocapture, the exact rg verification for the 0.3.6 dependency pins, and any targeted UAA-backed runtime-resolution tests you add, plus the guest smoke proof needed to record whether Codex is self-contained or requires a wider bundle. Final message must state whether Packet 2 is checkpoint-green, what symbols changed, what verification ran, whether Packet 3 is unblocked, and whether any reopen condition was discovered.
+/goal Land Slice 59 Packet 2 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md first. Work only on Task 2.1, Task 2.2, and Task 2.3. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed in the world-deps package/install seams, crates/shell/Cargo.toml, crates/gateway/Cargo.toml, crates/world-service/Cargo.toml, Cargo.lock, and the narrowest Substrate runtime-selection code that must call `agent_api::resolve_runtime_support(\"codex\", target_triple)`. Keep Packet 2.5 through Packet 4 work out of scope, and do not land installer flag surfaces, Slice 58 migration, host-runtime fallback, or floating latest-release resolution. Run cargo test -p shell world_deps -- --nocapture, the exact rg verification for the 0.3.6 dependency pins, and any targeted UAA-backed runtime-resolution tests you add, plus the guest smoke proof needed to record whether Codex is self-contained or requires a wider bundle. Final message must state whether Packet 2 is checkpoint-green, what symbols changed, what verification ran, whether Packet 2.5 is unblocked, and whether any reopen condition was discovered.
 
 Review subagent prompt:
 Review the committed Slice 59 Packet 2 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md. Review only Packet 2 and the live diff. Review across correctness, readability, architecture, security, and performance. Report findings first with explicit severities. State clearly whether Packet 2 is review-clean or requires changes.
@@ -186,6 +186,95 @@ Fix subagent prompt:
 
 Final response requirements:
 - State whether Packet 2 is checkpoint-green.
+- List exact verification commands run and whether they passed.
+- Report GitNexus impact-analysis results for edited production symbols.
+- Report GitNexus detect-changes results before each commit.
+- State whether Packet 2.5 is unblocked.
+- If anything is not green, say explicitly that Packet 2.5 must not begin.
+```
+
+## Packet 2.5 Prompt
+
+```text
+/goal Land Slice 59 Packet 2.5 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate.
+
+Use these source docs as authority:
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md
+
+Mission:
+- Land Slice 59 Packet 2.5 only: Unsupported-Guest Fail-Closed And Host/World Separation Remediation.
+- Do not start Packet 3.
+- Keep the slice bounded to resolving the remaining Packet 2 review disagreement around unsupported guest tuples and host-runtime leakage.
+
+Before editing:
+1. Read SPEC-59, PLAN-59, and TASKS-59 first.
+2. Verify Packet 2 is already landed and verification-green on the current tree.
+3. Inspect the live code and tests in:
+   - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_deps/
+   - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs
+   - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/orchestrator_world_dispatch.rs
+   - the narrowest adjacent Packet 2/2.5 tests under /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/
+4. Reconfirm the current published UAA runtime-support authority for Codex before changing behavior that depends on supported guest tuples.
+5. If GitNexus indicates the index is stale, run `npx gitnexus analyze`.
+6. Run GitNexus impact analysis before editing any production symbol you change and report the blast radius.
+7. Stay strictly within Packet 2.5 scope.
+
+Packet 2.5 scope:
+- Task 2.5.1: Fail closed on unsupported guest tuples with explicit guest-target truth.
+- Task 2.5.2: Prove host Codex cannot satisfy world runtime truth and make the separation explicit.
+
+Out of scope:
+- Packet 3 or 4 work
+- installer-time provisioning surfaces
+- Slice 58 placement-aware selector/config migration
+- broadening UAA published support truth inside this packet unless a separately landed/published prerequisite is already available and required only for bounded verification
+- host-runtime fallback, silent target remapping, or any logic that treats host Codex as interchangeable with guest Codex
+
+Execution requirements:
+- Spawn a fresh GPT-5.4 subagent on high to implement Packet 2.5.
+- The implementation subagent prompt must begin with `/goal ` and must instruct the subagent to use `$incremental-implementation`.
+- The implementation subagent must work only on Task 2.5.1 and Task 2.5.2.
+- After implementation, run the Packet 2.5 verification commands:
+  - `cargo test -p shell world_deps -- --nocapture`
+  - `cargo test -p shell dispatch_contract -- --nocapture`
+  - `cargo test -p shell agent_runtime::validator -- --nocapture`
+  - targeted regression tests for unsupported guest tuples, guest-target derivation, and host-PATH leakage if added
+- If implementation is green, run `git diff --stat` and `git status --short`.
+- Run GitNexus detect-changes before committing.
+- Commit the Packet 2.5 implementation work before review.
+
+Review requirements:
+- Spawn a fresh GPT-5.4 subagent on high using `$code-review-and-quality`.
+- The review subagent must review only Packet 2.5 against SPEC-59 / PLAN-59 / TASKS-59 and the live diff.
+- If review finds issues, spawn a fresh GPT-5.4 high fix subagent whose prompt begins with `/goal ` and uses `$incremental-implementation`.
+- The fix subagent must stay limited to the review findings and Packet 2.5 scope.
+- After fixes, rerun the relevant verification commands, run `git diff --stat` and `git status --short`, run GitNexus detect-changes again, commit the fixes, and then rerun a fresh GPT-5.4 high `$code-review-and-quality` review.
+- Repeat until review-clean.
+
+Commit policy:
+- Commit after implementation before review.
+- Commit after each fix round before re-review.
+- Do not amend unless absolutely required.
+
+Packet 2.5 checkpoint:
+- unsupported guest tuples fail closed before Substrate claims the world runtime is installed or launchable
+- host Codex presence on `PATH` does not make world Codex runtime truth pass
+- host-scoped and world-scoped Codex runtime truth remain explicitly separate
+- the remaining Packet 2 review disagreement is resolved without widening into installer work or Slice 58 migration
+
+Implementation subagent prompt:
+/goal Land Slice 59 Packet 2.5 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md first. Work only on Task 2.5.1 and Task 2.5.2. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed to make unsupported guest tuples fail closed with explicit guest-target truth and to prove host Codex cannot satisfy world Codex runtime truth. Keep Packet 3 and Packet 4 work out of scope, and do not land installer flag surfaces, Slice 58 migration, or silent target broadening through host runtime. Run cargo test -p shell world_deps -- --nocapture, cargo test -p shell dispatch_contract -- --nocapture, cargo test -p shell agent_runtime::validator -- --nocapture, and any targeted regression tests you add for unsupported guest tuples and host-PATH leakage. Final message must state whether Packet 2.5 is checkpoint-green, what symbols changed, what verification ran, whether Packet 3 is unblocked, and whether any reopen condition was discovered.
+
+Review subagent prompt:
+Review the committed Slice 59 Packet 2.5 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md. Review only Packet 2.5 and the live diff. Review across correctness, readability, architecture, security, and performance. Report findings first with explicit severities. State clearly whether Packet 2.5 is review-clean or requires changes.
+
+Fix subagent prompt:
+/goal Address only the required Slice 59 Packet 2.5 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read the review findings plus /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Fix only the flagged Packet 2.5 issues without widening scope. Re-run the relevant Packet 2.5 verification commands. Final message must state which findings were fixed, what verification ran, whether Packet 2.5 is checkpoint-green, and whether another review round is required.
+
+Final response requirements:
+- State whether Packet 2.5 is checkpoint-green.
 - List exact verification commands run and whether they passed.
 - Report GitNexus impact-analysis results for edited production symbols.
 - Report GitNexus detect-changes results before each commit.
@@ -210,7 +299,7 @@ Mission:
 
 Before editing:
 1. Read SPEC-59, PLAN-59, and TASKS-59 first.
-2. Verify Packet 2 is already landed and checkpoint-green on the current tree.
+2. Verify Packet 2.5 is already landed and checkpoint-green on the current tree.
 3. Inspect the live code and docs in:
    - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/install-substrate.sh
    - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/install.sh
