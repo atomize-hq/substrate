@@ -12,6 +12,7 @@ use tempfile::{Builder, TempDir};
 
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 const TOOLBOX_UNIX_PATH_FALLBACK_THRESHOLD: usize = 100;
+const TEST_CODEX_WORLD_GUEST_ENTRYPOINT: &str = "/var/lib/substrate/world-deps/bin/codex";
 
 #[derive(Clone, Copy)]
 enum CapabilityOverride<'a> {
@@ -74,6 +75,7 @@ struct AgentSuccessorFixture {
     home: PathBuf,
     substrate_home: PathBuf,
     workspace_root: PathBuf,
+    world_deps_bin: PathBuf,
 }
 
 impl AgentSuccessorFixture {
@@ -88,11 +90,24 @@ impl AgentSuccessorFixture {
         fs::create_dir_all(&substrate_home).expect("failed to create SUBSTRATE_HOME fixture");
         let workspace_root = temp.path().join("workspace");
         fs::create_dir_all(&workspace_root).expect("failed to create workspace root");
+        let world_deps_bin = temp.path().join("world-deps-bin");
+        fs::create_dir_all(&world_deps_bin).expect("failed to create world deps bin");
+        let guest_codex = world_deps_bin.join("codex");
+        fs::write(&guest_codex, "#!/bin/sh\nexit 0\n").expect("failed to create fake guest codex");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&guest_codex)
+                .expect("failed to stat fake guest codex")
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&guest_codex, perms).expect("failed to chmod fake guest codex");
+        }
         Self {
             _temp: temp,
             home,
             substrate_home,
             workspace_root,
+            world_deps_bin,
         }
     }
 
@@ -100,7 +115,8 @@ impl AgentSuccessorFixture {
         let mut cmd = substrate_shell_driver();
         cmd.env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
-            .env("SUBSTRATE_HOME", &self.substrate_home);
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &self.world_deps_bin);
         cmd
     }
 
@@ -284,6 +300,11 @@ fn cli_agent_file_with_session_contract<'a>(
     options: SessionContractOptions<'a>,
 ) -> String {
     let runtime_family = options.runtime_family.unwrap_or(runtime_family);
+    let binary = if scope == "world" && runtime_family == "codex" {
+        TEST_CODEX_WORLD_GUEST_ENTRYPOINT
+    } else {
+        options.binary
+    };
     let mut body =
         format!("version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n");
     if let Some(protocol) = options.protocol {
@@ -291,7 +312,7 @@ fn cli_agent_file_with_session_contract<'a>(
     }
     body.push_str(&format!(
         "  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: {}\n  capabilities:\n",
-        options.binary, options.cli_mode
+        binary, options.cli_mode
     ));
     for capability in [
         "session_start",
