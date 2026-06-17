@@ -17,6 +17,7 @@ use crate::execution::{
     WorldDepsWorkspaceAction, WorldDepsWorkspaceCmd,
 };
 use crate::{WorldDepsAction, WorldDepsCmd};
+use agent_api::resolve_runtime_support;
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -1245,6 +1246,10 @@ fn build_world_apt_entrypoint_wrapper_command_v1(entrypoints: &[String]) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::Command;
+    use tempfile::TempDir;
 
     #[test]
     fn wdh1_mktemp_template_is_shell_quoted_not_literal_quotes() {
@@ -1275,12 +1280,175 @@ mod tests {
             "expected wrapper to not hardcode /usr/bin for apt entrypoints: {cmd}"
         );
     }
+
+    #[test]
+    fn world_deps_codex_runtime_support_resolves_published_uaa_release_mapping() {
+        let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
+            .expect("resolve validated codex runtime");
+
+        assert_eq!(spec.version, "0.125.0");
+        assert_eq!(spec.archive_name, "codex-x86_64-unknown-linux-musl.tar.gz");
+        assert_eq!(
+            spec.archive_url,
+            "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz"
+        );
+        assert_eq!(
+            spec.archive_sha256,
+            "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001"
+        );
+    }
+
+    #[test]
+    fn world_deps_codex_runtime_support_fails_closed_for_unvalidated_target() {
+        let err = resolve_codex_runtime_install_spec_for_target_v1("aarch64-unknown-linux-musl")
+            .expect_err("unvalidated target should fail closed");
+
+        assert!(
+            format!("{err:#}").contains("agent_api::resolve_runtime_support"),
+            "expected UAA-backed failure text, got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn world_deps_codex_runtime_script_records_self_contained_posture() {
+        let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
+            .expect("resolve validated codex runtime");
+
+        let script = build_codex_runtime_install_script_v1(&spec);
+        assert!(
+            script.contains("self-contained"),
+            "expected script to record the verified self-contained posture: {script}"
+        );
+        assert!(
+            script.contains("does not widen into a Node/npm runtime bundle"),
+            "expected script to record the no-bundle outcome: {script}"
+        );
+        assert!(
+            script.contains("${stage_dir}/codex-${target_triple}"),
+            "expected script to handle the official archive filename layout: {script}"
+        );
+    }
+
+    #[test]
+    fn world_deps_codex_runtime_install_script_is_idempotent_and_links_guest_entrypoint() {
+        let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")
+            .expect("resolve validated codex runtime");
+        let fixture = TempDir::new().expect("tempdir");
+        let world_deps_root = fixture.path().join("world-deps");
+        let staging_dir = fixture.path().join("archive-stage");
+        fs::create_dir_all(&staging_dir).expect("create archive stage");
+
+        let archive_binary = staging_dir.join("codex-x86_64-unknown-linux-musl");
+        fs::write(
+            &archive_binary,
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'codex-cli 0.125.0'\n  exit 0\nfi\nexit 0\n",
+        )
+        .expect("write archive binary");
+        let mut perms = fs::metadata(&archive_binary)
+            .expect("archive binary metadata")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&archive_binary, perms).expect("chmod archive binary");
+
+        let archive_path = fixture
+            .path()
+            .join("codex-x86_64-unknown-linux-musl.tar.gz");
+        let tar_status = Command::new("tar")
+            .arg("-czf")
+            .arg(&archive_path)
+            .arg("-C")
+            .arg(&staging_dir)
+            .arg("codex-x86_64-unknown-linux-musl")
+            .status()
+            .expect("create tar.gz");
+        assert!(
+            tar_status.success(),
+            "expected tar to succeed: {tar_status:?}"
+        );
+
+        let sha_output = Command::new("sha256sum")
+            .arg(&archive_path)
+            .output()
+            .expect("sha256sum archive");
+        assert!(sha_output.status.success(), "expected sha256sum to succeed");
+        let sha = String::from_utf8(sha_output.stdout)
+            .expect("sha256sum utf8")
+            .split_whitespace()
+            .next()
+            .expect("sha256 token")
+            .to_string();
+
+        let script = build_codex_runtime_install_script_v1(&spec)
+            .replace(
+                "/var/lib/substrate/world-deps",
+                world_deps_root.to_str().expect("world deps root utf8"),
+            )
+            .replace(
+                "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                &format!("file://{}", archive_path.display()),
+            )
+            .replace(
+                "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001",
+                &sha,
+            );
+
+        let script_path = fixture.path().join("install-codex-runtime.sh");
+        fs::write(&script_path, script).expect("write install script");
+        let mut script_perms = fs::metadata(&script_path)
+            .expect("install script metadata")
+            .permissions();
+        script_perms.set_mode(0o755);
+        fs::set_permissions(&script_path, script_perms).expect("chmod install script");
+
+        for _ in 0..2 {
+            let status = Command::new("bash")
+                .arg(&script_path)
+                .status()
+                .expect("run install script");
+            assert!(
+                status.success(),
+                "expected install script to succeed: {status:?}"
+            );
+        }
+
+        let guest_entrypoint = world_deps_root.join("bin/codex");
+        assert!(
+            guest_entrypoint.exists(),
+            "expected guest entrypoint symlink"
+        );
+
+        let version_output = Command::new(&guest_entrypoint)
+            .arg("--version")
+            .output()
+            .expect("run guest entrypoint");
+        assert!(
+            version_output.status.success(),
+            "expected guest entrypoint to run"
+        );
+        assert_eq!(
+            String::from_utf8(version_output.stdout)
+                .expect("version stdout utf8")
+                .trim(),
+            "codex-cli 0.125.0"
+        );
+    }
 }
 
 struct WorldCommandOutputV1 {
     exit: i32,
     stdout: String,
     stderr: String,
+}
+
+const CODEX_RUNTIME_PACKAGE_NAME: &str = "codex-runtime";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexRuntimeInstallSpecV1 {
+    target_triple: String,
+    version: String,
+    archive_name: String,
+    archive_url: String,
+    archive_sha256: String,
 }
 
 #[allow(dead_code)]
@@ -1334,6 +1502,12 @@ fn apply_script_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<()> {
 }
 
 fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<String> {
+    if pkg.name == CODEX_RUNTIME_PACKAGE_NAME {
+        let target_triple = current_codex_runtime_target_triple_v1()?;
+        let spec = resolve_codex_runtime_install_spec_for_target_v1(target_triple)?;
+        return Ok(build_codex_runtime_install_script_v1(&spec));
+    }
+
     if let Some(path_raw) = &pkg.install.script_path {
         let path = PathBuf::from(path_raw);
         let resolved = if path.is_absolute() {
@@ -1368,6 +1542,111 @@ fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> R
         "invalid deps inventory: package '{}' declares install.method=script but has no script content",
         pkg.name
     )))
+}
+
+fn current_codex_runtime_target_triple_v1() -> Result<&'static str> {
+    match std::env::consts::ARCH {
+        "x86_64" => Ok("x86_64-unknown-linux-musl"),
+        "aarch64" => Ok("aarch64-unknown-linux-musl"),
+        arch => Err(config_model::user_error(format!(
+            "world deps package '{}' is unsupported for guest arch '{}' because Substrate cannot derive a validated Codex guest target triple",
+            CODEX_RUNTIME_PACKAGE_NAME, arch
+        ))),
+    }
+}
+
+fn resolve_codex_runtime_install_spec_for_target_v1(
+    target_triple: &str,
+) -> Result<CodexRuntimeInstallSpecV1> {
+    let record = resolve_runtime_support("codex", target_triple).map_err(|err| {
+        config_model::user_error(format!(
+            "world deps package '{}' is unsupported for guest target '{}' because Substrate could not resolve a validated Codex runtime via agent_api::resolve_runtime_support(\"codex\", ...): {}",
+            CODEX_RUNTIME_PACKAGE_NAME, target_triple, err
+        ))
+    })?;
+
+    match (record.version.as_str(), target_triple) {
+        ("0.125.0", "x86_64-unknown-linux-musl") => Ok(CodexRuntimeInstallSpecV1 {
+            target_triple: target_triple.to_string(),
+            version: record.version,
+            archive_name: "codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
+            archive_url: "https://github.com/openai/codex/releases/download/rust-v0.125.0/codex-x86_64-unknown-linux-musl.tar.gz".to_string(),
+            archive_sha256:
+                "4a20a53943a7e6a0c5fa4463d4e47c58dd8e553ecebde455a4107e9906bfb001"
+                    .to_string(),
+        }),
+        _ => Err(config_model::user_error(format!(
+            "world deps package '{}' has no pinned official Codex release mapping for validated tuple version='{}' target='{}'",
+            CODEX_RUNTIME_PACKAGE_NAME, record.version, target_triple
+        ))),
+    }
+}
+
+fn build_codex_runtime_install_script_v1(spec: &CodexRuntimeInstallSpecV1) -> String {
+    format!(
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+
+# Verified Packet 2 runtime posture: the official Codex musl release is self-contained
+# in the guest for `codex --version`, so this package installs only the Codex binary and
+# does not widen into a Node/npm runtime bundle.
+world_deps_root="/var/lib/substrate/world-deps"
+world_deps_bin="${{world_deps_root}}/bin"
+package_root="${{world_deps_root}}/{package_name}"
+package_bin="${{package_root}}/bin"
+downloads_root="${{package_root}}/downloads"
+installed_binary="${{package_bin}}/codex"
+archive_name="{archive_name}"
+archive_path="${{downloads_root}}/${{archive_name}}"
+archive_url="{archive_url}"
+archive_sha256="{archive_sha256}"
+codex_version="{version}"
+target_triple="{target_triple}"
+
+mkdir -p "${{world_deps_bin}}" "${{package_bin}}" "${{downloads_root}}"
+
+if [ -x "${{installed_binary}}" ] && "${{installed_binary}}" --version 2>/dev/null | grep -Fq "${{codex_version}}"; then
+  ln -sf "${{installed_binary}}" "${{world_deps_bin}}/codex"
+  exit 0
+fi
+
+if [ ! -f "${{archive_path}}" ] || ! echo "${{archive_sha256}}  ${{archive_path}}" | sha256sum -c - >/dev/null 2>&1; then
+  tmp_archive="${{archive_path}}.tmp"
+  rm -f "${{tmp_archive}}"
+  curl -fsSL --retry 3 --location "${{archive_url}}" -o "${{tmp_archive}}"
+  echo "${{archive_sha256}}  ${{tmp_archive}}" | sha256sum -c -
+  mv "${{tmp_archive}}" "${{archive_path}}"
+fi
+
+stage_dir="$(mktemp -d "${{package_root}}/.stage.${{target_triple}}.XXXXXX")"
+trap 'rm -rf "${{stage_dir}}"' EXIT
+tar -xzf "${{archive_path}}" -C "${{stage_dir}}"
+
+resolved_binary=""
+if [ -x "${{stage_dir}}/codex" ]; then
+  resolved_binary="${{stage_dir}}/codex"
+elif [ -x "${{stage_dir}}/codex-${{target_triple}}" ]; then
+  resolved_binary="${{stage_dir}}/codex-${{target_triple}}"
+else
+  resolved_binary="$(find "${{stage_dir}}" -type f \\( -name codex -o -name "codex-${{target_triple}}" \\) | head -n 1 || true)"
+fi
+
+if [ -z "${{resolved_binary}}" ]; then
+  echo "substrate: world deps package '{package_name}' did not contain a codex binary for target ${{target_triple}}" >&2
+  exit 1
+fi
+
+install -m 0755 "${{resolved_binary}}" "${{installed_binary}}"
+"${{installed_binary}}" --version | grep -F "${{codex_version}}" >/dev/null
+ln -sf "${{installed_binary}}" "${{world_deps_bin}}/codex"
+"#,
+        package_name = CODEX_RUNTIME_PACKAGE_NAME,
+        archive_name = spec.archive_name,
+        archive_url = spec.archive_url,
+        archive_sha256 = spec.archive_sha256,
+        version = spec.version,
+        target_triple = spec.target_triple,
+    )
 }
 
 struct WrapperFileV1 {

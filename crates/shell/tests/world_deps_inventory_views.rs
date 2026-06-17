@@ -117,6 +117,7 @@ fn test_current_list_available_includes_builtins_global_and_workspace() {
 
     let items = read_items(&output);
     assert!(contains_item(&items, "package", "bun"));
+    assert!(contains_item(&items, "package", "codex-runtime"));
     assert!(contains_item(&items, "package", "node"));
     assert!(contains_item(&items, "package", "npm"));
     assert!(contains_item(&items, "bundle", "node-runtime"));
