@@ -329,13 +329,13 @@ fn agents_validate_rejects_version_2_inventory_without_enabled_placements() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("codex.yaml")
-            && stderr.contains("must enable exactly one placement before Packet 2 selector cutover"),
+            && stderr.contains("must enable at least one placement"),
         "stderr should explain why all-disabled placement inventories are rejected\nstderr: {stderr}"
     );
 }
 
 #[test]
-fn agents_validate_rejects_multi_enabled_version_2_inventory_before_packet_2() {
+fn agents_validate_accepts_multi_enabled_version_2_inventory_before_packet_2() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
     fixture.write_agent_file(
@@ -344,16 +344,9 @@ fn agents_validate_rejects_multi_enabled_version_2_inventory_before_packet_2() {
     );
 
     let output = fixture.validate();
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "multi-enabled version 2 inventory should exit 2 before Packet 2: {output:?}"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("codex.yaml")
-            && stderr.contains("must enable exactly one placement before Packet 2 selector cutover"),
-        "stderr should explain why the Packet 1 compatibility bridge rejects multi-placement live inventory\nstderr: {stderr}"
+        output.status.success(),
+        "multi-enabled version 2 inventory should validate in Packet 1: {output:?}"
     );
 }
 

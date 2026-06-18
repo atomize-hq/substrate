@@ -518,12 +518,23 @@ pub(crate) fn load_effective_agent_inventory(
             )));
         }
         for path in collect_agent_files_in_root(&root)? {
-            let file = validate_agent_file(&path, base_policy)?;
+            let file = materialize_effective_inventory_file(&path, validate_agent_file(&path, base_policy)?)?;
             effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
         }
     }
 
     Ok(effective)
+}
+
+fn materialize_effective_inventory_file(path: &Path, file: AgentFileV1) -> Result<AgentFileV1> {
+    if file.version == 1 {
+        return Ok(file);
+    }
+
+    Err(config_model::user_error(format!(
+        "invalid agent file in {}: version 2 placement-aware inventory is validation-only before Packet 2 selector cutover; live effective inventory materialization must fail closed",
+        path.display()
+    )))
 }
 
 pub(crate) fn resolve_gateway_backend_inventory_entry(
@@ -715,11 +726,10 @@ fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Pol
         )));
     }
     let enabled_placements = count_enabled_v2_placements(parsed);
-    if enabled_placements != 1 {
+    if enabled_placements == 0 {
         return Err(config_model::user_error(format!(
-            "invalid agent file in {}: config.placements must enable exactly one placement before Packet 2 selector cutover (found {})",
+            "invalid agent file in {}: config.placements must enable at least one placement",
             path.display(),
-            enabled_placements
         )));
     }
 
@@ -1173,11 +1183,11 @@ fn validate_overlay_subset(
 #[cfg(test)]
 mod tests {
     use super::{
-        compatibility_inventory_file_from_v2, inventory_entry_origin, project_inventory_entry,
-        project_inventory_v2_entry, validate_agent_schema_v2, AgentCapabilitiesV1,
-        AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1,
-        AgentExecutionConfigV1, AgentFileV1, AgentFileV2, AgentInventoryBaselineOrigin,
-        AgentInventoryEntryV1, AgentPlacement,
+        compatibility_inventory_file_from_v2, inventory_entry_origin,
+        materialize_effective_inventory_file, project_inventory_entry, project_inventory_v2_entry,
+        validate_agent_schema_v2, AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily,
+        AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
+        AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
     };
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
@@ -1375,14 +1385,12 @@ config:
     }
 
     #[test]
-    fn validate_agent_schema_v2_rejects_inventory_without_exactly_one_enabled_placement() {
+    fn validate_agent_schema_v2_rejects_inventory_without_enabled_placements() {
         let temp = tempdir().expect("tempdir");
         let path = temp.path().join("codex.yaml");
         let base_policy = Policy::default();
 
-        for (raw, expected_count) in [
-            (
-                r#"
+        let raw = r#"
 version: 2
 id: codex
 config:
@@ -1400,11 +1408,23 @@ config:
       cli:
         binary: codex
         runtime_family: codex
-"#,
-                0,
-            ),
-            (
-                r#"
+"#;
+        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+        let err = validate_agent_schema_v2(&path, &parsed, &base_policy)
+            .expect_err("inventory without enabled placements should fail validation");
+        assert!(
+            err.to_string()
+                .contains("config.placements must enable at least one placement"),
+            "unexpected validation error: {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_agent_schema_v2_accepts_multi_enabled_inventory_before_packet_2_cutover() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("codex.yaml");
+        let base_policy = Policy::default();
+        let raw = r#"
 version: 2
 id: codex
 config:
@@ -1422,20 +1442,10 @@ config:
       cli:
         binary: codex
         runtime_family: codex
-"#,
-                2,
-            ),
-        ] {
-            let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-            let err = validate_agent_schema_v2(&path, &parsed, &base_policy)
-                .expect_err("inventory should fail closed before Packet 2");
-            assert!(
-                err.to_string().contains(&format!(
-                    "config.placements must enable exactly one placement before Packet 2 selector cutover (found {expected_count})"
-                )),
-                "unexpected validation error: {err:?}"
-            );
-        }
+"#;
+        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+        validate_agent_schema_v2(&path, &parsed, &base_policy)
+            .expect("multi-enabled inventory should parse and validate in Packet 1");
     }
 
     #[test]
@@ -1503,5 +1513,46 @@ config:
             assert!(compatibility.config.api.is_none());
             assert_eq!(compatibility.config.capabilities, AgentCapabilitiesV1::default());
         }
+    }
+
+    #[test]
+    fn effective_inventory_materialization_fails_closed_for_version_2_inventory() {
+        let raw = r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        session_start: true
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        session_resume: true
+        llm: true
+"#;
+        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+        let compatibility = compatibility_inventory_file_from_v2(&parsed);
+        let path = tempdir().expect("tempdir").path().join("codex.yaml");
+
+        let err = materialize_effective_inventory_file(&path, compatibility)
+            .expect_err("effective inventory should fail closed for version 2");
+        assert!(
+            err.to_string().contains(
+                "version 2 placement-aware inventory is validation-only before Packet 2 selector cutover"
+            ),
+            "unexpected materialization error: {err:?}"
+        );
     }
 }
