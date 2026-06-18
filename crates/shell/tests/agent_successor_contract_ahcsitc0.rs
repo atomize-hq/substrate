@@ -328,7 +328,9 @@ fn cli_agent_file_v2_with_session_contract<'a>(
     if let Some(protocol) = options.protocol {
         body.push_str(&format!("  protocol: {protocol}\n"));
     }
-    body.push_str(&format!("  placements:\n    {placement}:\n      enabled: true\n"));
+    body.push_str(&format!(
+        "  placements:\n    {placement}:\n      enabled: true\n"
+    ));
     body.push_str(&format!(
         "      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: {}\n      capabilities:\n",
         binary, options.cli_mode
@@ -1631,6 +1633,77 @@ fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
         codex.pointer("/execution/scope").and_then(Value::as_str),
         Some("world"),
         "workspace version 2 shadow must surface the selected world placement through the legacy world compatibility row: {codex}"
+    );
+}
+
+#[test]
+fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_stale_global_world_row() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+    - cli:codex_world
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, false, true),
+    );
+    fixture.write_agent_file(
+        "codex_world.yaml",
+        &cli_agent_file("codex_world", "world", true, false, true),
+    );
+    let workspace_agents_dir = fixture.workspace_root.join(".substrate").join("agents");
+    fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
+    fs::write(
+        workspace_agents_dir.join("codex.yaml"),
+        cli_agent_file_v2("codex", "host", true, false, true),
+    )
+    .expect("write workspace version 2 host agent file");
+
+    let output = fixture.run(&["agent", "list", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent list should surface the workspace host-only version 2 shadow: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let agents = json["agents"]
+        .as_array()
+        .expect("agents should be an array");
+    let codex = agents
+        .iter()
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .expect("shadowed codex host row should exist");
+    assert_eq!(
+        codex.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex"),
+        "Packet 1.5 must keep the legacy host exact backend id live for single-placement version 2 inventory: {codex}"
+    );
+    assert_eq!(
+        codex.pointer("/execution/scope").and_then(Value::as_str),
+        Some("host"),
+        "workspace version 2 shadow must surface the selected host placement through the legacy host compatibility row: {codex}"
+    );
+    assert!(
+        agents
+            .iter()
+            .all(|agent| agent.pointer("/agent_id").and_then(Value::as_str) != Some("codex_world")),
+        "workspace host-only version 2 compatibility truth must suppress the stale global world row: {agents:?}"
     );
 }
 
