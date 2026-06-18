@@ -2533,7 +2533,8 @@ install_macos() {
   if [[ "${world_enabled}" -eq 1 ]]; then
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' or '${bin_dir}/substrate world deps current sync' as needed."
   else
-    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --home \"${PREFIX}\"' when you are ready to provision."
+    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --home \"${PREFIX}\"' when you are ready to provision the backend."
+    log "Runtime-family provisioning after install is helper-only in this slice: use '${version_dir}/scripts/substrate/world-enable.sh --home \"${PREFIX}\" --provision-agent-runtime codex' instead of '${bin_dir}/substrate world enable --provision-agent-runtime ...'."
   fi
 
   write_host_state_metadata "${world_enabled}"
@@ -2623,7 +2624,8 @@ install_linux() {
     log "World backend enabled; run '${bin_dir}/substrate world doctor --json' for diagnostics or '${bin_dir}/substrate world deps current sync' to provision world deps."
     print_linger_guidance_linux "${primary_user}"
   else
-    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --home \"${PREFIX}\"' when you are ready to provision."
+    log "World backend disabled (--no-world). Run '${bin_dir}/substrate world enable --home \"${PREFIX}\"' when you are ready to provision the backend."
+    log "Runtime-family provisioning after install is helper-only in this slice: use '${version_dir}/scripts/substrate/world-enable.sh --home \"${PREFIX}\" --provision-agent-runtime codex' instead of '${bin_dir}/substrate world enable --provision-agent-runtime ...'."
   fi
 
   write_host_state_metadata "${world_enabled}"

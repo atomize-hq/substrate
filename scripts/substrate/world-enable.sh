@@ -105,6 +105,19 @@ prepare_tmpdir
 log "world-enable: home=${PREFIX} profile=${PROFILE} force=${FORCE} dry_run=${DRY_RUN}"
 log "world-enable: release root located at ${RELEASE_ROOT}"
 
+bin_suffix=""
+if [[ "${PLATFORM}" == "windows" ]]; then
+  bin_suffix=".exe"
+fi
+
+substrate_bin="${PREFIX}/bin/substrate${bin_suffix}"
+
+if [[ ${DRY_RUN} -eq 1 && -n "${PROVISION_AGENT_RUNTIME}" ]]; then
+  doctor_path="${PREFIX}/bin:${ORIGINAL_PATH}"
+  PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" provision_agent_runtime_world_deps "${substrate_bin}"
+  PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
+fi
+
 case "${PLATFORM}" in
   macos)
     ensure_macos_prereqs
@@ -127,12 +140,6 @@ if [[ ${DRY_RUN} -eq 1 ]]; then
   exit 0
 fi
 
-bin_suffix=""
-if [[ "${PLATFORM}" == "windows" ]]; then
-  bin_suffix=".exe"
-fi
-
-substrate_bin="${PREFIX}/bin/substrate${bin_suffix}"
 if [[ ! -x "${substrate_bin}" ]]; then
   fatal "substrate binary not found at ${substrate_bin}. Did you install to ${PREFIX}?"
 fi
