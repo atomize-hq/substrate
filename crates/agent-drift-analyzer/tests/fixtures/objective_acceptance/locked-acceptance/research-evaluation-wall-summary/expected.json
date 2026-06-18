@@ -1,0 +1,17 @@
+{
+  "case_id": "research-evaluation-wall-summary",
+  "objective_class": "task_statement",
+  "primary_intent": "research",
+  "target": {
+    "kind": "spec_or_design_doc",
+    "display_contains": [
+      "docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md"
+    ],
+    "paths": [
+      "docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md"
+    ]
+  },
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}

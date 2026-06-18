@@ -1,0 +1,22 @@
+{
+  "case_id": "concise-goal-architecture-doc-review",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "target": {
+    "kind": "spec_or_design_doc",
+    "display_contains": [
+      "docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md"
+    ],
+    "paths": [
+      "docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md"
+    ]
+  },
+  "compatibility_rendering": {
+    "acceptable_any_of": [
+      "/goal Review docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md only."
+    ]
+  },
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}

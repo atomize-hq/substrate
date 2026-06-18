@@ -1,0 +1,22 @@
+{
+  "case_id": "concise-goal-objective-rs-review",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "target": {
+    "kind": "file_or_directory",
+    "display_contains": [
+      "crates/agent-drift-analyzer/src/context/objective.rs"
+    ],
+    "paths": [
+      "crates/agent-drift-analyzer/src/context/objective.rs"
+    ]
+  },
+  "compatibility_rendering": {
+    "acceptable_any_of": [
+      "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+    ]
+  },
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}

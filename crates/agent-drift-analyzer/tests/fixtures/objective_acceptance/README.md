@@ -1,10 +1,9 @@
 # Objective acceptance fixture contract
 
 Packet `SO-4.1` establishes only the committed harness scaffold and deterministic fixture layout.
-Packet `SO-4.2` now commits the **expected-shape contract** for future cases, but the real family
-corpus is still intentionally tiny until `SO-5.*` seeds the locked acceptance wall. The harness
-must evaluate structured correctness from fixture metadata rather than reducing success to one exact
-objective string.
+Packet `SO-4.2` now commits the **expected-shape contract** for future cases, and `SO-5.1` through
+`SO-5.3` seed the first committed corpus. The harness must evaluate structured correctness from
+fixture metadata rather than reducing success to one exact objective string.
 
 The committed root must stay bounded to:
 
@@ -13,12 +12,24 @@ The committed root must stay bounded to:
 - `locked-acceptance/`
 - `stretch-external/`
 
-`locked-acceptance/` is now seeded by `SO-5.1` and `SO-5.2` with the WDAP kickoff cases
-`wdap0-integ-linux-kickoff/` and `wdap0-integ-macos-kickoff/`, plus the preserved instruction-
-surface controls `instruction-surface-agents-skill-update/` and
-`instruction-surface-available-skills-review/`. Those controls prove deliberate `AGENTS.md`,
-`<skill>`, `Available skills`, and related instruction-surface targets survive shortening instead
-of being filtered away as generic boilerplate. `design-set/` and `stretch-external/` remain placeholder-only until their later `SO-5.*` follow-on packets land. The harness must enumerate
+`design-set/` is now seeded by `SO-5.3` with the concise /goal control
+`concise-goal-architecture-doc-review/`. That small design-set control keeps an obvious
+spec-review prompt available for future rule tuning without turning the design set into a second
+locked wall.
+
+`locked-acceptance/` is now seeded by `SO-5.1` through `SO-5.3` with:
+
+- WDAP kickoff cases `wdap0-integ-linux-kickoff/` and `wdap0-integ-macos-kickoff/`
+- preserved instruction-surface controls `instruction-surface-agents-skill-update/` and
+  `instruction-surface-available-skills-review/`
+- concise /goal control `concise-goal-objective-rs-review/`
+- review/no-code control `review-no-code-so-5-3-audit/`
+- planning/docs control `plan-docs-only-phase1-plan/`
+- research/docs control `research-evaluation-wall-summary/`
+
+Those controls prove Phase 1 does not overfit to WDAP alone: deliberate `AGENTS.md`, `<skill>`,
+`Available skills`, concise /goal, do not change code, docs-only, and research prompts all stay
+semantically distinct. stretch-external/ remains placeholder-only. The harness must enumerate
 every committed `<case-id>/raw.json` and `<case-id>/expected.json` entry deterministically.
 
 ## Case contract

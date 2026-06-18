@@ -1,0 +1,9 @@
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+    }
+  ]
+}

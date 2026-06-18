@@ -1,0 +1,9 @@
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Review Packet SO-5.3 only, do not change code, and return packet-scoped findings."
+    }
+  ]
+}

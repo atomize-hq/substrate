@@ -48,12 +48,16 @@ fn objective_acceptance_family_dirs_keep_so_5_1_locked_cases_and_other_families_
                 actual_entries,
                 vec![
                     OBJECTIVE_ACCEPTANCE_FAMILY_README.to_owned(),
+                    "concise-goal-objective-rs-review".to_owned(),
                     "instruction-surface-agents-skill-update".to_owned(),
                     "instruction-surface-available-skills-review".to_owned(),
+                    "plan-docs-only-phase1-plan".to_owned(),
+                    "research-evaluation-wall-summary".to_owned(),
+                    "review-no-code-so-5-3-audit".to_owned(),
                     "wdap0-integ-linux-kickoff".to_owned(),
                     "wdap0-integ-macos-kickoff".to_owned(),
                 ],
-                "Packets SO-5.1 and SO-5.2 must seed the locked acceptance family with the WDAP kickoff cases plus preserved instruction-surface controls only"
+                "Packets SO-5.1 through SO-5.3 must seed the locked acceptance family with WDAP, preserved instruction-surface, concise-goal, and non-implementation controls only"
             );
             assert_eq!(
                 corpus
@@ -62,12 +66,34 @@ fn objective_acceptance_family_dirs_keep_so_5_1_locked_cases_and_other_families_
                     .map(|case| case.case_id)
                     .collect::<Vec<_>>(),
                 vec![
+                    "concise-goal-objective-rs-review".to_owned(),
                     "instruction-surface-agents-skill-update".to_owned(),
                     "instruction-surface-available-skills-review".to_owned(),
+                    "plan-docs-only-phase1-plan".to_owned(),
+                    "research-evaluation-wall-summary".to_owned(),
+                    "review-no-code-so-5-3-audit".to_owned(),
                     "wdap0-integ-linux-kickoff".to_owned(),
                     "wdap0-integ-macos-kickoff".to_owned(),
                 ],
-                "Packets SO-5.1 and SO-5.2 must keep the committed locked acceptance case list deterministic"
+                "Packets SO-5.1 through SO-5.3 must keep the committed locked acceptance case list deterministic"
+            );
+        } else if family.dir_name == "design-set" {
+            assert_eq!(
+                actual_entries,
+                vec![
+                    OBJECTIVE_ACCEPTANCE_FAMILY_README.to_owned(),
+                    "concise-goal-architecture-doc-review".to_owned(),
+                ],
+                "Packet SO-5.3 seeds the design-set with a concise-goal control only"
+            );
+            assert_eq!(
+                corpus
+                    .case_paths(family)
+                    .into_iter()
+                    .map(|case| case.case_id)
+                    .collect::<Vec<_>>(),
+                vec!["concise-goal-architecture-doc-review".to_owned()],
+                "Packet SO-5.3 must keep the committed design-set case list deterministic"
             );
         } else {
             assert_eq!(
@@ -103,20 +129,29 @@ fn objective_acceptance_readme_documents_the_family_contract() {
         );
     }
     for required_fragment in [
+        "concise-goal-architecture-doc-review",
+        "concise-goal-objective-rs-review",
         "instruction-surface-agents-skill-update",
         "instruction-surface-available-skills-review",
+        "plan-docs-only-phase1-plan",
+        "research-evaluation-wall-summary",
+        "review-no-code-so-5-3-audit",
         "wdap0-integ-linux-kickoff",
         "wdap0-integ-macos-kickoff",
         "AGENTS.md",
         "<skill>",
         "Available skills",
+        "concise /goal",
+        "do not change code",
+        "docs-only",
+        "research",
         "design-set/",
         "stretch-external/",
-        "remain placeholder-only",
+        "stretch-external/ remains placeholder-only",
     ] {
         assert!(
             readme.contains(required_fragment),
-            "objective acceptance README must document SO-5.2 locked acceptance seeding detail `{required_fragment}`"
+            "objective acceptance README must document SO-5.3 corpus seeding detail `{required_fragment}`"
         );
     }
 }

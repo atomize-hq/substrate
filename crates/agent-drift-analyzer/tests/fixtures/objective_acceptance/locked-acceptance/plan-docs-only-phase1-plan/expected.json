@@ -1,0 +1,23 @@
+{
+  "case_id": "plan-docs-only-phase1-plan",
+  "objective_class": "task_statement",
+  "primary_intent": "plan",
+  "target": {
+    "kind": "spec_or_design_doc",
+    "display_contains": [
+      "docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md"
+    ],
+    "paths": [
+      "docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md"
+    ]
+  },
+  "constraints": [
+    {
+      "constraint_kind": "docs_only",
+      "display_contains": "Docs only"
+    }
+  ],
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}

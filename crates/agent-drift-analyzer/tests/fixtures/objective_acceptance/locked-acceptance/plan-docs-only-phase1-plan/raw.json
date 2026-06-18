@@ -1,0 +1,9 @@
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Plan docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md only.\n\n## Constraints\n- Docs only.\n\n## Return with\n- Updated plan notes."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "case_id": "review-no-code-so-5-3-audit",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "target": {
+    "kind": "repo_slice",
+    "display_contains": [
+      "SO-5.3"
+    ],
+    "named_artifacts": [
+      "SO-5.3"
+    ]
+  },
+  "constraints": [
+    {
+      "constraint_kind": "no_code",
+      "display_contains": "Do not change code"
+    }
+  ],
+  "deliverables": [
+    {
+      "deliverable_kind": "review",
+      "display_contains": "Return packet-scoped findings"
+    }
+  ],
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}
