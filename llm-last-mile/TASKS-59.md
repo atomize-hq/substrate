@@ -1,23 +1,27 @@
-# TASKS: World-Scoped CLI Runtime Realizability And Codex Guest Runtime Delivery
+# TASKS-59: World-Scoped CLI Runtime Realizability And Codex Guest Runtime Delivery
 
 Source spec: [SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md](./SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md)  
 Source plan: [PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md](./PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md)  
 Related follow-on: [SPEC-58-placement-aware-agent-inventory-and-selector-contract.md](./SPEC-58-placement-aware-agent-inventory-and-selector-contract.md)  
 Phase: `TASKS`  
 Execution model: five sequential `/incremental-implementation` sessions  
-Status: draft for review
+Status: Packets 1-4 landed; slice 59 closed on `2026-06-18` after Packet 4 reran the validation wall, installer help checks, and the guest runtime smoke proof
+
+## Phase Gate
+
+These tasks assume the `SPECIFY` and `PLAN` artifacts for Slice `59` have been reviewed and accepted as the bounded source of truth before implementation begins.
 
 ## Execution Packets
 
-This slice should be implemented as five sequential packets:
+This slice was planned as five sequential `/incremental-implementation` sessions, but Packets `1` through `3` are already landed in code and now serve as the frozen floor for Packet `4` closeout.
 
-1. fail-closed validator/remediation wall,
-2. Codex world-deps package or runtime bundle,
-2.5. remediation of guest-tuple fail-closed and host-runtime leakage gaps,
-3. prod/dev installer-time provisioning surfaces,
-4. final end-to-end proof and handoff to Slice 58.
+- Packet `1` is landed and should not be reopened unless the contract changes.
+- Packet `2` is landed and should not be reopened unless the contract changes.
+- Packet `2.5` is landed and should not be reopened unless the contract changes.
+- Packet `3` is landed and should not be reopened unless the contract changes.
+- Packet `4` is landed; no active implementation packets remain for Slice `59`.
 
-Do not begin a later packet until the prior packet checkpoint is green.
+Treat the Packet `4` checkpoint as the green repo floor for this slice. Slice `59` is now closed against the landed Packet `1`-`4` floor.
 
 ## Packet 1: Fail-Closed Runtime Truth And Remediation
 
@@ -29,7 +33,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 1.1: Add world-scoped runtime-realizability gating before bootstrap
+- [x] Task 1.1: Add world-scoped runtime-realizability gating before bootstrap
   - Acceptance: current world-scoped Codex path fails before retained worker bootstrap when guest runtime truth is missing; host-only binary resolution no longer counts as sufficient world launchability proof.
   - Verify:
     - `cargo test -p shell agent_runtime::validator -- --nocapture`
@@ -38,7 +42,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/validator.rs`](../crates/shell/src/execution/agent_runtime/validator.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
 
-- [ ] Task 1.2: Emit stable remediation diagnostics for missing guest runtime truth
+- [x] Task 1.2: Emit stable remediation diagnostics for missing guest runtime truth
   - Acceptance: user-facing/runtime-facing errors mention the world runtime remediation path instead of surfacing only a late `127`; diagnostics remain specific to world-scoped runtime posture and do not blur host and world.
   - Verify:
     - `cargo test -p shell agent_runtime::validator -- --nocapture`
@@ -68,7 +72,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.1: Author the Codex world-deps package/bundle and install script
+- [x] Task 2.1: Author the Codex world-deps package/bundle and install script
   - Acceptance: a Substrate-owned world-deps package or bundle named `codex-runtime` can install Codex under `/var/lib/substrate/world-deps/<package>` and expose `/var/lib/substrate/world-deps/bin/codex`; artifact sourcing targets official release artifacts.
   - Verify:
     - `cargo test -p shell world_deps -- --nocapture`
@@ -78,7 +82,7 @@ Session goal:
     - associated install script(s)
     - [`docs/reference/world/deps/authoring_packages.md`](../docs/reference/world/deps/authoring_packages.md) only if operator contract examples need updating
 
-- [ ] Task 2.2: Align the published UAA dependency wiring to `0.3.7`
+- [x] Task 2.2: Align the published UAA dependency wiring to `0.3.7`
   - Acceptance: every Slice 59-touched manifest that already pins UAA exactly now resolves `unified-agent-api = "=0.3.7"` and aligned exact sibling UAA crates at `=0.3.7`, and the lockfile reflects that published dependency state.
   - Verify:
     - `rg -n 'unified-agent-api.*0\\.3\\.7|unified-agent-api-codex.*0\\.3\\.7|unified-agent-api-claude-code.*0\\.3\\.7' /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.lock`
@@ -88,7 +92,7 @@ Session goal:
     - [`crates/world-service/Cargo.toml`](../crates/world-service/Cargo.toml)
     - [`Cargo.lock`](../Cargo.lock)
 
-- [ ] Task 2.3: Integrate UAA-backed validated version selection and record the verified runtime dependency posture
+- [x] Task 2.3: Integrate UAA-backed validated version selection and record the verified runtime dependency posture
   - Acceptance: Substrate uses the published `0.3.7` `codex`-feature surface, calls `agent_api::resolve_runtime_support("codex", target_triple)`, uses `record.version` as the validated version to acquire, does not read generated/internal UAA files directly, and explicitly proves one of two outcomes: (a) the Linux Codex artifact is self-contained in the guest, or (b) the package widens into a runtime bundle that includes the required guest runtime dependencies.
   - Verify:
     - package-level smoke proof in the target guest environment
@@ -121,7 +125,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 2.5.1: Keep guest-target truth explicit and fail closed on unsupported or unmapped guest tuples
+- [x] Task 2.5.1: Keep guest-target truth explicit and fail closed on unsupported or unmapped guest tuples
   - Acceptance: Substrate derives the intended world-runtime guest target from the actual guest posture it is provisioning for, and if UAA does not publish validated support for that tuple or Substrate lacks a pinned official release mapping for a UAA-validated tuple, Substrate fails closed with explicit guest-target diagnostics instead of silently remapping, broadening, or treating host runtime truth as sufficient.
   - Verify:
     - `cargo test -p shell world_deps -- --nocapture`
@@ -132,7 +136,7 @@ Session goal:
     - adjacent runtime-selection seams only if required to keep guest-target truth explicit
     - nearby tests covering unsupported or validated-but-unmapped guest tuples
 
-- [ ] Task 2.5.2: Prove host Codex cannot satisfy world runtime truth and make the separation explicit
+- [x] Task 2.5.2: Prove host Codex cannot satisfy world runtime truth and make the separation explicit
   - Acceptance: tests and diagnostics prove that host `codex` availability on `PATH` can satisfy only host-scoped/orchestrator Codex truth and never the world-scoped Codex runtime contract; mixed-platform postures that may need both a host Codex binary and a Linux guest Codex binary are treated as two distinct contracts.
   - Verify:
     - `cargo test -p shell world_deps -- --nocapture`
@@ -163,7 +167,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Add the prod installer/runtime-provisioning surface
+- [x] Task 3.1: Add the prod installer/runtime-provisioning surface
   - Acceptance: prod install surfaces expose `--provision-agent-runtime <runtime_family>`; this slice supports `codex` only and fails closed for unsupported values; the flag provisions/install as needed and then runs `substrate world deps current sync`; help text and docs say so explicitly.
   - Verify:
     - installer help/usage inspection
@@ -173,7 +177,7 @@ Session goal:
     - [`scripts/substrate/install.sh`](../scripts/substrate/install.sh)
     - [`docs/INSTALLATION.md`](../docs/INSTALLATION.md)
 
-- [ ] Task 3.2: Add the dev installer/runtime-provisioning surface
+- [x] Task 3.2: Add the dev installer/runtime-provisioning surface
   - Acceptance: dev install exposes the same `--provision-agent-runtime <runtime_family>` shape, supports `codex` only in this slice, fails closed for unsupported values, provisions/install as needed and then runs `substrate world deps current sync`, and documents behavior consistently with prod install.
   - Verify:
     - installer help/usage inspection
@@ -204,8 +208,10 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 4.1: Run the final validation wall and smoke proof
+- [x] Task 4.1: Run the final validation wall and smoke proof
   - Acceptance: validator/runtime tests, world-deps tests, installer help/docs checks, and guest-runtime smoke proof are green; proof shows the world runtime is resolved from guest-visible world-deps paths instead of host-local NVM paths.
+  - Checkpoint note:
+    - Packet `4` closed green on `2026-06-18` without reopening Packets `1`-`3`: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p shell agent_runtime::validator -- --nocapture`, `cargo test -p shell dispatch_contract -- --nocapture`, `cargo test -p shell world_deps -- --nocapture`, `cargo test -p world-service member_runtime -- --nocapture`, `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`, `bash scripts/substrate/install-substrate.sh --help`, `bash scripts/substrate/install.sh --help`, `bash scripts/substrate/dev-install-substrate.sh --help`, `bash scripts/substrate/world-enable.sh --help`, and `cargo test -p shell world_deps_codex_runtime_install_script_is_idempotent_and_links_guest_entrypoint -- --nocapture` all passed; the guest smoke proof kept the runtime path anchored to `/var/lib/substrate/world-deps/bin/codex`, no production-symbol edits were required for closeout, and the only non-slice worktree drift remained the pre-existing tracker edits in `AGENTS.md` and `CLAUDE.md`
   - Verify:
     - `cargo fmt --all -- --check`
     - `cargo clippy --workspace --all-targets -- -D warnings`
