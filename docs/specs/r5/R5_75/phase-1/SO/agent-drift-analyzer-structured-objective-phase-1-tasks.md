@@ -2,10 +2,10 @@
 
 Status: draft task ledger created on 2026-06-14 from the structured-objective design stack;
 reconciled on 2026-06-17 against the live crate snapshot plus the grounding follow-on family
-through `SO-G6`. Architecture owns semantics, evaluation owns acceptance, migration owns landing
-order, and the classifier taxonomy remains deferred for this phase. Keep the original packet
-structure for auditability, but do not treat already-landed SO-1 / SO-2 seams as still-open
-implementation debt.
+through `SO-G6`, then updated on 2026-06-18 after `SO-2.3B-refine` closeout. Architecture owns
+semantics, evaluation owns acceptance, migration owns landing order, and the classifier taxonomy
+remains deferred for this phase. Keep the original packet structure for auditability, but do not
+treat already-landed SO-1 / SO-2 seams as still-open implementation debt.
 
 Keep each task as close as possible to five touched files or fewer. Do not advance to the next task
 until the current task's verification commands are green or the failure is explicitly captured in
@@ -71,8 +71,9 @@ Historical note: this packet family is already materially landed in the live cra
 follow-on grounding family (`SO-G1` / `SO-G2`) hardened section/clause identifiers and adversarial
 heading coverage without erasing the fact that the original decomposition/assembly seam already
 landed here. `SO-2.3B-refine` is the later corrective continuation of this already-landed
-preliminary structured assembly; do not read `SO-2.1` / `SO-2.2` / `SO-2.3` below as untouched
-greenfield backlog or as a competing implementation plan.
+preliminary structured assembly and is now itself landed as the bridge-honesty refinement; do not
+read `SO-2.1` / `SO-2.2` / `SO-2.3` below as untouched greenfield backlog or as a competing
+implementation plan.
 
 - [x] Task SO-2.1: Add section-aware decomposition for long directive rows.
   - Acceptance: objective extraction can distinguish mission/scope, checklist, verification,
@@ -108,13 +109,12 @@ greenfield backlog or as a competing implementation plan.
 Remaining work note: this section is still open. The live implementation exposes structured state,
 but `comparison_key` still mirrors display text and compatibility text is not yet rendered from the
 structured frame as the semantic authority. Treat the current key as a stopgap only; no downstream
-migration may anchor on it until SO-3.2 lands. After the grounding follow-on closes, the next
-immediate packet is `SO-2.3B-refine`, which preserves structured state through checkpoint
-narrowing, tightens target honesty, and aligns verification grounding before the compatibility/key
-projection work begins. Once `SO-2.3B-refine` lands with structured preservation, target honesty,
-role-backed verification grounding, a green packet verification wall, and documented residual
-risks, `SO-3.1` and `SO-3.2` are the next packet boundary before `SO-4` and `SO-5`. Do not start
-`SO-4` / `SO-5` from this ledger until that `SO-3` boundary has actually landed.
+migration may anchor on it until SO-3.2 lands. The corrective bridge packet `SO-2.3B-refine` is
+now landed and its closeout evidence is explicit: structured state survives checkpoint narrowing,
+target honesty is fixed, verification grounding is role-backed, the packet verification wall is
+green, and residual risks are documented. Therefore `SO-3.1` and `SO-3.2` are the next packet
+boundary before `SO-4` and `SO-5`. Do not start `SO-4` / `SO-5` from this ledger until that
+`SO-3` boundary has actually landed.
 
 - [ ] Task SO-3.1: Render compatibility text from structured state when safe.
   - Acceptance: `ObjectiveSummary.text` becomes a compatibility view over structured state when the

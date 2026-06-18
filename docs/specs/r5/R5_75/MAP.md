@@ -1,6 +1,6 @@
 # R5.75 Map: Sequential Pre-R6 Hardening And Validation
 
-Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack so the map reflects the current active seam and next-packet order honestly.
+Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout so the map reflects the current active seam and next-packet order honestly.
 
 ## Objective
 
@@ -13,7 +13,7 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 3. The adapted Hugging Face export corpus remains secondary robustness evidence only; it is useful for hardening but does not redefine native Codex rollout semantics.
 4. `R5.5` landed meaningful improvements, but the validation handoff proved the family is not yet ready to declare “fully landed and R6-ready.”
 
-## Current Live Routing Note (2026-06-17)
+## Current Live Routing Note (2026-06-18)
 
 - `R5.75-0` is landed history.
 - The current active seam is still `R5.75-1`, now routed through
@@ -21,14 +21,16 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 - The live crate already has real section/clause decomposition, preliminary structured assembly,
   and grounding follow-on work through `SO-G6`, so this is no longer just a narrow
   `normalized_objective_text(...)` stopgap.
-- However, `R5.75-1` is still open because the checkpoint path currently overwrites the richer
-  `assemble_context(window)` objective with a compatibility-only summary during narrowing instead
-  of preserving that structured sidecar and only falling back when structure is absent; weak goal
-  clauses can still overclaim `target`, and verification-command extraction is not yet locked to
-  the grounded role/evidence wall that Phase 1 expects.
-- Therefore the next work is **not** `R5.75-2`. The next work stays inside `R5.75-1` and follows
-  the structured-objective packet order described below: `SO-2.3B-refine` -> `SO-3` -> `SO-4` ->
-  `SO-5`, then only after that promotion gate may `R5.75-2` begin.
+- `SO-2.3B-refine` is now landed inside `R5.75-1`: checkpoint narrowing preserves the richer
+  structured objective, weak goal clauses no longer fabricate `target`, verification-command
+  extraction is role-backed, the packet verification wall is green, and the packet closeout notes
+  record those facts plus residual risks explicitly.
+- However, `R5.75-1` is still open because `comparison_key` still mirrors display text,
+  compatibility text is not yet rendered from structured state as the semantic authority, and the
+  committed `objective_acceptance` harness/fixture contract is still absent.
+- Therefore the next work is **not** `R5.75-2`. The next work stays inside `R5.75-1`, and the
+  next packet boundary is now `SO-3`, followed by `SO-4` and `SO-5`; only after that promotion
+  gate may `R5.75-2` begin.
 
 ## Required Fixes Adopted Into R5.75
 
@@ -254,19 +256,19 @@ acceptance wall around that structure:
 
 ### Remaining `R5.75-1` Landing Order Before `R5.75-2`
 
-1. **`SO-2.3B-refine` / `SO-Bridge-1`**
-   - preserve the structured `assemble_context(window)` objective through checkpoint narrowing,
-   - keep legacy narrowed text fallback-only and display-only if it is still needed,
-   - stop weak goal clauses from fabricating `target`,
-   - align verification-role grounding with verifier-command extraction.
-2. **`SO-3.1` / `SO-3.2`**
+1. **`SO-2.3B-refine` / `SO-Bridge-1`** `[landed]`
+   - preserved the structured `assemble_context(window)` objective through checkpoint narrowing,
+   - kept legacy narrowed text fallback-only and display-only when needed,
+   - stopped weak goal clauses from fabricating `target`, and
+   - aligned verification-role grounding with verifier-command extraction.
+2. **`SO-3.1` / `SO-3.2`** `[next]`
    - render compatibility text from structured state when safe,
    - derive deterministic `comparison_key` from structured semantic state.
-3. **`SO-4.1` / `SO-4.2`**
+3. **`SO-4.1` / `SO-4.2`** `[blocked on SO-3]`
    - add `tests/objective_acceptance.rs`,
    - lock the expected-shape contract for structured fields, grounding, forbidden promotions,
      compatibility rendering, and unknown-field correctness.
-4. **`SO-5.*`**
+4. **`SO-5.*`** `[blocked on SO-3]`
    - seed the locked acceptance corpus: WDAP, preserved boilerplate-target cases, concise `/goal`,
      review/no-code, and planning/docs families.
 

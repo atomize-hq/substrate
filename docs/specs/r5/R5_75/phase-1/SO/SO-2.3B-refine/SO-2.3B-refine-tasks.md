@@ -1,10 +1,11 @@
 # Tasks: SO-2.3B-refine Structured Objective Bridge Honesty
 
-Status: TASKS artifact created on 2026-06-17 after the packet-local SPEC and PLAN were written.
-This is a docs-first implementation ledger for the next bounded packet inside `R5.75-1`. Do not
-advance to `SO-3` until structured state survives checkpoint narrowing, target honesty is fixed,
-verification grounding is role-backed, the packet verification wall is green, and residual risks
-are explicit.
+Status: TASKS artifact created on 2026-06-17 after the packet-local SPEC and PLAN were written;
+closeout reconciled on 2026-06-18 after `B1.1` through `B5.2` were verified against live code,
+tests, and packet docs. This remains the audit ledger for the bounded corrective packet inside
+`R5.75-1`; `SO-3` is next only because structured state now survives checkpoint narrowing, target
+honesty is fixed, verification grounding is role-backed, the packet verification wall is green,
+and residual risks are explicit.
 
 Keep each task as close as possible to five touched files or fewer. Stay analyzer-local unless a
 small compile-safe bridge proves unavoidable.
@@ -46,7 +47,7 @@ This packet does **not** cover:
 
 ## B1: Preserve Structured Objective Through Checkpoint Narrowing
 
-- [ ] Task B1.1: Stop checkpoint narrowing from erasing structured state and prove it in the same packet.
+- [x] Task B1.1: Stop checkpoint narrowing from erasing structured state and prove it in the same packet.
   - Acceptance: `checkpoint_analyses(...)` preserves the richer `context.objective` already
     produced by `assemble_context(&window)` when that summary contains `structured`, instead of
     overwriting it with `ObjectiveSummary::compatibility(...)`; any legacy narrowed summary remains
@@ -90,7 +91,7 @@ Never derive `ObjectiveTargetKind::ConceptualTopic` from the whole goal clause a
 conservative fallback for weak review/analyze/fix clauses is `target == None` unless a specific
 named conceptual artifact/topic span is present.
 
-- [ ] Task B2.1: Separate grounded goal selection from explicit target extraction and prove vague-target unknown behavior.
+- [x] Task B2.1: Separate grounded goal selection from explicit target extraction and prove vague-target unknown behavior.
   - Acceptance:
     - vague review/analyze/fix prompts can keep a real goal while leaving `target == None`
     - `ObjectiveUnknown { field_name: "target", ... }` is present
@@ -108,7 +109,7 @@ named conceptual artifact/topic span is present.
     - `crates/agent-drift-analyzer/src/context/objective.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task B2.2: Preserve explicit concrete targets and prove the preservation matrix in the same packet.
+- [x] Task B2.2: Preserve explicit concrete targets and prove the preservation matrix in the same packet.
   - Acceptance: explicit file/directory, instruction-surface, spec/doc, test/verifier,
     crate/package, workspace-ref, directly tied packet/work-item targets, and specific named
     conceptual artifact/topic spans still survive extraction after the honesty tightening; and the
@@ -122,7 +123,7 @@ named conceptual artifact/topic span is present.
 
 ## B3: Align Verification Grounding With Verification Extraction
 
-- [ ] Task B3.1: Make verification-bearing clauses discoverable without a dedicated heading and prove it in the same packet.
+- [x] Task B3.1: Make verification-bearing clauses discoverable without a dedicated heading and prove it in the same packet.
   - Acceptance: bullet-only or inline verifier clauses that contain command-like verification work
     can produce grounded verification evidence even when the section is `Mission`, `Scope`, or
     `UnknownSection`; when `has_explicit_verification_cue(...)` is true, the clause receives an
@@ -135,7 +136,7 @@ named conceptual artifact/topic span is present.
     - `crates/agent-drift-analyzer/src/context/objective.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task B3.2: Prefer clause-grounded verification extraction over whole-row fallback and prove it in the same packet.
+- [x] Task B3.2: Prefer clause-grounded verification extraction over whole-row fallback and prove it in the same packet.
   - Acceptance: `verification_commands` come from any clause carrying a verification role
     candidate when such clauses exist, not only from clauses where `Verification` is the top role,
     while whole-candidate fallback remains only a conservative backup path; and the packet lands a
@@ -151,7 +152,7 @@ named conceptual artifact/topic span is present.
 
 ## B4: Final Coverage Audit
 
-- [ ] Task B4.1: Audit final coverage and add any missing combined-case regressions.
+- [x] Task B4.1: Audit final coverage and add any missing combined-case regressions.
   - Acceptance: after B1-B3 land, the packet audits the remaining proof surface and adds only the
     missing combined-case or residual regressions needed to make the family fully reviewable and
     durable; B4 does not carry the core proof load for B1-B3.
@@ -163,7 +164,7 @@ named conceptual artifact/topic span is present.
 
 ## B5: Packet Closeout
 
-- [ ] Task B5.1: Run the packet verification wall.
+- [x] Task B5.1: Run the packet verification wall.
   - Acceptance: focused checkpoint regressions and the full analyzer suite are green on the landed
     packet.
   - Verify:
@@ -172,7 +173,7 @@ named conceptual artifact/topic span is present.
   - Files:
     - no source changes required unless validation exposes a packet-scoped defect
 
-- [ ] Task B5.2: Capture the next-packet handoff honestly.
+- [x] Task B5.2: Capture the next-packet handoff honestly.
   - Acceptance:
     - packet closeout notes record that `SO-2.3B-refine` refined already-landed preliminary
       structured assembly rather than starting a competing greenfield plan
@@ -186,3 +187,27 @@ named conceptual artifact/topic span is present.
   - Files:
     - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
     - no additional files required unless closeout notes are updated during landing
+
+## Closeout Notes (2026-06-18)
+
+- This packet closed as a corrective refinement over already-landed preliminary structured
+  assembly from `SO-2.1` / `SO-2.2` / `SO-2.3`; it did not replace that earlier seam with a
+  competing greenfield plan.
+- Structured preservation is now explicit in live behavior: `checkpoint_analyses(...)` preserves
+  the richer structured objective during narrowing, and the regression wall includes
+  `checkpoints_preserve_structured_objective_when_narrowing_runs`.
+- Target honesty is now explicit in live behavior: vague review/analyze/fix asks keep a grounded
+  goal while leaving `target` unknown, and the explicit-target preservation matrix remains green.
+- Verification grounding is now explicit in live behavior: verification commands are backed by
+  clause-level verification-role evidence across unheaded, inline, and mixed-role cases.
+- Packet verification wall rerun on 2026-06-18:
+  - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+  - `cargo test -p agent-drift-analyzer -- --nocapture`
+- Next packet boundary: `SO-3.1` / `SO-3.2` only.
+- Still blocked: `SO-4` / `SO-5` remain blocked until `SO-3` lands.
+- Residual risks:
+  - `comparison_key` still mirrors display text until `SO-3.2` derives it from structured state.
+  - compatibility text is still not rendered from structured state as the semantic authority until
+    `SO-3.1`.
+  - the committed `objective_acceptance` harness and locked fixture wall are still absent until
+    `SO-4` / `SO-5` after `SO-3`.
