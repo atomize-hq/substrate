@@ -4091,27 +4091,8 @@ mod tests {
     };
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope};
     use serial_test::serial;
-    use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
-
-    struct CurrentDirGuard {
-        original: PathBuf,
-    }
-
-    impl CurrentDirGuard {
-        fn change_to(path: &Path) -> Self {
-            let original = std::env::current_dir().expect("current dir");
-            std::env::set_current_dir(path).expect("set current dir");
-            Self { original }
-        }
-    }
-
-    impl Drop for CurrentDirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original);
-        }
-    }
 
     struct EnvVarGuard {
         key: &'static str,
@@ -4136,112 +4117,57 @@ mod tests {
         }
     }
 
-    fn write_agent_file(
-        agent_id: &str,
-        runtime_family: &str,
-        scope: Option<&str>,
-        binary: &Path,
-    ) -> String {
-        let execution_scope = scope
-            .map(|scope| format!("  execution:\n    scope: {scope}\n"))
-            .unwrap_or_default();
-        format!(
-            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-            binary.display()
-        )
-    }
-
-    fn write_test_runtime_inventory(
-        substrate_home: &Path,
-        workspace_root: &Path,
-        include_world_backend: bool,
-        allow_host_backend: bool,
-    ) {
-        let allowed_backends = match (allow_host_backend, include_world_backend) {
-            (true, true) => "    - cli:codex\n    - cli:claude_code\n",
-            (true, false) => "    - cli:codex\n",
-            (false, true) => "    - cli:claude_code\n",
-            (false, false) => "",
-        };
-        fs::create_dir_all(substrate_home.join("agents")).expect("agents dir");
-        fs::write(
-            substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
-        )
-        .expect("write config");
-        fs::write(
-            substrate_home.join("policy.yaml"),
-            format!(
-                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}",
-            ),
-        )
-        .expect("write policy");
-        fs::write(
-            workspace_root.join(".substrate-profile"),
-            "id: test-policy\nname: Test Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\n",
-        )
-        .expect("write workspace profile");
-
-        let binary = std::env::current_exe().expect("current test binary");
-        fs::write(
-            substrate_home.join("agents/codex.yaml"),
-            write_agent_file("codex", "codex", Some("host"), &binary),
-        )
-        .expect("write host orchestrator");
-        if include_world_backend {
-            fs::write(
-                substrate_home.join("agents/claude_code.yaml"),
-                write_agent_file("claude_code", "claude_code", Some("world"), &binary),
-            )
-            .expect("write world backend");
-        }
-    }
-
-    fn write_test_runtime_inventory_with_unscoped_member(
-        substrate_home: &Path,
-        workspace_root: &Path,
-        global_scope: &str,
-        workspace_scope: Option<&str>,
-    ) {
-        write_test_runtime_inventory(substrate_home, workspace_root, true, true);
-        fs::write(
-            substrate_home.join("config.yaml"),
-            format!(
-                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n",
-            ),
-        )
-        .expect("write global scope config");
-        if let Some(workspace_scope) = workspace_scope {
-            let workspace_config_dir = workspace_root.join(".substrate");
-            fs::create_dir_all(&workspace_config_dir).expect("workspace config dir");
-            fs::write(
-                workspace_config_dir.join("workspace.yaml"),
-                format!("agents:\n  defaults:\n    execution:\n      scope: {workspace_scope}\n",),
-            )
-            .expect("write workspace scope config");
-        }
-
-        let binary = std::env::current_exe().expect("current test binary");
-        fs::write(
-            substrate_home.join("agents/claude_code.yaml"),
-            write_agent_file("claude_code", "claude_code", None, &binary),
-        )
-        .expect("write unscoped member backend");
-    }
-
-    fn command_context_for_test(cwd: &Path) -> AgentCommandContext {
-        let effective_config =
-            config_model::resolve_effective_config(cwd, &CliConfigOverrides::default())
-                .expect("resolve effective config");
-        let (base_policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
-            .expect("resolve effective policy");
-        let inventory =
-            load_effective_agent_inventory(cwd, &base_policy).expect("load agent inventory");
+    fn command_context_for_test(
+        effective_config: SubstrateConfig,
+        base_policy: Policy,
+        inventory: BTreeMap<String, AgentInventoryEntryV1>,
+    ) -> AgentCommandContext {
         AgentCommandContext {
             effective_config,
             base_policy,
             inventory,
         }
+    }
+
+    fn effective_config_for_test(default_scope: AgentExecutionScope) -> SubstrateConfig {
+        SubstrateConfig {
+            agents: crate::execution::config_model::AgentsConfig {
+                enabled: true,
+                defaults: crate::execution::config_model::AgentDefaultsConfig {
+                    execution: crate::execution::config_model::AgentDefaultsExecutionConfig {
+                        scope: default_scope,
+                    },
+                    cli: crate::execution::config_model::AgentDefaultsCliConfig {
+                        mode: AgentCliMode::Persistent,
+                    },
+                },
+                hub: crate::execution::config_model::AgentHubConfig {
+                    orchestrator_agent_id: "codex".to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn base_policy_for_test(allowed_backends: &[&str]) -> Policy {
+        Policy {
+            agents_allowed_backends: allowed_backends
+                .iter()
+                .map(|id| (*id).to_string())
+                .collect(),
+            ..Policy::default()
+        }
+    }
+
+    fn inventory_for_test(
+        entries: Vec<AgentInventoryEntryV1>,
+    ) -> BTreeMap<String, AgentInventoryEntryV1> {
+        entries
+            .into_iter()
+            .map(|entry| (entry.file.id.clone(), entry))
+            .collect()
     }
 
     fn host_start_args() -> AgentStartArgs {
@@ -4383,6 +4309,20 @@ mod tests {
         }
     }
 
+    fn inventory_entry_with_optional_scope_for_test(
+        agent_id: &str,
+        runtime_family: &str,
+        scope: Option<AgentExecutionScope>,
+    ) -> AgentInventoryEntryV1 {
+        let mut entry = inventory_entry_for_test(
+            agent_id,
+            runtime_family,
+            scope.unwrap_or(AgentExecutionScope::Host),
+        );
+        entry.file.config.execution.scope = scope;
+        entry
+    }
+
     #[test]
     fn live_tool_support_posture_json_tracks_runtime_family_not_agent_id() {
         let entry = inventory_entry_for_test(
@@ -4506,16 +4446,15 @@ mod tests {
     #[test]
     #[serial]
     fn host_start_launch_plan_keeps_eager_host_attach_behavior() {
-        let temp = TempDir::new().expect("tempdir");
-        let workspace_root = temp.path().join("workspace");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&workspace_root).expect("workspace root");
-        fs::create_dir_all(&substrate_home).expect("substrate home");
-        write_test_runtime_inventory(&substrate_home, &workspace_root, false, true);
-        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
-
-        let context = command_context_for_test(&workspace_root);
+        let context = command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::Host),
+            base_policy_for_test(&["cli:codex"]),
+            inventory_for_test(vec![inventory_entry_for_test(
+                "codex",
+                "codex",
+                AgentExecutionScope::Host,
+            )]),
+        );
         let plan =
             build_host_start_launch_plan(&host_start_args(), &context).expect("host launch plan");
 
@@ -4598,16 +4537,14 @@ mod tests {
     #[test]
     #[serial]
     fn world_start_launch_plan_builds_host_helper_with_world_visible_identity() {
-        let temp = TempDir::new().expect("tempdir");
-        let workspace_root = temp.path().join("workspace");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&workspace_root).expect("workspace root");
-        fs::create_dir_all(&substrate_home).expect("substrate home");
-        write_test_runtime_inventory(&substrate_home, &workspace_root, true, true);
-        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
-
-        let context = command_context_for_test(&workspace_root);
+        let context = command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::Host),
+            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            inventory_for_test(vec![
+                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
+                inventory_entry_for_test("claude_code", "claude_code", AgentExecutionScope::World),
+            ]),
+        );
         let plan = build_world_start_session_birth_plan(&world_start_args(), &context)
             .expect("world session birth plan");
 
@@ -4638,16 +4575,14 @@ mod tests {
     #[test]
     #[serial]
     fn build_start_launch_plan_routes_world_scope_to_host_helper_path() {
-        let temp = TempDir::new().expect("tempdir");
-        let workspace_root = temp.path().join("workspace");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&workspace_root).expect("workspace root");
-        fs::create_dir_all(&substrate_home).expect("substrate home");
-        write_test_runtime_inventory(&substrate_home, &workspace_root, true, true);
-        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
-
-        let context = command_context_for_test(&workspace_root);
+        let context = command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::Host),
+            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            inventory_for_test(vec![
+                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
+                inventory_entry_for_test("claude_code", "claude_code", AgentExecutionScope::World),
+            ]),
+        );
         let plan = build_start_launch_plan(&world_start_args(), &context)
             .expect("world start launch plan");
 
@@ -4659,21 +4594,14 @@ mod tests {
     #[test]
     #[serial]
     fn build_start_launch_plan_resolves_omitted_scope_from_workspace_defaults_before_global() {
-        let temp = TempDir::new().expect("tempdir");
-        let workspace_root = temp.path().join("workspace");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&workspace_root).expect("workspace root");
-        fs::create_dir_all(&substrate_home).expect("substrate home");
-        write_test_runtime_inventory_with_unscoped_member(
-            &substrate_home,
-            &workspace_root,
-            "host",
-            Some("world"),
+        let context = command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::World),
+            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            inventory_for_test(vec![
+                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
+                inventory_entry_with_optional_scope_for_test("claude_code", "claude_code", None),
+            ]),
         );
-        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
-
-        let context = command_context_for_test(&workspace_root);
         let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
             .expect("omitted scope launch plan");
 
@@ -4685,21 +4613,14 @@ mod tests {
     #[test]
     #[serial]
     fn build_start_launch_plan_resolves_omitted_scope_from_global_defaults_when_workspace_unset() {
-        let temp = TempDir::new().expect("tempdir");
-        let workspace_root = temp.path().join("workspace");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&workspace_root).expect("workspace root");
-        fs::create_dir_all(&substrate_home).expect("substrate home");
-        write_test_runtime_inventory_with_unscoped_member(
-            &substrate_home,
-            &workspace_root,
-            "host",
-            None,
+        let context = command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::Host),
+            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            inventory_for_test(vec![
+                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
+                inventory_entry_with_optional_scope_for_test("claude_code", "claude_code", None),
+            ]),
         );
-        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
-
-        let context = command_context_for_test(&workspace_root);
         let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
             .expect("omitted scope launch plan");
 
@@ -4714,21 +4635,14 @@ mod tests {
     #[serial]
     fn build_start_launch_plan_resolves_selected_claude_code_host_backend_without_hidden_fallback()
     {
-        let temp = TempDir::new().expect("tempdir");
-        let workspace_root = temp.path().join("workspace");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&workspace_root).expect("workspace root");
-        fs::create_dir_all(&substrate_home).expect("substrate home");
-        write_test_runtime_inventory_with_unscoped_member(
-            &substrate_home,
-            &workspace_root,
-            "host",
-            None,
+        let context = command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::Host),
+            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            inventory_for_test(vec![
+                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
+                inventory_entry_with_optional_scope_for_test("claude_code", "claude_code", None),
+            ]),
         );
-        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
-
-        let context = command_context_for_test(&workspace_root);
         let mut args = omitted_scope_start_args("cli:claude_code");
         args.prompt_source.prompt = Some("hello from claude start".to_string());
         let plan = build_start_launch_plan(&args, &context)
@@ -4749,16 +4663,14 @@ mod tests {
     #[test]
     #[serial]
     fn world_start_session_birth_plan_fails_closed_without_host_attach_backend() {
-        let temp = TempDir::new().expect("tempdir");
-        let workspace_root = temp.path().join("workspace");
-        let substrate_home = temp.path().join("substrate-home");
-        fs::create_dir_all(&workspace_root).expect("workspace root");
-        fs::create_dir_all(&substrate_home).expect("substrate home");
-        write_test_runtime_inventory(&substrate_home, &workspace_root, true, false);
-        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", &substrate_home);
-
-        let context = command_context_for_test(&workspace_root);
+        let context = command_context_for_test(
+            effective_config_for_test(AgentExecutionScope::Host),
+            base_policy_for_test(&["cli:claude_code"]),
+            inventory_for_test(vec![
+                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
+                inventory_entry_for_test("claude_code", "claude_code", AgentExecutionScope::World),
+            ]),
+        );
         let err = build_world_start_session_birth_plan(&world_start_args(), &context)
             .expect_err("missing host attach backend must fail closed");
 
