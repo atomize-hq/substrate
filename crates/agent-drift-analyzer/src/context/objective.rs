@@ -44,7 +44,7 @@ impl ObjectiveSummary {
         evidence: Vec<EvidenceRef>,
         structured: StructuredObjective,
     ) -> Self {
-        let comparison_key = text.clone();
+        let comparison_key = comparison_key_from_structured(&structured);
         Self {
             text,
             comparison_key,
@@ -57,7 +57,9 @@ impl ObjectiveSummary {
     pub(crate) fn with_compatibility_display_from(&self, compatibility: &ObjectiveSummary) -> Self {
         let mut summary = self.clone();
         summary.text = compatibility.text.clone();
-        summary.comparison_key = compatibility.comparison_key.clone();
+        if summary.structured.is_none() || summary.comparison_key.is_empty() {
+            summary.comparison_key = compatibility.comparison_key.clone();
+        }
         for command in &compatibility.verification_commands {
             if !summary.verification_commands.contains(command) {
                 summary.verification_commands.push(command.clone());
@@ -1097,6 +1099,173 @@ fn structured_compatibility_score(span: &ObjectiveEvidenceSpan) -> i32 {
     score + span.excerpt.len().min(180) as i32
 }
 
+fn comparison_key_from_structured(structured: &StructuredObjective) -> String {
+    if structured.objective_class != ObjectiveClass::TaskStatement {
+        return "not_task_statement".to_string();
+    }
+
+    let mut parts = vec![comparison_key_intent(structured.primary_intent).to_string()];
+    if let Some(target) = &structured.target {
+        push_unique_comparison_segments(&mut parts, comparison_key_segments_for_target(target));
+    } else {
+        push_unique_comparison_segment(&mut parts, "unknown_target".to_string());
+    }
+
+    for constraint in &structured.constraints {
+        push_unique_comparison_segments(
+            &mut parts,
+            comparison_key_segments_for_constraint(constraint),
+        );
+    }
+
+    for success_condition in &structured.success_conditions {
+        push_unique_comparison_segments(
+            &mut parts,
+            comparison_key_segments_for_success_condition(success_condition),
+        );
+    }
+
+    parts.join("|")
+}
+
+fn comparison_key_intent(intent: ObjectiveIntent) -> &'static str {
+    match intent {
+        ObjectiveIntent::Implement => "implement",
+        ObjectiveIntent::Debug => "debug",
+        ObjectiveIntent::Review => "review",
+        ObjectiveIntent::Research => "research",
+        ObjectiveIntent::Plan => "plan",
+        ObjectiveIntent::Validate => "validate",
+        ObjectiveIntent::Docs => "docs",
+        ObjectiveIntent::OtherTask => "other_task",
+    }
+}
+
+fn comparison_key_target_kind(kind: ObjectiveTargetKind) -> &'static str {
+    match kind {
+        ObjectiveTargetKind::RepoSlice => "repo_slice",
+        ObjectiveTargetKind::CrateOrPackage => "crate_or_package",
+        ObjectiveTargetKind::FileOrDirectory => "file_or_directory",
+        ObjectiveTargetKind::SpecOrDesignDoc => "spec_or_design_doc",
+        ObjectiveTargetKind::TestOrVerifier => "test_or_verifier",
+        ObjectiveTargetKind::SkillOrInstructionSurface => "skill_or_instruction_surface",
+        ObjectiveTargetKind::ExternalArtifact => "external_artifact",
+        ObjectiveTargetKind::ConceptualTopic => "conceptual_topic",
+        ObjectiveTargetKind::UnknownTarget => "unknown_target",
+    }
+}
+
+fn comparison_key_segments_for_target(target: &ObjectiveTarget) -> Vec<String> {
+    let mut segments = vec![comparison_key_target_kind(target.kind).to_string()];
+
+    let mut specifics = target
+        .paths
+        .iter()
+        .chain(target.workspace_refs.iter())
+        .chain(target.named_artifacts.iter())
+        .map(|value| normalize_comparison_key_segment(value))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+
+    if specifics.is_empty() {
+        let display = normalize_comparison_key_segment(&target.display);
+        if !display.is_empty() && display != comparison_key_target_kind(target.kind) {
+            specifics.push(display);
+        }
+    }
+
+    specifics.sort();
+    specifics.dedup();
+    segments.extend(specifics);
+    segments
+}
+
+fn comparison_key_segments_for_constraint(constraint: &ObjectiveConstraint) -> Vec<String> {
+    if !constraint
+        .evidence
+        .iter()
+        .any(comparison_key_allows_constraint_evidence)
+    {
+        return Vec::new();
+    }
+
+    match constraint.constraint_kind {
+        ObjectiveConstraintKind::NoCode => vec!["no_code".to_string()],
+        ObjectiveConstraintKind::DocsOnly => vec!["docs_only".to_string()],
+        ObjectiveConstraintKind::ReviewOnly => vec!["review_only".to_string()],
+        ObjectiveConstraintKind::ValidateOnly => vec!["validate_only".to_string()],
+        ObjectiveConstraintKind::PlatformBoundary => {
+            comparison_key_platform_segments(&constraint.display)
+        }
+        ObjectiveConstraintKind::ScopeBoundary
+        | ObjectiveConstraintKind::DeliverableFormat
+        | ObjectiveConstraintKind::OtherConstraint => Vec::new(),
+    }
+}
+
+fn comparison_key_allows_constraint_evidence(span: &ObjectiveEvidenceSpan) -> bool {
+    matches!(
+        span.section_kind,
+        ObjectiveSectionKind::Scope
+            | ObjectiveSectionKind::Mission
+            | ObjectiveSectionKind::Constraints
+            | ObjectiveSectionKind::UnknownSection
+    )
+}
+
+fn comparison_key_platform_segments(text: &str) -> Vec<String> {
+    let lowered = text.to_ascii_lowercase();
+    let mut segments = Vec::new();
+    for platform in ["linux", "macos", "windows"] {
+        if lowered.contains(platform) {
+            segments.push(platform.to_string());
+        }
+    }
+    segments
+}
+
+fn comparison_key_segments_for_success_condition(
+    success_condition: &SuccessCondition,
+) -> Vec<String> {
+    let lowered = success_condition.display.to_ascii_lowercase();
+    if contains_any(&lowered, &["green", "clean"]) {
+        vec!["green".to_string()]
+    } else if contains_any(&lowered, &["success", "succeed", "pass"]) {
+        vec!["success".to_string()]
+    } else {
+        Vec::new()
+    }
+}
+
+fn push_unique_comparison_segment(parts: &mut Vec<String>, segment: String) {
+    if !segment.is_empty() && !parts.iter().any(|existing| existing == &segment) {
+        parts.push(segment);
+    }
+}
+
+fn push_unique_comparison_segments(parts: &mut Vec<String>, segments: Vec<String>) {
+    for segment in segments {
+        push_unique_comparison_segment(parts, segment);
+    }
+}
+
+fn normalize_comparison_key_segment(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+
+    for ch in value.trim().chars().flat_map(|ch| ch.to_lowercase()) {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch);
+            last_was_separator = false;
+        } else if !last_was_separator {
+            normalized.push('_');
+            last_was_separator = true;
+        }
+    }
+
+    normalized.trim_matches('_').to_string()
+}
+
 fn assemble_structured_objective(
     decomposition: &ObjectiveDecomposition,
     verification_commands: &[String],
@@ -1193,10 +1362,7 @@ fn evidence_span_for_clause(clause: &ObjectiveClause) -> ObjectiveEvidenceSpan {
     evidence_span_for_role(clause, &role)
 }
 
-fn evidence_span_for_role(
-    clause: &ObjectiveClause,
-    role: &RoleCandidate,
-) -> ObjectiveEvidenceSpan {
+fn evidence_span_for_role(clause: &ObjectiveClause, role: &RoleCandidate) -> ObjectiveEvidenceSpan {
     ObjectiveEvidenceSpan {
         row: clause.row_ref.clone(),
         source_kind: clause.source_kind,
@@ -2417,7 +2583,10 @@ mod tests {
             .expect("goal evidence span");
         assert_eq!(goal_span.excerpt, summary.text);
         assert_eq!(
-            structured.target.as_ref().map(|target| target.display.as_str()),
+            structured
+                .target
+                .as_ref()
+                .map(|target| target.display.as_str()),
             Some("crates/agent-drift-analyzer/src/context/objective.rs")
         );
         assert_eq!(
@@ -2452,20 +2621,27 @@ mod tests {
         );
 
         let summary = extract_objective(&rows);
-        assert_eq!(summary.text, "Review the objective extractor, run make test.");
+        assert_eq!(
+            summary.text,
+            "Review the objective extractor, run make test."
+        );
         let Some(structured) = summary.structured else {
             panic!("structured sidecar")
         };
         assert_eq!(structured.verification_commands, vec!["make test"]);
         assert!(structured.evidence_spans.iter().any(|span| {
             span.role == ObjectiveRole::Goal
-                && span.excerpt.contains("Review the objective extractor, run make test.")
+                && span
+                    .excerpt
+                    .contains("Review the objective extractor, run make test.")
                 && span.section_index == Some(0)
                 && span.clause_index == Some(0)
         }));
         assert!(structured.evidence_spans.iter().any(|span| {
             span.role == ObjectiveRole::Verification
-                && span.excerpt.contains("Review the objective extractor, run make test.")
+                && span
+                    .excerpt
+                    .contains("Review the objective extractor, run make test.")
                 && span.section_index == Some(0)
                 && span.clause_index == Some(0)
         }));
@@ -2565,6 +2741,49 @@ mod tests {
             .unknowns
             .iter()
             .any(|unknown| unknown.field_name == "primary_goal"));
+    }
+
+    #[test]
+    fn comparison_key_uses_structured_state_instead_of_checklist_wording() {
+        let scope = "Validate Packet SO-3.2 only until the verification wall is green.";
+        let prompt_a = format!(
+            "## Scope\n{scope}\n\n## Checklist\n- Run this task on a linux machine.\n- Inspect objective.rs before editing."
+        );
+        let prompt_b = format!(
+            "## Scope\n{scope}\n\n## Checklist\n- Keep validation on linux only.\n- Read the packet notes before touching code."
+        );
+
+        let summary_a = extract_objective(&[test_row(&prompt_a)]);
+        let summary_b = extract_objective(&[test_row(&prompt_b)]);
+
+        assert_eq!(summary_a.text, scope);
+        assert_eq!(summary_b.text, scope);
+        assert_eq!(summary_a.comparison_key, "validate|repo_slice|so_3_2|green");
+        assert_eq!(summary_a.comparison_key, summary_b.comparison_key);
+    }
+
+    #[test]
+    fn compatibility_overlay_preserves_structured_comparison_key() {
+        let summary = extract_objective(&[test_row(
+            "/goal Determine whether the AGENTS.md instruction block and <skill> section should change.",
+        )]);
+        let compatibility = ObjectiveSummary::compatibility(
+            "Filesystem sandboxing defines which files can be read or written.".to_string(),
+            Vec::new(),
+            Vec::new(),
+        );
+
+        let merged = summary.with_compatibility_display_from(&compatibility);
+
+        assert_eq!(
+            merged.text,
+            "Filesystem sandboxing defines which files can be read or written."
+        );
+        assert_eq!(merged.comparison_key, summary.comparison_key);
+        assert_eq!(
+            merged.comparison_key,
+            "review|skill_or_instruction_surface|agents_md|instruction_block|skill"
+        );
     }
 
     #[test]

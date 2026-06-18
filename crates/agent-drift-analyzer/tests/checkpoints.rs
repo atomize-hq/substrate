@@ -24,10 +24,11 @@ fn checkpoints_are_deterministic_and_session_scoped() {
         first.sessions[0].checkpoints,
         second.sessions[0].checkpoints
     );
-    assert_eq!(
-        first.sessions[0].context.objective.comparison_key,
-        first.sessions[0].context.objective.text
-    );
+    assert!(!first.sessions[0]
+        .context
+        .objective
+        .comparison_key
+        .is_empty());
     assert!(first.sessions[0].context.objective.structured.is_some());
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
@@ -4584,7 +4585,10 @@ Review the objective extractor, run make test, and return concrete fixes."#;
     ]);
 
     let objective = &result.sessions[0].context.objective;
-    assert_eq!(objective.text, "Review the objective extractor, run make test.");
+    assert_eq!(
+        objective.text,
+        "Review the objective extractor, run make test."
+    );
     assert_eq!(objective.verification_commands, vec!["make test"]);
 
     let structured = objective.structured.as_ref().expect("structured objective");
@@ -4592,14 +4596,18 @@ Review the objective extractor, run make test, and return concrete fixes."#;
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Goal
             && matches!(span.section_kind, ObjectiveSectionKind::Scope)
-            && span.excerpt.contains("Review the objective extractor, run make test.")
+            && span
+                .excerpt
+                .contains("Review the objective extractor, run make test.")
             && span.section_index.is_some()
             && span.clause_index.is_some()
     }));
     assert!(structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Verification
             && matches!(span.section_kind, ObjectiveSectionKind::Scope)
-            && span.excerpt.contains("Review the objective extractor, run make test.")
+            && span
+                .excerpt
+                .contains("Review the objective extractor, run make test.")
             && span.section_index.is_some()
             && span.clause_index.is_some()
     }));
@@ -4685,7 +4693,8 @@ Review crates/agent-drift-analyzer/src/context/objective.rs only and run cargo t
             && span.clause_index.is_some()
     }));
     assert!(!structured.evidence_spans.iter().any(|span| {
-        span.role == ObjectiveRole::Goal && span.excerpt.contains("Inspect AGENTS.md before editing.")
+        span.role == ObjectiveRole::Goal
+            && span.excerpt.contains("Inspect AGENTS.md before editing.")
     }));
     assert!(structured
         .deliverables
@@ -4754,6 +4763,51 @@ Return with changed files and residual risk.
         })
         .expect("goal evidence span");
     assert_eq!(goal_span.excerpt, objective.text);
+}
+
+#[test]
+fn checkpoints_context_objective_comparison_key_ignores_boilerplate_wording_changes() {
+    let goal =
+        "/goal Determine whether the AGENTS.md instruction block and <skill> section should change.";
+    let prompt_a = format!(
+        "Filesystem sandboxing defines which files can be read or written. Approval policy is currently never.\n\n{goal}"
+    );
+    let prompt_b = format!(
+        "Use memory by default when the query mentions a workspace. Memory citation requirements stay active.\n\n{goal}"
+    );
+
+    let first = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &prompt_a),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,40p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+    ]);
+    let second = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", &prompt_b),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,40p' AGENTS.md","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let first_objective = &first.sessions[0].context.objective;
+    let second_objective = &second.sessions[0].context.objective;
+
+    assert_eq!(first_objective.text, goal);
+    assert_eq!(second_objective.text, goal);
+    assert_eq!(
+        first_objective.comparison_key,
+        "review|skill_or_instruction_surface|agents_md|instruction_block|skill"
+    );
+    assert_eq!(
+        first_objective.comparison_key,
+        second_objective.comparison_key
+    );
 }
 
 #[test]
@@ -4921,19 +4975,15 @@ fn checkpoints_context_objective_preserves_b22_explicit_target_family_matrix() {
     for (index, case) in cases.iter().enumerate() {
         let result = analyze_custom_rows(vec![
             prompt_row(0, "turn-001", case.prompt),
-            tool_call_row(
-                1,
-                "turn-001",
-                "functions.shell_command",
-                case.tool_command,
-            ),
+            tool_call_row(1, "turn-001", "functions.shell_command", case.tool_command),
         ]);
 
         let objective = &result.sessions[0].context.objective;
         let structured = objective.structured.as_ref().expect("structured objective");
-        let target = structured.target.as_ref().unwrap_or_else(|| {
-            panic!("case {} missing target for {}", index, case.name)
-        });
+        let target = structured
+            .target
+            .as_ref()
+            .unwrap_or_else(|| panic!("case {} missing target for {}", index, case.name));
 
         assert_eq!(target.kind, case.expected_kind, "case {}", case.name);
         assert_eq!(target.display, case.expected_display, "case {}", case.name);
@@ -4944,10 +4994,14 @@ fn checkpoints_context_objective_preserves_b22_explicit_target_family_matrix() {
             "case {}",
             case.name
         );
-        assert!(structured
-            .unknowns
-            .iter()
-            .all(|unknown| unknown.field_name != "target"), "case {}", case.name);
+        assert!(
+            structured
+                .unknowns
+                .iter()
+                .all(|unknown| unknown.field_name != "target"),
+            "case {}",
+            case.name
+        );
     }
 }
 
@@ -4968,7 +5022,9 @@ fn checkpoints_context_objective_does_not_treat_version_tokens_as_work_item_targ
     let objective = &result.sessions[0].context.objective;
     let structured = objective.structured.as_ref().expect("structured objective");
 
-    assert!(objective.text.contains("Review whether v0.6 landed correctly"));
+    assert!(objective
+        .text
+        .contains("Review whether v0.6 landed correctly"));
     assert!(structured.target.is_none());
     assert!(structured
         .unknowns
