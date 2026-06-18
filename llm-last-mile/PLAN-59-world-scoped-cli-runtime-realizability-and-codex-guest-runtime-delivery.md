@@ -14,7 +14,7 @@ This plan must land:
 
 1. fail-closed validation/remediation,
 2. Substrate-owned guest runtime delivery through world-deps,
-3. a remediation packet that closes unsupported-guest and host-runtime leakage gaps before installer work proceeds,
+3. a remediation packet that closes guest-tuple fail-closed and host-runtime leakage gaps before installer work proceeds,
 4. prod/dev installer-time provisioning support,
 5. and end-to-end proof that the world runtime is guest-visible and not inherited from host NVM/npm state.
 
@@ -27,7 +27,7 @@ So the correct sequence is:
 1. freeze the runtime-realizability contract,
 2. land the fail-closed validator/materialization wall,
 3. land the world-deps Codex package or runtime bundle,
-4. land a remediation packet that makes unsupported-guest behavior and host-vs-world runtime separation review-clean,
+4. land a remediation packet that makes guest-tuple fail-closed behavior and host-vs-world runtime separation review-clean,
 5. land installer support and docs,
 6. prove the path end-to-end,
 7. only after that, let Slice 58 change the config/selector shape.
@@ -41,8 +41,8 @@ Slice 59 therefore **precedes** Slice 58 implementation even though Slice 58 is 
 1. World-scoped CLI launchability becomes guest-visible truth instead of host `which` truth.
 2. Missing guest runtime becomes an early validator/materialization error with remediation.
 3. Codex guest runtime delivery uses a Substrate-owned world-deps script package named `codex-runtime` that pulls official release artifacts.
-4. Substrate resolves the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.6"`, Rust path `agent_api`) and keeps binary workflow ownership locally; `0.3.6` is the minimum published line for the Codex runtime-version API surface this slice needs.
-5. Unsupported guest tuples must fail closed and must never be treated as satisfied by host Codex runtime truth.
+4. Substrate resolves the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.7"`, Rust path `agent_api`) and keeps binary workflow ownership locally; `0.3.7` is the published line the repo now pins for the Codex runtime-version API surface this slice needs.
+5. Unsupported guest tuples and UAA-validated tuples that Substrate has not yet mapped to pinned official release artifacts must fail closed and must never be treated as satisfied by host Codex runtime truth.
 6. Prod and dev installers gain the generic public flag shape `--provision-agent-runtime <runtime_family>`, even though this slice only implements the `codex` value.
 
 ### What does not change
@@ -89,7 +89,7 @@ Goal:
 
 1. make Codex guest-visible through world-deps script packaging,
 2. pin the install prefix and entrypoint contract,
-3. resolve the validated Codex version through UAA’s public runtime-support API after bumping the published `unified-agent-api` line to `=0.3.6`,
+3. resolve the validated Codex version through UAA’s public runtime-support API while staying aligned to the published `unified-agent-api` line at `=0.3.7`,
 4. prove whether the Linux release binary is self-contained or whether the package must widen into a runtime bundle.
 
 Primary touch surface:
@@ -103,7 +103,7 @@ Primary touch surface:
 Required changes:
 
 1. define the package/bundle as `codex-runtime`,
-2. bump the published `unified-agent-api` dependency line to `=0.3.6` (plus any already-aligned exact sibling UAA pins in the touched manifests), keep the `codex` feature enabled, and use `agent_api::resolve_runtime_support("codex", target_triple)` to resolve the validated version,
+2. align the published `unified-agent-api` dependency line to `=0.3.7` everywhere Slice 59 touches exact UAA pins, keep the `codex` feature enabled, and use `agent_api::resolve_runtime_support("codex", target_triple)` to resolve the validated version,
 3. keep artifact URL construction, checksum verification, extraction, cache, and install logic in Substrate,
 4. install under `/var/lib/substrate/world-deps/<package>`,
 5. expose `/var/lib/substrate/world-deps/bin/codex`,
@@ -115,14 +115,14 @@ Verification checkpoint:
 1. the package/bundle installs idempotently,
 2. the guest-visible `codex` entrypoint resolves from the world-deps bin prefix,
 3. the implementation records which runtime-dependency posture was proven,
-4. Substrate resolves against the published `0.3.6` UAA surface and does not duplicate version-selection logic outside the public UAA API.
+4. Substrate resolves against the published `0.3.7` UAA surface and does not duplicate version-selection logic outside the public UAA API.
 
-### Phase 2.5: Close The Unsupported-Guest And Host-Leakage Review Gap
+### Phase 2.5: Close The Guest-Tuple Fail-Closed And Host-Leakage Review Gap
 
 Goal:
 
 1. make the guest target derivation and fail-closed boundary explicit enough to resolve the Packet 2 review disagreement,
-2. prove that unsupported guest tuples fail closed instead of silently widening to host-runtime truth,
+2. prove that unsupported or still-unmapped validated guest tuples fail closed instead of silently widening to host-runtime truth,
 3. preserve the separation between host-scoped Codex runtime truth and world-scoped Codex runtime truth on mixed-platform hosts.
 
 Primary touch surface:
@@ -135,13 +135,13 @@ Primary touch surface:
 Required changes:
 
 1. make the world-runtime guest target derivation explicit and bounded to actual guest posture,
-2. fail closed with stable unsupported-guest diagnostics when UAA has no validated support for the requested guest tuple,
+2. fail closed with stable guest-target diagnostics when UAA has no validated support for the requested guest tuple or when Substrate has not yet mapped a UAA-validated tuple to a pinned official release artifact,
 3. add regression proof that host Codex presence on `PATH` cannot satisfy the world-runtime contract,
 4. make the host-vs-world Codex runtime separation explicit enough that mixed-platform hosts are not misread as using one interchangeable binary.
 
 Verification checkpoint:
 
-1. unsupported guest tuples fail closed before the world runtime is treated as installed or launchable,
+1. unsupported or still-unmapped validated guest tuples fail closed before the world runtime is treated as installed or launchable,
 2. host Codex on `PATH` does not make world Codex runtime truth pass,
 3. supported guest tuples remain green,
 4. Packet 2’s remaining review finding is resolved without widening into installer or Slice 58 work.
@@ -210,7 +210,7 @@ Limited parallelism that is acceptable:
 
 1. artifact-source research and package-script drafting may happen while validator contract wording is being finalized,
 2. UAA integration for validated version resolution can be developed while package authoring is underway,
-3. broader UAA target-support research can happen in parallel with Packet 2.5 remediation design,
+3. broader host-tuple or downstream-mapping research can happen in parallel with Packet 2.5 remediation design,
 4. but code landing remains sequential because the runtime truth wall and remediation gate should exist before package and installer work claim success.
 
 ## Risks
@@ -249,8 +249,8 @@ If macOS/Lima or another mixed-platform posture is treated as “Codex already e
 Mitigation:
 
 1. keep host and world runtime truth explicitly separate in code, tests, and docs,
-2. fail closed on unsupported guest tuples even when host Codex is present,
-3. treat any broader guest-target support expansion as a deliberate published-support decision, not an implicit local fallback.
+2. fail closed on unsupported or still-unmapped validated guest tuples even when host Codex is present,
+3. treat any broader guest-target support expansion or new Substrate tuple mapping as a deliberate published-support decision, not an implicit local fallback.
 
 ### Risk 5: Slice 59 drifts into Slice 58
 

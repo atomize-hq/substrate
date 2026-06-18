@@ -109,7 +109,7 @@ Use these source docs as authority:
 Mission:
 - Land Slice 59 Packet 2 only: Codex Guest Runtime Package Or Runtime Bundle.
 - Do not start Packet 2.5.
-- Keep the slice bounded to the `codex-runtime` world-deps package, the published `unified-agent-api = "=0.3.6"` dependency bump, UAA-backed validated version selection, and explicit proof of self-contained-vs-bundle runtime posture.
+- Keep the slice bounded to the `codex-runtime` world-deps package, the published `unified-agent-api = "=0.3.7"` dependency alignment, UAA-backed validated version selection, and explicit proof of self-contained-vs-bundle runtime posture.
 
 Before editing:
 1. Read SPEC-59, PLAN-59, and TASKS-59 first.
@@ -132,7 +132,7 @@ Before editing:
 
 Packet 2 scope:
 - Task 2.1: Author the Codex world-deps package/bundle and install script.
-- Task 2.2: Bump the published UAA dependency wiring to `0.3.6`.
+- Task 2.2: Align the published UAA dependency wiring to `0.3.7`.
 - Task 2.3: Integrate UAA-backed validated version selection and record the verified runtime dependency posture.
 
 Out of scope:
@@ -148,7 +148,7 @@ Execution requirements:
 - The implementation subagent must work only on Task 2.1, Task 2.2, and Task 2.3.
 - After implementation, run the Packet 2 verification commands:
   - `cargo test -p shell world_deps -- --nocapture`
-  - `rg -n 'unified-agent-api.*0\\.3\\.6|unified-agent-api-codex.*0\\.3\\.6|unified-agent-api-claude-code.*0\\.3\\.6' /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.lock`
+  - `rg -n 'unified-agent-api.*0\\.3\\.7|unified-agent-api-codex.*0\\.3\\.7|unified-agent-api-claude-code.*0\\.3\\.7' /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.lock`
   - targeted tests for the UAA-backed version-resolution path if added
   - the packet-specific guest smoke proof command(s) that prove the runtime posture
 - If implementation is green, run `git diff --stat` and `git status --short`.
@@ -173,10 +173,10 @@ Packet 2 checkpoint:
 - package installs are idempotent
 - the verified self-contained-vs-bundle outcome is explicit
 - the path does not rely on host NVM/npm state
-- version selection comes from the published `unified-agent-api = "=0.3.6"` Rust API rather than downstream duplicated logic
+- version selection comes from the published `unified-agent-api = "=0.3.7"` Rust API rather than downstream duplicated logic
 
 Implementation subagent prompt:
-/goal Land Slice 59 Packet 2 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md first. Work only on Task 2.1, Task 2.2, and Task 2.3. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed in the world-deps package/install seams, crates/shell/Cargo.toml, crates/gateway/Cargo.toml, crates/world-service/Cargo.toml, Cargo.lock, and the narrowest Substrate runtime-selection code that must call `agent_api::resolve_runtime_support(\"codex\", target_triple)`. Keep Packet 2.5 through Packet 4 work out of scope, and do not land installer flag surfaces, Slice 58 migration, host-runtime fallback, or floating latest-release resolution. Run cargo test -p shell world_deps -- --nocapture, the exact rg verification for the 0.3.6 dependency pins, and any targeted UAA-backed runtime-resolution tests you add, plus the guest smoke proof needed to record whether Codex is self-contained or requires a wider bundle. Final message must state whether Packet 2 is checkpoint-green, what symbols changed, what verification ran, whether Packet 2.5 is unblocked, and whether any reopen condition was discovered.
+/goal Land Slice 59 Packet 2 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md first. Work only on Task 2.1, Task 2.2, and Task 2.3. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed in the world-deps package/install seams, crates/shell/Cargo.toml, crates/gateway/Cargo.toml, crates/world-service/Cargo.toml, Cargo.lock, and the narrowest Substrate runtime-selection code that must call `agent_api::resolve_runtime_support(\"codex\", target_triple)`. Keep Packet 2.5 through Packet 4 work out of scope, and do not land installer flag surfaces, Slice 58 migration, host-runtime fallback, or floating latest-release resolution. Run cargo test -p shell world_deps -- --nocapture, the exact rg verification for the 0.3.7 dependency pins, and any targeted UAA-backed runtime-resolution tests you add, plus the guest smoke proof needed to record whether Codex is self-contained or requires a wider bundle. Final message must state whether Packet 2 is checkpoint-green, what symbols changed, what verification ran, whether Packet 2.5 is unblocked, and whether any reopen condition was discovered.
 
 Review subagent prompt:
 Review the committed Slice 59 Packet 2 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md. Review only Packet 2 and the live diff. Review across correctness, readability, architecture, security, and performance. Report findings first with explicit severities. State clearly whether Packet 2 is review-clean or requires changes.
@@ -204,9 +204,9 @@ Use these source docs as authority:
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md
 
 Mission:
-- Land Slice 59 Packet 2.5 only: Unsupported-Guest Fail-Closed And Host/World Separation Remediation.
+- Land Slice 59 Packet 2.5 only: Guest-Tuple Fail-Closed And Host/World Separation Remediation.
 - Do not start Packet 3.
-- Keep the slice bounded to resolving the remaining Packet 2 review disagreement around unsupported guest tuples and host-runtime leakage.
+- Keep the slice bounded to resolving the remaining Packet 2 review disagreement around guest-tuple truth gaps, including UAA-validated Linux guest tuples that are not yet fully mapped by Substrate, plus host-runtime leakage.
 
 Before editing:
 1. Read SPEC-59, PLAN-59, and TASKS-59 first.
@@ -222,14 +222,14 @@ Before editing:
 7. Stay strictly within Packet 2.5 scope.
 
 Packet 2.5 scope:
-- Task 2.5.1: Fail closed on unsupported guest tuples with explicit guest-target truth.
+- Task 2.5.1: Keep guest-target truth explicit and fail closed on unsupported or unmapped guest tuples.
 - Task 2.5.2: Prove host Codex cannot satisfy world runtime truth and make the separation explicit.
 
 Out of scope:
 - Packet 3 or 4 work
 - installer-time provisioning surfaces
 - Slice 58 placement-aware selector/config migration
-- broadening UAA published support truth inside this packet unless a separately landed/published prerequisite is already available and required only for bounded verification
+- editing UAA published support truth itself inside this packet unless a separately landed/published prerequisite is already available and this packet only needs to consume it honestly
 - host-runtime fallback, silent target remapping, or any logic that treats host Codex as interchangeable with guest Codex
 
 Execution requirements:
@@ -240,7 +240,7 @@ Execution requirements:
   - `cargo test -p shell world_deps -- --nocapture`
   - `cargo test -p shell dispatch_contract -- --nocapture`
   - `cargo test -p shell agent_runtime::validator -- --nocapture`
-  - targeted regression tests for unsupported guest tuples, guest-target derivation, and host-PATH leakage if added
+  - targeted regression tests for unsupported or validated-but-unmapped guest tuples, guest-target derivation, and host-PATH leakage if added
 - If implementation is green, run `git diff --stat` and `git status --short`.
 - Run GitNexus detect-changes before committing.
 - Commit the Packet 2.5 implementation work before review.
@@ -259,13 +259,13 @@ Commit policy:
 - Do not amend unless absolutely required.
 
 Packet 2.5 checkpoint:
-- unsupported guest tuples fail closed before Substrate claims the world runtime is installed or launchable
+- unsupported or validated-but-unmapped guest tuples fail closed before Substrate claims the world runtime is installed or launchable
 - host Codex presence on `PATH` does not make world Codex runtime truth pass
 - host-scoped and world-scoped Codex runtime truth remain explicitly separate
 - the remaining Packet 2 review disagreement is resolved without widening into installer work or Slice 58 migration
 
 Implementation subagent prompt:
-/goal Land Slice 59 Packet 2.5 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md first. Work only on Task 2.5.1 and Task 2.5.2. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed to make unsupported guest tuples fail closed with explicit guest-target truth and to prove host Codex cannot satisfy world Codex runtime truth. Keep Packet 3 and Packet 4 work out of scope, and do not land installer flag surfaces, Slice 58 migration, or silent target broadening through host runtime. Run cargo test -p shell world_deps -- --nocapture, cargo test -p shell dispatch_contract -- --nocapture, cargo test -p shell agent_runtime::validator -- --nocapture, and any targeted regression tests you add for unsupported guest tuples and host-PATH leakage. Final message must state whether Packet 2.5 is checkpoint-green, what symbols changed, what verification ran, whether Packet 3 is unblocked, and whether any reopen condition was discovered.
+/goal Land Slice 59 Packet 2.5 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md first. Work only on Task 2.5.1 and Task 2.5.2. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed to make unsupported or validated-but-unmapped guest tuples fail closed with explicit guest-target truth and to prove host Codex cannot satisfy world Codex runtime truth. Keep Packet 3 and Packet 4 work out of scope, and do not land installer flag surfaces, Slice 58 migration, or silent target broadening through host runtime. Run cargo test -p shell world_deps -- --nocapture, cargo test -p shell dispatch_contract -- --nocapture, cargo test -p shell agent_runtime::validator -- --nocapture, and any targeted regression tests you add for unsupported or validated-but-unmapped guest tuples and host-PATH leakage. Final message must state whether Packet 2.5 is checkpoint-green, what symbols changed, what verification ran, whether Packet 3 is unblocked, and whether any reopen condition was discovered.
 
 Review subagent prompt:
 Review the committed Slice 59 Packet 2.5 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-59.md. Review only Packet 2.5 and the live diff. Review across correctness, readability, architecture, security, and performance. Report findings first with explicit severities. State clearly whether Packet 2.5 is review-clean or requires changes.

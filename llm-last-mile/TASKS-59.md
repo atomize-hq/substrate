@@ -13,7 +13,7 @@ This slice should be implemented as five sequential packets:
 
 1. fail-closed validator/remediation wall,
 2. Codex world-deps package or runtime bundle,
-2.5. remediation of unsupported-guest and host-runtime leakage gaps,
+2.5. remediation of guest-tuple fail-closed and host-runtime leakage gaps,
 3. prod/dev installer-time provisioning surfaces,
 4. final end-to-end proof and handoff to Slice 58.
 
@@ -78,10 +78,10 @@ Session goal:
     - associated install script(s)
     - [`docs/reference/world/deps/authoring_packages.md`](../docs/reference/world/deps/authoring_packages.md) only if operator contract examples need updating
 
-- [ ] Task 2.2: Bump the published UAA dependency wiring to `0.3.6`
-  - Acceptance: every Slice 59-touched manifest that already pins UAA exactly now resolves `unified-agent-api = "=0.3.6"` and aligned exact sibling UAA crates at `=0.3.6`, and the lockfile reflects that published dependency update.
+- [ ] Task 2.2: Align the published UAA dependency wiring to `0.3.7`
+  - Acceptance: every Slice 59-touched manifest that already pins UAA exactly now resolves `unified-agent-api = "=0.3.7"` and aligned exact sibling UAA crates at `=0.3.7`, and the lockfile reflects that published dependency state.
   - Verify:
-    - `rg -n 'unified-agent-api.*0\\.3\\.6|unified-agent-api-codex.*0\\.3\\.6|unified-agent-api-claude-code.*0\\.3\\.6' /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.lock`
+    - `rg -n 'unified-agent-api.*0\\.3\\.7|unified-agent-api-codex.*0\\.3\\.7|unified-agent-api-claude-code.*0\\.3\\.7' /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/gateway/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/Cargo.toml /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.lock`
   - Files:
     - [`crates/shell/Cargo.toml`](../crates/shell/Cargo.toml)
     - [`crates/gateway/Cargo.toml`](../crates/gateway/Cargo.toml)
@@ -89,7 +89,7 @@ Session goal:
     - [`Cargo.lock`](../Cargo.lock)
 
 - [ ] Task 2.3: Integrate UAA-backed validated version selection and record the verified runtime dependency posture
-  - Acceptance: Substrate uses the published `0.3.6` `codex`-feature surface, calls `agent_api::resolve_runtime_support("codex", target_triple)`, uses `record.version` as the validated version to acquire, does not read generated/internal UAA files directly, and explicitly proves one of two outcomes: (a) the Linux Codex artifact is self-contained in the guest, or (b) the package widens into a runtime bundle that includes the required guest runtime dependencies.
+  - Acceptance: Substrate uses the published `0.3.7` `codex`-feature surface, calls `agent_api::resolve_runtime_support("codex", target_triple)`, uses `record.version` as the validated version to acquire, does not read generated/internal UAA files directly, and explicitly proves one of two outcomes: (a) the Linux Codex artifact is self-contained in the guest, or (b) the package widens into a runtime bundle that includes the required guest runtime dependencies.
   - Verify:
     - package-level smoke proof in the target guest environment
     - `cargo test -p shell world_deps -- --nocapture`
@@ -107,22 +107,22 @@ Packet 2 is complete only when:
 2. package installs are idempotent,
 3. the verified self-contained-vs-bundle outcome is explicit,
 4. the path does not rely on host NVM/npm state,
-5. version selection comes from the published `unified-agent-api = "=0.3.6"` Rust API rather than downstream duplicated logic.
+5. version selection comes from the published `unified-agent-api = "=0.3.7"` Rust API rather than downstream duplicated logic.
 
 Do not start Packet 2.5 until Packet 2 verification is green.
 
-## Packet 2.5: Unsupported-Guest Fail-Closed And Host/World Separation Remediation
+## Packet 2.5: Guest-Tuple Fail-Closed And Host/World Separation Remediation
 
 Session goal:
 
-1. resolve the remaining Packet 2 review disagreement around unsupported guest tuples,
+1. resolve the remaining Packet 2 review disagreement around guest-tuple truth gaps,
 2. prove host Codex truth cannot leak into world Codex truth,
 3. keep mixed-platform host/runtime posture explicit before installer work begins.
 
 ### Tasks
 
-- [ ] Task 2.5.1: Fail closed on unsupported guest tuples with explicit guest-target truth
-  - Acceptance: Substrate derives the intended world-runtime guest target from the actual guest posture it is provisioning for, and if UAA does not publish validated support for that tuple Substrate fails closed with explicit unsupported-guest diagnostics instead of silently remapping, broadening, or treating host runtime truth as sufficient.
+- [ ] Task 2.5.1: Keep guest-target truth explicit and fail closed on unsupported or unmapped guest tuples
+  - Acceptance: Substrate derives the intended world-runtime guest target from the actual guest posture it is provisioning for, and if UAA does not publish validated support for that tuple or Substrate lacks a pinned official release mapping for a UAA-validated tuple, Substrate fails closed with explicit guest-target diagnostics instead of silently remapping, broadening, or treating host runtime truth as sufficient.
   - Verify:
     - `cargo test -p shell world_deps -- --nocapture`
     - `cargo test -p shell dispatch_contract -- --nocapture`
@@ -130,7 +130,7 @@ Session goal:
   - Files:
     - narrow world-deps/runtime-selection code under [`crates/shell/src/builtins/world_deps/`](../crates/shell/src/builtins/world_deps/)
     - adjacent runtime-selection seams only if required to keep guest-target truth explicit
-    - nearby tests covering unsupported guest tuples
+    - nearby tests covering unsupported or validated-but-unmapped guest tuples
 
 - [ ] Task 2.5.2: Prove host Codex cannot satisfy world runtime truth and make the separation explicit
   - Acceptance: tests and diagnostics prove that host `codex` availability on `PATH` can satisfy only host-scoped/orchestrator Codex truth and never the world-scoped Codex runtime contract; mixed-platform postures that may need both a host Codex binary and a Linux guest Codex binary are treated as two distinct contracts.
@@ -146,7 +146,7 @@ Session goal:
 
 Packet 2.5 is complete only when:
 
-1. unsupported guest tuples fail closed before Substrate claims the world runtime is installed or launchable,
+1. unsupported or validated-but-unmapped guest tuples fail closed before Substrate claims the world runtime is installed or launchable,
 2. host Codex presence on `PATH` does not make world Codex runtime truth pass,
 3. host-scoped and world-scoped Codex runtime truth remain explicitly separate, including on mixed-platform hosts,
 4. the remaining Packet 2 review disagreement is resolved without widening into installer work or Slice 58 migration.

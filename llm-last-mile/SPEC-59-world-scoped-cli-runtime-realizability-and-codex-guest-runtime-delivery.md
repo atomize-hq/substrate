@@ -33,8 +33,9 @@ ASSUMPTIONS I'M MAKING:
 5. The downloadable Linux Codex binary may or may not be fully self-contained in the target guest; this slice must require explicit guest verification instead of assuming either outcome.
 6. Exact backend ids, policy allowlists, and host/world fail-closed separation remain unchanged in this slice; selector migration belongs to Slice 58.
 7. The installer/runtime provisioning surface should be future-expandable, so the public flag shape should be generic to agent runtime family rather than Codex-specific.
-8. Substrate should resolve the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.6"`, imported as `agent_api`), because `0.3.6` is the minimum published line for the Codex runtime-version API surface this slice needs, and Substrate must not duplicate runtime version-selection logic or read generated UAA files directly.
-9. The published `0.3.6` UAA Codex runtime-support surface may validate fewer guest tuples than upstream Codex officially ships, and Slice 59 must remain semantically honest under that narrower published support truth instead of widening silently through host-runtime leakage.
+8. The intended Codex support matrix is Linux on `x86_64` and `aarch64`, macOS on `x86_64` and `aarch64`, and Windows on `x86_64`; Slice 59 must keep that product intent explicit while also keeping the world-deps guest-runtime packaging seam limited to Linux guest tuples and separate from host-runtime truth.
+9. Substrate should resolve the validated Codex version through the public UAA Rust API (`unified-agent-api = "=0.3.7"`, imported as `agent_api`), because `0.3.7` is the published line the repo now pins for the Codex runtime-version API surface this slice needs, and Substrate must not duplicate runtime version-selection logic or read generated UAA files directly.
+10. Slice 59 must remain semantically honest about the currently published UAA `0.3.7` support surface and any remaining downstream Substrate mapping gaps instead of widening silently through host-runtime leakage.
 
 If any of these are wrong, correct them before implementation.
 
@@ -62,7 +63,7 @@ This slice does **not** redesign selector grammar, perform the placement-aware i
 - `crates/world-service` member bootstrap/runtime execution
 - world-deps inventory + script packages under Substrate-managed prefixes
 - shell installers under `scripts/substrate/`
-- published `unified-agent-api = "=0.3.6"` crate with the `codex` feature enabled, imported in Rust as `agent_api`
+- published `unified-agent-api = "=0.3.7"` crate with the `codex` feature enabled, imported in Rust as `agent_api`
 - `llm-last-mile/` planning authority
 
 ## Commands
@@ -136,7 +137,7 @@ crates/world-service/tests/
   Integration and contract coverage for the validator/dispatch/runtime path that Slice 59 is expected to keep green.
 
 Cargo.toml / dependency wiring
-  Slice 59 must bump the published `unified-agent-api` line from the current `=0.3.5` repo truth to `=0.3.6`, keep the `codex` feature enabled, align any already-exact sibling UAA pins in the touched manifests, and call the public runtime-support API from Substrate code rather than reading generated files.
+  Slice 59 must stay aligned to the published `unified-agent-api = "=0.3.7"` line already pinned in live repo truth, keep the `codex` feature enabled, align any already-exact sibling UAA pins in the touched manifests, and call the public runtime-support API from Substrate code rather than reading generated files.
 
 docs/reference/world/deps/
   Stable operator contract for enable/provision/sync flows and package authoring.
@@ -197,9 +198,9 @@ The current failing `exit 127` proves the guest cannot actually execute the host
 
 world-deps already supports script-installed runnable packages under `/var/lib/substrate/world-deps/...` with stable entrypoints exposed via `/var/lib/substrate/world-deps/bin`.
 
-### 4. The current repo still pins UAA to `=0.3.5`
+### 4. The current repo now pins UAA to `=0.3.7`
 
-The active Substrate manifests still pin `unified-agent-api` to `=0.3.5` (with matching exact sibling UAA pins where present), so Slice 59 must explicitly bump that dependency wiring to `=0.3.6` before it can rely on the published Codex runtime-version API surface.
+The active Substrate manifests now pin `unified-agent-api` to `=0.3.7` (with matching exact sibling UAA pins where present), so Slice 59 must keep its runtime-selection truth, verification commands, and packet prompts aligned to that published Codex runtime-version API surface.
 
 ## Contract
 
@@ -243,7 +244,7 @@ This slice must not let Substrate invent or duplicate Codex version-selection po
 
 Rules:
 
-1. Substrate must depend on the published crate package `unified-agent-api = "=0.3.6"` with the `codex` feature enabled, and any already-exact sibling UAA pins in the touched manifests must move to `=0.3.6` in the same change,
+1. Substrate must depend on the published crate package `unified-agent-api = "=0.3.7"` with the `codex` feature enabled, and any already-exact sibling UAA pins in the touched manifests must resolve to `=0.3.7` in the same change,
 2. Substrate must use the public Rust crate path `agent_api`,
 3. Substrate must determine the exact target triple it intends to install for, then call `resolve_runtime_support("codex", target_triple)`,
 4. Substrate must use `record.version` from the returned `RuntimeSupportRecord` as the validated version it acquires,
@@ -251,14 +252,14 @@ Rules:
 6. Substrate must **not** read `runtime_support_data.rs`, `cli_manifests/**`, or any other generated/internal UAA file directly,
 7. if UAA returns `UnknownRuntimeFamily`, `UnsupportedTargetTriple`, or `MissingValidatedRuntime`, Substrate must fail closed and surface that the runtime is unsupported for the requested guest target.
 
-### 5. Unsupported guest tuples must fail closed without leaking to host runtime truth
+### 5. Guest tuple truth must fail closed without leaking to host runtime truth
 
-The world-scoped Codex runtime contract must remain honest even when upstream official assets exist for more tuples than the currently published UAA validated surface.
+The product intent is Codex support on Linux (`x86_64`, `aarch64`), macOS (`x86_64`, `aarch64`), and Windows (`x86_64`), but Slice 59’s world-deps delivery seam directly provisions only Linux guest tuples. The world-scoped Codex runtime contract must therefore remain honest both when a guest tuple is unsupported by published UAA truth and when a tuple is validated by UAA but not yet fully mapped by Substrate to a pinned official release artifact.
 
 Rules:
 
 1. Substrate must derive the intended world-runtime guest target from the actual guest OS/arch contract it is provisioning for, not from whichever host Codex binary happens to exist,
-2. if the requested guest tuple is unsupported or lacks validated UAA truth, Substrate must fail closed before claiming the world runtime is provisioned or launchable,
+2. if the requested guest tuple is unsupported, lacks validated UAA truth, or lacks a required Substrate mapping from the validated tuple to a pinned official release artifact, Substrate must fail closed before claiming the world runtime is provisioned or launchable,
 3. host `codex` availability on `PATH` may satisfy only the host-scoped/orchestrator Codex runtime contract; it must never satisfy the world-scoped Codex runtime contract,
 4. on mixed-platform hosts such as macOS + Lima, Slice 59 must preserve the separation between host Codex runtime truth and Linux guest Codex runtime truth even if both runtimes are needed in the same overall product flow,
 5. diagnostics, tests, and installer/operator wording must make that host-vs-world separation explicit enough that review cannot interpret host-runtime leakage as valid world support.
@@ -341,9 +342,9 @@ Rules:
 
 1. A world-scoped Codex backend is considered launchable only when guest runtime truth is satisfied.
 2. Missing guest runtime truth fails closed before retained worker bootstrap with explicit remediation.
-3. Substrate resolves the validated Codex version through the published `0.3.6` UAA Rust API instead of duplicating version-selection logic downstream.
+3. Substrate resolves the validated Codex version through the published `0.3.7` UAA Rust API instead of duplicating version-selection logic downstream.
 4. Substrate-owned world-deps packaging can install Codex into the guest from official release artifacts, using Substrate-owned checksum verification and install logic.
-5. Unsupported guest target tuples fail closed with explicit unsupported-target diagnostics and do not leak to host-runtime truth.
+5. Unsupported or still-unmapped guest target tuples fail closed with explicit guest-target diagnostics and do not leak to host-runtime truth.
 6. Host-scoped Codex runtime truth and world-scoped Codex runtime truth remain explicitly separate, including on mixed-platform hosts that may need both runtimes.
 7. The implementation explicitly proves whether the Linux artifact is self-contained or requires a wider runtime bundle.
 8. Prod and dev installers both expose a documented install-time provisioning flag for this runtime.
@@ -351,5 +352,5 @@ Rules:
 
 ## Open Questions
 
-1. Should Slice 59 itself widen published UAA Codex guest-target support (for example `aarch64-unknown-linux-musl`) before installer parity claims extend to mixed-platform hosts, or should that remain a prerequisite follow-on outside this slice?
+1. Should Slice 59 itself close any remaining published-support or downstream-mapping gaps outside the Linux guest pair (for example an eventual `x86_64-apple-darwin` host-runtime truth gap), or should those remain explicit follow-ons outside this slice’s world-deps guest packaging contract?
 2. If Slice 58 keeps temporary compatibility aliases, how long should Slice 59 diagnostics refer to old vs new exact ids during transition?
