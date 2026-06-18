@@ -4610,6 +4610,97 @@ Review the objective extractor, run make test, and return concrete fixes."#;
 }
 
 #[test]
+fn checkpoints_context_objective_combines_explicit_target_and_mixed_role_verification_without_scaffold_drift(
+) {
+    let prompt = r#"Read first:
+- AGENTS.md
+- docs/specs/r5/R5_75/MAP.md
+
+## Scope
+Review crates/agent-drift-analyzer/src/context/objective.rs only and run cargo test -p agent-drift-analyzer checkpoints -- --nocapture.
+
+## Checklist
+- Inspect AGENTS.md before editing.
+- Keep the packet scoped to B4.1.
+
+## Constraints
+- Do not widen into SO-3.
+
+## Return with
+- concrete findings"#;
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,260p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 0"),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(
+        objective.text,
+        "Review crates/agent-drift-analyzer/src/context/objective.rs only and run cargo test -p agent-drift-analyzer checkpoints -- --nocapture."
+    );
+    assert_eq!(
+        objective.verification_commands,
+        vec!["cargo test -p agent-drift-analyzer checkpoints -- --nocapture"]
+    );
+
+    let structured = objective.structured.as_ref().expect("structured objective");
+    let target = structured.target.as_ref().expect("explicit target");
+    assert_eq!(target.kind, ObjectiveTargetKind::FileOrDirectory);
+    assert_eq!(
+        target.display,
+        "crates/agent-drift-analyzer/src/context/objective.rs"
+    );
+    assert_eq!(
+        structured.verification_commands,
+        vec!["cargo test -p agent-drift-analyzer checkpoints -- --nocapture"]
+    );
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && matches!(span.section_kind, ObjectiveSectionKind::Scope)
+            && span
+                .excerpt
+                .contains("Review crates/agent-drift-analyzer/src/context/objective.rs only and run cargo test -p agent-drift-analyzer checkpoints -- --nocapture.")
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Verification
+            && matches!(span.section_kind, ObjectiveSectionKind::Scope)
+            && span
+                .excerpt
+                .contains("cargo test -p agent-drift-analyzer checkpoints -- --nocapture")
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
+    assert!(!structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal && span.excerpt.contains("Inspect AGENTS.md before editing.")
+    }));
+    assert!(structured
+        .deliverables
+        .iter()
+        .any(|deliverable| deliverable.display.contains("concrete findings")));
+    assert!(structured
+        .unknowns
+        .iter()
+        .all(|unknown| unknown.field_name != "target"));
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, objective.text);
+}
+
+#[test]
 fn checkpoints_context_objective_leaves_vague_targets_unknown() {
     let result = analyze_custom_rows(vec![
         prompt_row(0, "turn-001", "Look at the stuff above and make it better."),
