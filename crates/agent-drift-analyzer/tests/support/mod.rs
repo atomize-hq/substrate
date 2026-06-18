@@ -639,3 +639,136 @@ fn tool_row(
         dedupe_identity,
     )
 }
+
+pub const OBJECTIVE_ACCEPTANCE_FIXTURE_ROOT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/objective_acceptance"
+);
+
+pub const OBJECTIVE_ACCEPTANCE_FAMILY_README: &str = "README.md";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ObjectiveAcceptanceFamily {
+    pub dir_name: &'static str,
+}
+
+pub const OBJECTIVE_ACCEPTANCE_FAMILIES: [ObjectiveAcceptanceFamily; 3] = [
+    ObjectiveAcceptanceFamily {
+        dir_name: "design-set",
+    },
+    ObjectiveAcceptanceFamily {
+        dir_name: "locked-acceptance",
+    },
+    ObjectiveAcceptanceFamily {
+        dir_name: "stretch-external",
+    },
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjectiveAcceptanceCasePaths {
+    pub family_dir_name: &'static str,
+    pub case_id: String,
+    pub dir: Utf8PathBuf,
+    pub raw_json: Utf8PathBuf,
+    pub expected_json: Utf8PathBuf,
+}
+
+pub struct ObjectiveAcceptanceCorpus {
+    root: Utf8PathBuf,
+}
+
+impl ObjectiveAcceptanceCorpus {
+    pub fn load() -> Self {
+        let root = Utf8PathBuf::from(OBJECTIVE_ACCEPTANCE_FIXTURE_ROOT);
+        assert!(
+            root.is_dir(),
+            "missing objective acceptance fixture root {}; Packet SO-4.1 must not fall back to target/ or ~/.codex",
+            root
+        );
+        Self { root }
+    }
+
+    pub fn root(&self) -> &Utf8Path {
+        &self.root
+    }
+
+    pub fn family_dir(&self, family: ObjectiveAcceptanceFamily) -> Utf8PathBuf {
+        let dir = self.root.join(family.dir_name);
+        assert!(
+            dir.is_dir(),
+            "missing objective acceptance family directory {}; Packet SO-4.1 requires committed family roots",
+            dir
+        );
+        dir
+    }
+
+    pub fn case_paths(
+        &self,
+        family: ObjectiveAcceptanceFamily,
+    ) -> Vec<ObjectiveAcceptanceCasePaths> {
+        let family_dir = self.family_dir(family);
+        let mut cases = std::fs::read_dir(family_dir.as_std_path())
+            .unwrap_or_else(|error| {
+                panic!(
+                    "read objective acceptance family directory {}: {error}",
+                    family_dir
+                )
+            })
+            .filter_map(|entry| {
+                let entry = entry.unwrap_or_else(|error| {
+                    panic!(
+                        "read objective acceptance family directory entry in {}: {error}",
+                        family_dir
+                    )
+                });
+                let path = entry.path();
+                if !path.is_dir() {
+                    return None;
+                }
+                let case_id = entry.file_name().into_string().unwrap_or_else(|name| {
+                    panic!(
+                        "objective acceptance case directory {} must be valid UTF-8",
+                        std::path::Path::new(&name).display()
+                    )
+                });
+                let dir = Utf8PathBuf::from_path_buf(path).unwrap_or_else(|path| {
+                    panic!("objective acceptance case path {:?} must be UTF-8", path)
+                });
+                Some(ObjectiveAcceptanceCasePaths {
+                    family_dir_name: family.dir_name,
+                    raw_json: dir.join("raw.json"),
+                    expected_json: dir.join("expected.json"),
+                    case_id,
+                    dir,
+                })
+            })
+            .collect::<Vec<_>>();
+        cases.sort_by(|left, right| left.case_id.cmp(&right.case_id));
+        cases
+    }
+}
+
+pub fn sorted_entry_names(path: &std::path::Path) -> Vec<String> {
+    let mut entries = std::fs::read_dir(path)
+        .unwrap_or_else(|error| panic!("read fixture directory {}: {error}", path.display()))
+        .map(|entry| {
+            entry
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "read fixture directory entry in {}: {error}",
+                        path.display()
+                    )
+                })
+                .file_name()
+                .into_string()
+                .unwrap_or_else(|name| {
+                    panic!(
+                        "fixture directory entry {} must be valid UTF-8",
+                        std::path::Path::new(&name).display()
+                    )
+                })
+        })
+        .collect::<Vec<_>>();
+    entries.sort();
+    entries
+}
