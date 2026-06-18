@@ -1299,13 +1299,17 @@ mod tests {
     }
 
     #[test]
-    fn world_deps_codex_runtime_support_fails_closed_for_unvalidated_target() {
+    fn world_deps_codex_runtime_support_fails_closed_for_validated_but_unmapped_target() {
         let err = resolve_codex_runtime_install_spec_for_target_v1("aarch64-unknown-linux-musl")
-            .expect_err("unvalidated target should fail closed");
+            .expect_err("validated-but-unmapped target should fail closed");
 
         assert!(
-            format!("{err:#}").contains("agent_api::resolve_runtime_support"),
-            "expected UAA-backed failure text, got: {err:#}"
+            format!("{err:#}").contains("validated guest target 'aarch64-unknown-linux-musl'"),
+            "expected validated guest target diagnostics, got: {err:#}"
+        );
+        assert!(
+            format!("{err:#}").contains("no pinned official Codex release mapping"),
+            "expected unmapped release-mapping diagnostics, got: {err:#}"
         );
     }
 
@@ -1315,6 +1319,21 @@ mod tests {
             map_codex_runtime_target_triple_for_guest_arch_v1("arm64")
                 .expect("normalize arm64 guest arch"),
             "aarch64-unknown-linux-musl"
+        );
+    }
+
+    #[test]
+    fn world_deps_codex_runtime_guest_arch_mapping_fails_closed_for_unsupported_arch() {
+        let err = map_codex_runtime_target_triple_for_guest_arch_v1("riscv64")
+            .expect_err("unsupported guest arch should fail closed");
+
+        assert!(
+            format!("{err:#}").contains("unsupported for guest arch 'riscv64'"),
+            "expected guest arch diagnostics, got: {err:#}"
+        );
+        assert!(
+            format!("{err:#}").contains("guest target triple"),
+            "expected guest target derivation diagnostics, got: {err:#}"
         );
     }
 
@@ -1583,7 +1602,7 @@ fn map_codex_runtime_target_triple_for_guest_arch_v1(guest_arch: &str) -> Result
         "x86_64" | "amd64" => Ok("x86_64-unknown-linux-musl"),
         "aarch64" | "arm64" => Ok("aarch64-unknown-linux-musl"),
         arch => Err(config_model::user_error(format!(
-            "world deps package '{}' is unsupported for guest arch '{}' because Substrate cannot derive a validated Codex guest target triple",
+            "world deps package '{}' is unsupported for guest arch '{}' because Substrate cannot derive a Linux Codex guest target triple from the actual guest posture",
             CODEX_RUNTIME_PACKAGE_NAME, arch
         ))),
     }
@@ -1610,8 +1629,8 @@ fn resolve_codex_runtime_install_spec_for_target_v1(
                     .to_string(),
         }),
         _ => Err(config_model::user_error(format!(
-            "world deps package '{}' has no pinned official Codex release mapping for validated tuple version='{}' target='{}'",
-            CODEX_RUNTIME_PACKAGE_NAME, record.version, target_triple
+            "world deps package '{}' cannot provision validated guest target '{}' at version '{}' because Substrate has no pinned official Codex release mapping for that guest target",
+            CODEX_RUNTIME_PACKAGE_NAME, target_triple, record.version
         ))),
     }
 }

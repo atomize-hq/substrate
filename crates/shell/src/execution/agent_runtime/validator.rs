@@ -524,7 +524,7 @@ mod tests {
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
     use serial_test::serial;
     use std::collections::BTreeMap;
-    use std::ffi::OsString;
+    use std::ffi::{OsStr, OsString};
     use std::fs;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
@@ -539,6 +539,12 @@ mod tests {
 
     impl EnvVarGuard {
         fn set_path(key: &'static str, value: &std::path::Path) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+
+        fn set_value(key: &'static str, value: impl AsRef<OsStr>) -> Self {
             let previous = std::env::var_os(key);
             std::env::set_var(key, value);
             Self { key, previous }
@@ -1182,6 +1188,74 @@ mod tests {
         );
 
         let error = validate_runtime_realizability(&entry, &config).expect_err("must fail");
+        assert_eq!(error.exit_code, 4);
+        assert!(
+            error.reason.contains("guest entrypoint"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("is unavailable"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("substrate world deps current sync"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn validate_runtime_realizability_keeps_host_path_codex_truth_separate_from_world_codex_truth()
+    {
+        let _env_guard = crate::execution::world_env_guard();
+        let config = SubstrateConfig::default();
+        let temp = TempDir::new().expect("tempdir for host/world codex separation");
+        let host_bin_dir = temp.path().join("host-bin");
+        fs::create_dir_all(&host_bin_dir).expect("create host bin dir");
+        let host_codex = host_bin_dir.join("codex");
+        fs::write(&host_codex, "#!/bin/sh\nexit 0\n").expect("write fake host codex");
+        #[cfg(unix)]
+        {
+            let mut perms = fs::metadata(&host_codex)
+                .expect("host codex metadata")
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&host_codex, perms).expect("host codex permissions");
+        }
+
+        let _path_guard = EnvVarGuard::set_value("PATH", host_bin_dir.as_os_str());
+        let guest_bin_dir = temp.path().join("guest-bin");
+        fs::create_dir_all(&guest_bin_dir).expect("create guest bin dir");
+        let _world_codex_guard =
+            EnvVarGuard::set_path("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", guest_bin_dir.as_path());
+
+        let host_entry = make_entry_with_runtime_family_and_binary(
+            "codex",
+            AgentExecutionScope::Host,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::Codex),
+            "codex",
+            required_capabilities(),
+        );
+        let host_descriptor =
+            validate_runtime_realizability(&host_entry, &config).expect("host codex should resolve from PATH");
+        assert_eq!(host_descriptor.binary_path, host_codex);
+
+        let world_entry = make_entry_with_runtime_family_and_binary(
+            "codex_world",
+            AgentExecutionScope::World,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::Codex),
+            CODEX_WORLD_GUEST_ENTRYPOINT,
+            required_capabilities(),
+        );
+        let error =
+            validate_runtime_realizability(&world_entry, &config).expect_err("world codex must ignore host PATH truth");
         assert_eq!(error.exit_code, 4);
         assert!(
             error.reason.contains("guest entrypoint"),
