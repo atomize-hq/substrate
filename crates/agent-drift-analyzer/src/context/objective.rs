@@ -811,7 +811,14 @@ fn role_candidates_for_clause(
         ObjectiveSectionKind::UnknownSection => {}
     }
 
-    if has_explicit_verification_cue {
+    if has_explicit_verification_cue
+        && matches!(
+            section_kind,
+            ObjectiveSectionKind::Scope
+                | ObjectiveSectionKind::Mission
+                | ObjectiveSectionKind::UnknownSection
+        )
+    {
         push_role_candidate(
             &mut candidates,
             ObjectiveRole::Verification,
