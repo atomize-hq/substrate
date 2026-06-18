@@ -4565,6 +4565,108 @@ fn checkpoints_context_objective_preserves_explicit_file_target_without_copying_
 }
 
 #[test]
+fn checkpoints_context_objective_preserves_b22_explicit_target_family_matrix() {
+    struct Case {
+        name: &'static str,
+        prompt: &'static str,
+        tool_command: &'static str,
+        expected_kind: ObjectiveTargetKind,
+        expected_display: &'static str,
+    }
+
+    let cases = [
+        Case {
+            name: "file_path",
+            prompt: "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only and keep the packet scoped to that file target.",
+            tool_command: r#"{"command":"sed -n '1,260p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+            expected_kind: ObjectiveTargetKind::FileOrDirectory,
+            expected_display: "crates/agent-drift-analyzer/src/context/objective.rs",
+        },
+        Case {
+            name: "instruction_surface",
+            prompt: "/goal Analyze the AGENTS.md instruction block only and update just that instruction text.",
+            tool_command: r#"{"command":"sed -n '1,220p' AGENTS.md","workdir":"/repo"}"#,
+            expected_kind: ObjectiveTargetKind::SkillOrInstructionSurface,
+            expected_display: "AGENTS.md, instruction block",
+        },
+        Case {
+            name: "doc_path",
+            prompt: "/goal Review docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-spec.md only and summarize the packet-scoped findings.",
+            tool_command: r#"{"command":"sed -n '1,220p' docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-spec.md","workdir":"/repo"}"#,
+            expected_kind: ObjectiveTargetKind::SpecOrDesignDoc,
+            expected_display: "docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-spec.md",
+        },
+        Case {
+            name: "test_or_verifier",
+            prompt: "/goal Validate the objective_acceptance harness only before widening scope.",
+            tool_command: r#"{"command":"cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture","workdir":"/repo"}"#,
+            expected_kind: ObjectiveTargetKind::TestOrVerifier,
+            expected_display: "objective_acceptance harness",
+        },
+        Case {
+            name: "crate_or_package",
+            prompt: "/goal Review the agent-drift-analyzer crate only and return packet-scoped findings.",
+            tool_command: r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+            expected_kind: ObjectiveTargetKind::CrateOrPackage,
+            expected_display: "agent-drift-analyzer",
+        },
+        Case {
+            name: "workspace_ref",
+            prompt: "/goal Add this skill to @shared-cab-app only and keep the answer scoped to that workspace target.",
+            tool_command: r#"{"command":"Get-ChildItem -Force","workdir":"D:\\Shared-cab-app"}"#,
+            expected_kind: ObjectiveTargetKind::RepoSlice,
+            expected_display: "@shared-cab-app",
+        },
+        Case {
+            name: "packet_work_item",
+            prompt: "/goal Review Packet B2.2 only and return concrete findings.",
+            tool_command: r#"{"command":"rg -n \"Task B2\\.2\" docs/specs/r5/R5_75/phase-1/SO/SO-2.3B-refine/SO-2.3B-refine-tasks.md","workdir":"/repo"}"#,
+            expected_kind: ObjectiveTargetKind::RepoSlice,
+            expected_display: "B2.2",
+        },
+        Case {
+            name: "conceptual_topic",
+            prompt: "/goal Validate the structured objective sidecar only and keep the response packet-scoped.",
+            tool_command: r#"{"command":"echo structured-objective-sidecar","workdir":"/repo"}"#,
+            expected_kind: ObjectiveTargetKind::ConceptualTopic,
+            expected_display: "structured objective sidecar",
+        },
+    ];
+
+    for (index, case) in cases.iter().enumerate() {
+        let result = analyze_custom_rows(vec![
+            prompt_row(0, "turn-001", case.prompt),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                case.tool_command,
+            ),
+        ]);
+
+        let objective = &result.sessions[0].context.objective;
+        let structured = objective.structured.as_ref().expect("structured objective");
+        let target = structured.target.as_ref().unwrap_or_else(|| {
+            panic!("case {} missing target for {}", index, case.name)
+        });
+
+        assert_eq!(target.kind, case.expected_kind, "case {}", case.name);
+        assert_eq!(target.display, case.expected_display, "case {}", case.name);
+        assert_ne!(target.display, objective.text, "case {}", case.name);
+        assert_eq!(
+            target.evidence.first().map(|evidence| evidence.role),
+            Some(ObjectiveRole::Goal),
+            "case {}",
+            case.name
+        );
+        assert!(structured
+            .unknowns
+            .iter()
+            .all(|unknown| unknown.field_name != "target"), "case {}", case.name);
+    }
+}
+
+#[test]
 fn checkpoints_context_objective_does_not_treat_version_tokens_as_work_item_targets() {
     let prompt = "/goal Review whether v0.6 landed correctly and summarize the findings only.";
     let result = analyze_custom_rows(vec![
