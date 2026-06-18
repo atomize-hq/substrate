@@ -1229,8 +1229,10 @@ mod tests {
         let _path_guard = EnvVarGuard::set_value("PATH", host_bin_dir.as_os_str());
         let guest_bin_dir = temp.path().join("guest-bin");
         fs::create_dir_all(&guest_bin_dir).expect("create guest bin dir");
-        let _world_codex_guard =
-            EnvVarGuard::set_path("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", guest_bin_dir.as_path());
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            guest_bin_dir.as_path(),
+        );
 
         let host_entry = make_entry_with_runtime_family_and_binary(
             "codex",
@@ -1241,8 +1243,8 @@ mod tests {
             "codex",
             required_capabilities(),
         );
-        let host_descriptor =
-            validate_runtime_realizability(&host_entry, &config).expect("host codex should resolve from PATH");
+        let host_descriptor = validate_runtime_realizability(&host_entry, &config)
+            .expect("host codex should resolve from PATH");
         assert_eq!(host_descriptor.binary_path, host_codex);
 
         let world_entry = make_entry_with_runtime_family_and_binary(
@@ -1254,8 +1256,8 @@ mod tests {
             CODEX_WORLD_GUEST_ENTRYPOINT,
             required_capabilities(),
         );
-        let error =
-            validate_runtime_realizability(&world_entry, &config).expect_err("world codex must ignore host PATH truth");
+        let error = validate_runtime_realizability(&world_entry, &config)
+            .expect_err("world codex must ignore host PATH truth");
         assert_eq!(error.exit_code, 4);
         assert!(
             error.reason.contains("guest entrypoint"),
