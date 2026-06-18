@@ -1260,10 +1260,9 @@ mod tests {
         compatibility_inventory_file_from_v2, inventory_entry_origin,
         load_effective_agent_inventory, materialize_effective_inventory_file,
         normalize_inventory_origin_path, project_inventory_entry, project_inventory_v2_entry,
-        validate_agent_schema_v2, AgentCapabilitiesV1, AgentCliConfigV1,
-        AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1,
-        AgentFileV1, AgentFileV2, AgentInventoryBaselineOrigin, AgentInventoryEntryV1,
-        AgentPlacement,
+        validate_agent_schema_v2, AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily,
+        AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
+        AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
     };
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
