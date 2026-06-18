@@ -2,7 +2,7 @@ use crate::execution::config_model;
 use crate::execution::workspace;
 use anyhow::Result;
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -517,20 +517,30 @@ pub(crate) fn load_effective_agent_inventory(
                 root.display()
             )));
         }
+        let mut validated_files = Vec::new();
+        let mut root_shadowed_agent_ids = BTreeSet::new();
         for path in collect_agent_files_in_root(&root)? {
             let file = validate_agent_file(&path, base_policy)?;
-            if file.version == 2
-                && inventory_path_origin(cwd, &path)
-                    == AgentInventoryBaselineOrigin::WorkspaceInventory
-            {
-                // Packet 1.5 keeps workspace-local version-2 compatibility rows from leaving
-                // stale global split-entry truth live. A workspace v2 override replaces the
-                // whole pre-cutover logical-agent view, so it must suppress both legacy
-                // compatibility ids (`logical` and `logical_world`) regardless of which
-                // single placement the bridge materialized.
-                for shadowed_agent_id in legacy_shadowed_agent_ids_from_v2_compat(&file) {
-                    effective.remove(&shadowed_agent_id);
-                }
+            if file.version == 2 {
+                root_shadowed_agent_ids.extend(legacy_shadowed_agent_ids_from_v2_compat(&file));
+            }
+            validated_files.push((path, file));
+        }
+
+        if inventory_path_origin(cwd, &root) == AgentInventoryBaselineOrigin::WorkspaceInventory {
+            // Packet 1.5 keeps workspace-local version-2 compatibility rows from leaving
+            // stale global split-entry truth live. A workspace v2 override replaces the
+            // whole pre-cutover logical-agent view, so it must suppress both legacy
+            // compatibility ids (`logical` and `logical_world`) regardless of which
+            // single placement the bridge materialized.
+            for shadowed_agent_id in &root_shadowed_agent_ids {
+                effective.remove(shadowed_agent_id);
+            }
+        }
+
+        for (path, file) in validated_files {
+            if file.version == 1 && root_shadowed_agent_ids.contains(&file.id) {
+                continue;
             }
 
             let Some(file) = materialize_effective_inventory_file(&path, file)? else {
@@ -1911,6 +1921,79 @@ config:
         assert!(
             !inventory.contains_key("codex_world"),
             "workspace host-only version 2 compatibility truth must suppress the stale global world row"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_effective_agent_inventory_same_root_v2_suppresses_stale_legacy_world_sibling() {
+        let temp = tempdir().expect("tempdir");
+        let substrate_home = temp.path().join("substrate-home");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("create agents directory");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#,
+        )
+        .expect("write host-only v2 inventory");
+        fs::write(
+            agents_dir.join("codex_world.yaml"),
+            r#"
+version: 1
+id: codex_world
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    runtime_family: codex
+  capabilities:
+    llm: true
+"#,
+        )
+        .expect("write stale legacy world inventory");
+
+        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        let inventory_result = load_effective_agent_inventory(temp.path(), &Policy::default());
+        match previous_substrate_home {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+        let inventory = inventory_result.expect(
+            "effective inventory should keep the single-placement version 2 compatibility truth",
+        );
+
+        let codex = inventory
+            .get("codex")
+            .expect("host-only version 2 inventory should materialize through the legacy host compatibility id");
+        assert_eq!(codex.path, agents_dir.join("codex.yaml"));
+        assert_eq!(
+            codex.file.config.execution.scope,
+            Some(crate::execution::config_model::AgentExecutionScope::Host)
+        );
+        assert_eq!(codex.file.derived_backend_id(), "cli:codex");
+        assert!(
+            !inventory.contains_key("codex_world"),
+            "single-placement version 2 truth must suppress the stale same-root legacy world sibling"
         );
     }
 }
