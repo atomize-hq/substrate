@@ -22,7 +22,7 @@ Use these source docs as authority:
 
 Mission:
 - Land Slice 58 Packet 1 only: Placement-Aware Schema And Projection.
-- Do not start Packet 2.
+- Do not start Packet 1.5.
 - Keep the work bounded to `version: 2` placement-aware inventory parsing and projection.
 
 Before editing:
@@ -40,7 +40,7 @@ Packet 1 scope:
 - Task 1.2: Project placement-aware logical agents into realized placement rows.
 
 Out of scope:
-- Packet 2, 3, or 4 work
+- Packet 1.5, 2, 3, or 4 work
 - exact selector cutover
 - policy/doc/runtime-control exact-id migration
 - guest-runtime/bootstrap redesign
@@ -75,9 +75,10 @@ Packet 1 checkpoint:
 - projection emits exact realized rows
 - no selector cutover has happened yet
 - the distinction between logical id and realized id is explicit in the projection layer
+- live control-surface bridging remains deferred to Packet 1.5
 
 Implementation subagent prompt:
-/goal Land Slice 58 Packet 1 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md, and the landed Slice 59 spec first. Work only on Task 1.1 and Task 1.2. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed in crates/shell/src/execution/agent_inventory.rs and the narrowest adjacent inventory-validation tests. Keep Packet 2 through Packet 4 work out of scope. Do not cut over exact selectors, migrate policy/docs, or reopen Slice 59 runtime semantics. Run cargo test -p shell agents_validate -- --nocapture and cargo test -p shell agent_inventory -- --nocapture. Final message must state whether Packet 1 is checkpoint-green, what symbols changed, what verification ran, whether Packet 2 is unblocked, and whether any reopen condition was discovered.
+/goal Land Slice 58 Packet 1 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md, and the landed Slice 59 spec first. Work only on Task 1.1 and Task 1.2. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed in crates/shell/src/execution/agent_inventory.rs and the narrowest adjacent inventory-validation tests. Keep Packet 1.5 through Packet 4 work out of scope. Do not cut over exact selectors, migrate policy/docs, or reopen Slice 59 runtime semantics. Run cargo test -p shell agents_validate -- --nocapture and cargo test -p shell agent_inventory -- --nocapture. Final message must state whether Packet 1 is checkpoint-green, what symbols changed, what verification ran, whether Packet 1.5 is unblocked, and whether any reopen condition was discovered.
 
 Review subagent prompt:
 Review the committed Slice 58 Packet 1 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md. Review only Packet 1 and the live diff. Review across correctness, readability, architecture, security, and performance. Report findings first with explicit severities. State clearly whether Packet 1 is review-clean or requires changes.
@@ -87,6 +88,97 @@ Fix subagent prompt:
 
 Final response requirements:
 - State whether Packet 1 is checkpoint-green.
+- List exact verification commands run and whether they passed.
+- Report GitNexus impact-analysis results for edited production symbols.
+- Report GitNexus detect-changes results before each commit.
+- State whether Packet 1.5 is unblocked.
+- If anything is not green, say explicitly that Packet 1.5 must not begin.
+```
+
+## Packet 1.5 Prompt
+
+```text
+/goal Land Slice 58 Packet 1.5 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate.
+
+Use these source docs as authority:
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md
+
+Mission:
+- Land Slice 58 Packet 1.5 only: Effective-Inventory Compatibility Bridge And Control-Surface Honesty.
+- Do not start Packet 2.
+- Keep the work bounded to making single-placement `version: 2` inventory usable in current live control surfaces and making multi-enabled pre-cutover states fail closed explicitly.
+
+Before editing:
+1. Read SPEC-58, PLAN-58, TASKS-58, and the landed Slice 59 spec first.
+2. Verify Packet 1 is already landed and checkpoint-green on the current tree.
+3. Inspect the live code in:
+   - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_inventory.rs
+   - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agents_validate.rs
+   - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs
+   - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs
+   - the narrowest adjacent live-inventory/control-surface tests under /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests
+4. If GitNexus indicates the index is stale, run `npx gitnexus analyze`.
+5. Run GitNexus impact analysis before editing any production symbol you change and report the blast radius.
+6. Stay strictly within Packet 1.5 scope.
+
+Packet 1.5 scope:
+- Task 1.5.1: Materialize unambiguous single-placement `version: 2` inventory into the legacy effective inventory.
+- Task 1.5.2: Fail closed explicitly for multi-enabled `version: 2` inventory before Packet 2.
+
+Out of scope:
+- Packet 2, 3, or 4 work
+- placement-qualified exact-id cutover
+- inventory file migration
+- docs/policy/smoke-helper exact-id migration
+- backend-id grammar changes
+- weakening or reopening landed Slice 59 host-vs-world runtime separation
+
+Execution requirements:
+- Spawn a fresh GPT-5.4 subagent on high to implement Packet 1.5.
+- The implementation subagent prompt must begin with `/goal ` and must instruct the subagent to use `$incremental-implementation`.
+- The implementation subagent must work only on Task 1.5.1 and Task 1.5.2.
+- After implementation, run:
+  - `cargo test -p shell agents_validate -- --nocapture`
+  - `cargo test -p shell agent_inventory -- --nocapture`
+  - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+  - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+- If implementation is green, run `git diff --stat` and `git status --short`.
+- Run GitNexus detect-changes before committing.
+- Commit the Packet 1.5 implementation work before review.
+
+Review requirements:
+- Spawn a fresh GPT-5.4 subagent on high using `$code-review-and-quality`.
+- The review subagent must review only Packet 1.5 against SPEC-58 / PLAN-58 / TASKS-58 and the live diff.
+- If review finds issues, spawn a fresh GPT-5.4 high fix subagent whose prompt begins with `/goal ` and uses `$incremental-implementation`.
+- The fix subagent must stay limited to the review findings and Packet 1.5 scope.
+- After fixes, rerun the relevant verification commands, run `git diff --stat` and `git status --short`, run GitNexus detect-changes again, commit the fixes, and then rerun a fresh GPT-5.4 high `$code-review-and-quality` review.
+- Repeat until review-clean.
+
+Commit policy:
+- Commit after implementation before review.
+- Commit after each fix round before re-review.
+- Do not amend unless absolutely required.
+
+Packet 1.5 checkpoint:
+- single-placement `version: 2` inventory is usable through current live control surfaces
+- multi-enabled `version: 2` inventory cannot silently validate green and then disappear from effective inventory
+- legacy compatibility ids remain clearly interim-only and pre-cutover
+- no placement-qualified exact-selector cutover has happened yet
+
+Implementation subagent prompt:
+/goal Land Slice 58 Packet 1.5 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md, and the landed Slice 59 spec first. Work only on Task 1.5.1 and Task 1.5.2. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Implement the minimum code and tests needed in crates/shell/src/execution/agent_inventory.rs and the narrowest adjacent live-inventory/control-surface Packet 1.5 test seams. Keep Packet 2 through Packet 4 work out of scope. Do not make `cli:codex-host` / `cli:codex-world` live yet. Do not migrate inventory files, docs, or policy examples yet. Run cargo test -p shell agents_validate -- --nocapture, cargo test -p shell agent_inventory -- --nocapture, cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture, and cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture. Final message must state whether Packet 1.5 is checkpoint-green, what symbols changed, what verification ran, whether Packet 2 is unblocked, and whether any reopen condition was discovered.
+
+Review subagent prompt:
+Review the committed Slice 58 Packet 1.5 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md. Review only Packet 1.5 and the live diff. Review across correctness, readability, architecture, security, and performance. Report findings first with explicit severities. State clearly whether Packet 1.5 is review-clean or requires changes.
+
+Fix subagent prompt:
+/goal Address only the required Slice 58 Packet 1.5 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read the review findings plus /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md. Before editing any production symbol, run GitNexus impact analysis and report the blast radius. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Fix only the flagged Packet 1.5 issues without widening scope. Re-run the relevant Packet 1.5 verification commands. Final message must state which findings were fixed, what verification ran, whether Packet 1.5 is checkpoint-green, and whether another review round is required.
+
+Final response requirements:
+- State whether Packet 1.5 is checkpoint-green.
 - List exact verification commands run and whether they passed.
 - Report GitNexus impact-analysis results for edited production symbols.
 - Report GitNexus detect-changes results before each commit.
@@ -112,7 +204,7 @@ Mission:
 
 Before editing:
 1. Read SPEC-58, PLAN-58, TASKS-58, and the landed Slice 59 spec first.
-2. Verify Packet 1 is already landed and checkpoint-green on the current tree.
+2. Verify Packet 1.5 is already landed and checkpoint-green on the current tree.
 3. Inspect the live code in:
    - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_inventory.rs
    - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/dispatch_contract.rs
@@ -298,7 +390,7 @@ Use these source docs as authority:
 Mission:
 - Land Slice 58 Packet 4 only: Final Validation Wall.
 - Do not reopen earlier packets unless validation proves a concrete issue.
-- Keep the work bounded to proving the Packet 1-3 cutover is coherent and that landed Slice 59 runtime truth remains intact.
+- Keep the work bounded to proving the Packet 1, 1.5, 2, and 3 cutover is coherent and that landed Slice 59 runtime truth remains intact.
 
 Before editing:
 1. Read SPEC-58, PLAN-58, TASKS-58, and the landed Slice 59 spec first.
@@ -310,7 +402,7 @@ Before editing:
 
 Packet 4 scope:
 - Task 4.1: Run the final validation wall.
-- Only if the validation wall finds a concrete Packet 1-3 issue, fix that exact issue and rerun the wall.
+- Only if the validation wall finds a concrete Packet 1, 1.5, 2, or 3 issue, fix that exact issue and rerun the wall.
 
 Out of scope:
 - new feature work
@@ -356,7 +448,7 @@ Packet 4 checkpoint:
 - landed Slice 59 runtime truth, remediation, and installer semantics remain intact after the exact-id cutover
 
 Implementation subagent prompt:
-/goal Run Slice 58 Packet 4 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md, and the landed Slice 59 spec first. Start by running the full Packet 4 validation wall. Do not make changes unless the validation wall reveals a concrete Packet 1-3 defect. If a fix is required, keep it minimal and strictly within Packet 4 scope, run GitNexus impact analysis before editing any production symbol, and rerun the relevant wall commands after the fix. Final message must state whether Packet 4 is checkpoint-green, what verification ran, whether any code changes were necessary, whether the Slice 58 cutover preserved landed Slice 59 semantics, and whether any reopen condition was discovered.
+/goal Run Slice 58 Packet 4 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate. Use $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md, and the landed Slice 59 spec first. Start by running the full Packet 4 validation wall. Do not make changes unless the validation wall reveals a concrete Packet 1, 1.5, 2, or 3 defect. If a fix is required, keep it minimal and strictly within Packet 4 scope, run GitNexus impact analysis before editing any production symbol, and rerun the relevant wall commands after the fix. Final message must state whether Packet 4 is checkpoint-green, what verification ran, whether any code changes were necessary, whether the Slice 58 cutover preserved landed Slice 59 semantics, and whether any reopen condition was discovered.
 
 Review subagent prompt:
 Review the committed Slice 58 Packet 4 fix change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality, but only if Packet 4 required a code fix. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-58-placement-aware-agent-inventory-and-selector-contract.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-58-placement-aware-agent-inventory-and-selector-contract.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-58.md. Review only the Packet 4 fix diff. Review across correctness, readability, architecture, security, and performance. Report findings first with explicit severities. State clearly whether Packet 4 is review-clean or requires changes.

@@ -29,6 +29,7 @@ ASSUMPTIONS I'M MAKING:
 4. Exact backend ids must stay fail-closed and placement-explicit; host and world must not silently co-resolve.
 5. The current backend-id grammar remains `<kind>:<name>` with exactly one colon, so placement must live in the name portion rather than a second colon segment.
 6. A materially new inventory shape should use a new inventory version instead of overloading the current split-entry `version: 1` contract.
+7. A packet is not checkpoint-green if `substrate agents validate` reports success while live control surfaces silently drop the same inventory from effective runtime selection.
 
 If any of these are wrong, correct them before implementation.
 
@@ -279,11 +280,25 @@ This spec assumes a bounded migration window:
 
 1. existing split `version: 1` files remain supported until conversion lands,
 2. the placement-aware schema is the forward contract,
-3. exact backend ids will eventually move from `cli:codex` / `cli:codex_world` to `cli:codex-host` / `cli:codex-world`,
-4. migration planning must cover inventory, docs, policies, fixtures, status surfaces, and follow-up syntax before implementation cutover,
-5. and the migration must preserve the landed Slice `59` runtime-remediation / world-deps / installer semantics while exact ids move.
+3. before placement-qualified exact ids are live everywhere, validated `version: 2` inventory must not silently disappear from live control surfaces,
+4. single-placement `version: 2` inventory may use an interim compatibility bridge into current control surfaces while exact-id cutover is still pending,
+5. exact backend ids will eventually move from `cli:codex` / `cli:codex_world` to `cli:codex-host` / `cli:codex-world`,
+6. migration planning must cover inventory, docs, policies, fixtures, status surfaces, and follow-up syntax before implementation cutover,
+7. and the migration must preserve the landed Slice `59` runtime-remediation / world-deps / installer semantics while exact ids move.
 
 This spec does **not** promise silent compatibility forever for the old exact ids.
+
+### 7.1 Interim compatibility bridge before exact-id cutover
+
+Before Packet `2` lands, the repo still has legacy control surfaces keyed on split exact ids and a legacy effective-inventory view.
+
+Rules:
+
+1. a host-only placement-aware logical agent may remain control-surface usable through the legacy host exact id during the migration window,
+2. a world-only placement-aware logical agent may remain control-surface usable through the legacy world exact id during the migration window,
+3. that bridge is temporary compatibility truth only and must not be mistaken for the forward selector contract,
+4. multi-enabled `version: 2` inventory must not silently collapse into an empty effective inventory or a misleading checkpoint-green result before Packet `2` lands,
+5. if multi-enabled `version: 2` inventory cannot yet be selected honestly, the repo must fail closed with an explicit diagnostic rather than imply support it does not have.
 
 ## Code Style
 
@@ -323,7 +338,9 @@ Coverage expectations:
 4. exact backend validation continues to reject ambiguous or invalid selectors fail-closed,
 5. policy allowlists continue to operate on exact realized backend ids only,
 6. host/world display labels stay human-facing and do not replace exact selectors,
-7. legacy split `version: 1` inventory remains readable during migration if the implementation chooses a transition window.
+7. legacy split `version: 1` inventory remains readable during migration if the implementation chooses a transition window,
+8. validated `version: 2` inventory does not silently vanish from `agent list`, `agent doctor`, or adjacent live inventory consumers,
+9. before Packet `2`, single-placement `version: 2` inventory is either materially usable through the compatibility bridge or multi-placement `version: 2` fails closed with an explicit diagnostic.
 
 ## Boundaries
 
@@ -332,6 +349,7 @@ Coverage expectations:
   - keep host and world as separate realized backends
   - keep placement-local runtime truth inside the placement subtree
   - preserve `config.cli.runtime_family` as explicit runtime-realization truth
+  - keep validation and live control-surface usability honest with one another during migration
 - Ask first:
   - changing backend-id grammar away from the current single-colon contract
   - making logical-agent shorthand a control-plane selector
@@ -351,10 +369,10 @@ This spec is successful only when a fresh implementer can answer all of these fr
 3. what human-facing labels should look like,
 4. why `execution.scope: [host, world]` is rejected,
 5. where the already-landed Slice `59` world-runtime/bootstrap truth must live after placement-aware migration,
-6. and what migration boundary still remains before code changes begin.
+6. what migration boundary still remains before code changes begin,
+7. and what the interim compatibility story is before placement-qualified exact ids become live everywhere.
 
 ## Open Questions
 
 1. What exact placement-local key should hold the already-landed Slice `59` world-runtime bootstrap/dependency requirements once `codex_world` migrates into `placements.world`?
-2. Should implementation keep a temporary compatibility alias path for legacy exact ids such as `cli:codex` / `cli:codex_world`, or do a one-step exact-selector cutover once migration is ready?
-3. Which read-only UX surfaces should group by logical agent versus emit one row per realized placement by default?
+2. Which read-only UX surfaces should group by logical agent versus emit one row per realized placement by default once Packet `2` lands?

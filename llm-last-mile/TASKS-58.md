@@ -3,17 +3,18 @@
 Source spec: [SPEC-58-placement-aware-agent-inventory-and-selector-contract.md](./SPEC-58-placement-aware-agent-inventory-and-selector-contract.md)  
 Source plan: [PLAN-58-placement-aware-agent-inventory-and-selector-contract.md](./PLAN-58-placement-aware-agent-inventory-and-selector-contract.md)  
 Phase: `TASKS`  
-Execution model: four sequential `/incremental-implementation` sessions  
+Execution model: five sequential `/incremental-implementation` sessions  
 Status: draft for review
 
 ## Execution Packets
 
-This slice should be implemented as four sequential packets:
+This slice should be implemented as five sequential packets:
 
 1. schema and projection,
-2. exact selector derivation,
-3. migration of inventory/docs/tests/policies,
-4. final validation wall.
+2. control-surface compatibility bridge,
+3. exact selector derivation,
+4. migration of inventory/docs/tests/policies,
+5. final validation wall.
 
 Do not begin a later packet until the prior packet checkpoint is green.
 
@@ -52,7 +53,52 @@ Packet 1 is complete only when:
 3. no selector cutover has happened yet,
 4. the distinction between logical id and realized id is explicit in the projection layer.
 
-Do not start Packet 2 until Packet 1 verification is green.
+Do not start Packet 1.5 until Packet 1 verification is green.
+
+## Packet 1.5: Effective-Inventory Compatibility Bridge And Control-Surface Honesty
+
+Session goal:
+
+1. make single-placement `version: 2` inventory materially usable through the current live control surfaces,
+2. eliminate the false-green path where `agents validate` succeeds but effective-inventory consumers silently drop the same agent,
+3. keep placement-qualified exact-id cutover deferred to Packet `2`.
+
+### Tasks
+
+- [ ] Task 1.5.1: Materialize unambiguous single-placement `version: 2` inventory into the legacy effective inventory
+  - Acceptance: host-only `version: 2` logical agents remain reachable through the current host-scoped compatibility path; world-only `version: 2` logical agents remain reachable through the current world-scoped compatibility path; workspace-local `version: 2` shadowing no longer leaves usable single-placement inventory absent from effective inventory.
+  - Verify:
+    - `cargo test -p shell agent_inventory -- --nocapture`
+    - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+    - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+  - Expected files touched:
+    - [`crates/shell/src/execution/agent_inventory.rs`](../crates/shell/src/execution/agent_inventory.rs)
+    - [`crates/shell/tests/agent_public_control_surface_v1.rs`](../crates/shell/tests/agent_public_control_surface_v1.rs)
+    - [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](../crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
+
+- [ ] Task 1.5.2: Fail closed explicitly for multi-enabled `version: 2` inventory before Packet `2`
+  - Acceptance: multi-enabled `version: 2` inventory no longer yields silent empty effective inventory or a misleading checkpoint-green result; pre-cutover live consumers surface an actionable fail-closed diagnostic instead of implying support they do not yet have; Packet `1.5` does not make `cli:codex-host` / `cli:codex-world` live yet.
+  - Verify:
+    - `cargo test -p shell agents_validate -- --nocapture`
+    - `cargo test -p shell agent_inventory -- --nocapture`
+    - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+    - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+  - Expected files touched:
+    - [`crates/shell/src/execution/agent_inventory.rs`](../crates/shell/src/execution/agent_inventory.rs)
+    - [`crates/shell/tests/agents_validate.rs`](../crates/shell/tests/agents_validate.rs)
+    - [`crates/shell/tests/agent_public_control_surface_v1.rs`](../crates/shell/tests/agent_public_control_surface_v1.rs)
+    - [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](../crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
+
+### Packet 1.5 Checkpoint
+
+Packet 1.5 is complete only when:
+
+1. single-placement `version: 2` inventory is usable through current live control surfaces,
+2. multi-enabled `version: 2` inventory cannot silently validate green and then disappear from effective inventory,
+3. legacy compatibility ids remain clearly interim-only and pre-cutover,
+4. no placement-qualified exact-selector cutover has happened yet.
+
+Do not start Packet 2 until Packet 1.5 verification is green.
 
 ## Packet 2: Placement-Qualified Exact Selector Derivation
 
@@ -182,9 +228,10 @@ Packet 4 is complete only when:
 
 ## Cross-Packet Dependency Order
 
-1. Packet 1 blocks Packet 2.
-2. Packet 2 blocks Packet 3.
-3. Packet 3 blocks Packet 4.
+1. Packet 1 blocks Packet 1.5.
+2. Packet 1.5 blocks Packet 2.
+3. Packet 2 blocks Packet 3.
+4. Packet 3 blocks Packet 4.
 
 ## Inter-Packet Review Rules
 

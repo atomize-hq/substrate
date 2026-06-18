@@ -23,9 +23,10 @@ The correct next move is:
 
 1. add a new placement-aware inventory schema version,
 2. project each enabled placement into a concrete realized backend row,
-3. derive exact backend ids and display labels from that projection,
-4. migrate policies/docs/tests from old split exact ids to placement-qualified exact ids,
-5. and stop there.
+3. close the validation-versus-live-control-surface gap with an interim compatibility bridge,
+4. derive exact backend ids and display labels from that projection,
+5. migrate policies/docs/tests from old split exact ids to placement-qualified exact ids,
+6. and stop there.
 
 Do **not** widen this slice into new guest-runtime provisioning, world-deps authoring, or member bootstrap remediation. Those seams are already landed in Slice `59` and should only be touched here when the placement-aware cutover requires mechanical exact-id preservation.
 
@@ -76,6 +77,35 @@ Verification checkpoint:
 2. projection yields correct realized rows,
 3. `version: 1` fixtures still parse if migration support is intentionally retained,
 4. no selection semantics change yet.
+
+### Phase 1.5: Bridge Single-Placement V2 Into Live Control Surfaces
+
+Goal:
+
+1. eliminate the false-green state where `version: 2` inventory validates but disappears from live inventory consumers,
+2. keep single-placement `version: 2` inventory materially usable before Packet `2`,
+3. fail closed explicitly for multi-enabled `version: 2` inventory until placement-qualified exact ids are live.
+
+Primary touch surface:
+
+1. `crates/shell/src/execution/agent_inventory.rs`
+2. `crates/shell/tests/agents_validate.rs`
+3. `crates/shell/tests/agent_public_control_surface_v1.rs`
+4. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+
+Required changes:
+
+1. materialize unambiguous single-placement `version: 2` inventory into the current effective-inventory/control-surface bridge,
+2. preserve legacy host-vs-world exact-id truth inside that bridge so host-only and world-only placements do not blur together,
+3. replace silent omission for multi-enabled `version: 2` inventory with an explicit fail-closed diagnostic until Packet `2` lands,
+4. keep the forward placement-qualified selector contract deferred to Packet `2`.
+
+Verification checkpoint:
+
+1. single-placement `version: 2` inventory is visible to current list/doctor/start-adjacent control surfaces,
+2. workspace-local `version: 2` inventory no longer yields stale or missing effective-inventory truth for single-placement entries,
+3. multi-enabled `version: 2` inventory cannot silently validate green and then disappear from live surfaces,
+4. no `cli:codex-host` / `cli:codex-world` cutover has happened yet.
 
 ### Phase 2: Cut Exact Selector Derivation Over To Placement-Qualified Realized Backends
 
@@ -167,10 +197,11 @@ Exit criteria:
 
 ## Sequencing And Parallelism
 
-1. Phase 1 must land before any selector cutover.
-2. Phase 2 must land before policy/doc/test migration can be honest.
-3. Phase 3 should happen after selector derivation is stable so the docs/tests lock the real contract.
-4. Any runtime-contract reopen work should happen only if implementation uncovers a contradiction with landed Slice `59`; otherwise runtime/bootstrap behavior stays out of scope.
+1. Phase 1 must land before any compatibility bridge or selector cutover.
+2. Phase 1.5 must land before Packet `2`; otherwise `version: 2` inventory remains misleadingly non-live.
+3. Phase 2 must land before policy/doc/test migration can be honest.
+4. Phase 3 should happen after selector derivation is stable so the docs/tests lock the real contract.
+5. Any runtime-contract reopen work should happen only if implementation uncovers a contradiction with landed Slice `59`; otherwise runtime/bootstrap behavior stays out of scope.
 
 ## Risks
 
@@ -202,6 +233,16 @@ Mitigation:
 1. keep the placement-local ownership rule explicit in the spec,
 2. treat Slice `59` as the preserved runtime authority during every migration packet,
 3. reopen runtime docs/code only if a concrete contradiction appears during cutover.
+
+### Risk 4: Validation and live control surfaces drift apart during the migration window
+
+If `agents validate` says a `version: 2` inventory is good while `agent list`, `agent doctor`, or exact-backend launch surfaces silently omit it, the packet boundary becomes misleading and later packets build on disputed truth.
+
+Mitigation:
+
+1. insert an explicit Phase `1.5` compatibility bridge,
+2. make multi-enabled pre-cutover states fail closed diagnostically instead of disappearing,
+3. add control-surface coverage alongside parse/projection coverage before beginning Packet `2`.
 
 ## Non-Goals
 
