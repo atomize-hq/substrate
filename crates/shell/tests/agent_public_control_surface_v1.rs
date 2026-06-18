@@ -265,7 +265,7 @@ impl AgentControlFixture {
         .expect("write config.yaml");
         fs::write(
             self.substrate_home.join("policy.yaml"),
-            &format!(
+            format!(
                 "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n    - \"{allowed_backend}\"\n"
             ),
         )
