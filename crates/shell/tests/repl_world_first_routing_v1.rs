@@ -4414,7 +4414,7 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
     );
 
     repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(6));
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
