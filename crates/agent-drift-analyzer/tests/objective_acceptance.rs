@@ -89,9 +89,11 @@ fn objective_acceptance_readme_documents_expected_shape_contract() {
         "raw.json",
         "expected.json",
         "role_spans",
+        "exact_ref",
         "field_evidence",
         "forbidden_role_promotions",
         "compatibility_rendering",
+        "comparison_key",
         "required_unknown_fields",
     ] {
         assert!(
@@ -160,14 +162,22 @@ fn objective_acceptance_expected_shape_contract_validates_structured_correctness
                     "source_kind": "user_prompt",
                     "section_kind": "scope",
                     "excerpt_contains": "Teach objective extraction to distinguish mission/scope",
-                    "require_indices": true
+                    "exact_ref": {
+                        "source_file_suffix": "scope_over_checklist_contract.jsonl",
+                        "event_index": 0,
+                        "row_ordinal": 0
+                    }
                 },
                 {
                     "role": "verification",
                     "source_kind": "user_prompt",
                     "section_kind": "verification",
                     "excerpt_contains": "cargo test -p agent-drift-analyzer checkpoints -- --nocapture",
-                    "require_indices": true
+                    "exact_ref": {
+                        "source_file_suffix": "scope_over_checklist_contract.jsonl",
+                        "event_index": 0,
+                        "row_ordinal": 0
+                    }
                 }
             ],
             "forbidden_role_promotions": [
@@ -175,7 +185,12 @@ fn objective_acceptance_expected_shape_contract_validates_structured_correctness
                     "forbidden_role": "goal",
                     "source_kind": "user_prompt",
                     "section_kind": "checklist",
-                    "excerpt_contains": "Run this task on a linux machine."
+                    "excerpt_contains": "Run this task on a linux machine.",
+                    "exact_ref": {
+                        "source_file_suffix": "scope_over_checklist_contract.jsonl",
+                        "event_index": 0,
+                        "row_ordinal": 0
+                    }
                 }
             ],
             "compatibility_rendering": {
@@ -210,7 +225,12 @@ fn objective_acceptance_expected_shape_contract_validates_structured_correctness
                 "target": [
                     {
                         "role": "goal",
-                        "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs"
+                        "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs",
+                        "exact_ref": {
+                            "source_file_suffix": "explicit_file_target_grounding_contract.jsonl",
+                            "event_index": 0,
+                            "row_ordinal": 0
+                        }
                     }
                 ]
             },
@@ -243,6 +263,67 @@ fn objective_acceptance_expected_shape_contract_validates_structured_correctness
         }),
     );
 
+    corpus.write_case(
+        "locked-acceptance",
+        "constraint_and_deliverable_grounding_contract",
+        serde_json::json!({
+            "rows": [
+                {
+                    "kind": "user_message",
+                    "user_message_role": "prompt",
+                    "text": "Review SO-2.1, do not change code, identify brittle gaps, and return concrete packet fixes."
+                }
+            ]
+        }),
+        serde_json::json!({
+            "case_id": "constraint_and_deliverable_grounding_contract",
+            "objective_class": "task_statement",
+            "primary_intent": "review",
+            "constraints": [
+                {
+                    "constraint_kind": "no_code",
+                    "display_contains": "Do not change code"
+                }
+            ],
+            "deliverables": [
+                {
+                    "deliverable_kind": "other_deliverable",
+                    "display_contains": "Return concrete packet fixes"
+                }
+            ],
+            "field_evidence": {
+                "constraints": [
+                    [
+                        {
+                            "role": "constraint",
+                            "source_kind": "user_prompt",
+                            "excerpt_contains": "Do not change code",
+                            "exact_ref": {
+                                "source_file_suffix": "constraint_and_deliverable_grounding_contract.jsonl",
+                                "event_index": 0,
+                                "row_ordinal": 0
+                            }
+                        }
+                    ]
+                ],
+                "deliverables": [
+                    [
+                        {
+                            "role": "goal",
+                            "source_kind": "user_prompt",
+                            "excerpt_contains": "Return concrete packet fixes",
+                            "exact_ref": {
+                                "source_file_suffix": "constraint_and_deliverable_grounding_contract.jsonl",
+                                "event_index": 0,
+                                "row_ordinal": 0
+                            }
+                        }
+                    ]
+                ]
+            }
+        }),
+    );
+
     validate_objective_acceptance_corpus(corpus.root());
 }
 
@@ -260,6 +341,7 @@ struct ObjectiveAcceptanceRawRow {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedObjectiveAcceptance {
     case_id: String,
     objective_class: ObjectiveClass,
@@ -289,6 +371,7 @@ struct ExpectedObjectiveAcceptance {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedTarget {
     kind: ObjectiveTargetKind,
     #[serde(default)]
@@ -296,29 +379,35 @@ struct ExpectedTarget {
     #[serde(default)]
     paths: Vec<String>,
     #[serde(default)]
+    symbols: Vec<String>,
+    #[serde(default)]
     named_artifacts: Vec<String>,
     #[serde(default)]
     workspace_refs: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedConstraint {
     constraint_kind: ObjectiveConstraintKind,
     display_contains: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedDisplayField {
     display_contains: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedDeliverable {
     deliverable_kind: RequestedDeliverableKind,
     display_contains: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedRoleSpan {
     role: ObjectiveRole,
     #[serde(default)]
@@ -327,16 +416,39 @@ struct ExpectedRoleSpan {
     section_kind: Option<ObjectiveSectionKind>,
     excerpt_contains: String,
     #[serde(default)]
-    require_indices: bool,
+    exact_ref: Option<ExpectedSpanRef>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExpectedSpanRef {
+    #[serde(default)]
+    source_file_suffix: Option<String>,
+    #[serde(default)]
+    event_index: Option<usize>,
+    #[serde(default)]
+    row_ordinal: Option<usize>,
+    #[serde(default)]
+    section_index: Option<usize>,
+    #[serde(default)]
+    clause_index: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedFieldEvidence {
     #[serde(default)]
     target: Vec<ExpectedRoleSpan>,
+    #[serde(default)]
+    constraints: Vec<Vec<ExpectedRoleSpan>>,
+    #[serde(default)]
+    success_conditions: Vec<Vec<ExpectedRoleSpan>>,
+    #[serde(default)]
+    deliverables: Vec<Vec<ExpectedRoleSpan>>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedForbiddenRolePromotion {
     forbidden_role: ObjectiveRole,
     #[serde(default)]
@@ -344,9 +456,12 @@ struct ExpectedForbiddenRolePromotion {
     #[serde(default)]
     section_kind: Option<ObjectiveSectionKind>,
     excerpt_contains: String,
+    #[serde(default)]
+    exact_ref: Option<ExpectedSpanRef>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExpectedCompatibilityRendering {
     acceptable_any_of: Vec<String>,
     #[serde(default)]
@@ -535,6 +650,14 @@ fn validate_objective_acceptance_case(case: &ObjectiveAcceptanceCaseFixture) {
                 actual_target.paths
             );
         }
+        for symbol in &target.symbols {
+            assert!(
+                actual_target.symbols.iter().any(|actual| actual == symbol),
+                "objective acceptance case {} target symbols must contain `{symbol}`; got {:?}",
+                case.case_id,
+                actual_target.symbols
+            );
+        }
         for artifact in &target.named_artifacts {
             assert!(
                 actual_target
@@ -565,15 +688,40 @@ fn validate_objective_acceptance_case(case: &ObjectiveAcceptanceCaseFixture) {
             );
         }
     }
+    if !expected.field_evidence.constraints.is_empty() {
+        assert_eq!(
+            expected.field_evidence.constraints.len(),
+            expected.constraints.len(),
+            "objective acceptance case {} constraint field_evidence must align 1:1 with expected constraints",
+            case.case_id
+        );
+    }
+    if !expected.field_evidence.success_conditions.is_empty() {
+        assert_eq!(
+            expected.field_evidence.success_conditions.len(),
+            expected.success_conditions.len(),
+            "objective acceptance case {} success-condition field_evidence must align 1:1 with expected success_conditions",
+            case.case_id
+        );
+    }
+    if !expected.field_evidence.deliverables.is_empty() {
+        assert_eq!(
+            expected.field_evidence.deliverables.len(),
+            expected.deliverables.len(),
+            "objective acceptance case {} deliverable field_evidence must align 1:1 with expected deliverables",
+            case.case_id
+        );
+    }
 
-    for expected_constraint in &expected.constraints {
+    for (constraint_index, expected_constraint) in expected.constraints.iter().enumerate() {
+        let actual_constraint = structured.constraints.iter().find(|constraint| {
+            constraint.constraint_kind == expected_constraint.constraint_kind
+                && constraint
+                    .display
+                    .contains(&expected_constraint.display_contains)
+        });
         assert!(
-            structured.constraints.iter().any(|constraint| {
-                constraint.constraint_kind == expected_constraint.constraint_kind
-                    && constraint
-                        .display
-                        .contains(&expected_constraint.display_contains)
-            }),
+            actual_constraint.is_some(),
             "objective acceptance case {} missing constraint kind {:?} containing `{}`; got {:?}",
             case.case_id,
             expected_constraint.constraint_kind,
@@ -584,15 +732,31 @@ fn validate_objective_acceptance_case(case: &ObjectiveAcceptanceCaseFixture) {
                 .map(|constraint| (&constraint.constraint_kind, &constraint.display))
                 .collect::<Vec<_>>()
         );
+        if let Some(field_evidence) = expected.field_evidence.constraints.get(constraint_index) {
+            let actual_constraint = actual_constraint.expect("constraint matched above");
+            for span in field_evidence {
+                assert_span_matches(
+                    &actual_constraint.evidence,
+                    span,
+                    &format!(
+                        "objective acceptance case {} constraint {} evidence",
+                        case.case_id, constraint_index
+                    ),
+                );
+            }
+        }
     }
 
-    for expected_success_condition in &expected.success_conditions {
+    for (success_condition_index, expected_success_condition) in
+        expected.success_conditions.iter().enumerate()
+    {
+        let actual_success_condition = structured.success_conditions.iter().find(|condition| {
+            condition
+                .display
+                .contains(&expected_success_condition.display_contains)
+        });
         assert!(
-            structured.success_conditions.iter().any(|condition| {
-                condition
-                    .display
-                    .contains(&expected_success_condition.display_contains)
-            }),
+            actual_success_condition.is_some(),
             "objective acceptance case {} missing success condition containing `{}`; got {:?}",
             case.case_id,
             expected_success_condition.display_contains,
@@ -602,16 +766,35 @@ fn validate_objective_acceptance_case(case: &ObjectiveAcceptanceCaseFixture) {
                 .map(|condition| condition.display.as_str())
                 .collect::<Vec<_>>()
         );
+        if let Some(field_evidence) = expected
+            .field_evidence
+            .success_conditions
+            .get(success_condition_index)
+        {
+            let actual_success_condition =
+                actual_success_condition.expect("success condition matched above");
+            for span in field_evidence {
+                assert_span_matches(
+                    &actual_success_condition.evidence,
+                    span,
+                    &format!(
+                        "objective acceptance case {} success condition {} evidence",
+                        case.case_id, success_condition_index
+                    ),
+                );
+            }
+        }
     }
 
-    for expected_deliverable in &expected.deliverables {
+    for (deliverable_index, expected_deliverable) in expected.deliverables.iter().enumerate() {
+        let actual_deliverable = structured.deliverables.iter().find(|deliverable| {
+            deliverable.deliverable_kind == expected_deliverable.deliverable_kind
+                && deliverable
+                    .display
+                    .contains(&expected_deliverable.display_contains)
+        });
         assert!(
-            structured.deliverables.iter().any(|deliverable| {
-                deliverable.deliverable_kind == expected_deliverable.deliverable_kind
-                    && deliverable
-                        .display
-                        .contains(&expected_deliverable.display_contains)
-            }),
+            actual_deliverable.is_some(),
             "objective acceptance case {} missing deliverable kind {:?} containing `{}`; got {:?}",
             case.case_id,
             expected_deliverable.deliverable_kind,
@@ -622,6 +805,19 @@ fn validate_objective_acceptance_case(case: &ObjectiveAcceptanceCaseFixture) {
                 .map(|deliverable| (&deliverable.deliverable_kind, &deliverable.display))
                 .collect::<Vec<_>>()
         );
+        if let Some(field_evidence) = expected.field_evidence.deliverables.get(deliverable_index) {
+            let actual_deliverable = actual_deliverable.expect("deliverable matched above");
+            for span in field_evidence {
+                assert_span_matches(
+                    &actual_deliverable.evidence,
+                    span,
+                    &format!(
+                        "objective acceptance case {} deliverable {} evidence",
+                        case.case_id, deliverable_index
+                    ),
+                );
+            }
+        }
     }
 
     for span in &expected.role_spans {
@@ -643,6 +839,10 @@ fn validate_objective_acceptance_case(case: &ObjectiveAcceptanceCaseFixture) {
                         .section_kind
                         .is_none_or(|section_kind| span.section_kind == section_kind)
                     && span.excerpt.contains(&forbidden_promotion.excerpt_contains)
+                    && forbidden_promotion
+                        .exact_ref
+                        .as_ref()
+                        .is_none_or(|exact_ref| exact_ref_matches(span, exact_ref))
             }),
             "objective acceptance case {} must not promote `{}` to {:?}",
             case.case_id,
@@ -767,8 +967,32 @@ fn span_matches(
             .section_kind
             .is_none_or(|section_kind| actual.section_kind == section_kind)
         && actual.excerpt.contains(&expected.excerpt_contains)
-        && (!expected.require_indices
-            || (actual.section_index.is_some() && actual.clause_index.is_some()))
+        && expected
+            .exact_ref
+            .as_ref()
+            .is_none_or(|exact_ref| exact_ref_matches(actual, exact_ref))
+}
+
+fn exact_ref_matches(
+    actual: &agent_drift_analyzer::ObjectiveEvidenceSpan,
+    expected: &ExpectedSpanRef,
+) -> bool {
+    expected
+        .source_file_suffix
+        .as_ref()
+        .is_none_or(|suffix| actual.row.source_file.as_str().ends_with(suffix))
+        && expected
+            .event_index
+            .is_none_or(|event_index| actual.row.event_index == event_index)
+        && expected
+            .row_ordinal
+            .is_none_or(|row_ordinal| actual.row.row_ordinal == row_ordinal)
+        && expected
+            .section_index
+            .is_none_or(|section_index| actual.section_index == Some(section_index))
+        && expected
+            .clause_index
+            .is_none_or(|clause_index| actual.clause_index == Some(clause_index))
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Utf8Path) -> T {

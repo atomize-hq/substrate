@@ -59,16 +59,38 @@ honesty from this metadata:
     {
       "role": "goal",
       "source_kind": "user_prompt",
-      "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs"
+      "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs",
+      "exact_ref": {
+        "source_file_suffix": "explicit_file_target_grounding_contract.jsonl",
+        "event_index": 0,
+        "row_ordinal": 0
+      }
     }
   ],
   "field_evidence": {
-    "target": [
-      {
-        "role": "goal",
-        "source_kind": "user_prompt",
-        "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs"
+    "target": [{
+      "role": "goal",
+      "source_kind": "user_prompt",
+      "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs",
+      "exact_ref": {
+        "source_file_suffix": "explicit_file_target_grounding_contract.jsonl",
+        "event_index": 0,
+        "row_ordinal": 0
       }
+    }],
+    "constraints": [
+      [
+        {
+          "role": "constraint",
+          "source_kind": "user_prompt",
+          "excerpt_contains": "do not change code",
+          "exact_ref": {
+            "source_file_suffix": "constraint_and_deliverable_grounding_contract.jsonl",
+            "event_index": 0,
+            "row_ordinal": 0
+          }
+        }
+      ]
     ]
   },
   "forbidden_role_promotions": [
@@ -97,8 +119,15 @@ Notes:
 - `acceptable_any_of` is the compatibility wall. Cases may allow multiple rendered strings when the
   structured frame is correct, but the harness must still enforce the semantic `comparison_key`
   whenever the case specifies one.
+- `exact_ref` is the grounding-ref wall. Cases can pin an expected span to the originating
+  synthetic or committed row via `source_file_suffix`, `event_index`, `row_ordinal`, and, when the
+  extractor makes them available, `section_index` / `clause_index`.
 - `role_spans` and `field_evidence` are separate on purpose: the first proves clause-role labeling,
   the second proves the extracted field stayed grounded to the right span.
+- `field_evidence.constraints`, `field_evidence.success_conditions`, and
+  `field_evidence.deliverables` are positional arrays that align with the corresponding
+  `constraints`, `success_conditions`, and `deliverables` lists when a case wants to pin grounding
+  for those structured fields.
 - `forbidden_role_promotions` is the anti-WDAP guardrail. Checklist or scaffolding text must be
   able to fail the case even if the final rendered string still looks plausible.
 - `required_unknown_fields` and `forbidden_unknown_fields` keep the extractor honest when evidence
