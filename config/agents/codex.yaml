@@ -1,21 +1,37 @@
-version: 1
+version: 2
 id: codex
 config:
   kind: cli
   enabled: true
   protocol: substrate.agent.session
-  execution:
-    scope: host
-  cli:
-    runtime_family: codex
-    binary: codex
-    mode: persistent
-  capabilities:
-    session_start: true
-    session_resume: true
-    session_fork: true
-    session_stop: true
-    status_snapshot: true
-    event_stream: true
-    llm: true
-    mcp_client: false
+  placements:
+    host:
+      enabled: true
+      cli:
+        runtime_family: codex
+        binary: codex
+        mode: persistent
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
+    world:
+      enabled: true
+      cli:
+        runtime_family: codex
+        binary: codex
+        mode: persistent
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false

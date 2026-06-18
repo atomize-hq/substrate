@@ -10404,6 +10404,25 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn runtime_agent_file_host_and_world(
+        agent_id: &str,
+        runtime_family: &str,
+        host_binary: &Path,
+        world_binary: &Path,
+    ) -> String {
+        format!(
+            "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  placements:\n    host:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n    world:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n",
+            host_binary.display(),
+            if runtime_family == "codex" {
+                crate::execution::agent_runtime::validator::CODEX_WORLD_GUEST_ENTRYPOINT
+                    .to_string()
+            } else {
+                world_binary.display().to_string()
+            }
+        )
+    }
+
+    #[cfg(unix)]
     fn write_runtime_inventory_with_world_member(
         substrate_home: &Path,
         orchestrator_binary: &Path,
@@ -11729,7 +11748,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"spawn_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"spawn_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -11740,10 +11759,10 @@ mod tests {
         )
         .expect("write codex agent file");
         fs::write(
-            agents_dir.join("codex_world.yaml"),
-            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
-        .expect("write codex_world agent file");
+        .expect("write placement-aware codex agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -11791,7 +11810,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::SpawnWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
@@ -11833,7 +11852,7 @@ mod tests {
                 other => panic!("expected spawn_world_worker outcome, got {other:?}"),
             };
 
-            assert_eq!(spawn.target_backend_id, "cli:codex_world");
+            assert_eq!(spawn.target_backend_id, "cli:codex-world");
             assert_eq!(spawn.world_id, world_binding.world_id);
             assert_eq!(spawn.world_generation, world_binding.world_generation);
             let host_participant_id = runtime_manifest_snapshot(&host_runtime).handle.participant_id;
@@ -11885,7 +11904,7 @@ mod tests {
                 .store
                 .resolve_public_turn_target(
                     &startup_context.orchestration_session_id(),
-                    "cli:codex_world",
+                    "cli:codex-world",
                 )
                 .expect("public turn target must rediscover the spawned retained worker");
             assert_eq!(resolved.participant.handle.participant_id, spawn.participant_id);
@@ -11940,7 +11959,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -11951,10 +11970,10 @@ mod tests {
         )
         .expect("write codex agent file");
         fs::write(
-            agents_dir.join("codex_world.yaml"),
-            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
-        .expect("write codex_world agent file");
+        .expect("write placement-aware codex agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -12137,7 +12156,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12148,10 +12167,10 @@ mod tests {
         )
         .expect("write codex agent file");
         fs::write(
-            agents_dir.join("codex_world.yaml"),
-            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
-        .expect("write codex_world agent file");
+        .expect("write placement-aware codex agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -12190,7 +12209,7 @@ mod tests {
             .await
             .expect("register toolbox transport");
             let selected_descriptor =
-                select_member_runtime_descriptor_for_backend(&startup_context, "cli:codex_world")
+                select_member_runtime_descriptor_for_backend(&startup_context, "cli:codex-world")
                     .expect("member selection should succeed")
                     .expect("member runtime should be selected");
             let member_prepared = prepare_member_runtime_startup_for_descriptor(
@@ -12226,7 +12245,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::CancelWorldWork,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: Some(member_manifest.handle.participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
@@ -12316,7 +12335,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12373,7 +12392,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::CancelWorldWork,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
@@ -12454,7 +12473,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12511,7 +12530,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::CancelWorldWork,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: Some("ash-worker-cancel".to_string()),
                 world_id: Some(world_binding.world_id.clone()),
@@ -12593,7 +12612,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12604,10 +12623,10 @@ mod tests {
         )
         .expect("write codex agent file");
         fs::write(
-            agents_dir.join("codex_world.yaml"),
-            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
-        .expect("write codex_world agent file");
+        .expect("write placement-aware codex agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -12646,7 +12665,7 @@ mod tests {
             .await
             .expect("register toolbox transport");
             let selected_descriptor =
-                select_member_runtime_descriptor_for_backend(&startup_context, "cli:codex_world")
+                select_member_runtime_descriptor_for_backend(&startup_context, "cli:codex-world")
                     .expect("member selection should succeed")
                     .expect("member runtime should be selected");
             let member_prepared = prepare_member_runtime_startup_for_descriptor(
@@ -12683,7 +12702,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::ForkWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: Some(member_manifest.handle.participant_id.clone()),
                 world_id: Some(world_binding.world_id.clone()),
@@ -12784,7 +12803,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12841,7 +12860,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::ForkWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
@@ -12923,7 +12942,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12980,7 +12999,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::ForkWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: Some("ash-worker-source-38".to_string()),
                 world_id: Some(world_binding.world_id.clone()),
@@ -13059,7 +13078,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -13116,7 +13135,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::StopWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: None,
                 world_id: Some(world_binding.world_id.clone()),
@@ -13193,7 +13212,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -13250,7 +13269,7 @@ mod tests {
                 ),
                 action: WorldDispatchActionV1::InspectWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: Some("ash-worker-ignored".to_string()),
                 world_id: Some(world_binding.world_id.clone()),
@@ -13329,7 +13348,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -13384,7 +13403,7 @@ mod tests {
                 caller_participant_id: Some("orch_unknown_shape_valid".to_string()),
                 action: WorldDispatchActionV1::InspectWorldWorker,
                 mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
-                target_backend_id: Some("cli:codex_world".to_string()),
+                target_backend_id: Some("cli:codex-world".to_string()),
                 task_run_id: None,
                 target_participant_id: Some("ash-worker-unknown".to_string()),
                 world_id: Some("world-unknown-shape-valid".to_string()),
@@ -13465,7 +13484,7 @@ mod tests {
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex_world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -13476,10 +13495,10 @@ mod tests {
         )
         .expect("write codex agent file");
         fs::write(
-            agents_dir.join("codex_world.yaml"),
-            runtime_agent_file("codex_world", "world", "codex", &fake_member),
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
         )
-        .expect("write codex_world agent file");
+        .expect("write placement-aware codex agent file");
 
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");

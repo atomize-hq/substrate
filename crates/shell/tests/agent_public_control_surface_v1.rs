@@ -170,14 +170,12 @@ impl AgentControlFixture {
             &[],
         );
         fs::write(
-            self.substrate_home
-                .join(format!("agents/{member_agent_id}.yaml")),
-            format!(
-                "version: 1\nid: {member_agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: world\n  cli:\n    runtime_family: codex\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-                member_binary.display()
-            ),
+            self.substrate_home.join("agents/codex.yaml"),
+            cli_agent_file_v2_host_and_world("codex", &self.fake_codex, member_binary),
         )
-        .unwrap_or_else(|_| panic!("write {member_agent_id} agent file with explicit binary"));
+        .unwrap_or_else(|_| {
+            panic!("write placement-aware codex agent file with explicit world binary")
+        });
     }
 
     fn write_runtime_inventory_with_member_backend_and_world_dispatch(
@@ -189,7 +187,14 @@ impl AgentControlFixture {
         allowed_backends_override: &[&str],
     ) {
         fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
-        let mut inventory_backends = vec!["cli:codex".to_string()];
+        let forward_codex = member_agent_id == Some("codex-world");
+        let orchestrator_agent_id = if forward_codex { "codex-host" } else { "codex" };
+        let host_backend_id = if forward_codex {
+            "cli:codex-host"
+        } else {
+            "cli:codex"
+        };
+        let mut inventory_backends = vec![host_backend_id.to_string()];
         if let Some(member_agent_id) = member_agent_id {
             inventory_backends.push(format!("cli:{member_agent_id}"));
         }
@@ -215,7 +220,9 @@ impl AgentControlFixture {
         let dispatch_modes_yaml = yaml_quoted_list(allowed_modes, 6);
         fs::write(
             self.substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            format!(
+                "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: {orchestrator_agent_id}\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            ),
         )
         .expect("write config.yaml");
         fs::write(
@@ -232,10 +239,21 @@ impl AgentControlFixture {
         .expect("write .substrate-profile");
         fs::write(
             self.substrate_home.join("agents/codex.yaml"),
-            cli_agent_file("codex", Some("host"), &self.fake_codex),
+            if forward_codex {
+                cli_agent_file_v2_host_and_world(
+                    "codex",
+                    &self.fake_codex,
+                    Path::new(CODEX_WORLD_GUEST_ENTRYPOINT),
+                )
+            } else {
+                cli_agent_file("codex", Some("host"), &self.fake_codex)
+            },
         )
         .expect("write codex agent file");
         if let Some(member_agent_id) = member_agent_id {
+            if forward_codex {
+                return;
+            }
             fs::write(
                 self.substrate_home
                     .join(format!("agents/{member_agent_id}.yaml")),
@@ -580,10 +598,23 @@ fn cli_agent_file_v2(agent_id: &str, placement: &str, binary: &Path) -> String {
     )
 }
 
+fn cli_agent_file_v2_host_and_world(
+    agent_id: &str,
+    host_binary: &Path,
+    world_binary: &Path,
+) -> String {
+    let runtime_family = runtime_family_for_fixture_agent(agent_id);
+    format!(
+        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  placements:\n    host:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n    world:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n",
+        host_binary.display(),
+        world_binary.display()
+    )
+}
+
 fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
     match agent_id {
         "claude_code" => "claude_code",
-        "codex" | "codex_world" => "codex",
+        "codex" | "codex-world" => "codex",
         other => panic!("fixture runtime_family is not specified for agent `{other}`"),
     }
 }
@@ -5290,7 +5321,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
 fn world_member_bootstrap_fails_closed_with_remediation_when_codex_world_keeps_host_binary_truth() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory_with_explicit_member_binary("codex_world", &fixture.fake_codex);
+    fixture.write_runtime_inventory_with_explicit_member_binary("codex-world", &fixture.fake_codex);
 
     let socket_home = tempfile::Builder::new()
         .prefix("sac-world-missing-runtime-")
@@ -5313,7 +5344,7 @@ fn world_member_bootstrap_fails_closed_with_remediation_when_codex_world_keeps_h
         .expect("prompt");
 
     let host_runtime_launch_offset = repl_output_len(&repl);
-    repl.send_line("::cli:codex start retained host runtime");
+    repl.send_line("::cli:codex-host start retained host runtime");
     wait_for_shell_owned_session_ready(
         &fixture,
         &repl,
@@ -5322,7 +5353,7 @@ fn world_member_bootstrap_fails_closed_with_remediation_when_codex_world_keeps_h
     );
 
     let world_turn_offset = repl_output_len(&repl);
-    repl.send_line("::cli:codex_world member targeted first turn");
+    repl.send_line("::cli:codex-world member targeted first turn");
     wait_for_output_after(
         &repl,
         "substrate>",
@@ -5365,11 +5396,11 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory_with_member_backend_and_world_dispatch(
-        Some("codex_world"),
+        Some("codex-world"),
         true,
         &["spawn_world_worker", "continue_world_worker"],
         &["retained"],
-        &["cli:codex_world"],
+        &["cli:codex-world"],
     );
 
     let socket_home = tempfile::Builder::new()
@@ -5393,7 +5424,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
         .expect("prompt");
 
     let host_runtime_launch_offset = repl_output_len(&repl);
-    repl.send_line("::cli:codex start retained host runtime");
+    repl.send_line("::cli:codex-host start retained host runtime");
     let (orchestration_session_id, owner_participant_id) = wait_for_shell_owned_session_ready(
         &fixture,
         &repl,
@@ -5402,7 +5433,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     );
 
     let first_world_turn_offset = repl_output_len(&repl);
-    repl.send_line("::cli:codex_world member targeted first turn");
+    repl.send_line("::cli:codex-world member targeted first turn");
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
     wait_for_output_after(
         &repl,
@@ -5456,7 +5487,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
             "--session",
             &orchestration_session_id,
             "--backend",
-            "cli:codex_world",
+            "cli:codex-world",
             "--prompt",
             "continue in world",
             "--json",
@@ -5481,7 +5512,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     );
     assert_eq!(
         turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex_world")
+        Some("cli:codex-world")
     );
     assert_eq!(
         turn_json.get("turn_outcome").and_then(Value::as_str),
@@ -5501,11 +5532,11 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     );
     assert_eq!(
         live_members[0].get("agent_id").and_then(Value::as_str),
-        Some("codex_world")
+        Some("codex-world")
     );
     assert_eq!(
         live_members[0].get("backend_id").and_then(Value::as_str),
-        Some("cli:codex_world")
+        Some("cli:codex-world")
     );
     assert_eq!(
         live_members[0]
@@ -5525,7 +5556,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     assert_eq!(submit.orchestration_session_id, orchestration_session_id);
     assert_eq!(submit.participant_id, member_participant_id);
     assert_eq!(submit.orchestrator_participant_id, owner_participant_id);
-    assert_eq!(submit.backend_id, "cli:codex_world");
+    assert_eq!(submit.backend_id, "cli:codex-world");
     assert_eq!(submit.world_id, world_id);
     assert_eq!(submit.world_generation, world_generation);
     assert_eq!(submit.prompt, "continue in world");
@@ -5592,7 +5623,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
 fn public_world_retained_cancelled_snapshot_preserves_explicit_terminal_truth() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
+    fixture.write_runtime_inventory_with_member_backend(Some("codex-world"));
 
     let ts = "2026-06-02T00:00:00Z";
     write_orchestration_session(
@@ -5619,7 +5650,7 @@ fn public_world_retained_cancelled_snapshot_preserves_explicit_terminal_truth() 
     write_world_member_participant(
         &fixture,
         "ash_world_cancelled",
-        "codex_world",
+        "codex-world",
         "sess_world_cancelled",
         "orch_world_cancelled",
         "world-17",
@@ -5722,7 +5753,7 @@ fn public_world_retained_cancelled_snapshot_preserves_explicit_terminal_truth() 
 fn public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
+    fixture.write_runtime_inventory_with_member_backend(Some("codex-world"));
 
     #[cfg(target_os = "linux")]
     let output = {
@@ -5748,7 +5779,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
                 "agent",
                 "start",
                 "--backend",
-                "cli:codex_world",
+                "cli:codex-world",
                 "--scope",
                 "world",
                 "--prompt",
@@ -5782,7 +5813,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         "agent",
         "start",
         "--backend",
-        "cli:codex_world",
+        "cli:codex-world",
         "--scope",
         "world",
         "--prompt",
@@ -5827,7 +5858,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         );
         assert_eq!(
             start_accepted.get("backend_id").and_then(Value::as_str),
-            Some("cli:codex_world")
+            Some("cli:codex-world")
         );
         assert_eq!(
             start_accepted.get("scope").and_then(Value::as_str),
@@ -5839,7 +5870,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         );
         assert_eq!(
             start_json.get("backend_id").and_then(Value::as_str),
-            Some("cli:codex_world")
+            Some("cli:codex-world")
         );
         assert_eq!(
             start_json.get("turn_outcome").and_then(Value::as_str),
@@ -5966,7 +5997,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
         );
         assert_eq!(
             participant.get("backend_id").and_then(Value::as_str),
-            Some("cli:codex")
+            Some("cli:codex-host")
         );
         assert_ne!(
             participant.get("state").and_then(Value::as_str),
@@ -6002,7 +6033,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
                 "--session",
                 orchestration_session_id,
                 "--backend",
-                "cli:codex_world",
+                "cli:codex-world",
                 "--prompt",
                 "next",
                 "--json",
@@ -6031,7 +6062,7 @@ fn public_root_start_world_scope_starts_attached_host_session_with_world_binding
 fn public_root_start_world_scope_reports_requested_backend_and_scope() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
-    fixture.write_runtime_inventory_with_member_backend(Some("codex_world"));
+    fixture.write_runtime_inventory_with_member_backend(Some("codex-world"));
 
     #[cfg(target_os = "linux")]
     let output = {
@@ -6056,7 +6087,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
                 "agent",
                 "start",
                 "--backend",
-                "cli:codex_world",
+                "cli:codex-world",
                 "--scope",
                 "world",
                 "--prompt",
@@ -6072,7 +6103,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         "agent",
         "start",
         "--backend",
-        "cli:codex_world",
+        "cli:codex-world",
         "--scope",
         "world",
         "--prompt",
@@ -6108,7 +6139,7 @@ fn public_root_start_world_scope_reports_requested_backend_and_scope() {
         );
         assert_eq!(
             start_json.get("backend_id").and_then(Value::as_str),
-            Some("cli:codex_world")
+            Some("cli:codex-world")
         );
         assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("world"));
         assert_eq!(

@@ -43,8 +43,8 @@ impl SessionContractOptions<'_> {
 
 fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
     match agent_id {
-        "claude_code" | "claude_code_world" => "claude_code",
-        "codex" | "codex_world" | "helper" => "codex",
+        "claude_code" | "claude_code-world" => "claude_code",
+        "codex" | "codex-world" | "helper" => "codex",
         other => panic!("fixture runtime_family is not specified for agent `{other}`"),
     }
 }
@@ -289,25 +289,6 @@ fn cli_agent_file_v2(
     )
 }
 
-fn cli_agent_file_with_runtime_family(
-    agent_id: &str,
-    scope: &str,
-    llm: bool,
-    mcp_client: bool,
-    enabled: bool,
-    runtime_family: &str,
-) -> String {
-    cli_agent_file_with_session_contract(
-        agent_id,
-        scope,
-        llm,
-        mcp_client,
-        enabled,
-        runtime_family,
-        SessionContractOptions::default(),
-    )
-}
-
 fn cli_agent_file_v2_with_session_contract<'a>(
     agent_id: &str,
     placement: &str,
@@ -360,6 +341,13 @@ fn cli_agent_file_v2_with_session_contract<'a>(
         "        llm: {llm}\n        mcp_client: {mcp_client}\n"
     ));
     body
+}
+
+fn cli_agent_file_v2_host_and_world(agent_id: &str, llm: bool, mcp_client: bool) -> String {
+    let runtime_family = runtime_family_for_fixture_agent(agent_id);
+    format!(
+        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  placements:\n    host:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: sh\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: {llm}\n        mcp_client: {mcp_client}\n    world:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: {TEST_CODEX_WORLD_GUEST_ENTRYPOINT}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: {llm}\n        mcp_client: false\n"
+    )
 }
 
 fn cli_agent_file_with_session_contract<'a>(
@@ -1666,11 +1654,7 @@ fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_stale_global_
     );
     fixture.write_agent_file(
         "codex.yaml",
-        &cli_agent_file("codex", "host", true, false, true),
-    );
-    fixture.write_agent_file(
-        "codex_world.yaml",
-        &cli_agent_file("codex_world", "world", true, false, true),
+        &cli_agent_file_v2_host_and_world("codex", true, false),
     );
     let workspace_agents_dir = fixture.workspace_root.join(".substrate").join("agents");
     fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
@@ -1877,7 +1861,7 @@ config:
         .iter()
         .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-host"))
         .expect("codex-host row should exist");
-    let codex_world = agents
+    let codex_member = agents
         .iter()
         .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-world"))
         .expect("codex-world row should exist");
@@ -1911,23 +1895,23 @@ config:
         Some("cli:codex-host is not allowlisted by effective policy agents.allowed_backends")
     );
     assert_eq!(
-        codex_world.pointer("/backend_id").and_then(Value::as_str),
+        codex_member.pointer("/backend_id").and_then(Value::as_str),
         Some("cli:codex-world")
     );
     assert_eq!(
-        codex_world
+        codex_member
             .pointer("/display_label")
             .and_then(Value::as_str),
         Some("codex (world)")
     );
     assert_eq!(
-        codex_world
+        codex_member
             .pointer("/eligibility/state")
             .and_then(Value::as_str),
         Some("denied")
     );
     assert_eq!(
-        codex_world
+        codex_member
             .pointer("/eligibility/reason")
             .and_then(Value::as_str),
         Some("cli:codex-world is not allowlisted by effective policy agents.allowed_backends")
@@ -4479,16 +4463,12 @@ fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_fam
         r#"agents:
   allowed_backends:
     - cli:codex
-    - cli:codex_world
+    - cli:codex-world
 "#,
     );
     fixture.write_agent_file(
         "codex.yaml",
-        &cli_agent_file("codex", "host", true, true, true),
-    );
-    fixture.write_agent_file(
-        "codex_world.yaml",
-        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
+        &cli_agent_file_v2_host_and_world("codex", true, true),
     );
     write_live_runtime_manifest(
         &fixture,
@@ -4506,7 +4486,7 @@ fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_fam
     );
     write_replacement_world_member_manifest(
         &fixture,
-        "codex_world",
+        "codex-world",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
         "ash_codex_world_member",
         "ash_orchestrator_alias_world",
@@ -4526,14 +4506,14 @@ fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_fam
     let sessions = json["sessions"]
         .as_array()
         .expect("sessions should be an array");
-    let alias_member = find_session_by_agent(sessions, "codex_world");
+    let alias_member = find_session_by_agent(sessions, "codex-world");
     assert_eq!(
         alias_member.pointer("/agent_id").and_then(Value::as_str),
-        Some("codex_world")
+        Some("codex-world")
     );
     assert_eq!(
         alias_member.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:codex_world"),
+        Some("cli:codex-world"),
         "status must keep the exact aliased backend selector visible: {alias_member}"
     );
 
@@ -4547,11 +4527,11 @@ fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_fam
     .expect("aliased participant manifest should be valid JSON");
     assert_eq!(
         persisted.pointer("/agent_id").and_then(Value::as_str),
-        Some("codex_world")
+        Some("codex-world")
     );
     assert_eq!(
         persisted.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:codex_world")
+        Some("cli:codex-world")
     );
     assert_eq!(
         persisted
@@ -5863,7 +5843,7 @@ fn agent_doctor_fails_closed_on_world_member_allowlist_before_world_boundary() {
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: codex
+    orchestrator_agent_id: codex-host
 "#,
     );
     fixture.write_global_policy_patch(
@@ -5879,7 +5859,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:codex"
+    - "cli:codex-host"
 
 net_allowed: []
 cmd_allowed: []
@@ -5900,11 +5880,7 @@ metadata: {}
     );
     fixture.write_agent_file(
         "codex.yaml",
-        &cli_agent_file("codex", "host", true, true, true),
-    );
-    fixture.write_agent_file(
-        "codex_world.yaml",
-        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
+        &cli_agent_file_v2_host_and_world("codex", true, true),
     );
 
     let output = fixture.run(&["agent", "doctor", "--json"]);
@@ -5945,7 +5921,7 @@ metadata: {}
     assert_eq!(
         checks[5].pointer("/reason").and_then(Value::as_str),
         Some(
-            "required world-scoped member backend 'cli:codex_world' is not allowlisted by effective policy agents.allowed_backends"
+            "required world-scoped member backend 'cli:codex-world' is not allowlisted by effective policy agents.allowed_backends"
         ),
         "member dispatch must be gated by the derived backend_id before world boundary handling: {json}"
     );
@@ -5997,7 +5973,7 @@ fn agent_doctor_exactly_one_world_member_candidate_continues_into_world_boundary
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: codex
+    orchestrator_agent_id: codex-host
 "#,
     );
     fixture.write_global_policy_patch(
@@ -6013,8 +5989,8 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:codex"
-    - "cli:codex_world"
+    - "cli:codex-host"
+    - "cli:codex-world"
 
 net_allowed: []
 cmd_allowed: []
@@ -6035,11 +6011,7 @@ metadata: {}
     );
     fixture.write_agent_file(
         "codex.yaml",
-        &cli_agent_file("codex", "host", true, true, true),
-    );
-    fixture.write_agent_file(
-        "codex_world.yaml",
-        &cli_agent_file_with_runtime_family("codex_world", "world", true, false, true, "codex"),
+        &cli_agent_file_v2_host_and_world("codex", true, true),
     );
 
     let output = fixture.run(&["agent", "doctor", "--json"]);

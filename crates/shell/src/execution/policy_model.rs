@@ -2237,7 +2237,7 @@ mod tests {
             ConfigUpdate {
                 key: "agents.world_dispatch.allowed_backends".to_string(),
                 op: UpdateOp::Append,
-                value: "cli:codex_world".to_string(),
+                value: "cli:codex-world".to_string(),
             },
             ConfigUpdate {
                 key: "agents.world_dispatch.allowed_actions".to_string(),
@@ -2331,7 +2331,7 @@ mod tests {
         assert_eq!(patch.agents.world_dispatch.enabled, Some(true));
         assert_eq!(
             patch.agents.world_dispatch.allowed_backends.as_deref(),
-            Some(&["cli:codex_world".to_string()][..])
+            Some(&["cli:codex-world".to_string()][..])
         );
         assert_eq!(
             patch.agents.world_dispatch.allowed_actions.as_deref(),
@@ -2422,7 +2422,7 @@ agents:
   world_dispatch:
     enabled: true
     allowed_backends:
-      - "cli:codex_world"
+      - "cli:codex-world"
     allowed_actions:
       - "run_world_task"
       - "spawn_world_worker"

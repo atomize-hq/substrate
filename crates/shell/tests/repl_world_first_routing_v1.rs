@@ -463,8 +463,16 @@ agents:
     )
     .expect("write claude_code agent file");
     fs::write(
-        home_substrate.join(format!("agents/{member_agent_id}.yaml")),
-        runtime_agent_yaml(member_agent_id, "world", fake_member, member_runtime_family),
+        if member_agent_id == "codex-world" {
+            home_substrate.join("agents/codex.yaml")
+        } else {
+            home_substrate.join(format!("agents/{member_agent_id}.yaml"))
+        },
+        if member_agent_id == "codex-world" {
+            runtime_agent_yaml_v2("codex", "world", fake_member, member_runtime_family)
+        } else {
+            runtime_agent_yaml(member_agent_id, "world", fake_member, member_runtime_family)
+        },
     )
     .unwrap_or_else(|_| panic!("write {member_agent_id} agent file"));
 }
@@ -669,6 +677,24 @@ fn runtime_agent_yaml(agent_id: &str, scope: &str, binary: &Path, runtime_family
     };
     format!(
         "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+        binary_path
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn runtime_agent_yaml_v2(
+    agent_id: &str,
+    placement: &str,
+    binary: &Path,
+    runtime_family: &str,
+) -> String {
+    let binary_path = if placement == "world" && runtime_family == "codex" {
+        TEST_CODEX_WORLD_GUEST_ENTRYPOINT.to_string()
+    } else {
+        binary.display().to_string()
+    };
+    format!(
+        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  placements:\n    {placement}:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n",
         binary_path
     )
 }
@@ -5898,7 +5924,7 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
         &substrate_home,
         &fake_orchestrator,
         &fake_member,
-        "codex_world",
+        "codex-world",
         "codex",
         "auto_restart",
     );
@@ -5939,7 +5965,7 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
             .iter()
             .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
             .collect::<Vec<_>>(),
-        vec![Some("cli:claude_code"), Some("cli:codex_world")],
+        vec![Some("cli:claude_code"), Some("cli:codex-world")],
         "aliased world startup must preserve exact authoritative-live backend identity"
     );
 
@@ -5971,12 +5997,12 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
         .expect("member world_generation");
     assert_eq!(
         member.get("agent_id").and_then(Value::as_str),
-        Some("codex_world"),
+        Some("codex-world"),
         "persisted member truth must keep the exact aliased agent id"
     );
     assert_eq!(
         member.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex_world")
+        Some("cli:codex-world")
     );
     assert_eq!(
         member
@@ -5986,7 +6012,7 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
         "persisted member truth must keep canonical runtime-family spelling separate from alias identity"
     );
 
-    repl.send_line("::cli:codex_world second");
+    repl.send_line("::cli:codex-world second");
     wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
     repl.wait_for_output("__MEMBER_TURN_SUBMIT_STUB__ second", Duration::from_secs(3))
         .expect("typed submit route output");
@@ -6012,12 +6038,12 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
         submit.orchestrator_participant_id,
         member_orchestrator_participant_id
     );
-    assert_eq!(submit.backend_id, "cli:codex_world");
+    assert_eq!(submit.backend_id, "cli:codex-world");
     assert_eq!(submit.world_id, world_id);
     assert_eq!(submit.world_generation, world_generation);
     assert_eq!(submit.prompt, "second");
     assert_eq!(
-        member_dispatch.backend_id, "cli:codex_world",
+        member_dispatch.backend_id, "cli:codex-world",
         "retained member dispatch must preserve the exact aliased backend identity"
     );
     drop(guard);

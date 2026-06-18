@@ -22,20 +22,19 @@ Options:
   --prefix <path>           Installed Substrate home (default: ~/.substrate)
   --bin <path>              Explicit substrate binary path (default: <prefix>/bin/substrate)
   --repo-root <path>        Repo root used to locate config/agents/claude_code.yaml
-  --agent-manifest <path>   Explicit host claude_code agent manifest source
+  --agent-manifest <path>   Explicit placement-aware claude_code agent manifest source
   --world-agent-manifest <path>
-                            Explicit world claude_code_world agent manifest source
+                            Deprecated split world manifest source; must match --agent-manifest when provided
   --skip-sync               Stop after gateway status instead of running gateway sync
   --help                    Show this message
 
 This helper assumes the fresh install is using the default Claude Code host/world
 smoke path:
-  - llm.routing.default_backend = cli:claude_code
-  - claude_code is the orchestrator agent
+  - llm.routing.default_backend = cli:claude_code-host
+  - claude_code-host is the orchestrator agent
   - config/agents/claude_code.yaml is copied into <prefix>/agents/claude_code.yaml
-  - config/agents/claude_code_world.yaml is copied into <prefix>/agents/claude_code_world.yaml
   - agents.toolbox is enabled with UDS transport
-  - agents.world_dispatch is enabled for exact backend cli:claude_code_world
+  - agents.world_dispatch is enabled for exact backend cli:claude_code-world
 USAGE
 }
 
@@ -97,12 +96,15 @@ if [[ -z "${AGENT_MANIFEST}" ]]; then
   AGENT_MANIFEST="${REPO_ROOT}/config/agents/claude_code.yaml"
 fi
 if [[ -z "${WORLD_AGENT_MANIFEST}" ]]; then
-  WORLD_AGENT_MANIFEST="${REPO_ROOT}/config/agents/claude_code_world.yaml"
+  WORLD_AGENT_MANIFEST="${AGENT_MANIFEST}"
 fi
 
 [[ -x "${SUBSTRATE_BIN}" ]] || fatal "substrate binary not found or not executable at ${SUBSTRATE_BIN}"
 [[ -f "${AGENT_MANIFEST}" ]] || fatal "agent manifest not found at ${AGENT_MANIFEST}"
 [[ -f "${WORLD_AGENT_MANIFEST}" ]] || fatal "world agent manifest not found at ${WORLD_AGENT_MANIFEST}"
+if [[ "${WORLD_AGENT_MANIFEST}" != "${AGENT_MANIFEST}" ]]; then
+  fatal "split world agent manifests are no longer supported; point --world-agent-manifest at the same placement-aware claude_code manifest as --agent-manifest"
+fi
 
 run_substrate() {
   log "Running: ${SUBSTRATE_BIN} $*"
@@ -112,23 +114,21 @@ run_substrate() {
 agents_dir="${PREFIX}/agents"
 mkdir -p "${agents_dir}"
 cp "${AGENT_MANIFEST}" "${agents_dir}/claude_code.yaml"
-cp "${WORLD_AGENT_MANIFEST}" "${agents_dir}/claude_code_world.yaml"
 log "Copied claude_code agent manifest into ${agents_dir}/claude_code.yaml"
-log "Copied claude_code world agent manifest into ${agents_dir}/claude_code_world.yaml"
 
-run_substrate config global set llm.routing.default_backend=cli:claude_code
+run_substrate config global set llm.routing.default_backend=cli:claude_code-host
 run_substrate config global set agents.enabled=true
-run_substrate config global set agents.hub.orchestrator_agent_id=claude_code
+run_substrate config global set agents.hub.orchestrator_agent_id=claude_code-host
 run_substrate config global set agents.toolbox.enabled=true
 run_substrate config global set agents.toolbox.bind.transport=uds
 run_substrate config global set llm.enabled=true
 run_substrate config global set llm.gateway.enabled=true
-run_substrate policy global set 'llm.allowed_backends=["cli:claude_code"]'
+run_substrate policy global set 'llm.allowed_backends=["cli:claude_code-host"]'
 run_substrate policy global set 'llm.secrets.env_allowed=["ANTHROPIC_API_KEY"]'
-run_substrate policy global set 'agents.allowed_backends=["cli:claude_code","cli:claude_code_world"]'
-run_substrate policy global set 'agents.host_credentials.read.allowed_backends=["cli:claude_code"]'
+run_substrate policy global set 'agents.allowed_backends=["cli:claude_code-host","cli:claude_code-world"]'
+run_substrate policy global set 'agents.host_credentials.read.allowed_backends=["cli:claude_code-host"]'
 run_substrate policy global set 'agents.world_dispatch.enabled=true'
-run_substrate policy global set 'agents.world_dispatch.allowed_backends=["cli:claude_code_world"]'
+run_substrate policy global set 'agents.world_dispatch.allowed_backends=["cli:claude_code-world"]'
 run_substrate policy global set 'agents.world_dispatch.allowed_actions=["run_world_task","spawn_world_worker","fork_world_worker","continue_world_worker","inspect_world_worker","cancel_world_work","stop_world_worker"]'
 run_substrate policy global set 'agents.world_dispatch.allowed_modes=["ephemeral","retained"]'
 run_substrate policy global set 'agents.world_dispatch.same_session_only=true'

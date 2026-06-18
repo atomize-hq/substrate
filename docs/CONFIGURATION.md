@@ -40,8 +40,8 @@ Config keys:
 - `agents.hub.orchestrator_agent_id` selects the canonical host-scoped orchestrator agent for `substrate agent status` and `substrate agent doctor`.
 - Agent inventory entries continue to define each agent's adapter kind and execution posture; the derived `backend_id` remains `<kind>:<agent_id>`.
 - The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=substrate.agent.session`, and `cli.mode=persistent`.
-- `config.cli.runtime_family` is the inventory-only runtime-realization truth for shell-owned UAA candidates. Supported values are `codex` and `claude_code`.
-- Runtime realization still keys policy and exact backend routing off the derived `backend_id`. For example, `cli:codex_world` may realize the canonical `codex` runtime family while remaining a distinct exact backend id from `cli:codex`.
+- `config.placements.<placement>.cli.runtime_family` is the inventory-only runtime-realization truth for shell-owned UAA candidates in placement-aware `version: 2` agent manifests. Supported values are `codex` and `claude_code`.
+- Runtime realization still keys policy and exact backend routing off the derived `backend_id`. For example, `cli:codex-world` may realize the canonical `codex` runtime family while remaining a distinct exact backend id from `cli:codex-host`.
 - `config.cli.binary` for the selected orchestrator must resolve on the host during `substrate agent doctor` and async REPL bootstrap.
 
 Policy keys:
@@ -60,37 +60,55 @@ Minimal example:
 ```yaml
 agents:
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 ```
 
 ```yaml
-version: 1
+version: 2
 id: claude_code
 config:
   kind: cli
   protocol: substrate.agent.session
-  execution:
-    scope: host
-  cli:
-    runtime_family: claude_code
-    binary: claude
-    mode: persistent
-  capabilities:
-    session_start: true
-    session_resume: true
-    session_fork: true
-    session_stop: true
-    status_snapshot: true
-    event_stream: true
-    llm: true
-    mcp_client: true
+  placements:
+    host:
+      enabled: true
+      cli:
+        runtime_family: claude_code
+        binary: claude
+        mode: persistent
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: true
+    world:
+      enabled: true
+      cli:
+        runtime_family: claude_code
+        binary: claude
+        mode: persistent
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
 ```
 
 ```yaml
 agents:
   allowed_backends:
-    - cli:claude_code
-    - cli:codex
+    - cli:claude_code-host
+    - cli:claude_code-world
+    - cli:codex-host
+    - cli:codex-world
 ```
 
 ## Manager Manifest & Init
@@ -339,7 +357,7 @@ agents:
   world_dispatch:
     enabled: true
     allowed_backends:
-      - cli:codex_world
+      - cli:codex-world
     allowed_actions:
       - run_world_task
       - spawn_world_worker
