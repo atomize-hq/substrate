@@ -92,6 +92,52 @@ pub(crate) struct AgentApiAuthConfigV1 {
     pub env: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct AgentFileVersionProbe {
+    version: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AgentFileV2 {
+    pub version: u32,
+    pub id: String,
+    pub config: AgentConfigV2,
+    #[serde(default)]
+    pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AgentConfigV2 {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    pub kind: AgentConfigKind,
+    #[serde(default)]
+    pub protocol: Option<String>,
+    pub placements: AgentPlacementsV2,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentPlacementsV2 {
+    pub host: Option<AgentPlacementConfigV2>,
+    pub world: Option<AgentPlacementConfigV2>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AgentPlacementConfigV2 {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub cli: Option<AgentCliConfigV1>,
+    #[serde(default)]
+    pub api: Option<AgentApiConfigV1>,
+    #[serde(default)]
+    pub capabilities: AgentCapabilitiesV1,
+}
+
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCapabilitiesV1 {
@@ -123,6 +169,29 @@ pub(crate) enum ProjectedInventoryValueOrigin {
     EffectiveConfigDefault,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AgentPlacement {
+    Host,
+    World,
+}
+
+impl AgentPlacement {
+    #[allow(dead_code)]
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::World => "world",
+        }
+    }
+
+    pub(crate) fn execution_scope(self) -> crate::execution::config_model::AgentExecutionScope {
+        match self {
+            Self::Host => crate::execution::config_model::AgentExecutionScope::Host,
+            Self::World => crate::execution::config_model::AgentExecutionScope::World,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ProjectedInventoryEntryV1 {
     pub origin: AgentInventoryBaselineOrigin,
@@ -139,6 +208,28 @@ pub(crate) struct ProjectedInventoryEntryV1 {
     pub cli_runtime_family: Option<AgentCliRuntimeFamily>,
     pub capabilities: AgentCapabilitiesV1,
     #[allow(dead_code)]
+    pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct PlacementProjectedInventoryEntryV2 {
+    pub origin: AgentInventoryBaselineOrigin,
+    pub path: PathBuf,
+    pub logical_agent_id: String,
+    pub placement: AgentPlacement,
+    pub realized_agent_id: String,
+    pub backend_id: String,
+    pub display_label: String,
+    pub kind: AgentConfigKind,
+    pub protocol: Option<String>,
+    pub execution_scope: crate::execution::config_model::AgentExecutionScope,
+    pub execution_scope_origin: ProjectedInventoryValueOrigin,
+    pub cli_mode: crate::execution::config_model::AgentCliMode,
+    pub cli_mode_origin: ProjectedInventoryValueOrigin,
+    pub cli_binary: Option<String>,
+    pub cli_runtime_family: Option<AgentCliRuntimeFamily>,
+    pub capabilities: AgentCapabilitiesV1,
     pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
 }
 
@@ -298,6 +389,88 @@ pub(crate) fn project_inventory_entry(
     }
 }
 
+#[allow(dead_code)]
+pub(crate) fn project_inventory_v2_entry(
+    cwd: &Path,
+    path: &Path,
+    file: &AgentFileV2,
+    effective_config: &crate::execution::config_model::SubstrateConfig,
+) -> Vec<PlacementProjectedInventoryEntryV2> {
+    if !file.config.enabled {
+        return Vec::new();
+    }
+
+    let origin = inventory_entry_origin(
+        cwd,
+        &AgentInventoryEntryV1 {
+            path: path.to_path_buf(),
+            file: compatibility_inventory_file_from_v2(file),
+        },
+    );
+    let mut projected = Vec::new();
+    for (placement, placement_config) in [
+        (AgentPlacement::Host, file.config.placements.host.as_ref()),
+        (AgentPlacement::World, file.config.placements.world.as_ref()),
+    ] {
+        let Some(placement_config) = placement_config else {
+            continue;
+        };
+        if !placement_config.enabled {
+            continue;
+        }
+
+        let cli_mode_origin = if placement_config
+            .cli
+            .as_ref()
+            .and_then(|cli| cli.mode)
+            .is_some()
+        {
+            ProjectedInventoryValueOrigin::InventoryExplicit
+        } else {
+            ProjectedInventoryValueOrigin::EffectiveConfigDefault
+        };
+        let cli_mode = placement_config
+            .cli
+            .as_ref()
+            .and_then(|cli| cli.mode)
+            .unwrap_or(effective_config.agents.defaults.cli.mode);
+        let cli_binary = placement_config.cli.as_ref().map(|cli| {
+            let trimmed = cli.binary.trim();
+            if trimmed.is_empty() {
+                file.id.clone()
+            } else {
+                trimmed.to_string()
+            }
+        });
+        let realized_agent_id = format!("{}-{}", file.id, placement.as_str());
+
+        projected.push(PlacementProjectedInventoryEntryV2 {
+            origin,
+            path: path.to_path_buf(),
+            logical_agent_id: file.id.clone(),
+            placement,
+            realized_agent_id: realized_agent_id.clone(),
+            backend_id: derive_agent_backend_id(file.config.kind.as_str(), &realized_agent_id),
+            display_label: format!("{} ({})", file.id, placement.as_str()),
+            kind: file.config.kind,
+            protocol: file.config.protocol.clone(),
+            execution_scope: placement.execution_scope(),
+            execution_scope_origin: ProjectedInventoryValueOrigin::InventoryExplicit,
+            cli_mode,
+            cli_mode_origin,
+            cli_binary,
+            cli_runtime_family: placement_config
+                .cli
+                .as_ref()
+                .and_then(|cli| cli.runtime_family),
+            capabilities: placement_config.capabilities.clone(),
+            policy_overlay: file.policy_overlay.clone(),
+        });
+    }
+
+    projected
+}
+
 fn default_true() -> bool {
     true
 }
@@ -398,16 +571,37 @@ pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<A
     let raw = fs::read_to_string(path).map_err(|err| {
         config_model::user_error(format!("failed to read {}: {err}", path.display()))
     })?;
-    let parsed: AgentFileV1 = serde_yaml::from_str(&raw).map_err(|err| {
-        config_model::user_error(format!(
-            "invalid YAML in {}: {}",
-            path.display(),
-            err.to_string().trim()
-        ))
-    })?;
+    match detect_agent_inventory_version(path, &raw)? {
+        1 => {
+            let parsed: AgentFileV1 = serde_yaml::from_str(&raw).map_err(|err| {
+                config_model::user_error(format!(
+                    "invalid YAML in {}: {}",
+                    path.display(),
+                    err.to_string().trim()
+                ))
+            })?;
 
-    validate_agent_schema(path, &parsed, base_policy)?;
-    Ok(parsed)
+            validate_agent_schema(path, &parsed, base_policy)?;
+            Ok(parsed)
+        }
+        2 => {
+            let parsed: AgentFileV2 = serde_yaml::from_str(&raw).map_err(|err| {
+                config_model::user_error(format!(
+                    "invalid YAML in {}: {}",
+                    path.display(),
+                    err.to_string().trim()
+                ))
+            })?;
+
+            validate_agent_schema_v2(path, &parsed, base_policy)?;
+            Ok(compatibility_inventory_file_from_v2(&parsed))
+        }
+        version => Err(config_model::user_error(format!(
+            "invalid agent file in {}: version must be 1 or 2 (got {})",
+            path.display(),
+            version
+        ))),
+    }
 }
 
 fn discover_agent_inventory_roots(cwd: &Path) -> Result<Vec<PathBuf>> {
@@ -479,6 +673,119 @@ fn validate_agent_schema(path: &Path, parsed: &AgentFileV1, base_policy: &Policy
     }
 
     Ok(())
+}
+
+fn detect_agent_inventory_version(path: &Path, raw: &str) -> Result<u32> {
+    let version_probe: AgentFileVersionProbe = serde_yaml::from_str(raw).map_err(|err| {
+        config_model::user_error(format!(
+            "invalid YAML in {}: {}",
+            path.display(),
+            err.to_string().trim()
+        ))
+    })?;
+    Ok(version_probe.version)
+}
+
+fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Policy) -> Result<()> {
+    if parsed.version != 2 {
+        return Err(config_model::user_error(format!(
+            "invalid agent file in {}: version must be 2 (got {})",
+            path.display(),
+            parsed.version
+        )));
+    }
+
+    let expected_id = path.file_stem().and_then(OsStr::to_str).ok_or_else(|| {
+        config_model::user_error(format!(
+            "invalid agent filename in {}: expected a .yaml filename",
+            path.display()
+        ))
+    })?;
+    if parsed.id != expected_id {
+        return Err(config_model::user_error(format!(
+            "invalid agent file in {}: id '{}' must match filename '{}.yaml'",
+            path.display(),
+            parsed.id,
+            expected_id
+        )));
+    }
+
+    if parsed.config.placements.host.is_none() && parsed.config.placements.world.is_none() {
+        return Err(config_model::user_error(format!(
+            "invalid agent file in {}: config.placements must define at least one placement",
+            path.display()
+        )));
+    }
+
+    for (placement, placement_config) in [
+        (AgentPlacement::Host, parsed.config.placements.host.as_ref()),
+        (AgentPlacement::World, parsed.config.placements.world.as_ref()),
+    ] {
+        let Some(placement_config) = placement_config else {
+            continue;
+        };
+        validate_agent_config(
+            path,
+            &AgentConfigV1 {
+                enabled: placement_config.enabled,
+                kind: parsed.config.kind,
+                protocol: parsed.config.protocol.clone(),
+                execution: AgentExecutionConfigV1 {
+                    scope: Some(placement.execution_scope()),
+                },
+                cli: placement_config.cli.clone(),
+                api: placement_config.api.clone(),
+                capabilities: placement_config.capabilities.clone(),
+            },
+        )?;
+    }
+
+    if let Some(overlay) = &parsed.policy_overlay {
+        validate_policy_overlay(path, overlay, base_policy)?;
+    }
+
+    Ok(())
+}
+
+fn compatibility_inventory_file_from_v2(parsed: &AgentFileV2) -> AgentFileV1 {
+    // Packet 1 validates the version-2 schema and exposes placement-aware projection helpers
+    // without cutting legacy selector/runtime consumers over to multi-row inventory yet.
+    let compatibility_source = [
+        parsed
+            .config
+            .placements
+            .host
+            .as_ref()
+            .filter(|placement| placement.enabled),
+        parsed
+            .config
+            .placements
+            .world
+            .as_ref()
+            .filter(|placement| placement.enabled),
+        parsed.config.placements.host.as_ref(),
+        parsed.config.placements.world.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    .next();
+
+    AgentFileV1 {
+        version: parsed.version,
+        id: parsed.id.clone(),
+        config: AgentConfigV1 {
+            enabled: parsed.config.enabled,
+            kind: parsed.config.kind,
+            protocol: parsed.config.protocol.clone(),
+            execution: AgentExecutionConfigV1::default(),
+            cli: compatibility_source.and_then(|placement| placement.cli.clone()),
+            api: compatibility_source.and_then(|placement| placement.api.clone()),
+            capabilities: compatibility_source
+                .map(|placement| placement.capabilities.clone())
+                .unwrap_or_default(),
+        },
+        policy_overlay: parsed.policy_overlay.clone(),
+    }
 }
 
 fn validate_agent_config(path: &Path, config: &AgentConfigV1) -> Result<()> {
@@ -854,7 +1161,8 @@ mod tests {
     use super::{
         inventory_entry_origin, project_inventory_entry, AgentCapabilitiesV1, AgentCliConfigV1,
         AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1,
-        AgentInventoryBaselineOrigin, AgentInventoryEntryV1,
+        AgentFileV2, AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
+        project_inventory_v2_entry,
     };
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
@@ -933,5 +1241,120 @@ mod tests {
             projected.cli_runtime_family,
             Some(AgentCliRuntimeFamily::Codex)
         );
+    }
+
+    #[test]
+    fn project_inventory_v2_entry_emits_realized_rows_for_enabled_placements() {
+        let cwd = tempdir().expect("tempdir");
+        let mut effective_config = SubstrateConfig::default();
+        effective_config.agents.defaults.cli.mode = AgentCliMode::Persistent;
+
+        let raw = r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        mode: persistent
+        runtime_family: codex
+      capabilities:
+        session_start: true
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        session_resume: true
+        llm: true
+"#;
+        let file: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+
+        let projected = project_inventory_v2_entry(
+            cwd.path(),
+            &cwd.path().join("codex.yaml"),
+            &file,
+            &effective_config,
+        );
+
+        assert_eq!(projected.len(), 2);
+
+        let host = &projected[0];
+        assert_eq!(host.logical_agent_id, "codex");
+        assert_eq!(host.placement, AgentPlacement::Host);
+        assert_eq!(host.realized_agent_id, "codex-host");
+        assert_eq!(host.backend_id, "cli:codex-host");
+        assert_eq!(host.display_label, "codex (host)");
+        assert_eq!(
+            host.execution_scope,
+            crate::execution::config_model::AgentExecutionScope::Host
+        );
+        assert_eq!(host.cli_runtime_family, Some(AgentCliRuntimeFamily::Codex));
+        assert_eq!(host.cli_binary.as_deref(), Some("codex"));
+        assert!(host.capabilities.session_start);
+        assert!(host.capabilities.llm);
+
+        let world = &projected[1];
+        assert_eq!(world.logical_agent_id, "codex");
+        assert_eq!(world.placement, AgentPlacement::World);
+        assert_eq!(world.realized_agent_id, "codex-world");
+        assert_eq!(world.backend_id, "cli:codex-world");
+        assert_eq!(world.display_label, "codex (world)");
+        assert_eq!(
+            world.execution_scope,
+            crate::execution::config_model::AgentExecutionScope::World
+        );
+        assert_eq!(world.cli_runtime_family, Some(AgentCliRuntimeFamily::Codex));
+        assert_eq!(world.cli_binary.as_deref(), Some("codex"));
+        assert!(world.capabilities.session_resume);
+        assert!(world.capabilities.llm);
+    }
+
+    #[test]
+    fn project_inventory_v2_entry_skips_disabled_placements() {
+        let cwd = tempdir().expect("tempdir");
+        let effective_config = SubstrateConfig::default();
+        let raw = r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: false
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#;
+        let file: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+
+        let projected = project_inventory_v2_entry(
+            cwd.path(),
+            &cwd.path().join("codex.yaml"),
+            &file,
+            &effective_config,
+        );
+
+        assert_eq!(projected.len(), 1);
+        assert_eq!(projected[0].placement, AgentPlacement::World);
+        assert_eq!(projected[0].realized_agent_id, "codex-world");
     }
 }

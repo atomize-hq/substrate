@@ -112,6 +112,12 @@ fn legacy_valid_cli_agent_file(agent_id: &str, policy_overlay: Option<&str>) -> 
     }
 }
 
+fn valid_cli_agent_file_v2(agent_id: &str) -> String {
+    format!(
+        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  placements:\n    host:\n      enabled: true\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n    world:\n      enabled: true\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n"
+    )
+}
+
 #[test]
 fn agents_validate_accepts_valid_inventory_and_restrictive_world_fs_overlay() {
     let fixture = AgentsValidateFixture::new();
@@ -285,6 +291,19 @@ config:
 }
 
 #[test]
+fn agents_validate_accepts_version_2_placement_inventory() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file("codex.yaml", &valid_cli_agent_file_v2("codex"));
+
+    let output = fixture.validate();
+    assert!(
+        output.status.success(),
+        "version 2 placement inventory should validate: {output:?}"
+    );
+}
+
+#[test]
 fn agents_validate_rejects_invalid_cli_runtime_family_with_exit_2() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
@@ -324,6 +343,44 @@ config:
             && stderr.contains("runtime_family")
             && stderr.contains("unknown variant"),
         "stderr should mention runtime_family enum validation\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn agents_validate_rejects_unknown_version_2_placement_with_exit_2() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file(
+        "bad_placement.yaml",
+        r#"version: 2
+id: bad_placement
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    moon:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#,
+    );
+
+    let output = fixture.validate();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "unknown placement should exit 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("bad_placement.yaml")
+            && stderr.contains("placements")
+            && stderr.contains("moon"),
+        "stderr should mention the unknown placement key\nstderr: {stderr}"
     );
 }
 
