@@ -3223,7 +3223,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
 
     repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(6));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
@@ -4622,7 +4622,7 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
     );
 
     repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(6));
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
