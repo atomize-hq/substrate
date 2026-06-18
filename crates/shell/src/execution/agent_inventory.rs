@@ -157,6 +157,12 @@ pub(crate) struct AgentInventoryEntryV1 {
     pub file: AgentFileV1,
 }
 
+#[derive(Debug, Clone)]
+enum ParsedAgentInventoryFile {
+    V1(AgentFileV1),
+    V2(AgentFileV2),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AgentInventoryBaselineOrigin {
     GlobalInventory,
@@ -520,9 +526,9 @@ pub(crate) fn load_effective_agent_inventory(
         let mut validated_files = Vec::new();
         let mut root_shadowed_agent_ids = BTreeSet::new();
         for path in collect_agent_files_in_root(&root)? {
-            let file = validate_agent_file(&path, base_policy)?;
-            if file.version == 2 {
-                root_shadowed_agent_ids.extend(legacy_shadowed_agent_ids_from_v2_compat(&file));
+            let file = parse_and_validate_agent_file(&path, base_policy)?;
+            if let ParsedAgentInventoryFile::V2(parsed) = &file {
+                root_shadowed_agent_ids.extend(legacy_shadowed_agent_ids_from_v2(parsed));
             }
             validated_files.push((path, file));
         }
@@ -539,54 +545,71 @@ pub(crate) fn load_effective_agent_inventory(
         }
 
         for (path, file) in validated_files {
-            if file.version == 1 && root_shadowed_agent_ids.contains(&file.id) {
-                continue;
+            match file {
+                ParsedAgentInventoryFile::V1(file) => {
+                    if root_shadowed_agent_ids.contains(&file.id) {
+                        continue;
+                    }
+                    effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
+                }
+                ParsedAgentInventoryFile::V2(file) => {
+                    for entry in materialize_effective_inventory_entries_from_v2(&path, &file) {
+                        effective.insert(entry.file.id.clone(), entry);
+                    }
+                }
             }
-
-            let Some(file) = materialize_effective_inventory_file(&path, file)? else {
-                continue;
-            };
-            effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
         }
     }
 
     Ok(effective)
 }
 
-fn materialize_effective_inventory_file(
-    _path: &Path,
-    file: AgentFileV1,
-) -> Result<Option<AgentFileV1>> {
-    if file.version == 1 {
-        return Ok(Some(file));
-    }
-
-    // Packet 1.5 bridges unambiguous single-placement version-2 inventory into the legacy
-    // effective-inventory view, but keeps disabled or still-ambiguous entries out until
-    // placement-qualified exact ids land in Packet 2.
-    if file.config.enabled && file.config.execution.scope.is_some() {
-        Ok(Some(file))
-    } else {
-        Ok(None)
-    }
-}
-
-fn legacy_shadowed_agent_ids_from_v2_compat(file: &AgentFileV1) -> Vec<String> {
-    if file.version != 2 {
+fn materialize_effective_inventory_entries_from_v2(
+    path: &Path,
+    file: &AgentFileV2,
+) -> Vec<AgentInventoryEntryV1> {
+    if !file.config.enabled {
         return Vec::new();
     }
 
-    let logical_agent_id = match file.config.execution.scope {
-        Some(crate::execution::config_model::AgentExecutionScope::World) => {
-            file.id.strip_suffix("_world").unwrap_or(file.id.as_str())
+    let mut entries = Vec::new();
+    for (placement, placement_config) in [
+        (AgentPlacement::Host, file.config.placements.host.as_ref()),
+        (AgentPlacement::World, file.config.placements.world.as_ref()),
+    ] {
+        let Some(placement_config) = placement_config else {
+            continue;
+        };
+        if !placement_config.enabled {
+            continue;
         }
-        _ => file.id.as_str(),
-    };
 
-    vec![
-        logical_agent_id.to_string(),
-        format!("{logical_agent_id}_world"),
-    ]
+        entries.push(AgentInventoryEntryV1 {
+            path: path.to_path_buf(),
+            file: AgentFileV1 {
+                version: file.version,
+                id: format!("{}-{}", file.id, placement.as_str()),
+                config: AgentConfigV1 {
+                    enabled: true,
+                    kind: file.config.kind,
+                    protocol: file.config.protocol.clone(),
+                    execution: AgentExecutionConfigV1 {
+                        scope: Some(placement.execution_scope()),
+                    },
+                    cli: placement_config.cli.clone(),
+                    api: placement_config.api.clone(),
+                    capabilities: placement_config.capabilities.clone(),
+                },
+                policy_overlay: file.policy_overlay.clone(),
+            },
+        });
+    }
+
+    entries
+}
+
+fn legacy_shadowed_agent_ids_from_v2(file: &AgentFileV2) -> Vec<String> {
+    vec![file.id.clone(), format!("{}_world", file.id)]
 }
 
 pub(crate) fn resolve_gateway_backend_inventory_entry(
@@ -629,6 +652,16 @@ pub(crate) fn resolve_gateway_backend_inventory_entry(
 }
 
 pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<AgentFileV1> {
+    match parse_and_validate_agent_file(path, base_policy)? {
+        ParsedAgentInventoryFile::V1(parsed) => Ok(parsed),
+        ParsedAgentInventoryFile::V2(parsed) => Ok(compatibility_inventory_file_from_v2(&parsed)),
+    }
+}
+
+fn parse_and_validate_agent_file(
+    path: &Path,
+    base_policy: &Policy,
+) -> Result<ParsedAgentInventoryFile> {
     let raw = fs::read_to_string(path).map_err(|err| {
         config_model::user_error(format!("failed to read {}: {err}", path.display()))
     })?;
@@ -643,7 +676,7 @@ pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<A
             })?;
 
             validate_agent_schema(path, &parsed, base_policy)?;
-            Ok(parsed)
+            Ok(ParsedAgentInventoryFile::V1(parsed))
         }
         2 => {
             let parsed: AgentFileV2 = serde_yaml::from_str(&raw).map_err(|err| {
@@ -655,7 +688,7 @@ pub(crate) fn validate_agent_file(path: &Path, base_policy: &Policy) -> Result<A
             })?;
 
             validate_agent_schema_v2(path, &parsed, base_policy)?;
-            Ok(compatibility_inventory_file_from_v2(&parsed))
+            Ok(ParsedAgentInventoryFile::V2(parsed))
         }
         version => Err(config_model::user_error(format!(
             "invalid agent file in {}: version must be 1 or 2 (got {})",
@@ -781,12 +814,6 @@ fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Pol
     if parsed.config.enabled && enabled_placements == 0 {
         return Err(config_model::user_error(format!(
             "invalid agent file in {}: config.placements must enable at least one placement",
-            path.display(),
-        )));
-    }
-    if parsed.config.enabled && enabled_placements > 1 {
-        return Err(config_model::user_error(format!(
-            "invalid agent file in {}: config.placements enables multiple live placements, but version 2 compatibility inventory only supports exactly one enabled placement until Packet 2 lands; disable one placement or set config.enabled=false",
             path.display(),
         )));
     }
@@ -1258,7 +1285,7 @@ fn validate_overlay_subset(
 mod tests {
     use super::{
         compatibility_inventory_file_from_v2, inventory_entry_origin,
-        load_effective_agent_inventory, materialize_effective_inventory_file,
+        load_effective_agent_inventory, materialize_effective_inventory_entries_from_v2,
         normalize_inventory_origin_path, project_inventory_entry, project_inventory_v2_entry,
         validate_agent_schema_v2, AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily,
         AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
@@ -1526,7 +1553,7 @@ config:
     }
 
     #[test]
-    fn validate_agent_schema_v2_rejects_multi_enabled_inventory_before_packet_2_cutover() {
+    fn validate_agent_schema_v2_accepts_multi_enabled_inventory_after_packet_2_cutover() {
         let temp = tempdir().expect("tempdir");
         let path = temp.path().join("codex.yaml");
         let base_policy = Policy::default();
@@ -1550,13 +1577,8 @@ config:
         runtime_family: codex
         "#;
         let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        let err = validate_agent_schema_v2(&path, &parsed, &base_policy)
-            .expect_err("multi-enabled inventory should fail closed before Packet 2");
-        assert!(
-            err.to_string()
-                .contains("only supports exactly one enabled placement until Packet 2 lands"),
-            "validation error should explain the pre-Packet-2 fail-closed boundary: {err}"
-        );
+        validate_agent_schema_v2(&path, &parsed, &base_policy)
+            .expect("Packet 2 should accept multi-enabled placement-aware inventory");
     }
 
     #[test]
@@ -1649,20 +1671,56 @@ config:
         llm: true
 "#;
         let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        let compatibility = compatibility_inventory_file_from_v2(&parsed);
         let path = tempdir().expect("tempdir").path().join("codex.yaml");
 
-        let materialized = materialize_effective_inventory_file(&path, compatibility)
-            .expect("effective inventory materialization should not error for version 2");
-        let materialized =
-            materialized.expect("single-placement version 2 inventory should materialize");
+        let materialized = materialize_effective_inventory_entries_from_v2(&path, &parsed);
+
+        assert_eq!(materialized.len(), 1);
+        let materialized = &materialized[0].file;
         assert!(materialized.config.enabled);
-        assert_eq!(materialized.id, "codex_world");
-        assert_eq!(materialized.derived_backend_id(), "cli:codex_world");
+        assert_eq!(materialized.id, "codex-world");
+        assert_eq!(materialized.derived_backend_id(), "cli:codex-world");
         assert_eq!(
             materialized.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::World)
         );
+    }
+
+    #[test]
+    fn effective_inventory_materialization_realizes_multi_placement_version_2_inventory() {
+        let raw = r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: /var/lib/substrate/world-deps/bin/codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#;
+        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+        let path = tempdir().expect("tempdir").path().join("codex.yaml");
+
+        let materialized = materialize_effective_inventory_entries_from_v2(&path, &parsed);
+
+        assert_eq!(materialized.len(), 2);
+        assert_eq!(materialized[0].file.id, "codex-host");
+        assert_eq!(materialized[0].file.derived_backend_id(), "cli:codex-host");
+        assert_eq!(materialized[1].file.id, "codex-world");
+        assert_eq!(materialized[1].file.derived_backend_id(), "cli:codex-world");
     }
 
     #[test]
@@ -1729,14 +1787,14 @@ config:
         );
         assert!(inventory.contains_key("claude_code"));
         let codex = inventory
-            .get("codex_world")
+            .get("codex-world")
             .expect("single-placement version 2 entry should be present");
         assert_eq!(
             codex.file.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::World),
             "materialized compatibility entry must preserve the selected placement scope"
         );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex_world");
+        assert_eq!(codex.file.derived_backend_id(), "cli:codex-world");
     }
 
     #[test]
@@ -1804,11 +1862,11 @@ config:
 
         assert!(
             !inventory.contains_key("codex"),
-            "workspace version 2 world compatibility truth must suppress the stale global host row"
+            "workspace version 2 world truth must suppress the stale global host row"
         );
-        let codex = inventory
-            .get("codex_world")
-            .expect("workspace version 2 inventory should materialize through the legacy world compatibility id");
+        let codex = inventory.get("codex-world").expect(
+            "workspace version 2 inventory should materialize through the realized world id",
+        );
         assert_eq!(
             normalize_inventory_origin_path(&codex.path),
             normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
@@ -1818,7 +1876,7 @@ config:
             codex.file.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::World)
         );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex_world");
+        assert_eq!(codex.file.derived_backend_id(), "cli:codex-world");
     }
 
     #[test]
@@ -1905,9 +1963,13 @@ config:
             "effective inventory should materialize the workspace host-only version 2 shadow entry",
         );
 
-        let codex = inventory
-            .get("codex")
-            .expect("workspace version 2 inventory should materialize through the legacy host compatibility id");
+        assert!(
+            !inventory.contains_key("codex"),
+            "workspace version 2 host truth must replace the stale legacy host id"
+        );
+        let codex = inventory.get("codex-host").expect(
+            "workspace version 2 inventory should materialize through the realized host id",
+        );
         assert_eq!(
             normalize_inventory_origin_path(&codex.path),
             normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
@@ -1917,10 +1979,10 @@ config:
             codex.file.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::Host)
         );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex");
+        assert_eq!(codex.file.derived_backend_id(), "cli:codex-host");
         assert!(
             !inventory.contains_key("codex_world"),
-            "workspace host-only version 2 compatibility truth must suppress the stale global world row"
+            "workspace host-only version 2 truth must suppress the stale global world row"
         );
     }
 
@@ -1979,18 +2041,22 @@ config:
             None => std::env::remove_var("SUBSTRATE_HOME"),
         }
         let inventory = inventory_result.expect(
-            "effective inventory should keep the single-placement version 2 compatibility truth",
+            "effective inventory should keep the realized single-placement version 2 truth",
         );
 
-        let codex = inventory
-            .get("codex")
-            .expect("host-only version 2 inventory should materialize through the legacy host compatibility id");
+        assert!(
+            !inventory.contains_key("codex"),
+            "effective inventory should no longer retain the legacy host compatibility id"
+        );
+        let codex = inventory.get("codex-host").expect(
+            "host-only version 2 inventory should materialize through the realized host id",
+        );
         assert_eq!(codex.path, agents_dir.join("codex.yaml"));
         assert_eq!(
             codex.file.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::Host)
         );
-        assert_eq!(codex.file.derived_backend_id(), "cli:codex");
+        assert_eq!(codex.file.derived_backend_id(), "cli:codex-host");
         assert!(
             !inventory.contains_key("codex_world"),
             "single-placement version 2 truth must suppress the stale same-root legacy world sibling"

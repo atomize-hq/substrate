@@ -1991,6 +1991,7 @@ struct EligibilityJson<'a> {
 #[derive(Serialize)]
 struct ListAgentJson<'a> {
     agent_id: String,
+    display_label: String,
     backend_id: String,
     kind: &'a str,
     execution: ExecutionScopeJson<'a>,
@@ -2041,6 +2042,7 @@ fn build_list_report<'a>(
 
                 Some(ListAgentJson {
                     agent_id: entry.file.id.clone(),
+                    display_label: display_label_for_entry(entry),
                     backend_id,
                     kind: entry.file.config.kind.as_str(),
                     execution: ExecutionScopeJson {
@@ -2084,7 +2086,7 @@ fn render_list_report(report: &ListReportJson<'_>, json_mode: bool) -> Result<()
             .unwrap_or_default()
     );
     println!(
-        "agent_id\tbackend_id\tkind\texecution.scope\trole\tcapabilities\teligibility\tprotocol"
+        "agent_id\tdisplay_label\tbackend_id\tkind\texecution.scope\trole\tcapabilities\teligibility\tprotocol"
     );
 
     for agent in &report.agents {
@@ -2095,8 +2097,9 @@ fn render_list_report(report: &ListReportJson<'_>, json_mode: bool) -> Result<()
             agent.eligibility.state.to_string()
         };
         println!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             agent.agent_id,
+            agent.display_label,
             agent.backend_id,
             agent.kind,
             agent.execution.scope,
@@ -3378,6 +3381,20 @@ fn role_for_entry<'a>(agent_id: &str, effective_config: &'a SubstrateConfig) -> 
     }
 }
 
+// Placement-aware version-2 rows expose a human-facing label separate from the exact selector.
+fn display_label_for_entry(entry: &AgentInventoryEntryV1) -> String {
+    if entry.file.version == 2 {
+        if let Some(logical_agent_id) = entry.file.id.strip_suffix("-host") {
+            return format!("{logical_agent_id} (host)");
+        }
+        if let Some(logical_agent_id) = entry.file.id.strip_suffix("-world") {
+            return format!("{logical_agent_id} (world)");
+        }
+    }
+
+    entry.file.id.clone()
+}
+
 fn role_for_event<'a>(
     event: &'a AgentEvent,
     agent_id: &str,
@@ -3460,6 +3477,7 @@ fn live_tool_support_posture_json_for_selected_orchestrator(
 #[derive(Serialize)]
 struct DoctorOrchestratorJson<'a> {
     agent_id: String,
+    display_label: String,
     backend_id: String,
     execution: ExecutionScopeJson<'a>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3555,6 +3573,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
             });
             DoctorOrchestratorJson {
                 agent_id: entry.file.id.clone(),
+                display_label: display_label_for_entry(entry),
                 backend_id: entry.derived_backend_id(),
                 execution: ExecutionScopeJson { scope: "host" },
                 live_tool_support: None,
@@ -3996,6 +4015,7 @@ fn render_doctor_report(report: &DoctorReportJson<'_>, json_mode: bool) -> Resul
     if let Some(orchestrator) = &report.orchestrator {
         println!("orchestrator");
         println!("  agent_id: {}", orchestrator.agent_id);
+        println!("  display_label: {}", orchestrator.display_label);
         println!("  backend_id: {}", orchestrator.backend_id);
         println!("  execution.scope: {}", orchestrator.execution.scope);
         if let Some(live_tool_support) = &orchestrator.live_tool_support {

@@ -252,15 +252,17 @@ impl AgentControlFixture {
     }
 
     fn write_runtime_inventory_v2_single_placement(&self, placement: &str) {
-        let allowed_backend = if placement == "world" {
-            "cli:codex_world"
+        let (orchestrator_agent_id, allowed_backend) = if placement == "world" {
+            ("codex-world", "cli:codex-world")
         } else {
-            "cli:codex"
+            ("codex-host", "cli:codex-host")
         };
         fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
         fs::write(
             self.substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            format!(
+                "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: {orchestrator_agent_id}\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            ),
         )
         .expect("write config.yaml");
         fs::write(
@@ -2264,16 +2266,32 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
 
 #[test]
 #[serial]
-fn public_start_accepts_host_only_version_2_single_placement_inventory() {
+fn public_start_requires_exact_backend_for_host_only_version_2_single_placement_inventory() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory_v2_single_placement("host");
+
+    let failed_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from version 2 host start",
+        "--json",
+    ]);
+    assert_eq!(failed_output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&failed_output.stderr);
+    assert!(
+        stderr.contains("no exact backend match found for 'cli:codex'"),
+        "logical shorthand must fail closed once placement-qualified exact ids are live\nstderr: {stderr}"
+    );
 
     let start_output = fixture.run(&[
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from version 2 host start",
         "--json",
@@ -2289,8 +2307,8 @@ fn public_start_accepts_host_only_version_2_single_placement_inventory() {
     assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("host"));
     assert_eq!(
         completed.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex"),
-        "Packet 1.5 must keep the legacy exact backend id live for host-only version 2 start flows: {completed}"
+        Some("cli:codex-host"),
+        "Packet 2 must surface the placement-qualified exact backend id for host-only version 2 start flows: {completed}"
     );
     assert_eq!(
         completed.get("turn_outcome").and_then(Value::as_str),
@@ -2300,7 +2318,7 @@ fn public_start_accepts_host_only_version_2_single_placement_inventory() {
 
 #[test]
 #[serial]
-fn public_list_surfaces_world_only_version_2_single_placement_inventory_through_legacy_world_backend_id(
+fn public_list_surfaces_world_only_version_2_single_placement_inventory_through_placement_qualified_exact_id(
 ) {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -2318,12 +2336,16 @@ fn public_list_surfaces_world_only_version_2_single_placement_inventory_through_
         .expect("agents should be an array");
     let codex = agents
         .iter()
-        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex_world"))
-        .expect("world-only version 2 compatibility row should be present");
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-world"))
+        .expect("world-only version 2 placement-qualified row should be present");
     assert_eq!(
         codex.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:codex_world"),
-        "Packet 1.5 must keep the legacy world exact backend id live for world-only version 2 list surfaces: {codex}"
+        Some("cli:codex-world"),
+        "Packet 2 must surface the placement-qualified exact backend id for world-only version 2 list surfaces: {codex}"
+    );
+    assert_eq!(
+        codex.pointer("/display_label").and_then(Value::as_str),
+        Some("codex (world)")
     );
     assert_eq!(
         codex.pointer("/execution/scope").and_then(Value::as_str),

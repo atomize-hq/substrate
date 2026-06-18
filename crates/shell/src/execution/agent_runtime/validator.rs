@@ -1005,6 +1005,60 @@ mod tests {
     }
 
     #[test]
+    #[serial]
+    fn validate_exact_backend_selection_accepts_placement_qualified_version_2_ids() {
+        let _env_guard = crate::execution::world_env_guard();
+        let _world_codex_guard = set_test_world_codex_runtime();
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex-host".to_string(),
+            make_entry(
+                "codex-host",
+                AgentExecutionScope::Host,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+        inventory.insert(
+            "codex-world".to_string(),
+            make_entry_with_runtime_family(
+                "codex-world",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                Some(AgentCliRuntimeFamily::Codex),
+                required_capabilities(),
+            ),
+        );
+
+        let host_descriptor = assert_exact_selected_descriptor(validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::Host,
+            "cli:codex-host",
+        ));
+        assert_eq!(host_descriptor.agent_id, "codex-host");
+        assert_eq!(host_descriptor.backend_id, "cli:codex-host");
+        assert_eq!(host_descriptor.execution_scope, AgentExecutionScope::Host);
+
+        let world_descriptor = assert_exact_selected_descriptor(validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::World,
+            "cli:codex-world",
+        ));
+        assert_eq!(world_descriptor.agent_id, "codex-world");
+        assert_eq!(world_descriptor.backend_id, "cli:codex-world");
+        assert_eq!(world_descriptor.execution_scope, AgentExecutionScope::World);
+        assert_eq!(
+            world_descriptor.backend_kind,
+            AgentRuntimeBackendKind::Codex
+        );
+    }
+
+    #[test]
     fn validate_exact_backend_selection_reports_scope_specific_protocol_error() {
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();

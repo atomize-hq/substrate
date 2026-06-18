@@ -1585,7 +1585,7 @@ fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
         r#"agents:
   allowed_backends:
     - cli:claude_code
-    - cli:codex_world
+    - cli:codex-world
 "#,
     );
     fixture.write_agent_file(
@@ -1615,24 +1615,29 @@ fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
         .as_array()
         .expect("agents should be an array");
     assert!(
-        agents
-            .iter()
-            .all(|agent| agent.pointer("/agent_id").and_then(Value::as_str) != Some("codex")),
-        "workspace version 2 world compatibility truth must suppress the stale host-scoped codex row: {agents:?}"
+        agents.iter().all(|agent| !matches!(
+            agent.pointer("/agent_id").and_then(Value::as_str),
+            Some("codex") | Some("codex-host")
+        )),
+        "workspace version 2 world truth must suppress the stale host-scoped codex row: {agents:?}"
     );
     let codex = agents
         .iter()
-        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex_world"))
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-world"))
         .expect("shadowed codex world row should exist");
     assert_eq!(
         codex.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:codex_world"),
-        "Packet 1.5 must keep the legacy world exact backend id live for single-placement version 2 inventory: {codex}"
+        Some("cli:codex-world"),
+        "Packet 2 must surface the placement-qualified exact backend id for single-placement version 2 inventory: {codex}"
+    );
+    assert_eq!(
+        codex.pointer("/display_label").and_then(Value::as_str),
+        Some("codex (world)")
     );
     assert_eq!(
         codex.pointer("/execution/scope").and_then(Value::as_str),
         Some("world"),
-        "workspace version 2 shadow must surface the selected world placement through the legacy world compatibility row: {codex}"
+        "workspace version 2 shadow must surface the selected world placement through the placement-qualified row: {codex}"
     );
 }
 
@@ -1651,8 +1656,8 @@ fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_stale_global_
         r#"agents:
   allowed_backends:
     - cli:claude_code
-    - cli:codex
-    - cli:codex_world
+    - cli:codex-host
+    - cli:codex-world
 "#,
     );
     fixture.write_agent_file(
@@ -1687,28 +1692,32 @@ fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_stale_global_
         .expect("agents should be an array");
     let codex = agents
         .iter()
-        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-host"))
         .expect("shadowed codex host row should exist");
     assert_eq!(
         codex.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:codex"),
-        "Packet 1.5 must keep the legacy host exact backend id live for single-placement version 2 inventory: {codex}"
+        Some("cli:codex-host"),
+        "Packet 2 must surface the placement-qualified exact backend id for single-placement version 2 inventory: {codex}"
+    );
+    assert_eq!(
+        codex.pointer("/display_label").and_then(Value::as_str),
+        Some("codex (host)")
     );
     assert_eq!(
         codex.pointer("/execution/scope").and_then(Value::as_str),
         Some("host"),
-        "workspace version 2 shadow must surface the selected host placement through the legacy host compatibility row: {codex}"
+        "workspace version 2 shadow must surface the selected host placement through the placement-qualified row: {codex}"
     );
     assert!(
         agents
             .iter()
-            .all(|agent| agent.pointer("/agent_id").and_then(Value::as_str) != Some("codex_world")),
-        "workspace host-only version 2 compatibility truth must suppress the stale global world row: {agents:?}"
+            .all(|agent| agent.pointer("/agent_id").and_then(Value::as_str) != Some("codex-world")),
+        "workspace host-only version 2 truth must suppress the stale global world row: {agents:?}"
     );
 }
 
 #[test]
-fn agent_list_fails_closed_on_multi_enabled_version_2_inventory_before_packet_2() {
+fn agent_list_surfaces_multi_enabled_version_2_inventory_with_exact_backend_ids() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.write_global_config_patch(
@@ -1722,7 +1731,6 @@ fn agent_list_fails_closed_on_multi_enabled_version_2_inventory_before_packet_2(
         r#"agents:
   allowed_backends:
     - cli:claude_code
-    - cli:codex
 "#,
     );
     fixture.write_agent_file(
@@ -1758,16 +1766,73 @@ config:
     );
 
     let output = fixture.run(&["agent", "list", "--json"]);
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "agent list should fail closed on multi-enabled version 2 inventory before Packet 2: {output:?}"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("codex.yaml")
-            && stderr.contains("only supports exactly one enabled placement until Packet 2 lands"),
-        "list failure should surface the Packet 1.5 compatibility diagnostic\nstderr: {stderr}"
+        output.status.success(),
+        "agent list should surface both placement-qualified version 2 rows after Packet 2: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let agents = json["agents"]
+        .as_array()
+        .expect("agents should be an array");
+    let codex_host = agents
+        .iter()
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-host"))
+        .expect("codex-host row should exist");
+    let codex_world = agents
+        .iter()
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-world"))
+        .expect("codex-world row should exist");
+    assert!(
+        agents.iter().all(|agent| {
+            !matches!(
+                agent.pointer("/agent_id").and_then(Value::as_str),
+                Some("codex") | Some("codex_world")
+            )
+        }),
+        "legacy split ids must not remain live once placement-qualified exact ids are surfaced: {agents:?}"
+    );
+    assert_eq!(
+        codex_host.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex-host")
+    );
+    assert_eq!(
+        codex_host.pointer("/display_label").and_then(Value::as_str),
+        Some("codex (host)")
+    );
+    assert_eq!(
+        codex_host
+            .pointer("/eligibility/state")
+            .and_then(Value::as_str),
+        Some("denied")
+    );
+    assert_eq!(
+        codex_host
+            .pointer("/eligibility/reason")
+            .and_then(Value::as_str),
+        Some("cli:codex-host is not allowlisted by effective policy agents.allowed_backends")
+    );
+    assert_eq!(
+        codex_world.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex-world")
+    );
+    assert_eq!(
+        codex_world
+            .pointer("/display_label")
+            .and_then(Value::as_str),
+        Some("codex (world)")
+    );
+    assert_eq!(
+        codex_world
+            .pointer("/eligibility/state")
+            .and_then(Value::as_str),
+        Some("denied")
+    );
+    assert_eq!(
+        codex_world
+            .pointer("/eligibility/reason")
+            .and_then(Value::as_str),
+        Some("cli:codex-world is not allowlisted by effective policy agents.allowed_backends")
     );
 }
 
@@ -5311,6 +5376,20 @@ fn agent_doctor_json_accepts_host_only_version_2_orchestrator_inventory() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_doctor_prereqs();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code-host
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code-host
+    - cli:helper
+"#,
+    );
     fixture.write_agent_file(
         "claude_code.yaml",
         &cli_agent_file_v2("claude_code", "host", true, true, true),
@@ -5330,13 +5409,18 @@ fn agent_doctor_json_accepts_host_only_version_2_orchestrator_inventory() {
     assert_eq!(
         json.pointer("/orchestrator/agent_id")
             .and_then(Value::as_str),
-        Some("claude_code")
+        Some("claude_code-host")
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/display_label")
+            .and_then(Value::as_str),
+        Some("claude_code (host)")
     );
     assert_eq!(
         json.pointer("/orchestrator/backend_id")
             .and_then(Value::as_str),
-        Some("cli:claude_code"),
-        "Packet 1.5 must keep the legacy exact backend id live for host-only version 2 orchestrator inventory: {json}"
+        Some("cli:claude_code-host"),
+        "Packet 2 must surface the placement-qualified exact backend id for host-only version 2 orchestrator inventory: {json}"
     );
     assert_eq!(
         json.pointer("/orchestrator/execution/scope")
