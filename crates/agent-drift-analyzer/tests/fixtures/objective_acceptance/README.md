@@ -13,9 +13,11 @@ The committed root must stay bounded to:
 - `locked-acceptance/`
 - `stretch-external/`
 
-Each family directory is intentionally placeholder-only in this packet. Real case directories land
-later under `SO-5.*`, at which point the harness can enumerate `<case-id>/raw.json` and
-`<case-id>/expected.json` entries deterministically.
+`locked-acceptance/` is now seeded by `SO-5.1` with the WDAP kickoff cases
+`wdap0-integ-linux-kickoff/` and `wdap0-integ-macos-kickoff/`. `design-set/` and
+`stretch-external/` remain placeholder-only until their later `SO-5.*` follow-on packets land.
+The harness must enumerate every committed `<case-id>/raw.json` and `<case-id>/expected.json`
+entry deterministically.
 
 ## Case contract
 

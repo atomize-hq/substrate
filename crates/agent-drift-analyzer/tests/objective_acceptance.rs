@@ -98,6 +98,18 @@ fn objective_acceptance_readme_documents_the_family_contract() {
             family.dir_name
         );
     }
+    for required_fragment in [
+        "wdap0-integ-linux-kickoff",
+        "wdap0-integ-macos-kickoff",
+        "design-set/",
+        "stretch-external/",
+        "remain placeholder-only",
+    ] {
+        assert!(
+            readme.contains(required_fragment),
+            "objective acceptance README must document SO-5.1 locked acceptance seeding detail `{required_fragment}`"
+        );
+    }
 }
 
 #[test]
