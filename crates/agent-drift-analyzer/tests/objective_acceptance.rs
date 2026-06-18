@@ -36,23 +36,48 @@ fn objective_acceptance_fixture_root_contains_only_readme_and_family_dirs() {
 }
 
 #[test]
-fn objective_acceptance_family_dirs_exist_as_placeholder_only_until_seed_cases_land() {
+fn objective_acceptance_family_dirs_keep_so_5_1_locked_cases_and_other_families_placeholder_only() {
     let corpus = ObjectiveAcceptanceCorpus::load();
-    let expected_family_entries = vec![OBJECTIVE_ACCEPTANCE_FAMILY_README.to_owned()];
+    let placeholder_only_entries = vec![OBJECTIVE_ACCEPTANCE_FAMILY_README.to_owned()];
 
     for family in OBJECTIVE_ACCEPTANCE_FAMILIES {
         let family_dir = corpus.family_dir(family);
-        assert_eq!(
-            sorted_entry_names(family_dir.as_std_path()),
-            expected_family_entries,
-            "objective acceptance family {} must stay placeholder-only until SO-5 seeds commit real cases",
-            family.dir_name
-        );
-        assert!(
-            corpus.case_paths(family).is_empty(),
-            "objective acceptance family {} must not report committed case directories before SO-5",
-            family.dir_name
-        );
+        let actual_entries = sorted_entry_names(family_dir.as_std_path());
+        if family.dir_name == "locked-acceptance" {
+            assert_eq!(
+                actual_entries,
+                vec![
+                    OBJECTIVE_ACCEPTANCE_FAMILY_README.to_owned(),
+                    "wdap0-integ-linux-kickoff".to_owned(),
+                    "wdap0-integ-macos-kickoff".to_owned(),
+                ],
+                "Packet SO-5.1 must seed the locked acceptance family with the WDAP linux and macOS kickoff cases only"
+            );
+            assert_eq!(
+                corpus
+                    .case_paths(family)
+                    .into_iter()
+                    .map(|case| case.case_id)
+                    .collect::<Vec<_>>(),
+                vec![
+                    "wdap0-integ-linux-kickoff".to_owned(),
+                    "wdap0-integ-macos-kickoff".to_owned(),
+                ],
+                "Packet SO-5.1 must keep the committed locked acceptance case list deterministic"
+            );
+        } else {
+            assert_eq!(
+                actual_entries,
+                placeholder_only_entries,
+                "objective acceptance family {} must stay placeholder-only until its own SO-5 follow-on packet lands",
+                family.dir_name
+            );
+            assert!(
+                corpus.case_paths(family).is_empty(),
+                "objective acceptance family {} must not report committed case directories before its follow-on SO-5 packet lands",
+                family.dir_name
+            );
+        }
     }
 }
 
@@ -324,6 +349,12 @@ fn objective_acceptance_expected_shape_contract_validates_structured_correctness
         }),
     );
 
+    validate_objective_acceptance_corpus(corpus.root());
+}
+
+#[test]
+fn objective_acceptance_committed_locked_cases_validate_current_corpus() {
+    let corpus = ObjectiveAcceptanceCorpus::load();
     validate_objective_acceptance_corpus(corpus.root());
 }
 

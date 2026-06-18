@@ -1,0 +1,60 @@
+{
+  "case_id": "wdap0-integ-macos-kickoff",
+  "objective_class": "task_statement",
+  "primary_intent": "plan",
+  "verification_commands": [
+    "cargo clippy --workspace --all-targets -- -D warnings",
+    "cargo build --bin substrate && export PATH=\\\\\\\"$PWD/target/debug:$PATH\\\\\\\" && bash \\\\\\\"docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh\\\\\\",
+    "cargo build --bin substrate"
+  ],
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "user_prompt",
+      "section_kind": "scope",
+      "excerpt_contains": "Ensure the slice is green for macos in the way required by the Planning Pack.",
+      "exact_ref": {
+        "source_file_suffix": "wdap0-integ-macos-kickoff.jsonl",
+        "event_index": 0,
+        "row_ordinal": 0,
+        "section_index": 0,
+        "clause_index": 0
+      }
+    },
+    {
+      "role": "verification",
+      "source_kind": "user_prompt",
+      "section_kind": "verification",
+      "excerpt_contains": "scripts/ci-audit/ci_audit.sh --ledger-path \\\"docs/project_management/packs/draft/world-deps-apt-provisioning/logs/WDAP0/ci-audit/ledger.jsonl\\\" --kind feature-smoke --orch-branch \\\"feat/world-deps-apt-provisioning\\\" --required-platforms macos",
+      "exact_ref": {
+        "source_file_suffix": "wdap0-integ-macos-kickoff.jsonl",
+        "event_index": 0,
+        "row_ordinal": 0,
+        "section_index": 5,
+        "clause_index": 0
+      }
+    }
+  ],
+  "forbidden_role_promotions": [
+    {
+      "forbidden_role": "goal",
+      "source_kind": "user_prompt",
+      "section_kind": "checklist",
+      "excerpt_contains": "Run this task on a macos machine.",
+      "exact_ref": {
+        "source_file_suffix": "wdap0-integ-macos-kickoff.jsonl",
+        "event_index": 0,
+        "row_ordinal": 0
+      }
+    }
+  ],
+  "compatibility_rendering": {
+    "acceptable_any_of": [
+      "Ensure the slice is green for macos in the way required by the Planning Pack."
+    ],
+    "comparison_key": "plan|unknown_target|green"
+  },
+  "required_unknown_fields": [
+    "target"
+  ]
+}
