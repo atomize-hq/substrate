@@ -666,6 +666,7 @@ fn operator_surface_labels_scheduler_trigger_separately_from_analyzer_posture() 
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_drift(
     session_id: &str,
     ordinal: usize,
@@ -692,6 +693,7 @@ fn checkpoint_with_drift(
     checkpoint
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
@@ -715,6 +717,7 @@ fn checkpoint_with_state(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_schema_state(
     schema_version: &str,
     session_id: &str,

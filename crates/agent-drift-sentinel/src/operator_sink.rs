@@ -7,6 +7,7 @@ use crate::operator_surface::{
 };
 use crate::scheduler::{DecisionReason, TriggerClass};
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OperatorEvent {
     VisibleWarning(VisibleWarningEvent),

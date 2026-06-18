@@ -3240,13 +3240,20 @@ mod tests {
         assert_eq!(analyses.len(), 1);
 
         let objective = &analyses[0].current.context.objective;
-        assert!(objective.text.contains("Validate the structured objective sidecar."));
+        assert!(objective
+            .text
+            .contains("Validate the structured objective sidecar."));
 
         let structured = objective.structured.as_ref().expect("structured objective");
         assert!(structured.evidence_spans.iter().any(|span| {
             span.role == crate::checkpoint::ObjectiveRole::Goal
-                && matches!(span.section_kind, crate::checkpoint::ObjectiveSectionKind::Scope)
-                && span.excerpt.contains("Validate the structured objective sidecar.")
+                && matches!(
+                    span.section_kind,
+                    crate::checkpoint::ObjectiveSectionKind::Scope
+                )
+                && span
+                    .excerpt
+                    .contains("Validate the structured objective sidecar.")
                 && span.section_index.is_some()
                 && span.clause_index.is_some()
         }));

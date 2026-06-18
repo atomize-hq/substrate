@@ -616,6 +616,7 @@ fn trigger_name(trigger: TriggerClass) -> &'static str {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Deserialize)]
 #[serde(tag = "event_type", rename_all = "snake_case")]
 enum LiveCheckpointFixtureRecord {

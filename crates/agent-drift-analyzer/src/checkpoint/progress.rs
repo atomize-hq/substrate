@@ -1962,16 +1962,18 @@ fn parent_visible_comparability_reset(
         != parent_visible_comparability_fingerprint(older)
 }
 
-fn parent_visible_comparability_fingerprint(
-    analysis: &CheckpointAnalysis,
-) -> Option<(
+type ParentVisibleComparabilityFingerprint = (
     DelegationTopology,
     ChildWorkVisibility,
     bool,
     String,
     Vec<String>,
     BTreeSet<String>,
-)> {
+);
+
+fn parent_visible_comparability_fingerprint(
+    analysis: &CheckpointAnalysis,
+) -> Option<ParentVisibleComparabilityFingerprint> {
     Some((
         analysis.delegation.topology?,
         effective_child_work_visibility(analysis),
@@ -2320,6 +2322,223 @@ fn has_negative_signal(signals: &[ProgressSignal]) -> bool {
             SignalPolarity::Negative | SignalPolarity::Mixed
         )
     })
+}
+
+fn negative_signal_evidence(signals: &[ProgressSignal]) -> Vec<EvidenceRef> {
+    signals
+        .iter()
+        .filter(|signal| {
+            matches!(
+                signal.polarity,
+                SignalPolarity::Negative | SignalPolarity::Mixed
+            )
+        })
+        .flat_map(|signal| signal.evidence.clone())
+        .collect()
+}
+
+fn merge_evidence(groups: Vec<Vec<EvidenceRef>>) -> Vec<EvidenceRef> {
+    dedupe_and_limit_evidence(groups.into_iter().flatten().collect())
+}
+
+fn dedupe_and_limit_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
+    let mut deduped = dedupe_evidence(items);
+    deduped.truncate(MAX_PROGRESS_EVIDENCE_ITEMS);
+    deduped
+}
+
+fn dedupe_and_limit_counter_evidence(
+    items: Vec<EvidenceRef>,
+    required: Option<EvidenceRef>,
+) -> Vec<EvidenceRef> {
+    let mut deduped = dedupe_evidence(items);
+    if deduped.len() <= MAX_PROGRESS_EVIDENCE_ITEMS {
+        return deduped;
+    }
+    let Some(required) = required else {
+        deduped.truncate(MAX_PROGRESS_EVIDENCE_ITEMS);
+        return deduped;
+    };
+
+    let mut limited = deduped
+        .iter()
+        .take(MAX_PROGRESS_EVIDENCE_ITEMS)
+        .cloned()
+        .collect::<Vec<_>>();
+    if limited.contains(&required) {
+        return limited;
+    }
+
+    limited.pop();
+    limited.push(required);
+    limited.sort_by(evidence_sort_key);
+    limited
+}
+
+fn required_delegation_limiting_counter_evidence(
+    progress: &SessionProgress,
+) -> Option<EvidenceRef> {
+    let limiting_row_keys = progress
+        .signals
+        .iter()
+        .filter(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited)
+        .flat_map(|signal| signal.evidence.iter())
+        .map(evidence_row_key)
+        .collect::<BTreeSet<_>>();
+    if limiting_row_keys.is_empty() {
+        return None;
+    }
+
+    let counter_evidence = dedupe_evidence(progress.counter_evidence.clone());
+    counter_evidence
+        .iter()
+        .find(|evidence| {
+            evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON
+                && limiting_row_keys.contains(&evidence_row_key(evidence))
+        })
+        .cloned()
+        .or_else(|| {
+            counter_evidence
+                .into_iter()
+                .find(|evidence| limiting_row_keys.contains(&evidence_row_key(evidence)))
+        })
+}
+
+fn dedupe_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
+    let mut deduped = items
+        .into_iter()
+        .fold(BTreeMap::new(), |mut acc, evidence| {
+            acc.entry(evidence_key(&evidence)).or_insert(evidence);
+            acc
+        })
+        .into_values()
+        .collect::<Vec<_>>();
+    deduped.sort_by(evidence_sort_key);
+    deduped
+}
+
+fn evidence_key(evidence: &EvidenceRef) -> (camino::Utf8PathBuf, usize, usize, String) {
+    (
+        evidence.row.source_file.clone(),
+        evidence.row.event_index,
+        evidence.row.row_ordinal,
+        evidence.reason.clone(),
+    )
+}
+
+fn evidence_row_key(evidence: &EvidenceRef) -> (camino::Utf8PathBuf, usize, usize) {
+    (
+        evidence.row.source_file.clone(),
+        evidence.row.event_index,
+        evidence.row.row_ordinal,
+    )
+}
+
+fn evidence_sort_key(left: &EvidenceRef, right: &EvidenceRef) -> Ordering {
+    (
+        left.row.source_file.as_str(),
+        left.row.event_index,
+        left.row.row_ordinal,
+        left.reason.as_str(),
+    )
+        .cmp(&(
+            right.row.source_file.as_str(),
+            right.row.event_index,
+            right.row.row_ordinal,
+            right.reason.as_str(),
+        ))
+}
+
+fn set_preview(set: &BTreeSet<String>) -> String {
+    if set.is_empty() {
+        return "none".to_string();
+    }
+    set.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
+}
+
+fn plan_artifact_created(analysis: &CheckpointAnalysis, attempt: &CommandAttempt) -> bool {
+    let previous_truth_artifacts = analysis
+        .previous
+        .as_ref()
+        .map(|slice| working_set(&slice.task_frame.truth_artifacts))
+        .unwrap_or_default();
+    attempt
+        .paths
+        .iter()
+        .any(|path| !previous_truth_artifacts.contains(path))
+}
+
+fn is_plan_artifact_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.starts_with("docs/specs/")
+        || lower.contains("/docs/specs/")
+        || lower.ends_with("-spec.md")
+        || lower.ends_with("-plan.md")
+        || lower.ends_with("-tasks.md")
+        || lower.contains("design-")
+}
+
+fn is_closeout_artifact_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("handoff")
+        || lower.contains("summary")
+        || lower.contains("fixture")
+        || lower.starts_with("docs/")
+        || lower.ends_with(".md")
+}
+
+fn is_source_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    (lower.ends_with(".rs")
+        || lower.ends_with(".ts")
+        || lower.ends_with(".tsx")
+        || lower.ends_with(".js")
+        || lower.ends_with(".jsx")
+        || lower.ends_with(".py"))
+        && !is_test_path(path)
+        && !lower.ends_with(".md")
+}
+
+fn is_test_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("/tests/")
+        || lower.contains("/fixtures/")
+        || lower.contains("golden")
+        || lower.ends_with(".snap")
+        || lower.ends_with(".golden")
+}
+
+fn delegation_limiting_summary(
+    topology: DelegationTopology,
+    visibility: ChildWorkVisibility,
+) -> &'static str {
+    match (topology, visibility) {
+        (DelegationTopology::DelegatingParent, ChildWorkVisibility::Opaque) => {
+            "delegating-parent plus child-opaque visibility prevented direct child progress claim"
+        }
+        (DelegationTopology::DelegatingParent, ChildWorkVisibility::Partial) => {
+            "partial child visibility limited progress confidence"
+        }
+        (DelegationTopology::MixedOrAmbiguous, ChildWorkVisibility::Opaque) => {
+            "only parent-visible orchestration evidence was available for progress assessment"
+        }
+        _ => "delegation visibility limited progress confidence",
+    }
+}
+
+fn signal_sort_key(left: &ProgressSignal, right: &ProgressSignal) -> std::cmp::Ordering {
+    (
+        left.code as u8,
+        left.summary.as_str(),
+        left.before.as_deref().unwrap_or_default(),
+        left.after.as_deref().unwrap_or_default(),
+    )
+        .cmp(&(
+            right.code as u8,
+            right.summary.as_str(),
+            right.before.as_deref().unwrap_or_default(),
+            right.after.as_deref().unwrap_or_default(),
+        ))
 }
 
 #[cfg(test)]
@@ -2761,221 +2980,4 @@ AssertionError: expected advancing"#,
             })
             .collect()
     }
-}
-
-fn negative_signal_evidence(signals: &[ProgressSignal]) -> Vec<EvidenceRef> {
-    signals
-        .iter()
-        .filter(|signal| {
-            matches!(
-                signal.polarity,
-                SignalPolarity::Negative | SignalPolarity::Mixed
-            )
-        })
-        .flat_map(|signal| signal.evidence.clone())
-        .collect()
-}
-
-fn merge_evidence(groups: Vec<Vec<EvidenceRef>>) -> Vec<EvidenceRef> {
-    dedupe_and_limit_evidence(groups.into_iter().flatten().collect())
-}
-
-fn dedupe_and_limit_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
-    let mut deduped = dedupe_evidence(items);
-    deduped.truncate(MAX_PROGRESS_EVIDENCE_ITEMS);
-    deduped
-}
-
-fn dedupe_and_limit_counter_evidence(
-    items: Vec<EvidenceRef>,
-    required: Option<EvidenceRef>,
-) -> Vec<EvidenceRef> {
-    let mut deduped = dedupe_evidence(items);
-    if deduped.len() <= MAX_PROGRESS_EVIDENCE_ITEMS {
-        return deduped;
-    }
-    let Some(required) = required else {
-        deduped.truncate(MAX_PROGRESS_EVIDENCE_ITEMS);
-        return deduped;
-    };
-
-    let mut limited = deduped
-        .iter()
-        .take(MAX_PROGRESS_EVIDENCE_ITEMS)
-        .cloned()
-        .collect::<Vec<_>>();
-    if limited.iter().any(|evidence| *evidence == required) {
-        return limited;
-    }
-
-    limited.pop();
-    limited.push(required);
-    limited.sort_by(evidence_sort_key);
-    limited
-}
-
-fn required_delegation_limiting_counter_evidence(
-    progress: &SessionProgress,
-) -> Option<EvidenceRef> {
-    let limiting_row_keys = progress
-        .signals
-        .iter()
-        .filter(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited)
-        .flat_map(|signal| signal.evidence.iter())
-        .map(evidence_row_key)
-        .collect::<BTreeSet<_>>();
-    if limiting_row_keys.is_empty() {
-        return None;
-    }
-
-    let counter_evidence = dedupe_evidence(progress.counter_evidence.clone());
-    counter_evidence
-        .iter()
-        .find(|evidence| {
-            evidence.reason == DELEGATION_LIMITING_CONFIDENCE_REASON
-                && limiting_row_keys.contains(&evidence_row_key(evidence))
-        })
-        .cloned()
-        .or_else(|| {
-            counter_evidence
-                .into_iter()
-                .find(|evidence| limiting_row_keys.contains(&evidence_row_key(evidence)))
-        })
-}
-
-fn dedupe_evidence(items: Vec<EvidenceRef>) -> Vec<EvidenceRef> {
-    let mut deduped = items
-        .into_iter()
-        .fold(BTreeMap::new(), |mut acc, evidence| {
-            acc.entry(evidence_key(&evidence)).or_insert(evidence);
-            acc
-        })
-        .into_values()
-        .collect::<Vec<_>>();
-    deduped.sort_by(evidence_sort_key);
-    deduped
-}
-
-fn evidence_key(evidence: &EvidenceRef) -> (camino::Utf8PathBuf, usize, usize, String) {
-    (
-        evidence.row.source_file.clone(),
-        evidence.row.event_index,
-        evidence.row.row_ordinal,
-        evidence.reason.clone(),
-    )
-}
-
-fn evidence_row_key(evidence: &EvidenceRef) -> (camino::Utf8PathBuf, usize, usize) {
-    (
-        evidence.row.source_file.clone(),
-        evidence.row.event_index,
-        evidence.row.row_ordinal,
-    )
-}
-
-fn evidence_sort_key(left: &EvidenceRef, right: &EvidenceRef) -> Ordering {
-    (
-        left.row.source_file.as_str(),
-        left.row.event_index,
-        left.row.row_ordinal,
-        left.reason.as_str(),
-    )
-        .cmp(&(
-            right.row.source_file.as_str(),
-            right.row.event_index,
-            right.row.row_ordinal,
-            right.reason.as_str(),
-        ))
-}
-
-fn set_preview(set: &BTreeSet<String>) -> String {
-    if set.is_empty() {
-        return "none".to_string();
-    }
-    set.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
-}
-
-fn plan_artifact_created(analysis: &CheckpointAnalysis, attempt: &CommandAttempt) -> bool {
-    let previous_truth_artifacts = analysis
-        .previous
-        .as_ref()
-        .map(|slice| working_set(&slice.task_frame.truth_artifacts))
-        .unwrap_or_default();
-    attempt
-        .paths
-        .iter()
-        .any(|path| !previous_truth_artifacts.contains(path))
-}
-
-fn is_plan_artifact_path(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    lower.starts_with("docs/specs/")
-        || lower.contains("/docs/specs/")
-        || lower.ends_with("-spec.md")
-        || lower.ends_with("-plan.md")
-        || lower.ends_with("-tasks.md")
-        || lower.contains("design-")
-}
-
-fn is_closeout_artifact_path(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    lower.contains("handoff")
-        || lower.contains("summary")
-        || lower.contains("fixture")
-        || lower.starts_with("docs/")
-        || lower.ends_with(".md")
-}
-
-fn is_source_path(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    (lower.ends_with(".rs")
-        || lower.ends_with(".ts")
-        || lower.ends_with(".tsx")
-        || lower.ends_with(".js")
-        || lower.ends_with(".jsx")
-        || lower.ends_with(".py"))
-        && !is_test_path(path)
-        && !lower.ends_with(".md")
-}
-
-fn is_test_path(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    lower.contains("/tests/")
-        || lower.contains("/fixtures/")
-        || lower.contains("golden")
-        || lower.ends_with(".snap")
-        || lower.ends_with(".golden")
-}
-
-fn delegation_limiting_summary(
-    topology: DelegationTopology,
-    visibility: ChildWorkVisibility,
-) -> &'static str {
-    match (topology, visibility) {
-        (DelegationTopology::DelegatingParent, ChildWorkVisibility::Opaque) => {
-            "delegating-parent plus child-opaque visibility prevented direct child progress claim"
-        }
-        (DelegationTopology::DelegatingParent, ChildWorkVisibility::Partial) => {
-            "partial child visibility limited progress confidence"
-        }
-        (DelegationTopology::MixedOrAmbiguous, ChildWorkVisibility::Opaque) => {
-            "only parent-visible orchestration evidence was available for progress assessment"
-        }
-        _ => "delegation visibility limited progress confidence",
-    }
-}
-
-fn signal_sort_key(left: &ProgressSignal, right: &ProgressSignal) -> std::cmp::Ordering {
-    (
-        left.code as u8,
-        left.summary.as_str(),
-        left.before.as_deref().unwrap_or_default(),
-        left.after.as_deref().unwrap_or_default(),
-    )
-        .cmp(&(
-            right.code as u8,
-            right.summary.as_str(),
-            right.before.as_deref().unwrap_or_default(),
-            right.after.as_deref().unwrap_or_default(),
-        ))
 }

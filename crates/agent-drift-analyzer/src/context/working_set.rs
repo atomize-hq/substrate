@@ -150,7 +150,7 @@ pub fn collect_command_observations(rows: &[CompactionRow]) -> Vec<CommandObserv
                     .or_else(|| value.get("cmd"))
                     .and_then(Value::as_str)
             })
-            .unwrap_or_else(|| row.text.as_str())
+            .unwrap_or(row.text.as_str())
             .to_string();
         let family = command_family(&raw_command).unwrap_or_else(|| tool_name.clone());
         let mut paths = extract_path_hints(&raw_command);

@@ -870,6 +870,7 @@ fn live_checkpoint_compatibility_supports_recovered_posture_without_schema_widen
             .contains("historical truth-grounding gap: flagged score for session-posture:1")));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_drift(
     schema_version: &str,
     session_id: &str,
@@ -897,6 +898,7 @@ fn checkpoint_with_drift(
     checkpoint
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,

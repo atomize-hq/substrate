@@ -875,6 +875,7 @@ fn extract_progress_line(rendered: &str) -> Option<&str> {
         .find(|line| line.starts_with("- Progress: "))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,
@@ -898,6 +899,7 @@ fn checkpoint_with_state(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_schema_state(
     schema_version: &str,
     session_id: &str,

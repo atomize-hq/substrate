@@ -408,7 +408,7 @@ fn visibility_surface(row: &CompactionRow) -> Option<String> {
                         .or_else(|| value.get("cmd"))
                         .and_then(Value::as_str)
                 })
-                .unwrap_or_else(|| row.text.as_str());
+                .unwrap_or(row.text.as_str());
             Some(surface.to_string())
         }
         CompactionKind::ToolOutput => Some(row.text.clone()),

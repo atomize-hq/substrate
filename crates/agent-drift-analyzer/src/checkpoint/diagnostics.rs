@@ -484,8 +484,8 @@ fn classify_failure(
     let lower = output.to_ascii_lowercase();
     let verifier = verifier_for_signature(attempt);
 
-    if verifier == VerifierKind::Replay {
-        if contains_any(
+    if verifier == VerifierKind::Replay
+        && contains_any(
             &lower,
             &[
                 "missing field",
@@ -494,9 +494,9 @@ fn classify_failure(
                 "fixturecontractgap",
                 "expected checkpoint",
             ],
-        ) {
-            return FailureClass::ReplayMismatch;
-        }
+        )
+    {
+        return FailureClass::ReplayMismatch;
     }
 
     if contains_any(
@@ -690,6 +690,7 @@ fn target_fingerprint(
     (!parts.is_empty()).then(|| parts.into_iter().collect::<Vec<_>>().join("|"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hash_payload(
     attempt: &CommandAttempt,
     failure_class: FailureClass,
@@ -1498,7 +1499,7 @@ fn strip_ansi(text: &str) -> String {
         if ch == '\u{1b}' {
             if chars.peek().copied() == Some('[') {
                 chars.next();
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     if next.is_ascii_alphabetic() {
                         break;
                     }

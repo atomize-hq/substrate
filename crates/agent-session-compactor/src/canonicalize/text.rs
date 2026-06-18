@@ -32,7 +32,7 @@ fn strip_ansi_sequences(raw: &str) -> String {
         match chars.peek().copied() {
             Some('[') => {
                 chars.next();
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     if ('@'..='~').contains(&next) {
                         break;
                     }
@@ -41,7 +41,7 @@ fn strip_ansi_sequences(raw: &str) -> String {
             Some(']') => {
                 chars.next();
                 let mut saw_escape = false;
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     if next == '\u{7}' || (saw_escape && next == '\\') {
                         break;
                     }

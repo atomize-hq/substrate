@@ -1320,16 +1320,16 @@ fn format_drift_class_frequencies(
 fn format_confidence_distribution(
     stats: &agent_drift_analyzer::checkpoint::CheckpointDiagnosticStats,
 ) -> String {
-    (stats.checkpoint_count > 0)
-        .then(|| {
-            format!(
-                "low={}, medium={}, high={}",
-                stats.confidence_distribution.low,
-                stats.confidence_distribution.medium,
-                stats.confidence_distribution.high
-            )
-        })
-        .unwrap_or_else(|| "unavailable".to_string())
+    if stats.checkpoint_count > 0 {
+        format!(
+            "low={}, medium={}, high={}",
+            stats.confidence_distribution.low,
+            stats.confidence_distribution.medium,
+            stats.confidence_distribution.high
+        )
+    } else {
+        "unavailable".to_string()
+    }
 }
 
 fn format_progress_status_distribution(checkpoints: &[Checkpoint]) -> String {

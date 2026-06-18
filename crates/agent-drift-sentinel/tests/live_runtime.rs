@@ -279,6 +279,7 @@ fn live_runtime_keeps_checkpoint_ready_and_repeated_failure_headlines_distinct()
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,

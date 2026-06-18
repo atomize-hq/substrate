@@ -261,6 +261,7 @@ fn operator_sink_labels_repeated_failure_status_as_scheduler_trigger() {
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn checkpoint_with_state(
     session_id: &str,
     ordinal: usize,

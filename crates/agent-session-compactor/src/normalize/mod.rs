@@ -432,6 +432,7 @@ fn build_failure_row(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_row(
     rollout: &IngestedRolloutFile,
     record: &IngestedRolloutRecord,

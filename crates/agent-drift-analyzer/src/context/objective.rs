@@ -413,7 +413,7 @@ fn classify_section_label(label: &str) -> SectionClassification {
     let tokens = normalized.split_whitespace().collect::<Vec<_>>();
 
     let classified = if matches_any_phrase(&normalized, &["scope", "task scope", "review scope"])
-        || tokens.iter().any(|token| *token == "scope")
+        || tokens.contains(&"scope")
     {
         SectionClassification {
             kind: ObjectiveSectionKind::Scope,
@@ -2392,7 +2392,7 @@ fn clean_command_candidate(candidate: &str) -> String {
         .trim_start_matches("run ")
         .trim_start_matches("Run ")
         .trim_matches(|c: char| matches!(c, '`' | '"' | '\''))
-        .trim_end_matches(|c: char| matches!(c, ':' | ';' | ','))
+        .trim_end_matches([':', ';', ','])
         .trim()
         .to_string();
     if cleaned.ends_with('.') && !cleaned.ends_with("/...") {

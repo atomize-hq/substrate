@@ -56,11 +56,11 @@ pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> ScoredDrif
 }
 
 fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {
-    let repeated_verification_score = analysis
-        .recovery
-        .active_repeated_verification
-        .then_some(analysis.repetition.repeated_verification_loops.len() * 40)
-        .unwrap_or(0);
+    let repeated_verification_score = if analysis.recovery.active_repeated_verification {
+        analysis.repetition.repeated_verification_loops.len() * 40
+    } else {
+        0
+    };
 
     (repeated_verification_score + (analysis.repetition.repeated_failure_loops.len() * 30)).min(100)
         as u8
