@@ -24,7 +24,7 @@ config:
       enabled: true
       cli:
         runtime_family: codex
-        binary: codex
+        binary: /var/lib/substrate/world-deps/bin/codex
         mode: persistent
       capabilities:
         session_start: true

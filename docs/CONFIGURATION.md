@@ -38,14 +38,14 @@ Agent Hub successor routing is configured through the normal Substrate config an
 
 Config keys:
 - `agents.hub.orchestrator_agent_id` selects the canonical host-scoped orchestrator agent for `substrate agent status` and `substrate agent doctor`.
-- Agent inventory entries continue to define each agent's adapter kind and execution posture; the derived `backend_id` remains `<kind>:<agent_id>`.
+- Placement-aware `version: 2` agent inventory entries define one logical agent plus one or more realized placement rows; each exact `backend_id` is derived from the realized placement identity, for example `cli:codex-host` or `cli:codex-world`.
 - The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=substrate.agent.session`, and `cli.mode=persistent`.
 - `config.placements.<placement>.cli.runtime_family` is the inventory-only runtime-realization truth for shell-owned UAA candidates in placement-aware `version: 2` agent manifests. Supported values are `codex` and `claude_code`.
-- Runtime realization still keys policy and exact backend routing off the derived `backend_id`. For example, `cli:codex-world` may realize the canonical `codex` runtime family while remaining a distinct exact backend id from `cli:codex-host`.
-- `config.cli.binary` for the selected orchestrator must resolve on the host during `substrate agent doctor` and async REPL bootstrap.
+- Runtime realization still keys policy and exact backend routing off that placement-local exact `backend_id`. For example, `cli:codex-world` may realize the canonical `codex` runtime family while remaining a distinct exact backend id from `cli:codex-host`.
+- `config.placements.<placement>.cli.binary` is also placement-local truth. The selected placement must carry the binary that is true for that placement; for example, `codex-world` must continue to declare `/var/lib/substrate/world-deps/bin/codex` rather than the host shorthand `codex`.
 
 Policy keys:
-- `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
+- `agents.allowed_backends` remains the allowlist for exact agent adapter ids such as `cli:codex-host`, `cli:codex-world`, or `api:openai`.
 - Existing `agents.allowed_backends` entries stay valid across the successor `substrate agent ...` command surface because the policy token is still the derived `backend_id`, not `client`, `router`, `protocol`, `provider`, or `auth_authority`.
 - `agents.world_dispatch.*` is an internal steering-policy patch surface for orchestrator-owned host-to-world dispatch. It is deny-by-default, does not widen the public `substrate agent ...` CLI, and governs the live internal verbs `run_world_task`, `spawn_world_worker`, `fork_world_worker`, `continue_world_worker`, `inspect_world_worker`, `cancel_world_work`, and `stop_world_worker`.
 - Slices `39` through `42` keep retained-worker approval/fork/follow-up/blocked obligation bootstrap plus typed host approval-response and clarification-response bootstrap on that same internal surface through seven deny-by-default keys: `agents.world_dispatch.obligations.approval_allowed`, `agents.world_dispatch.obligations.approval_response_allowed`, `agents.world_dispatch.obligations.follow_up_allowed`, `agents.world_dispatch.obligations.blocked_allowed`, `agents.world_dispatch.obligations.clarification_response_allowed`, `agents.world_dispatch.fork.requests_allowed`, and `agents.world_dispatch.fork.recommendations_allowed`.
