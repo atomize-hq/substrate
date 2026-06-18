@@ -2300,6 +2300,13 @@ sync_world_deps() {
     rc=$?
   fi
   if [[ "${rc}" -ne 0 ]]; then
+    if [[ -n "${PROVISION_AGENT_RUNTIME}" ]]; then
+      print_world_deps_summary "${substrate_bin}"
+      if [[ "${rc}" -eq 4 ]]; then
+        fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; provisioning-time system packages are still required. Run 'substrate world enable --provision-deps' and re-run the install."
+      fi
+      fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the install is stopping so runtime provisioning does not remain partially applied."
+    fi
     if [[ "${rc}" -eq 4 ]]; then
       warn "world deps sync requires provisioning-time system packages; run 'substrate world enable --provision-deps'."
     fi

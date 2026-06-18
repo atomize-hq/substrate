@@ -75,6 +75,17 @@ validate_agent_runtime_provision_request() {
   fi
 }
 
+fail_closed_world_provisioning_for_runtime_request() {
+  local detail="$1"
+  local remediation="$2"
+
+  if [[ -z "${PROVISION_AGENT_RUNTIME}" ]]; then
+    return 1
+  fi
+
+  fatal_with_code 1 "Cannot continue --provision-agent-runtime ${PROVISION_AGENT_RUNTIME} because world provisioning failed: ${detail} ${remediation}"
+}
+
 provision_agent_runtime_with_sync() {
   local substrate_bin="$1"
   if [[ -z "${PROVISION_AGENT_RUNTIME}" ]]; then
@@ -1718,6 +1729,9 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
       log "Checking sudo access for world provisioning (you may be prompted)..."
       if [[ ! -t 0 && ! -t 1 && ! -t 2 ]]; then
         WORLD_PROVISION_FAILED=1
+        fail_closed_world_provisioning_for_runtime_request \
+          "sudo is required, but no interactive prompt is available in this session." \
+          "Re-run from a TTY, pre-authenticate with 'sudo -v', or omit --provision-agent-runtime."
         WORLD_ENABLED=0
         write_install_metadata "${WORLD_ENABLED}"
         write_env_sh_script "${WORLD_ENABLED}"
@@ -1726,6 +1740,9 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
         warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning from a TTY, pre-authenticate with 'sudo -v', or run with --no-world."
       elif ! sudo -v; then
         WORLD_PROVISION_FAILED=1
+        fail_closed_world_provisioning_for_runtime_request \
+          "unable to cache sudo credentials for world provisioning." \
+          "Re-run after 'sudo -v' succeeds, or omit --provision-agent-runtime."
         WORLD_ENABLED=0
         write_install_metadata "${WORLD_ENABLED}"
         write_env_sh_script "${WORLD_ENABLED}"
@@ -1751,6 +1768,9 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	    fi
 	    if ! SUBSTRATE_HOME="${PREFIX}" "${PROVISION_SCRIPT}" "${provision_args[@]}"; then
 	      WORLD_PROVISION_FAILED=1
+	      fail_closed_world_provisioning_for_runtime_request \
+	        "the Linux world-provision helper reported an error." \
+	        "Re-run ${PROVISION_SCRIPT} successfully, then retry the dev install."
 	      WORLD_ENABLED=0
 	      write_install_metadata "${WORLD_ENABLED}"
 	      write_env_sh_script "${WORLD_ENABLED}"
@@ -1760,6 +1780,9 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
     fi
   else
     WORLD_PROVISION_FAILED=1
+    fail_closed_world_provisioning_for_runtime_request \
+      "the Linux world-provision helper is missing at ${PROVISION_SCRIPT}." \
+      "Restore that helper or omit --provision-agent-runtime."
     WORLD_ENABLED=0
     write_install_metadata "${WORLD_ENABLED}"
     write_env_sh_script "${WORLD_ENABLED}"
@@ -1800,6 +1823,9 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   fi
 
   if [[ "${cache_ok}" -eq 0 ]] || ! verify_prefix_linux_bundle world-service substrate-gateway; then
+    fail_closed_world_provisioning_for_runtime_request \
+      "the macOS Lima guest binary bundle cache or verification step failed." \
+      "Fix Lima provisioning and rerun the dev install, or omit --provision-agent-runtime."
     WORLD_ENABLED=0
     write_install_metadata "${WORLD_ENABLED}"
     write_env_sh_script "${WORLD_ENABLED}"
