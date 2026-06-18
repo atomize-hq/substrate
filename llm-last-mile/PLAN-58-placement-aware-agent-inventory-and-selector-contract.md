@@ -1,9 +1,10 @@
 # Plan: Placement-Aware Agent Inventory And Selector Contract
 
 Source spec: [SPEC-58-placement-aware-agent-inventory-and-selector-contract.md](./SPEC-58-placement-aware-agent-inventory-and-selector-contract.md)  
-Plan type: inventory/selector contract redesign before world-runtime bootstrap follow-on  
+Related landed slice: [SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md](./SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md)  
+Plan type: inventory/selector contract redesign after world-runtime contract landing  
 Status: draft for review  
-Implementation posture: spec-first, bounded migration, no guest-runtime bootstrap work in this slice
+Implementation posture: spec-first, bounded migration, preserve landed Slice `59` runtime/bootstrap behavior while migrating config and selector shape
 
 ## Objective
 
@@ -12,11 +13,11 @@ Implement the approved placement-aware logical-agent contract so the repo can st
 1. exact backend-id selection,
 2. fail-closed host/world separation,
 3. explicit runtime-family truth,
-4. and a clean handoff to the later world-runtime realizability slice.
+4. and the already-landed Slice `59` runtime-realizability / world-deps / installer contract during the placement-aware cutover.
 
 ## Plan Summary
 
-The current tree already has the runtime-family alias correction, but it still packages host and world as duplicate logical agents such as `codex` and `codex_world`.
+The current tree already has both the runtime-family alias correction and the landed Slice `59` world-runtime truth floor, but it still packages host and world as duplicate logical agents such as `codex` / `codex_world` and `claude_code` / `claude_code_world`.
 
 The correct next move is:
 
@@ -26,7 +27,7 @@ The correct next move is:
 4. migrate policies/docs/tests from old split exact ids to placement-qualified exact ids,
 5. and stop there.
 
-Do **not** widen this slice into guest-runtime provisioning, world-deps authoring, or member bootstrap remediation. Those are follow-on work once the placement container is honest.
+Do **not** widen this slice into new guest-runtime provisioning, world-deps authoring, or member bootstrap remediation. Those seams are already landed in Slice `59` and should only be touched here when the placement-aware cutover requires mechanical exact-id preservation.
 
 ## Locked Decisions
 
@@ -43,7 +44,7 @@ Do **not** widen this slice into guest-runtime provisioning, world-deps authorin
 1. Backend-id grammar stays `<kind>:<name>`.
 2. Exact backend selection remains fail-closed.
 3. `config.cli.runtime_family` remains explicit inventory truth.
-4. The world-runtime/bootstrap contract is not defined here.
+4. The concrete world-runtime/bootstrap contract remains the Slice `59` authority; this slice only relocates how that truth is represented after placement-aware migration.
 5. Policy still allowlists exact backend ids, not logical-agent ids.
 
 ## Implementation Order
@@ -110,22 +111,27 @@ Verification checkpoint:
 Goal:
 
 1. replace the split `codex` + `codex_world` topology with one logical placement-aware file,
-2. move exact allowlists/docs/tests to placement-qualified ids,
-3. remove the duplicated-file product truth.
+2. apply the same forward contract to any other split multi-placement CLI inventory still modeled as `*_world` pairs,
+3. move exact allowlists/docs/tests to placement-qualified ids,
+4. remove the duplicated-file product truth.
 
 Primary touch surface:
 
 1. `config/agents/`
 2. `docs/CONFIGURATION.md`
-3. `crates/shell/tests/agent_public_control_surface_v1.rs`
-4. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
-5. nearby validator/dispatch tests
+3. `crates/shell/src/execution/policy_model.rs`
+4. `crates/shell/src/repl/async_repl.rs`
+5. `crates/shell/tests/agent_public_control_surface_v1.rs`
+6. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+7. `crates/shell/tests/repl_world_first_routing_v1.rs`
+8. `scripts/substrate/dev-fresh-install-gateway-smoke*.sh`
+9. nearby validator/dispatch/runtime-control tests that still pin legacy exact ids
 
 Required changes:
 
 1. replace split inventory files with placement-aware equivalents,
-2. update policy examples and docs from `cli:codex_world` to `cli:codex-world`,
-3. update fixtures and follow-up syntax expectations,
+2. update policy examples, REPL/runtime-control fixtures, smoke helpers, and docs from legacy `*_world` exact ids to placement-qualified exact ids,
+3. update follow-up syntax expectations and read-only/status examples,
 4. make the migration boundary explicit in docs/release notes if old ids remain temporarily supported.
 
 Verification checkpoint:
@@ -140,7 +146,7 @@ Verification checkpoint:
 Goal:
 
 1. prove the placement-aware selector contract is coherent end-to-end,
-2. stop before guest-runtime bootstrap work begins.
+2. prove the cutover did not weaken or blur the landed Slice `59` runtime/bootstrap behavior.
 
 Verification wall:
 
@@ -157,14 +163,14 @@ Exit criteria:
 1. placement-aware inventory is the forward contract,
 2. exact backend ids are placement-qualified and fail-closed,
 3. human-facing labels are derived and distinct from selectors,
-4. no guest-runtime/bootstrap behavior was implicitly promised or silently changed.
+4. landed Slice `59` runtime-truth, remediation, and installer semantics remain intact after the placement-aware migration.
 
 ## Sequencing And Parallelism
 
 1. Phase 1 must land before any selector cutover.
 2. Phase 2 must land before policy/doc/test migration can be honest.
 3. Phase 3 should happen after selector derivation is stable so the docs/tests lock the real contract.
-4. Guest-runtime/bootstrap design should start only after this plan is green.
+4. Any runtime-contract reopen work should happen only if implementation uncovers a contradiction with landed Slice `59`; otherwise runtime/bootstrap behavior stays out of scope.
 
 ## Risks
 
@@ -187,18 +193,19 @@ Mitigation:
 2. keep docs/examples/fixtures in the same packet as the selector cutover,
 3. fail closed on ambiguous compatibility if needed.
 
-### Risk 3: Placement schema lands without a clear handoff to world-runtime truth
+### Risk 3: Placement migration accidentally weakens the landed Slice 59 runtime contract
 
-If the placement container lands but the next slice still has no obvious home for guest-runtime requirements, the repo will clean up names without solving the real blocker.
+If exact-id or inventory migration drops, hides, or reinterprets the world-runtime fields that Slice `59` already made truthful, the repo could clean up names while regressing real launchability semantics.
 
 Mitigation:
 
 1. keep the placement-local ownership rule explicit in the spec,
-2. immediately follow this slice with the world-runtime realizability contract slice.
+2. treat Slice `59` as the preserved runtime authority during every migration packet,
+3. reopen runtime docs/code only if a concrete contradiction appears during cutover.
 
 ## Non-Goals
 
-1. Fixing the actual `exit 127` Codex world bootstrap failure.
+1. Re-fixing or redesigning the landed Slice `59` world-runtime realizability, world-deps delivery, or installer contract except where the placement-aware cutover requires mechanical exact-id migration.
 2. Defining world-deps package contents for Codex.
 3. Changing backend-id grammar to support `cli:codex:world`.
 4. Widening public selector ergonomics to logical-agent shorthand.

@@ -20,7 +20,16 @@ Related authorities:
 - [`scripts/substrate/install-substrate.sh`](../scripts/substrate/install-substrate.sh)
 - [`scripts/substrate/dev-install-substrate.sh`](../scripts/substrate/dev-install-substrate.sh)
 Phase: `SPECIFY`  
-Status: draft for review
+Status: landed and validated on `2026-06-18`
+
+## Implementation closeout
+
+Historical note: the repo-truth gut-check and packet framing below capture the pre-landing problem statement. Current repo truth after Slice `59` validation is:
+
+1. world-scoped Codex launchability now fails closed before retained-worker bootstrap unless the guest-visible runtime entrypoint exists,
+2. Substrate-owned `codex-runtime` world-deps delivery plus UAA-backed validated version selection is the landed guest-runtime floor,
+3. prod/dev install surfaces and the installed helper now expose `--provision-agent-runtime codex` and immediately run `substrate world deps current sync`,
+4. placement-aware selector/config migration remains deferred to Slice `58`.
 
 ## Assumptions
 

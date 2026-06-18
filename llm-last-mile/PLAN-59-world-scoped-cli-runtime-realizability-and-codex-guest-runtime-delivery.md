@@ -3,8 +3,17 @@
 Source spec: [SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md](./SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md)  
 Related slice: [SPEC-58-placement-aware-agent-inventory-and-selector-contract.md](./SPEC-58-placement-aware-agent-inventory-and-selector-contract.md)  
 Plan type: runtime-truth + guest runtime delivery + installer integration before placement-aware cutover  
-Status: draft for review  
+Status: landed and validated on `2026-06-18`  
 Implementation posture: spec-first, runtime truth first, no placement-aware selector migration in this slice
+
+## Closeout outcome
+
+Slice `59` is now the landed baseline for world-scoped Codex runtime truth:
+
+1. validator/materialization and dispatch now fail closed on missing guest runtime truth instead of treating host `which` success as sufficient for world scope,
+2. guest runtime delivery is anchored to the Substrate-owned `codex-runtime` world-deps path with UAA-backed validated version resolution on the published `0.3.7` line,
+3. prod/dev installer flows and the installed helper expose the generic `--provision-agent-runtime <runtime_family>` surface while Slice `59` implements `codex`,
+4. Slice `58` can now migrate inventory/selector shape without reopening runtime semantics.
 
 ## Objective
 

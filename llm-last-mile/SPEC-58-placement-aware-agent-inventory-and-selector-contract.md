@@ -3,8 +3,13 @@
 Source dossier: [SESSION_DECISION_DOSSIER-agent-placement-shape-and-world-runtime-gap.md](./SESSION_DECISION_DOSSIER-agent-placement-shape-and-world-runtime-gap.md)  
 Related authorities:
 - [CODEX_WORLD_DISPATCH_GAP_WRITEUP.md](../CODEX_WORLD_DISPATCH_GAP_WRITEUP.md)
+- [SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md](./SPEC-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md)
+- [PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md](./PLAN-59-world-scoped-cli-runtime-realizability-and-codex-guest-runtime-delivery.md)
+- [TASKS-59.md](./TASKS-59.md)
 - [SPEC-shell-owned-uaa-runtime-family-alias-support.md](./SPEC-shell-owned-uaa-runtime-family-alias-support.md)
 - [docs/CONFIGURATION.md](../docs/CONFIGURATION.md)
+- [`config/agents/claude_code.yaml`](../config/agents/claude_code.yaml)
+- [`config/agents/claude_code_world.yaml`](../config/agents/claude_code_world.yaml)
 - [`config/agents/codex.yaml`](../config/agents/codex.yaml)
 - [`config/agents/codex_world.yaml`](../config/agents/codex_world.yaml)
 - [`crates/shell/src/execution/config_model.rs`](../crates/shell/src/execution/config_model.rs)
@@ -18,8 +23,9 @@ Status: draft for review
 ASSUMPTIONS I'M MAKING:
 
 1. The current repo truth already settled that the active `cli:codex_world` gap is guest runtime realizability, not lost world binding.
+   Slice `59` is now the landed floor for that runtime-realizability gap, so Slice `58` must preserve the closed runtime truth rather than reopen it.
 2. The runtime-family alias slice is already landed baseline truth, so this slice must preserve `config.cli.runtime_family` rather than reopen it.
-3. The next honest seam is the logical-agent inventory/selector shape, not guest runtime provisioning itself.
+3. The next honest seam is the logical-agent inventory/selector shape now that Slice `59` has already closed the world-scoped Codex runtime-truth gap.
 4. Exact backend ids must stay fail-closed and placement-explicit; host and world must not silently co-resolve.
 5. The current backend-id grammar remains `<kind>:<name>` with exactly one colon, so placement must live in the name portion rather than a second colon segment.
 6. A materially new inventory shape should use a new inventory version instead of overloading the current split-entry `version: 1` contract.
@@ -38,7 +44,7 @@ This slice must answer:
 4. how human-facing labels differ from exact selectors,
 5. and how exact-selection semantics stay fail-closed once one logical agent can realize more than one placement.
 
-This slice does **not** define the guest-runtime/bootstrap contract yet. It only defines where placement-local runtime truth belongs and how selectors/labels derive.
+This slice does **not** redefine the guest-runtime/bootstrap contract already landed in Slice `59`. It defines where that placement-local runtime truth belongs once split host/world entries are migrated into one logical-agent container and how selectors/labels derive from that container.
 
 ## Tech Stack
 
@@ -47,6 +53,7 @@ This slice does **not** define the guest-runtime/bootstrap contract yet. It only
 - `crates/transport-api-types` backend-id selector grammar
 - YAML agent inventory under `config/agents/`
 - `docs/CONFIGURATION.md` for public operator/config contract
+- landed Slice `59` runtime-truth / world-deps / installer authority that this migration must preserve
 - `llm-last-mile/` for spec/plan/tasks authority
 
 ## Commands
@@ -82,7 +89,7 @@ cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 Targeted repo-truth checks:
 
 ```bash
-rg -n "codex_world|execution\\.scope|runtime_family|backend_id|allowed_backends" \
+rg -n "codex_world|claude_code_world|execution\\.scope|runtime_family|backend_id|allowed_backends" \
   /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/config \
   /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell \
   /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs
@@ -92,7 +99,7 @@ rg -n "codex_world|execution\\.scope|runtime_family|backend_id|allowed_backends"
 
 ```text
 config/agents/
-  Current split host/world logical-agent inventory files that this slice replaces.
+  Current split host/world logical-agent inventory files (`codex`, `codex_world`, `claude_code`, `claude_code_world`) that this slice replaces with placement-aware logical-agent containers.
 
 crates/shell/src/execution/agent_inventory.rs
   Inventory schema, projection, and derived realized backend identity.
@@ -122,8 +129,8 @@ llm-last-mile/
 
 Current inventory truth is still split across separate files such as:
 
-1. `config/agents/codex.yaml`
-2. `config/agents/codex_world.yaml`
+1. `config/agents/codex.yaml` / `config/agents/codex_world.yaml`
+2. `config/agents/claude_code.yaml` / `config/agents/claude_code_world.yaml`
 
 Those files already share the same runtime family and most of the same capabilities, which is evidence that the split is mostly placement modeling rather than truly distinct logical-agent identity.
 
@@ -138,9 +145,9 @@ Current runtime and policy posture already depends on:
 
 This slice must preserve those invariants while changing the inventory container shape.
 
-### 3. The actual runtime blocker is adjacent but separate
+### 3. The runtime blocker that motivated the sequence is now separately closed
 
-`CODEX_WORLD_DISPATCH_GAP_WRITEUP.md` already proves the remaining `codex_world` failure is guest runtime bootstrap via a host-resolved NVM path. That means inventory cleanup alone is not sufficient, but the cleanup is still needed before the world-runtime contract can be expressed cleanly.
+`CODEX_WORLD_DISPATCH_GAP_WRITEUP.md` and the landed Slice `59` work prove the old `codex_world` failure was guest runtime bootstrap via a host-resolved NVM path, and that runtime-truth wall is now closed through world-deps delivery plus installer support. This slice must therefore preserve the landed Slice `59` runtime contract while changing the inventory container shape.
 
 ## Contract
 
@@ -257,14 +264,14 @@ Once one logical agent can realize more than one placement:
 
 ### 6. Placement-local runtime truth belongs under the placement, not above it
 
-This slice does **not** yet freeze the guest-runtime/bootstrap contract, but it does freeze the ownership boundary:
+This slice does **not** reopen the concrete guest-runtime/bootstrap contract from Slice `59`, but it does freeze the ownership boundary that must carry that landed contract forward:
 
 1. any world-only runtime/dependency/bootstrap truth must live inside the `world` placement subtree,
 2. it must not be hidden in logical-agent-wide fields,
 3. it must not be implied only by `placement = world`,
 4. it must not be pushed into policy as a selector surrogate.
 
-That is the architectural handoff to the next slice.
+That is the migration rule for carrying the landed Slice `59` runtime contract into placement-aware config.
 
 ### 7. Migration posture
 
@@ -273,7 +280,8 @@ This spec assumes a bounded migration window:
 1. existing split `version: 1` files remain supported until conversion lands,
 2. the placement-aware schema is the forward contract,
 3. exact backend ids will eventually move from `cli:codex` / `cli:codex_world` to `cli:codex-host` / `cli:codex-world`,
-4. migration planning must cover inventory, docs, policies, fixtures, status surfaces, and follow-up syntax before implementation cutover.
+4. migration planning must cover inventory, docs, policies, fixtures, status surfaces, and follow-up syntax before implementation cutover,
+5. and the migration must preserve the landed Slice `59` runtime-remediation / world-deps / installer semantics while exact ids move.
 
 This spec does **not** promise silent compatibility forever for the old exact ids.
 
@@ -342,11 +350,11 @@ This spec is successful only when a fresh implementer can answer all of these fr
 2. how exact backend ids derive from that shape,
 3. what human-facing labels should look like,
 4. why `execution.scope: [host, world]` is rejected,
-5. where future world-runtime/bootstrap truth must live,
+5. where the already-landed Slice `59` world-runtime/bootstrap truth must live after placement-aware migration,
 6. and what migration boundary still remains before code changes begin.
 
 ## Open Questions
 
-1. What exact placement-local key should hold world-runtime bootstrap/dependency requirements in the follow-on slice?
-2. Should implementation keep a temporary compatibility alias path for `cli:codex` and `cli:codex_world`, or do a one-step exact-selector cutover once migration is ready?
+1. What exact placement-local key should hold the already-landed Slice `59` world-runtime bootstrap/dependency requirements once `codex_world` migrates into `placements.world`?
+2. Should implementation keep a temporary compatibility alias path for legacy exact ids such as `cli:codex` / `cli:codex_world`, or do a one-step exact-selector cutover once migration is ready?
 3. Which read-only UX surfaces should group by logical agent versus emit one row per realized placement by default?
