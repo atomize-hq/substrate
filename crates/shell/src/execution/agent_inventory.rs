@@ -306,6 +306,10 @@ pub(crate) fn inventory_entry_origin(
     cwd: &Path,
     entry: &AgentInventoryEntryV1,
 ) -> AgentInventoryBaselineOrigin {
+    inventory_path_origin(cwd, &entry.path)
+}
+
+fn inventory_path_origin(cwd: &Path, path: &Path) -> AgentInventoryBaselineOrigin {
     let Some(workspace_root) = workspace::find_workspace_root(cwd) else {
         return AgentInventoryBaselineOrigin::GlobalInventory;
     };
@@ -314,7 +318,7 @@ pub(crate) fn inventory_entry_origin(
             .join(workspace::SUBSTRATE_DIR_NAME)
             .join("agents"),
     );
-    let entry_path = normalize_inventory_origin_path(&entry.path);
+    let entry_path = normalize_inventory_origin_path(path);
 
     if entry_path.starts_with(&workspace_agents_root) {
         AgentInventoryBaselineOrigin::WorkspaceInventory
@@ -400,13 +404,7 @@ pub(crate) fn project_inventory_v2_entry(
         return Vec::new();
     }
 
-    let origin = inventory_entry_origin(
-        cwd,
-        &AgentInventoryEntryV1 {
-            path: path.to_path_buf(),
-            file: compatibility_inventory_file_from_v2(file),
-        },
-    );
+    let origin = inventory_path_origin(cwd, path);
     let mut projected = Vec::new();
     for (placement, placement_config) in [
         (AgentPlacement::Host, file.config.placements.host.as_ref()),
@@ -716,6 +714,14 @@ fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Pol
             path.display()
         )));
     }
+    let enabled_placements = count_enabled_v2_placements(parsed);
+    if enabled_placements != 1 {
+        return Err(config_model::user_error(format!(
+            "invalid agent file in {}: config.placements must enable exactly one placement before Packet 2 selector cutover (found {})",
+            path.display(),
+            enabled_placements
+        )));
+    }
 
     for (placement, placement_config) in [
         (AgentPlacement::Host, parsed.config.placements.host.as_ref()),
@@ -747,34 +753,42 @@ fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Pol
     Ok(())
 }
 
-fn compatibility_inventory_file_from_v2(parsed: &AgentFileV2) -> AgentFileV1 {
-    // Packet 1 validates the version-2 schema and exposes placement-aware projection helpers
-    // without cutting legacy selector/runtime consumers over to multi-row inventory yet.
-    let compatibility_source = [
-        parsed
-            .config
-            .placements
-            .host
-            .as_ref()
-            .filter(|placement| placement.enabled),
-        parsed
-            .config
-            .placements
-            .world
-            .as_ref()
-            .filter(|placement| placement.enabled),
+fn count_enabled_v2_placements(parsed: &AgentFileV2) -> usize {
+    [
         parsed.config.placements.host.as_ref(),
         parsed.config.placements.world.as_ref(),
     ]
     .into_iter()
     .flatten()
-    .next();
+    .filter(|placement| placement.enabled)
+    .count()
+}
+
+fn compatibility_source_from_v2(parsed: &AgentFileV2) -> Option<&AgentPlacementConfigV2> {
+    let mut enabled = [
+        parsed.config.placements.host.as_ref(),
+        parsed.config.placements.world.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|placement| placement.enabled);
+    let first = enabled.next()?;
+    if enabled.next().is_some() {
+        return None;
+    }
+    Some(first)
+}
+
+fn compatibility_inventory_file_from_v2(parsed: &AgentFileV2) -> AgentFileV1 {
+    // Packet 1 validates the version-2 schema and exposes placement-aware projection helpers
+    // without cutting legacy selector/runtime consumers over to multi-row inventory yet.
+    let compatibility_source = compatibility_source_from_v2(parsed);
 
     AgentFileV1 {
         version: parsed.version,
         id: parsed.id.clone(),
         config: AgentConfigV1 {
-            enabled: parsed.config.enabled,
+            enabled: parsed.config.enabled && compatibility_source.is_some(),
             kind: parsed.config.kind,
             protocol: parsed.config.protocol.clone(),
             execution: AgentExecutionConfigV1::default(),
@@ -1159,13 +1173,15 @@ fn validate_overlay_subset(
 #[cfg(test)]
 mod tests {
     use super::{
-        inventory_entry_origin, project_inventory_entry, AgentCapabilitiesV1, AgentCliConfigV1,
-        AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1,
-        AgentFileV2, AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
-        project_inventory_v2_entry,
+        compatibility_inventory_file_from_v2, inventory_entry_origin, project_inventory_entry,
+        project_inventory_v2_entry, validate_agent_schema_v2, AgentCapabilitiesV1,
+        AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1,
+        AgentExecutionConfigV1, AgentFileV1, AgentFileV2, AgentInventoryBaselineOrigin,
+        AgentInventoryEntryV1, AgentPlacement,
     };
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
+    use substrate_broker::Policy;
     use tempfile::tempdir;
 
     #[test]
@@ -1356,5 +1372,136 @@ config:
         assert_eq!(projected.len(), 1);
         assert_eq!(projected[0].placement, AgentPlacement::World);
         assert_eq!(projected[0].realized_agent_id, "codex-world");
+    }
+
+    #[test]
+    fn validate_agent_schema_v2_rejects_inventory_without_exactly_one_enabled_placement() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("codex.yaml");
+        let base_policy = Policy::default();
+
+        for (raw, expected_count) in [
+            (
+                r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: false
+      cli:
+        binary: codex
+        runtime_family: codex
+    world:
+      enabled: false
+      cli:
+        binary: codex
+        runtime_family: codex
+"#,
+                0,
+            ),
+            (
+                r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+    world:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+"#,
+                2,
+            ),
+        ] {
+            let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+            let err = validate_agent_schema_v2(&path, &parsed, &base_policy)
+                .expect_err("inventory should fail closed before Packet 2");
+            assert!(
+                err.to_string().contains(&format!(
+                    "config.placements must enable exactly one placement before Packet 2 selector cutover (found {expected_count})"
+                )),
+                "unexpected validation error: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compatibility_inventory_file_from_v2_fails_closed_for_ambiguous_or_disabled_placements() {
+        for raw in [
+            r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: false
+      cli:
+        binary: codex-host
+        runtime_family: codex
+      capabilities:
+        session_start: true
+        llm: true
+    world:
+      enabled: false
+      cli:
+        binary: codex-world
+        runtime_family: codex
+      capabilities:
+        session_resume: true
+        llm: true
+"#,
+            r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex-host
+        runtime_family: codex
+      capabilities:
+        session_start: true
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: codex-world
+        runtime_family: codex
+      capabilities:
+        session_resume: true
+        llm: true
+"#,
+        ] {
+            let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+            let compatibility = compatibility_inventory_file_from_v2(&parsed);
+
+            assert!(
+                !compatibility.config.enabled,
+                "ambiguous compatibility projection must fail closed"
+            );
+            assert!(compatibility.config.cli.is_none());
+            assert!(compatibility.config.api.is_none());
+            assert_eq!(compatibility.config.capabilities, AgentCapabilitiesV1::default());
+        }
     }
 }

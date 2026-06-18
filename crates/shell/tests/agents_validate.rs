@@ -113,8 +113,16 @@ fn legacy_valid_cli_agent_file(agent_id: &str, policy_overlay: Option<&str>) -> 
 }
 
 fn valid_cli_agent_file_v2(agent_id: &str) -> String {
+    valid_cli_agent_file_v2_with_enabled_placements(agent_id, true, false)
+}
+
+fn valid_cli_agent_file_v2_with_enabled_placements(
+    agent_id: &str,
+    host_enabled: bool,
+    world_enabled: bool,
+) -> String {
     format!(
-        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  placements:\n    host:\n      enabled: true\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n    world:\n      enabled: true\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n"
+        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  placements:\n    host:\n      enabled: {host_enabled}\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n    world:\n      enabled: {world_enabled}\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n"
     )
 }
 
@@ -300,6 +308,52 @@ fn agents_validate_accepts_version_2_placement_inventory() {
     assert!(
         output.status.success(),
         "version 2 placement inventory should validate: {output:?}"
+    );
+}
+
+#[test]
+fn agents_validate_rejects_version_2_inventory_without_enabled_placements() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file(
+        "codex.yaml",
+        &valid_cli_agent_file_v2_with_enabled_placements("codex", false, false),
+    );
+
+    let output = fixture.validate();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "version 2 inventory without enabled placements should exit 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("codex.yaml")
+            && stderr.contains("must enable exactly one placement before Packet 2 selector cutover"),
+        "stderr should explain why all-disabled placement inventories are rejected\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn agents_validate_rejects_multi_enabled_version_2_inventory_before_packet_2() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file(
+        "codex.yaml",
+        &valid_cli_agent_file_v2_with_enabled_placements("codex", true, true),
+    );
+
+    let output = fixture.validate();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "multi-enabled version 2 inventory should exit 2 before Packet 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("codex.yaml")
+            && stderr.contains("must enable exactly one placement before Packet 2 selector cutover"),
+        "stderr should explain why the Packet 1 compatibility bridge rejects multi-placement live inventory\nstderr: {stderr}"
     );
 }
 
