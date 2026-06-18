@@ -1418,12 +1418,14 @@ validate_agent_runtime_provision_request() {
 }
 
 agent_runtime_retry_after_sync_failure() {
+  local deps_item
+  deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
   if [[ "${INSTALLER_NAME}" == "substrate-world-enable" ]]; then
-    printf "re-run the world-enable helper with '--provision-agent-runtime %s'" "${PROVISION_AGENT_RUNTIME}"
+    printf "re-run the world-enable helper with '--provision-agent-runtime %s' to re-add '%s' and retry the sync" "${PROVISION_AGENT_RUNTIME}" "${deps_item}"
     return
   fi
 
-  printf 're-run the install'
+  printf "re-run the install to re-add '%s' and retry the sync" "${deps_item}"
 }
 
 world_deps_global_remove_scope_note() {
@@ -2346,7 +2348,7 @@ sync_world_deps() {
         if [[ "${rc}" -eq 4 ]]; then
           fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the installer removed the global enable because provisioning-time system packages are still required. Clearing the global enable does not roll back any guest-side state that may already have been applied in the world. Run 'substrate world enable --provision-deps', then $(agent_runtime_retry_after_sync_failure)."
         fi
-        fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the installer removed the global enable so the runtime is not left persistently enabled for future syncs. $(world_deps_global_remove_scope_note)"
+        fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the installer removed the global enable so the runtime is not left persistently enabled for future syncs. $(world_deps_global_remove_scope_note) Then $(agent_runtime_retry_after_sync_failure)."
       fi
       if [[ "${rc}" -eq 4 ]]; then
         fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; provisioning-time system packages are still required, and rollback also failed so '${deps_item}' remains globally enabled. Run 'substrate world deps global remove ${deps_item}' to clear the global enable only. $(world_deps_global_remove_scope_note) Then run 'substrate world enable --provision-deps', then $(agent_runtime_retry_after_sync_failure)."

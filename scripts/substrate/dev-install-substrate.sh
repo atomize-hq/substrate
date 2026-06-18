@@ -112,6 +112,12 @@ rollback_agent_runtime_after_failed_sync() {
   return 1
 }
 
+dev_install_retry_after_sync_failure() {
+  local deps_item
+  deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
+  printf "Re-run the dev install to re-add '%s' and retry the sync." "${deps_item}"
+}
+
 provision_agent_runtime_with_sync() {
   local substrate_bin="$1"
   if [[ -z "${PROVISION_AGENT_RUNTIME}" ]]; then
@@ -149,15 +155,15 @@ provision_agent_runtime_with_sync() {
 
   if rollback_agent_runtime_after_failed_sync "${substrate_bin}" "${deps_item}" "${runtime_path}"; then
     if [[ "${rc}" -eq 4 ]]; then
-      fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the dev installer removed the global enable because provisioning-time system packages are still required. Clearing the global enable does not roll back any guest-side state that may already have been applied in the world. Run 'substrate world enable --provision-deps' and re-run the dev install."
+      fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the dev installer removed the global enable because provisioning-time system packages are still required. Clearing the global enable does not roll back any guest-side state that may already have been applied in the world. Run 'substrate world enable --provision-deps', then $(dev_install_retry_after_sync_failure)"
     fi
-    fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the dev installer removed the global enable so the runtime is not left persistently enabled for future syncs. $(world_deps_global_remove_scope_note)"
+    fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; the dev installer removed the global enable so the runtime is not left persistently enabled for future syncs. $(world_deps_global_remove_scope_note) Then $(dev_install_retry_after_sync_failure)"
   fi
 
   if [[ "${rc}" -eq 4 ]]; then
-    fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; provisioning-time system packages are still required, and rollback also failed so '${deps_item}' remains globally enabled. Run 'substrate world deps global remove ${deps_item}' to clear the global enable only. $(world_deps_global_remove_scope_note) Then run 'substrate world enable --provision-deps' and re-run the dev install."
+    fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; provisioning-time system packages are still required, and rollback also failed so '${deps_item}' remains globally enabled. Run 'substrate world deps global remove ${deps_item}' to clear the global enable only. $(world_deps_global_remove_scope_note) Then run 'substrate world enable --provision-deps', then $(dev_install_retry_after_sync_failure)"
   fi
-  fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; rollback also failed so '${deps_item}' remains globally enabled. Run 'substrate world deps global remove ${deps_item}' after fixing the sync failure to clear the global enable only. $(world_deps_global_remove_scope_note) Then re-run the dev install."
+  fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; rollback also failed so '${deps_item}' remains globally enabled. Run 'substrate world deps global remove ${deps_item}' after fixing the sync failure to clear the global enable only. $(world_deps_global_remove_scope_note) Then $(dev_install_retry_after_sync_failure)"
 }
 
 run_privileged() {

@@ -42,6 +42,9 @@ runtime family, and the installer will enable the built-in `codex-runtime`
 world-deps item globally and then immediately run
 `substrate world deps current sync` so the guest install step is impossible to
 miss.
+If that sync fails after the installer added `codex-runtime` on your behalf,
+re-run the same installer/helper with `--provision-agent-runtime codex` to
+re-add the enable before retrying sync.
 
 For Linux hosted installs, `scripts/substrate/install.sh` and
 `scripts/substrate/install-substrate.sh` share one operator-facing contract:
@@ -335,6 +338,10 @@ tooling.
 When you pass `--provision-agent-runtime codex`, the dev installer enables the
 global `codex-runtime` world-deps item and then immediately runs
 `substrate world deps current sync` before it finishes.
+If sync fails after that enable was newly added and then rolled back, rerun the
+same dev install (or the installed world-enable helper) with
+`--provision-agent-runtime codex` so `codex-runtime` is re-added before the
+next sync attempt.
 
 On Linux, the dev installer also mirrors the production socket-activation
 requirements: it creates the `substrate` group if needed, adds the invoking
