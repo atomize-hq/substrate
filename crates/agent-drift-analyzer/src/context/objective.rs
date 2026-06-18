@@ -811,6 +811,15 @@ fn role_candidates_for_clause(
         ObjectiveSectionKind::UnknownSection => {}
     }
 
+    if has_explicit_verification_cue {
+        push_role_candidate(
+            &mut candidates,
+            ObjectiveRole::Verification,
+            Confidence::High,
+            825,
+        );
+    }
+
     if !matches!(
         section_kind,
         ObjectiveSectionKind::Checklist
