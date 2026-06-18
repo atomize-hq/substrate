@@ -3,7 +3,7 @@
     {
       "kind": "user_message",
       "user_message_role": "prompt",
-      "text": "/goal Research the objective acceptance wall in docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md only and return a concise summary."
+      "text": "/goal Research the objective acceptance wall in docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md only.\n\n## Return with\n- A concise summary."
     }
   ]
 }

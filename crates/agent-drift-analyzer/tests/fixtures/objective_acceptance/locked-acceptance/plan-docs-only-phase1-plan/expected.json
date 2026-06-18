@@ -17,6 +17,22 @@
       "display_contains": "Docs only"
     }
   ],
+  "deliverables": [
+    {
+      "deliverable_kind": "plan",
+      "display_contains": "Updated plan notes"
+    }
+  ],
+  "field_evidence": {
+    "deliverables": [
+      [
+        {
+          "role": "other_role",
+          "excerpt_contains": "Updated plan notes"
+        }
+      ]
+    ]
+  },
   "forbidden_unknown_fields": [
     "target"
   ]

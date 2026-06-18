@@ -36,7 +36,7 @@ fn objective_acceptance_fixture_root_contains_only_readme_and_family_dirs() {
 }
 
 #[test]
-fn objective_acceptance_family_dirs_keep_so_5_1_locked_cases_and_other_families_placeholder_only() {
+fn objective_acceptance_family_dirs_keep_so_5_3_committed_cases_and_other_families_placeholder_only() {
     let corpus = ObjectiveAcceptanceCorpus::load();
     let placeholder_only_entries = vec![OBJECTIVE_ACCEPTANCE_FAMILY_README.to_owned()];
 

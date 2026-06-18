@@ -11,6 +11,22 @@
       "docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md"
     ]
   },
+  "deliverables": [
+    {
+      "deliverable_kind": "research_summary",
+      "display_contains": "concise summary"
+    }
+  ],
+  "field_evidence": {
+    "deliverables": [
+      [
+        {
+          "role": "other_role",
+          "excerpt_contains": "concise summary"
+        }
+      ]
+    ]
+  },
   "forbidden_unknown_fields": [
     "target"
   ]
