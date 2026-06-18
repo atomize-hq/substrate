@@ -252,6 +252,11 @@ impl AgentControlFixture {
     }
 
     fn write_runtime_inventory_v2_single_placement(&self, placement: &str) {
+        let allowed_backend = if placement == "world" {
+            "cli:codex_world"
+        } else {
+            "cli:codex"
+        };
         fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
         fs::write(
             self.substrate_home.join("config.yaml"),
@@ -260,7 +265,9 @@ impl AgentControlFixture {
         .expect("write config.yaml");
         fs::write(
             self.substrate_home.join("policy.yaml"),
-            "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - \"cli:codex\"\n",
+            &format!(
+                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n    - \"{allowed_backend}\"\n"
+            ),
         )
         .expect("write policy.yaml");
         fs::write(
@@ -2288,6 +2295,39 @@ fn public_start_accepts_host_only_version_2_single_placement_inventory() {
     assert_eq!(
         completed.get("turn_outcome").and_then(Value::as_str),
         Some("success")
+    );
+}
+
+#[test]
+#[serial]
+fn public_list_surfaces_world_only_version_2_single_placement_inventory_through_legacy_world_backend_id(
+) {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_v2_single_placement("world");
+
+    let list_output = fixture.run(&["agent", "list", "--json"]);
+    assert!(
+        list_output.status.success(),
+        "public list should surface a world-only version 2 single-placement inventory through the legacy world backend id: {list_output:?}"
+    );
+
+    let json = parse_json_output(&list_output);
+    let agents = json["agents"]
+        .as_array()
+        .expect("agents should be an array");
+    let codex = agents
+        .iter()
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex_world"))
+        .expect("world-only version 2 compatibility row should be present");
+    assert_eq!(
+        codex.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex_world"),
+        "Packet 1.5 must keep the legacy world exact backend id live for world-only version 2 list surfaces: {codex}"
+    );
+    assert_eq!(
+        codex.pointer("/execution/scope").and_then(Value::as_str),
+        Some("world")
     );
 }
 

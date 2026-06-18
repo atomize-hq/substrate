@@ -1583,7 +1583,7 @@ fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
         r#"agents:
   allowed_backends:
     - cli:claude_code
-    - cli:codex
+    - cli:codex_world
 "#,
     );
     fixture.write_agent_file(
@@ -1612,19 +1612,25 @@ fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
     let agents = json["agents"]
         .as_array()
         .expect("agents should be an array");
+    assert!(
+        agents
+            .iter()
+            .all(|agent| agent.pointer("/agent_id").and_then(Value::as_str) != Some("codex")),
+        "workspace version 2 world compatibility truth must suppress the stale host-scoped codex row: {agents:?}"
+    );
     let codex = agents
         .iter()
-        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
-        .expect("shadowed codex row should exist");
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex_world"))
+        .expect("shadowed codex world row should exist");
     assert_eq!(
         codex.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:codex"),
-        "Packet 1.5 must keep the legacy exact backend id live for single-placement version 2 inventory: {codex}"
+        Some("cli:codex_world"),
+        "Packet 1.5 must keep the legacy world exact backend id live for single-placement version 2 inventory: {codex}"
     );
     assert_eq!(
         codex.pointer("/execution/scope").and_then(Value::as_str),
         Some("world"),
-        "workspace version 2 shadow must replace the stale global host scope with the selected world placement: {codex}"
+        "workspace version 2 shadow must surface the selected world placement through the legacy world compatibility row: {codex}"
     );
 }
 

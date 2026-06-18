@@ -523,10 +523,16 @@ pub(crate) fn load_effective_agent_inventory(
                 && inventory_path_origin(cwd, &path)
                     == AgentInventoryBaselineOrigin::WorkspaceInventory
             {
-                // Packet 1 keeps version-2 entries out of the legacy effective inventory,
-                // but a workspace-local version-2 file must still suppress any older global
-                // version-1 entry for the same logical id instead of leaving stale truth live.
+                // Packet 1.5 keeps workspace-local version-2 compatibility rows from leaving
+                // stale global split-entry truth live. World-only compatibility rows preserve
+                // the legacy *_world identity, so they must also suppress the corresponding
+                // unsuffixed logical-id host row during workspace shadowing.
                 effective.remove(&file.id);
+                if let Some(logical_agent_id) =
+                    legacy_shadowed_logical_agent_id_from_v2_compat(&file)
+                {
+                    effective.remove(logical_agent_id);
+                }
             }
 
             let Some(file) = materialize_effective_inventory_file(&path, file)? else {
@@ -554,6 +560,19 @@ fn materialize_effective_inventory_file(
         Ok(Some(file))
     } else {
         Ok(None)
+    }
+}
+
+fn legacy_shadowed_logical_agent_id_from_v2_compat(file: &AgentFileV1) -> Option<&str> {
+    if file.version != 2 {
+        return None;
+    }
+
+    match file.config.execution.scope {
+        Some(crate::execution::config_model::AgentExecutionScope::World) => {
+            file.id.strip_suffix("_world")
+        }
+        _ => Some(file.id.as_str()),
     }
 }
 
@@ -821,10 +840,16 @@ fn compatibility_inventory_file_from_v2(parsed: &AgentFileV2) -> AgentFileV1 {
     // Packet 1 validates the version-2 schema and exposes placement-aware projection helpers
     // without cutting legacy selector/runtime consumers over to multi-row inventory yet.
     let compatibility_source = compatibility_source_from_v2(parsed);
+    let compatibility_id = compatibility_source
+        .map(|(placement, _)| match placement {
+            AgentPlacement::Host => parsed.id.clone(),
+            AgentPlacement::World => format!("{}_world", parsed.id),
+        })
+        .unwrap_or_else(|| parsed.id.clone());
 
     AgentFileV1 {
         version: parsed.version,
-        id: parsed.id.clone(),
+        id: compatibility_id,
         config: AgentConfigV1 {
             enabled: parsed.config.enabled && compatibility_source.is_some(),
             kind: parsed.config.kind,
@@ -1609,6 +1634,8 @@ config:
             .expect("effective inventory materialization should not error for version 2");
         let materialized = materialized.expect("single-placement version 2 inventory should materialize");
         assert!(materialized.config.enabled);
+        assert_eq!(materialized.id, "codex_world");
+        assert_eq!(materialized.derived_backend_id(), "cli:codex_world");
         assert_eq!(
             materialized.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::World)
@@ -1675,13 +1702,14 @@ config:
         assert_eq!(inventory.len(), 2, "legacy v1 plus single-placement v2 entries should materialize");
         assert!(inventory.contains_key("claude_code"));
         let codex = inventory
-            .get("codex")
+            .get("codex_world")
             .expect("single-placement version 2 entry should be present");
         assert_eq!(
             codex.file.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::World),
             "materialized compatibility entry must preserve the selected placement scope"
         );
+        assert_eq!(codex.file.derived_backend_id(), "cli:codex_world");
     }
 
     #[test]
@@ -1748,9 +1776,13 @@ config:
         let inventory = inventory_result
             .expect("effective inventory should materialize the workspace version 2 shadow entry");
 
+        assert!(
+            !inventory.contains_key("codex"),
+            "workspace version 2 world compatibility truth must suppress the stale global host row"
+        );
         let codex = inventory
-            .get("codex")
-            .expect("workspace version 2 inventory should replace stale global version 1 truth");
+            .get("codex_world")
+            .expect("workspace version 2 inventory should materialize through the legacy world compatibility id");
         assert_eq!(
             codex.path,
             workspace_agents_dir.join("codex.yaml"),
@@ -1760,5 +1792,6 @@ config:
             codex.file.config.execution.scope,
             Some(crate::execution::config_model::AgentExecutionScope::World)
         );
+        assert_eq!(codex.file.derived_backend_id(), "cli:codex_world");
     }
 }
