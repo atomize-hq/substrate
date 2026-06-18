@@ -518,7 +518,11 @@ pub(crate) fn load_effective_agent_inventory(
             )));
         }
         for path in collect_agent_files_in_root(&root)? {
-            let file = materialize_effective_inventory_file(&path, validate_agent_file(&path, base_policy)?)?;
+            let Some(file) =
+                materialize_effective_inventory_file(&path, validate_agent_file(&path, base_policy)?)?
+            else {
+                continue;
+            };
             effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
         }
     }
@@ -526,15 +530,17 @@ pub(crate) fn load_effective_agent_inventory(
     Ok(effective)
 }
 
-fn materialize_effective_inventory_file(path: &Path, file: AgentFileV1) -> Result<AgentFileV1> {
+fn materialize_effective_inventory_file(
+    _path: &Path,
+    file: AgentFileV1,
+) -> Result<Option<AgentFileV1>> {
     if file.version == 1 {
-        return Ok(file);
+        return Ok(Some(file));
     }
 
-    Err(config_model::user_error(format!(
-        "invalid agent file in {}: version 2 placement-aware inventory is validation-only before Packet 2 selector cutover; live effective inventory materialization must fail closed",
-        path.display()
-    )))
+    // Packet 1 keeps placement-aware inventory out of the legacy effective-inventory view
+    // without breaking read/control surfaces that still depend on that legacy materialization.
+    Ok(None)
 }
 
 pub(crate) fn resolve_gateway_backend_inventory_entry(
@@ -1184,13 +1190,15 @@ fn validate_overlay_subset(
 mod tests {
     use super::{
         compatibility_inventory_file_from_v2, inventory_entry_origin,
-        materialize_effective_inventory_file, project_inventory_entry, project_inventory_v2_entry,
-        validate_agent_schema_v2, AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily,
-        AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
+        load_effective_agent_inventory, materialize_effective_inventory_file,
+        project_inventory_entry, project_inventory_v2_entry, validate_agent_schema_v2,
+        AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
+        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
         AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
     };
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
+    use std::fs;
     use substrate_broker::Policy;
     use tempfile::tempdir;
 
@@ -1546,13 +1554,83 @@ config:
         let compatibility = compatibility_inventory_file_from_v2(&parsed);
         let path = tempdir().expect("tempdir").path().join("codex.yaml");
 
-        let err = materialize_effective_inventory_file(&path, compatibility)
-            .expect_err("effective inventory should fail closed for version 2");
+        let materialized = materialize_effective_inventory_file(&path, compatibility)
+            .expect("effective inventory materialization should not error for version 2");
         assert!(
-            err.to_string().contains(
-                "version 2 placement-aware inventory is validation-only before Packet 2 selector cutover"
-            ),
-            "unexpected materialization error: {err:?}"
+            materialized.is_none(),
+            "version 2 inventory must stay out of legacy effective inventory before Packet 2"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_effective_agent_inventory_skips_version_2_files_without_erroring() {
+        let temp = tempdir().expect("tempdir");
+        let substrate_home = temp.path().join("substrate-home");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("create agents directory");
+        fs::write(
+            agents_dir.join("claude_code.yaml"),
+            r#"
+version: 1
+id: claude_code
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: host
+  cli:
+    binary: claude
+    runtime_family: claude_code
+  capabilities:
+    llm: true
+"#,
+        )
+        .expect("write v1 inventory");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#,
+        )
+        .expect("write v2 inventory");
+
+        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        let inventory_result = load_effective_agent_inventory(temp.path(), &Policy::default());
+        match previous_substrate_home {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+        let inventory = inventory_result
+            .expect("effective inventory should skip version 2 files without failing");
+
+        assert_eq!(inventory.len(), 1, "only legacy v1 entries should materialize");
+        assert!(inventory.contains_key("claude_code"));
+        assert!(
+            !inventory.contains_key("codex"),
+            "version 2 inventory must remain absent from legacy effective inventory"
         );
     }
 }
