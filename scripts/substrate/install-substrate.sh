@@ -1425,7 +1425,7 @@ agent_runtime_retry_after_sync_failure() {
     return
   fi
 
-  printf "re-run the install to re-add '%s' and retry the sync" "${deps_item}"
+  printf "re-run the installer with '--provision-agent-runtime %s' to re-add '%s' and retry the sync" "${PROVISION_AGENT_RUNTIME}" "${deps_item}"
 }
 
 world_deps_global_remove_scope_note() {

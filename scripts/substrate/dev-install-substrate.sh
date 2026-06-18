@@ -115,7 +115,7 @@ rollback_agent_runtime_after_failed_sync() {
 dev_install_retry_after_sync_failure() {
   local deps_item
   deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
-  printf "Re-run the dev install to re-add '%s' and retry the sync." "${deps_item}"
+  printf "Re-run the dev install with '--provision-agent-runtime %s' to re-add '%s' and retry the sync." "${PROVISION_AGENT_RUNTIME}" "${deps_item}"
 }
 
 provision_agent_runtime_with_sync() {

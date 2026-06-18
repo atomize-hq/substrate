@@ -93,6 +93,11 @@ EOF
   chmod +x "${path}"
 }
 
+source_dev_runtime_provision_helpers() {
+  # shellcheck disable=SC1090
+  source <(awk '/^run_privileged\(\)/{exit} {print}' "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh")
+}
+
 run_prod_install_then_sync_scenario() {
   local work_root
   work_root="$(mktemp -d "/tmp/substrate-provision-runtime-prod.XXXXXX")"
@@ -159,25 +164,90 @@ run_prod_rollback_remediation_scenario() {
 
   [[ "${status}" -eq 7 ]] || fatal "prod rollback scenario should exit 7, got ${status}"
   assert_contains "${output}" "the installer removed the global enable" "prod rollback remediation"
-  assert_contains "${output}" "re-run the install to re-add 'codex-runtime' and retry the sync" "prod rollback remediation"
+  assert_contains "${output}" "re-run the installer with '--provision-agent-runtime codex' to re-add 'codex-runtime' and retry the sync" "prod rollback remediation"
   assert_file_contains "${stub_log}" "world deps global remove codex-runtime" "prod rollback should remove the newly-added enable"
   log "Verified prod rollback remediation explains how to re-add and retry."
 }
 
+run_world_enable_helper_rollback_remediation_scenario() {
+  local work_root
+  work_root="$(mktemp -d "/tmp/substrate-provision-runtime-helper-rollback.XXXXXX")"
+  trap 'rm -rf "${work_root}"' RETURN
+
+  local stub="${work_root}/substrate"
+  local stub_log="${work_root}/substrate.log"
+  write_stub_substrate "${stub}"
+  : >"${stub_log}"
+
+  local output
+  set +e
+  output="$(
+    exec 2>&1
+    export SUBSTRATE_STUB_LOG="${stub_log}"
+    export STUB_ADD_MODE="added"
+    export STUB_SYNC_EXIT=7
+    export STUB_REMOVE_EXIT=0
+    INSTALLER_NAME="substrate-world-enable"
+    source "${REPO_ROOT}/scripts/substrate/install-substrate.sh"
+    PROVISION_AGENT_RUNTIME="codex"
+    PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
+    SYNC_DEPS=1
+    NO_WORLD=0
+    DRY_RUN=0
+    PREFIX="${work_root}/prefix"
+    ORIGINAL_PATH="${PATH}"
+    provision_agent_runtime_world_deps "${stub}"
+    sync_world_deps "${stub}"
+  2>&1)"
+  local status=$?
+  set -e
+
+  [[ "${status}" -eq 7 ]] || fatal "world-enable rollback scenario should exit 7, got ${status}"
+  assert_contains "${output}" "the installer removed the global enable" "world-enable rollback remediation"
+  assert_contains "${output}" "re-run the world-enable helper with '--provision-agent-runtime codex' to re-add 'codex-runtime' and retry the sync" "world-enable rollback remediation"
+  assert_file_contains "${stub_log}" "world deps global remove codex-runtime" "world-enable rollback should remove the newly-added enable"
+  log "Verified world-enable rollback remediation explains how to re-add and retry."
+}
+
 run_dev_rollback_remediation_scenario() {
-  assert_file_contains \
-    "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" \
-    "Re-run the dev install to re-add '%s' and retry the sync." \
-    "dev rollback helper should keep the retry wording committed"
-  assert_file_contains \
-    "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" \
-    "Then \$(dev_install_retry_after_sync_failure)" \
-    "dev rollback path should append the retry guidance after rollback"
-  log "Verified dev rollback remediation text stays explicit about re-adding and retrying."
+  local work_root
+  work_root="$(mktemp -d "/tmp/substrate-provision-runtime-dev-rollback.XXXXXX")"
+  trap 'rm -rf "${work_root}"' RETURN
+
+  local stub="${work_root}/substrate"
+  local stub_log="${work_root}/substrate.log"
+  write_stub_substrate "${stub}"
+  : >"${stub_log}"
+
+  local output
+  set +e
+  output="$(
+    exec 2>&1
+    export SUBSTRATE_STUB_LOG="${stub_log}"
+    export STUB_ADD_MODE="added"
+    export STUB_SYNC_EXIT=7
+    export STUB_REMOVE_EXIT=0
+    source_dev_runtime_provision_helpers
+    PROVISION_AGENT_RUNTIME="codex"
+    PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
+    PREFIX="${work_root}/prefix"
+    BIN_DIR="${work_root}/bin"
+    mkdir -p "${BIN_DIR}"
+    provision_agent_runtime_with_sync "${stub}"
+  2>&1)"
+  local status=$?
+  set -e
+
+  [[ "${status}" -eq 7 ]] || fatal "dev rollback scenario should exit 7, got ${status}"
+  assert_contains "${output}" "the dev installer removed the global enable" "dev rollback remediation"
+  assert_contains "${output}" "Re-run the dev install with '--provision-agent-runtime codex' to re-add 'codex-runtime' and retry the sync." "dev rollback remediation"
+  assert_file_contains "${stub_log}" "world deps global remove codex-runtime" "dev rollback should remove the newly-added enable"
+  log "Verified dev rollback remediation explains how to re-add and retry."
 }
 
 run_prod_install_then_sync_scenario
 run_prod_rollback_remediation_scenario
+run_world_enable_helper_rollback_remediation_scenario
 run_dev_rollback_remediation_scenario
 
 log "All provision-agent-runtime Packet 3 smoke checks passed."
