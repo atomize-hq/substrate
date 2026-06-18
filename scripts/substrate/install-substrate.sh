@@ -22,6 +22,7 @@ DRY_RUN=0
 SYNC_DEPS=0
 ENABLE_WORLD_NETFILTER=0
 PROVISION_AGENT_RUNTIME=""
+PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
 ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
 TMPDIR=""
@@ -2316,6 +2317,13 @@ sync_world_deps() {
     if [[ -n "${PROVISION_AGENT_RUNTIME}" ]]; then
       local deps_item
       deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
+      if [[ "${PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER}" -ne 1 ]]; then
+        print_world_deps_summary "${substrate_bin}"
+        if [[ "${rc}" -eq 4 ]]; then
+          fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; '${deps_item}' was already globally enabled before this install, so the installer left that enable in place. Run 'substrate world enable --provision-deps', then rerun 'substrate world deps current sync'."
+        fi
+        fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; '${deps_item}' was already globally enabled before this install, so the installer left that enable in place. Fix the sync failure and rerun 'substrate world deps current sync'."
+      fi
       local rollback_succeeded=0
       if rollback_agent_runtime_world_deps_enable "${substrate_bin}" "${deps_item}"; then
         rollback_succeeded=1
@@ -2355,7 +2363,14 @@ provision_agent_runtime_world_deps() {
   fi
 
   log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The installer will run 'substrate world deps current sync' immediately after this step."
-  "${substrate_bin}" world deps global add "${deps_item}"
+  local add_output
+  add_output="$("${substrate_bin}" world deps global add --json "${deps_item}")"
+  if grep -Fq "\"${deps_item}\"" <<<"${add_output}"; then
+    PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=1
+  else
+    PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
+  fi
+  printf '%s\n' "${add_output}"
 }
 
 PATH_SNIPPET_START="# >>> substrate >>>"

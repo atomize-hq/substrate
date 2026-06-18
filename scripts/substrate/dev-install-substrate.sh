@@ -15,6 +15,7 @@ fatal_with_code() {
 
 readonly DISTRO_UNKNOWN_SENTINEL="<unknown>"
 readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
+PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
 
 usage() {
   cat <<'USAGE'
@@ -119,13 +120,27 @@ provision_agent_runtime_with_sync() {
   runtime_path="${BIN_DIR}:${PATH}"
 
   log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The dev installer will run 'substrate world deps current sync' immediately after this step."
-  PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global add "${deps_item}"
+  local add_output
+  add_output="$(PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global add --json "${deps_item}")"
+  if grep -Fq "\"${deps_item}\"" <<<"${add_output}"; then
+    PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=1
+  else
+    PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
+  fi
+  printf '%s\n' "${add_output}"
   log "Syncing world dependencies via 'substrate world deps current sync' for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}..."
   local rc=0
   if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps current sync; then
     return
   else
     rc=$?
+  fi
+
+  if [[ "${PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER}" -ne 1 ]]; then
+    if [[ "${rc}" -eq 4 ]]; then
+      fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; '${deps_item}' was already globally enabled before this dev install, so the dev installer left that enable in place. Run 'substrate world enable --provision-deps', then rerun 'substrate world deps current sync'."
+    fi
+    fatal_with_code "${rc}" "world deps sync failed for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}; '${deps_item}' was already globally enabled before this dev install, so the dev installer left that enable in place. Fix the sync failure and rerun 'substrate world deps current sync'."
   fi
 
   if rollback_agent_runtime_after_failed_sync "${substrate_bin}" "${deps_item}" "${runtime_path}"; then
