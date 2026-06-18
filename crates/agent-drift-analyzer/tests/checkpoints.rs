@@ -4565,6 +4565,31 @@ fn checkpoints_context_objective_preserves_explicit_file_target_without_copying_
 }
 
 #[test]
+fn checkpoints_context_objective_does_not_treat_version_tokens_as_work_item_targets() {
+    let prompt = "/goal Review whether v0.6 landed correctly and summarize the findings only.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"echo review-v0-6","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    let structured = objective.structured.as_ref().expect("structured objective");
+
+    assert!(objective.text.contains("Review whether v0.6 landed correctly"));
+    assert!(structured.target.is_none());
+    assert!(structured
+        .unknowns
+        .iter()
+        .any(|unknown| unknown.field_name == "target"));
+}
+
+#[test]
 fn checkpoints_context_objective_keeps_explicit_tooling_target_inside_mixed_prompt_scaffolding() {
     let concrete_ask =
         "Determine whether the Codex desktop context, plugin instructions, and Apps (Connectors) scaffold should change, and explain only that tooling boilerplate decision.";

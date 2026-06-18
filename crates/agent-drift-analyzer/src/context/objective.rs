@@ -1422,8 +1422,15 @@ fn extract_work_item_identifier(text: &str) -> Option<String> {
 
 fn looks_like_work_item_identifier(token: &str) -> bool {
     let cleaned = clean_target_token(token);
+    let prefix = cleaned
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphabetic())
+        .collect::<String>();
     !cleaned.is_empty()
         && !cleaned.contains('/')
+        && !prefix.is_empty()
+        && prefix.chars().all(|ch| ch.is_ascii_uppercase())
+        && prefix != "V"
         && cleaned.chars().any(|ch| ch.is_ascii_alphabetic())
         && cleaned.chars().any(|ch| ch.is_ascii_digit())
         && (cleaned.contains('-') || cleaned.contains('.'))
