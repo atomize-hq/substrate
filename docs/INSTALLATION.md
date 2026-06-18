@@ -114,10 +114,11 @@ the exact `substrate world enable` command to run when you are ready to
 provision the backend. In this slice, that Rust CLI surface does not expose
 `--provision-agent-runtime`; if you want to enable the backend later and also
 provision the Codex world runtime, use
-`scripts/substrate/world-enable.sh --home ~/.substrate --provision-agent-runtime codex`.
+`~/.substrate/versions/<installed-version>/scripts/substrate/world-enable.sh --home ~/.substrate --provision-agent-runtime codex`.
 You can still force a single world-isolated run later with `substrate --world ...`
 without changing the stored metadata.
-When you later enable the world through `scripts/substrate/world-enable.sh`,
+When you later enable the world through the installed helper at
+`~/.substrate/versions/<installed-version>/scripts/substrate/world-enable.sh`,
 that helper also accepts `--provision-agent-runtime codex` and will run
 `substrate world deps current sync` before it exits.
 
@@ -248,7 +249,7 @@ substrate.exe world doctor --json | ConvertFrom-Json | Select-Object schema_vers
 If you installed with `--no-world`, run `substrate world enable` once you are
 ready to provision the backend (macOS Lima VM or Linux namespaces). If you also
 want the Slice 59 runtime provisioning path later, use
-`scripts/substrate/world-enable.sh --home ~/.substrate --provision-agent-runtime codex`;
+`~/.substrate/versions/<installed-version>/scripts/substrate/world-enable.sh --home ~/.substrate --provision-agent-runtime codex`;
 that helper-only flag is not part of the Rust `substrate world enable` CLI
 surface in this slice. If
 either doctor surfaces failures, consult `docs/WORLD.md` and the troubleshooting
@@ -273,10 +274,10 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | `--version <semver>` | Install a specific published release (default: `0.2.0-beta`) |
 | `--prefix <path>` | Override the installation prefix (default: `~/.substrate`) |
 | `--pkg-manager <apt-get\|dnf\|yum\|pacman\|zypper>` | Highest-precedence Linux hosted-installer package-manager selector; invalid values exit with code `2`, and a selected manager missing from `PATH` exits with code `3` |
-| `--no-world` | Skip provisioning the world backend (use `substrate world enable` later; use `scripts/substrate/world-enable.sh --provision-agent-runtime codex` if you also want the helper-only runtime provisioning path in this slice) |
+| `--no-world` | Skip provisioning the world backend (use `substrate world enable` later; use the installed helper at `<prefix>/versions/<installed-version>/scripts/substrate/world-enable.sh --provision-agent-runtime codex` if you also want the helper-only runtime provisioning path in this slice) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
 | `--sync-deps` | Run `substrate world deps current sync` after provisioning completes (best-effort; applies the enabled deps list into the world and may remediate APT-backed misses to `substrate world enable --provision-deps`) |
-| `--provision-agent-runtime <runtime_family>` | Enable a world runtime globally, then immediately run `substrate world deps current sync`; Slice 59 Packet 3 supports `codex` only and fails closed for any other value. If you defer world enable until later, this flag is available through `scripts/substrate/world-enable.sh`, not the Rust `substrate world enable` CLI surface |
+| `--provision-agent-runtime <runtime_family>` | Enable a world runtime globally, then immediately run `substrate world deps current sync`; Slice 59 Packet 3 supports `codex` only and fails closed for any other value. If you defer world enable until later, this flag is available through the installed helper at `<prefix>/versions/<installed-version>/scripts/substrate/world-enable.sh`, not the Rust `substrate world enable` CLI surface |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 
