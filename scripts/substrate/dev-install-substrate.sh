@@ -83,6 +83,13 @@ fail_closed_world_provisioning_for_runtime_request() {
     return 0
   fi
 
+  WORLD_ENABLED=0
+  if [[ -n "${INSTALL_CONFIG_PATH:-}" && -n "${ENV_SH_PATH:-}" && -n "${MANAGER_ENV_PATH:-}" ]]; then
+    write_install_metadata "${WORLD_ENABLED}"
+    write_env_sh_script "${WORLD_ENABLED}"
+    write_manager_env_script "${WORLD_ENABLED}"
+  fi
+
   fatal_with_code 1 "Cannot continue --provision-agent-runtime ${PROVISION_AGENT_RUNTIME} because world provisioning failed: ${detail} ${remediation}"
 }
 
