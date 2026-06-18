@@ -331,7 +331,10 @@ fn agents_validate_accepts_version_2_placement_inventory() {
 fn agents_validate_rejects_version_2_inventory_without_enabled_placements() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
-    fixture.write_agent_file("codex.yaml", &valid_cli_agent_file_v2_with_enabled_placements("codex", false, false));
+    fixture.write_agent_file(
+        "codex.yaml",
+        &valid_cli_agent_file_v2_with_enabled_placements("codex", false, false),
+    );
 
     let output = fixture.validate();
     assert_eq!(
