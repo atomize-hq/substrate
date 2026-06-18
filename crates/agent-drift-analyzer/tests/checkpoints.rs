@@ -4530,6 +4530,46 @@ Keep target extraction unchanged in this packet.
 }
 
 #[test]
+fn checkpoints_context_objective_grounds_inline_verifier_clauses_without_verification_heading() {
+    let prompt = r#"## Mission
+Implement Packet B3.1 without widening into later packets. npm run lint.
+
+## Details
+Keep the verifier evidence grounded to the clause. cargo fmt --check."#;
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"echo inline-verifier-role-grounding","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(
+        objective.verification_commands,
+        vec!["npm run lint", "cargo fmt --check"]
+    );
+
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Verification
+            && matches!(span.section_kind, ObjectiveSectionKind::Mission)
+            && span.excerpt.contains("npm run lint")
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Verification
+            && matches!(span.section_kind, ObjectiveSectionKind::UnknownSection)
+            && span.excerpt.contains("cargo fmt --check")
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
+}
+
+#[test]
 fn checkpoints_context_objective_leaves_vague_targets_unknown() {
     let result = analyze_custom_rows(vec![
         prompt_row(0, "turn-001", "Look at the stuff above and make it better."),
