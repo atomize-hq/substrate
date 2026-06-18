@@ -367,7 +367,7 @@ fn agents_validate_accepts_top_level_disabled_version_2_inventory_without_enable
 }
 
 #[test]
-fn agents_validate_rejects_multi_enabled_version_2_inventory_before_packet_2() {
+fn agents_validate_accepts_multi_enabled_version_2_inventory_after_packet_2() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
     fixture.write_agent_file(
@@ -376,16 +376,9 @@ fn agents_validate_rejects_multi_enabled_version_2_inventory_before_packet_2() {
     );
 
     let output = fixture.validate();
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "multi-enabled version 2 inventory should fail closed before Packet 2: {output:?}"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("codex.yaml")
-            && stderr.contains("only supports exactly one enabled placement until Packet 2 lands"),
-        "stderr should explain the Packet 1.5 compatibility wall\nstderr: {stderr}"
+        output.status.success(),
+        "multi-enabled version 2 inventory should validate after Packet 2: {output:?}"
     );
 }
 
