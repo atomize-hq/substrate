@@ -271,6 +271,24 @@ fn cli_agent_file(
     )
 }
 
+fn cli_agent_file_v2(
+    agent_id: &str,
+    placement: &str,
+    llm: bool,
+    mcp_client: bool,
+    enabled: bool,
+) -> String {
+    cli_agent_file_v2_with_session_contract(
+        agent_id,
+        placement,
+        llm,
+        mcp_client,
+        enabled,
+        runtime_family_for_fixture_agent(agent_id),
+        SessionContractOptions::default(),
+    )
+}
+
 fn cli_agent_file_with_runtime_family(
     agent_id: &str,
     scope: &str,
@@ -288,6 +306,58 @@ fn cli_agent_file_with_runtime_family(
         runtime_family,
         SessionContractOptions::default(),
     )
+}
+
+fn cli_agent_file_v2_with_session_contract<'a>(
+    agent_id: &str,
+    placement: &str,
+    llm: bool,
+    mcp_client: bool,
+    enabled: bool,
+    runtime_family: &'a str,
+    options: SessionContractOptions<'a>,
+) -> String {
+    let runtime_family = options.runtime_family.unwrap_or(runtime_family);
+    let binary = if placement == "world" && runtime_family == "codex" {
+        TEST_CODEX_WORLD_GUEST_ENTRYPOINT
+    } else {
+        options.binary
+    };
+    let mut body =
+        format!("version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n");
+    if let Some(protocol) = options.protocol {
+        body.push_str(&format!("  protocol: {protocol}\n"));
+    }
+    body.push_str(&format!("  placements:\n    {placement}:\n      enabled: true\n"));
+    body.push_str(&format!(
+        "      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: {}\n      capabilities:\n",
+        binary, options.cli_mode
+    ));
+
+    for capability in [
+        "session_start",
+        "session_resume",
+        "session_fork",
+        "session_stop",
+        "status_snapshot",
+        "event_stream",
+    ] {
+        if let Some(override_kind) = options.capability_override {
+            match override_kind {
+                CapabilityOverride::ForceFalse(name) if name == capability => {
+                    body.push_str(&format!("        {capability}: false\n"));
+                    continue;
+                }
+                CapabilityOverride::Omit(name) if name == capability => continue,
+                _ => {}
+            }
+        }
+        body.push_str(&format!("        {capability}: true\n"));
+    }
+    body.push_str(&format!(
+        "        llm: {llm}\n        mcp_client: {mcp_client}\n"
+    ));
+    body
 }
 
 fn cli_agent_file_with_session_contract<'a>(
@@ -1496,6 +1566,130 @@ fn agent_list_json_locks_backend_id_derivation_role_and_omission_rules() {
             );
         }
     }
+}
+
+#[test]
+fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, false, true),
+    );
+    let workspace_agents_dir = fixture.workspace_root.join(".substrate").join("agents");
+    fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
+    fs::write(
+        workspace_agents_dir.join("codex.yaml"),
+        cli_agent_file_v2("codex", "world", true, false, true),
+    )
+    .expect("write workspace version 2 agent file");
+
+    let output = fixture.run(&["agent", "list", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent list should surface the workspace version 2 single-placement shadow: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let agents = json["agents"]
+        .as_array()
+        .expect("agents should be an array");
+    let codex = agents
+        .iter()
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .expect("shadowed codex row should exist");
+    assert_eq!(
+        codex.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex"),
+        "Packet 1.5 must keep the legacy exact backend id live for single-placement version 2 inventory: {codex}"
+    );
+    assert_eq!(
+        codex.pointer("/execution/scope").and_then(Value::as_str),
+        Some("world"),
+        "workspace version 2 shadow must replace the stale global host scope with the selected world placement: {codex}"
+    );
+}
+
+#[test]
+fn agent_list_fails_closed_on_multi_enabled_version_2_inventory_before_packet_2() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        r#"version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        runtime_family: codex
+        binary: sh
+        mode: persistent
+      capabilities:
+        llm: true
+    world:
+      enabled: true
+      cli:
+        runtime_family: codex
+        binary: /var/lib/substrate/world-deps/bin/codex
+        mode: persistent
+      capabilities:
+        llm: true
+"#,
+    );
+
+    let output = fixture.run(&["agent", "list", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "agent list should fail closed on multi-enabled version 2 inventory before Packet 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("codex.yaml")
+            && stderr.contains("only supports exactly one enabled placement until Packet 2 lands"),
+        "list failure should surface the Packet 1.5 compatibility diagnostic\nstderr: {stderr}"
+    );
 }
 
 #[test]
@@ -5031,6 +5225,46 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
         ],
         "host-only doctor fixture should report a not_applicable world boundary after the four required passes: {json}"
     );
+}
+
+#[test]
+fn agent_doctor_json_accepts_host_only_version_2_orchestrator_inventory() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_doctor_prereqs();
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file_v2("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "helper.yaml",
+        &cli_agent_file("helper", "host", false, true, true),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent doctor should accept a host-only version 2 orchestrator inventory: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json.pointer("/orchestrator/agent_id")
+            .and_then(Value::as_str),
+        Some("claude_code")
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/backend_id")
+            .and_then(Value::as_str),
+        Some("cli:claude_code"),
+        "Packet 1.5 must keep the legacy exact backend id live for host-only version 2 orchestrator inventory: {json}"
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/execution/scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(json.get("healthy").and_then(Value::as_bool), Some(true));
 }
 
 #[test]

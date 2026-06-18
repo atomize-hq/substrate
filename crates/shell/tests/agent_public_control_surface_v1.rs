@@ -251,6 +251,30 @@ impl AgentControlFixture {
         );
     }
 
+    fn write_runtime_inventory_v2_single_placement(&self, placement: &str) {
+        fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
+        fs::write(
+            self.substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        )
+        .expect("write config.yaml");
+        fs::write(
+            self.substrate_home.join("policy.yaml"),
+            "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - \"cli:codex\"\n",
+        )
+        .expect("write policy.yaml");
+        fs::write(
+            self.workspace_root.join(".substrate-profile"),
+            "id: test-policy\nname: Test Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\n",
+        )
+        .expect("write .substrate-profile");
+        fs::write(
+            self.substrate_home.join("agents/codex.yaml"),
+            cli_agent_file_v2("codex", placement, &self.fake_codex),
+        )
+        .expect("write version 2 codex agent file");
+    }
+
     fn write_runtime_inventory_with_unscoped_member(
         &self,
         global_scope: &str,
@@ -529,6 +553,20 @@ fn cli_agent_file(agent_id: &str, scope: Option<&str>, binary: &Path) -> String 
     let runtime_family = runtime_family_for_fixture_agent(agent_id);
     format!(
         "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n{execution_scope}  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+        binary_value
+    )
+}
+
+fn cli_agent_file_v2(agent_id: &str, placement: &str, binary: &Path) -> String {
+    let binary_value =
+        if placement == "world" && runtime_family_for_fixture_agent(agent_id) == "codex" {
+            CODEX_WORLD_GUEST_ENTRYPOINT.to_string()
+        } else {
+            binary.display().to_string()
+        };
+    let runtime_family = runtime_family_for_fixture_agent(agent_id);
+    format!(
+        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  placements:\n    {placement}:\n      enabled: true\n      cli:\n        runtime_family: {runtime_family}\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n",
         binary_value
     )
 }
@@ -2214,6 +2252,42 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         final_session.get("state").and_then(Value::as_str),
         Some("stopped"),
         "host-scoped public stop should persist a stopped parent session on clean shutdown"
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_accepts_host_only_version_2_single_placement_inventory() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory_v2_single_placement("host");
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from version 2 host start",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "public start should accept a host-only version 2 single-placement inventory: {start_output:?}"
+    );
+
+    let start_records = parse_ndjson_output(&start_output);
+    let accepted = find_ndjson_record(&start_records, "accepted");
+    let completed = find_ndjson_record(&start_records, "completed");
+    assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("host"));
+    assert_eq!(
+        completed.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex"),
+        "Packet 1.5 must keep the legacy exact backend id live for host-only version 2 start flows: {completed}"
+    );
+    assert_eq!(
+        completed.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
     );
 }
 

@@ -547,9 +547,14 @@ fn materialize_effective_inventory_file(
         return Ok(Some(file));
     }
 
-    // Packet 1 keeps placement-aware inventory out of the legacy effective-inventory view
-    // without breaking read/control surfaces that still depend on that legacy materialization.
-    Ok(None)
+    // Packet 1.5 bridges unambiguous single-placement version-2 inventory into the legacy
+    // effective-inventory view, but keeps disabled or still-ambiguous entries out until
+    // placement-qualified exact ids land in Packet 2.
+    if file.config.enabled && file.config.execution.scope.is_some() {
+        Ok(Some(file))
+    } else {
+        Ok(None)
+    }
 }
 
 pub(crate) fn resolve_gateway_backend_inventory_entry(
@@ -747,6 +752,12 @@ fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Pol
             path.display(),
         )));
     }
+    if parsed.config.enabled && enabled_placements > 1 {
+        return Err(config_model::user_error(format!(
+            "invalid agent file in {}: config.placements enables multiple live placements, but version 2 compatibility inventory only supports exactly one enabled placement until Packet 2 lands; disable one placement or set config.enabled=false",
+            path.display(),
+        )));
+    }
 
     for (placement, placement_config) in [
         (AgentPlacement::Host, parsed.config.placements.host.as_ref()),
@@ -789,14 +800,16 @@ fn count_enabled_v2_placements(parsed: &AgentFileV2) -> usize {
     .count()
 }
 
-fn compatibility_source_from_v2(parsed: &AgentFileV2) -> Option<&AgentPlacementConfigV2> {
+fn compatibility_source_from_v2(
+    parsed: &AgentFileV2,
+) -> Option<(AgentPlacement, &AgentPlacementConfigV2)> {
     let mut enabled = [
-        parsed.config.placements.host.as_ref(),
-        parsed.config.placements.world.as_ref(),
+        (AgentPlacement::Host, parsed.config.placements.host.as_ref()),
+        (AgentPlacement::World, parsed.config.placements.world.as_ref()),
     ]
     .into_iter()
-    .flatten()
-    .filter(|placement| placement.enabled);
+    .filter_map(|(placement, config)| config.map(|config| (placement, config)))
+    .filter(|(_, placement)| placement.enabled);
     let first = enabled.next()?;
     if enabled.next().is_some() {
         return None;
@@ -816,11 +829,13 @@ fn compatibility_inventory_file_from_v2(parsed: &AgentFileV2) -> AgentFileV1 {
             enabled: parsed.config.enabled && compatibility_source.is_some(),
             kind: parsed.config.kind,
             protocol: parsed.config.protocol.clone(),
-            execution: AgentExecutionConfigV1::default(),
-            cli: compatibility_source.and_then(|placement| placement.cli.clone()),
-            api: compatibility_source.and_then(|placement| placement.api.clone()),
+            execution: AgentExecutionConfigV1 {
+                scope: compatibility_source.map(|(placement, _)| placement.execution_scope()),
+            },
+            cli: compatibility_source.and_then(|(_, placement)| placement.cli.clone()),
+            api: compatibility_source.and_then(|(_, placement)| placement.api.clone()),
             capabilities: compatibility_source
-                .map(|placement| placement.capabilities.clone())
+                .map(|(_, placement)| placement.capabilities.clone())
                 .unwrap_or_default(),
         },
         policy_overlay: parsed.policy_overlay.clone(),
@@ -1467,7 +1482,7 @@ config:
     }
 
     #[test]
-    fn validate_agent_schema_v2_accepts_multi_enabled_inventory_before_packet_2_cutover() {
+    fn validate_agent_schema_v2_rejects_multi_enabled_inventory_before_packet_2_cutover() {
         let temp = tempdir().expect("tempdir");
         let path = temp.path().join("codex.yaml");
         let base_policy = Policy::default();
@@ -1489,10 +1504,15 @@ config:
       cli:
         binary: codex
         runtime_family: codex
-"#;
+        "#;
         let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
-        validate_agent_schema_v2(&path, &parsed, &base_policy)
-            .expect("multi-enabled inventory should parse and validate in Packet 1");
+        let err = validate_agent_schema_v2(&path, &parsed, &base_policy)
+            .expect_err("multi-enabled inventory should fail closed before Packet 2");
+        assert!(
+            err.to_string()
+                .contains("only supports exactly one enabled placement until Packet 2 lands"),
+            "validation error should explain the pre-Packet-2 fail-closed boundary: {err}"
+        );
     }
 
     #[test]
@@ -1563,7 +1583,7 @@ config:
     }
 
     #[test]
-    fn effective_inventory_materialization_fails_closed_for_version_2_inventory() {
+    fn effective_inventory_materialization_accepts_single_placement_version_2_inventory() {
         let raw = r#"
 version: 2
 id: codex
@@ -1572,14 +1592,6 @@ config:
   enabled: true
   protocol: substrate.agent.session
   placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        session_start: true
-        llm: true
     world:
       enabled: true
       cli:
@@ -1595,15 +1607,17 @@ config:
 
         let materialized = materialize_effective_inventory_file(&path, compatibility)
             .expect("effective inventory materialization should not error for version 2");
-        assert!(
-            materialized.is_none(),
-            "version 2 inventory must stay out of legacy effective inventory before Packet 2"
+        let materialized = materialized.expect("single-placement version 2 inventory should materialize");
+        assert!(materialized.config.enabled);
+        assert_eq!(
+            materialized.config.execution.scope,
+            Some(crate::execution::config_model::AgentExecutionScope::World)
         );
     }
 
     #[test]
     #[serial_test::serial]
-    fn load_effective_agent_inventory_skips_version_2_files_without_erroring() {
+    fn load_effective_agent_inventory_materializes_single_placement_version_2_files() {
         let temp = tempdir().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         let agents_dir = substrate_home.join("agents");
@@ -1637,13 +1651,6 @@ config:
   enabled: true
   protocol: substrate.agent.session
   placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
     world:
       enabled: true
       cli:
@@ -1663,19 +1670,23 @@ config:
             None => std::env::remove_var("SUBSTRATE_HOME"),
         }
         let inventory = inventory_result
-            .expect("effective inventory should skip version 2 files without failing");
+            .expect("effective inventory should materialize single-placement version 2 files");
 
-        assert_eq!(inventory.len(), 1, "only legacy v1 entries should materialize");
+        assert_eq!(inventory.len(), 2, "legacy v1 plus single-placement v2 entries should materialize");
         assert!(inventory.contains_key("claude_code"));
-        assert!(
-            !inventory.contains_key("codex"),
-            "version 2 inventory must remain absent from legacy effective inventory"
+        let codex = inventory
+            .get("codex")
+            .expect("single-placement version 2 entry should be present");
+        assert_eq!(
+            codex.file.config.execution.scope,
+            Some(crate::execution::config_model::AgentExecutionScope::World),
+            "materialized compatibility entry must preserve the selected placement scope"
         );
     }
 
     #[test]
     #[serial_test::serial]
-    fn load_effective_agent_inventory_workspace_v2_shadow_suppresses_global_v1_entry() {
+    fn load_effective_agent_inventory_workspace_v2_shadow_materializes_single_placement_entry() {
         let temp = tempdir().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         let global_agents_dir = substrate_home.join("agents");
@@ -1715,13 +1726,6 @@ config:
   enabled: true
   protocol: substrate.agent.session
   placements:
-    host:
-      enabled: true
-      cli:
-        binary: codex
-        runtime_family: codex
-      capabilities:
-        llm: true
     world:
       enabled: true
       cli:
@@ -1742,11 +1746,19 @@ config:
             None => std::env::remove_var("SUBSTRATE_HOME"),
         }
         let inventory = inventory_result
-            .expect("effective inventory should fail closed when workspace v2 shadows global v1");
+            .expect("effective inventory should materialize the workspace version 2 shadow entry");
 
-        assert!(
-            !inventory.contains_key("codex"),
-            "workspace version 2 inventory must suppress stale global version 1 truth"
+        let codex = inventory
+            .get("codex")
+            .expect("workspace version 2 inventory should replace stale global version 1 truth");
+        assert_eq!(
+            codex.path,
+            workspace_agents_dir.join("codex.yaml"),
+            "workspace version 2 inventory must win the shadowing boundary"
+        );
+        assert_eq!(
+            codex.file.config.execution.scope,
+            Some(crate::execution::config_model::AgentExecutionScope::World)
         );
     }
 }

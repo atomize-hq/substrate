@@ -309,15 +309,22 @@ config:
 
 #[test]
 fn agents_validate_accepts_version_2_placement_inventory() {
-    let fixture = AgentsValidateFixture::new();
-    fixture.init_workspace();
-    fixture.write_agent_file("codex.yaml", &valid_cli_agent_file_v2("codex"));
+    for (host_enabled, world_enabled) in [(true, false), (false, true)] {
+        let fixture = AgentsValidateFixture::new();
+        fixture.init_workspace();
+        let contents = if host_enabled && !world_enabled {
+            valid_cli_agent_file_v2("codex")
+        } else {
+            valid_cli_agent_file_v2_with_enabled_placements("codex", host_enabled, world_enabled)
+        };
+        fixture.write_agent_file("codex.yaml", &contents);
 
-    let output = fixture.validate();
-    assert!(
-        output.status.success(),
-        "version 2 placement inventory should validate: {output:?}"
-    );
+        let output = fixture.validate();
+        assert!(
+            output.status.success(),
+            "single-placement version 2 inventory should validate: {output:?}"
+        );
+    }
 }
 
 #[test]
@@ -357,7 +364,7 @@ fn agents_validate_accepts_top_level_disabled_version_2_inventory_without_enable
 }
 
 #[test]
-fn agents_validate_accepts_multi_enabled_version_2_inventory_before_packet_2() {
+fn agents_validate_rejects_multi_enabled_version_2_inventory_before_packet_2() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
     fixture.write_agent_file(
@@ -366,9 +373,16 @@ fn agents_validate_accepts_multi_enabled_version_2_inventory_before_packet_2() {
     );
 
     let output = fixture.validate();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "multi-enabled version 2 inventory should fail closed before Packet 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        output.status.success(),
-        "multi-enabled version 2 inventory should validate in Packet 1: {output:?}"
+        stderr.contains("codex.yaml")
+            && stderr.contains("only supports exactly one enabled placement until Packet 2 lands"),
+        "stderr should explain the Packet 1.5 compatibility wall\nstderr: {stderr}"
     );
 }
 
