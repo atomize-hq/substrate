@@ -4701,6 +4701,62 @@ Review crates/agent-drift-analyzer/src/context/objective.rs only and run cargo t
 }
 
 #[test]
+fn checkpoints_context_objective_projects_multiline_goal_sections_from_structured_state() {
+    let prompt = r#"/goal Review crates/agent-drift-analyzer/src/context/objective.rs only.
+Use the $incremental-implementation skill.
+Return with changed files and residual risk.
+
+## Verification
+- cargo test -p agent-drift-analyzer checkpoints -- --nocapture"#;
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,260p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 0"),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(
+        objective.text,
+        "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+    );
+    assert!(!objective.text.contains("$incremental-implementation"));
+    assert_eq!(
+        objective.verification_commands,
+        vec!["cargo test -p agent-drift-analyzer checkpoints -- --nocapture"]
+    );
+
+    let structured = objective.structured.as_ref().expect("structured objective");
+    let target = structured.target.as_ref().expect("explicit target");
+    assert_eq!(target.kind, ObjectiveTargetKind::FileOrDirectory);
+    assert_eq!(
+        target.display,
+        "crates/agent-drift-analyzer/src/context/objective.rs"
+    );
+    assert_ne!(target.display, objective.text);
+    let goal_span = structured
+        .evidence_spans
+        .iter()
+        .find(|span| {
+            span.role == ObjectiveRole::Goal
+                && span.excerpt
+                    == "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+        })
+        .expect("goal evidence span");
+    assert_eq!(goal_span.excerpt, objective.text);
+}
+
+#[test]
 fn checkpoints_context_objective_leaves_vague_targets_unknown() {
     let result = analyze_custom_rows(vec![
         prompt_row(0, "turn-001", "Look at the stuff above and make it better."),

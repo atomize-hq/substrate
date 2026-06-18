@@ -81,12 +81,13 @@ pub fn extract_objective(rows: &[CompactionRow]) -> ObjectiveSummary {
         );
     };
 
-    let compatibility = select_compatibility_text(&decomposition)
+    let verification_commands = verification_commands_from_decomposition(&decomposition);
+    let structured = assemble_structured_objective(&decomposition, &verification_commands);
+    let compatibility = compatibility_text_from_structured(&structured)
+        .or_else(|| select_compatibility_text(&decomposition))
         .or_else(|| decomposition.primary_candidate_text())
         .unwrap_or_else(|| "No objective row available".to_string());
-    let verification_commands = verification_commands_from_decomposition(&decomposition);
     let evidence = objective_summary_evidence(&decomposition, &compatibility);
-    let structured = assemble_structured_objective(&decomposition, &verification_commands);
 
     ObjectiveSummary::with_structured(compatibility, verification_commands, evidence, structured)
 }
@@ -1001,6 +1002,99 @@ fn compatibility_text_for_clause(
         }
     }
     clause.text.trim().to_string()
+}
+
+fn compatibility_text_from_structured(structured: &StructuredObjective) -> Option<String> {
+    if structured.objective_class != ObjectiveClass::TaskStatement
+        || structured
+            .unknowns
+            .iter()
+            .any(|unknown| unknown.field_name == "primary_goal")
+    {
+        return None;
+    }
+
+    let projected = structured
+        .evidence_spans
+        .iter()
+        .filter(|span| span.role == ObjectiveRole::Goal)
+        .max_by_key(|span| structured_compatibility_score(span))
+        .map(|span| structured_compatibility_text_for_goal_span(structured, span))?;
+
+    (!projected.is_empty()).then(|| projected.to_string())
+}
+
+fn structured_compatibility_text_for_goal_span(
+    structured: &StructuredObjective,
+    goal_span: &ObjectiveEvidenceSpan,
+) -> String {
+    let mut projected = goal_span.excerpt.trim().to_string();
+    if !projected.starts_with("/goal ") {
+        return projected;
+    }
+
+    let Some(section_index) = goal_span.section_index else {
+        return projected;
+    };
+    let Some(goal_clause_index) = goal_span.clause_index else {
+        return projected;
+    };
+
+    let inline_verification = structured
+        .evidence_spans
+        .iter()
+        .filter(|span| {
+            span.role == ObjectiveRole::Verification
+                && span.row == goal_span.row
+                && span.section_index == Some(section_index)
+        })
+        .filter_map(|span| {
+            let clause_index = span.clause_index?;
+            (clause_index > goal_clause_index).then_some((clause_index, span.excerpt.trim()))
+        })
+        .collect::<Vec<_>>();
+
+    if inline_verification.is_empty() {
+        return projected;
+    }
+
+    for (_, excerpt) in inline_verification {
+        if excerpt.is_empty() {
+            continue;
+        }
+        projected.push(' ');
+        projected.push_str(excerpt);
+    }
+
+    projected
+}
+
+fn structured_compatibility_score(span: &ObjectiveEvidenceSpan) -> i32 {
+    let mut score = source_priority(span.source_kind) + section_goal_priority(span.section_kind);
+    score += match span.confidence {
+        Confidence::High => 200,
+        Confidence::Medium => 100,
+        Confidence::Low => 0,
+    };
+
+    let lowered = span.excerpt.to_ascii_lowercase();
+    if lowered.starts_with("/goal ") {
+        score += 500;
+    }
+    if looks_like_goal_text(&lowered) {
+        score += 150;
+    }
+    if looks_like_checklist_text(&lowered) {
+        score -= 300;
+    }
+    if looks_like_verification_text(&lowered) {
+        score -= 350;
+    }
+    if looks_like_boilerplate_text(&lowered) && !explicitly_targets_instruction_surface(&lowered) {
+        score -= 250;
+    }
+
+    score + span.excerpt.len().min(180) as i32
 }
 
 fn assemble_structured_objective(
@@ -2297,6 +2391,42 @@ mod tests {
     }
 
     #[test]
+    fn projects_multiline_goal_sections_from_structured_goal_evidence() {
+        let rows = vec![test_row(
+            "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only.\nUse the $incremental-implementation skill.\nReturn with changed files and residual risk.\n\n## Verification\n- cargo test -p agent-drift-analyzer checkpoints -- --nocapture",
+        )];
+
+        let summary = extract_objective(&rows);
+        assert_eq!(
+            summary.text,
+            "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+        );
+        assert!(!summary.text.contains("$incremental-implementation"));
+
+        let Some(structured) = summary.structured else {
+            panic!("structured sidecar")
+        };
+        let goal_span = structured
+            .evidence_spans
+            .iter()
+            .find(|span| {
+                span.role == ObjectiveRole::Goal
+                    && span.excerpt
+                        == "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+            })
+            .expect("goal evidence span");
+        assert_eq!(goal_span.excerpt, summary.text);
+        assert_eq!(
+            structured.target.as_ref().map(|target| target.display.as_str()),
+            Some("crates/agent-drift-analyzer/src/context/objective.rs")
+        );
+        assert_eq!(
+            summary.verification_commands,
+            vec!["cargo test -p agent-drift-analyzer checkpoints -- --nocapture"]
+        );
+    }
+
+    #[test]
     fn collects_verification_commands_from_goal_led_mixed_role_clauses() {
         let rows = vec![test_row(
             "## Scope\nReview the objective extractor, run make test, and return concrete fixes.",
@@ -2417,6 +2547,24 @@ mod tests {
             verification_commands_from_decomposition(&decomposition),
             vec!["make test"]
         );
+    }
+
+    #[test]
+    fn falls_back_to_primary_candidate_text_when_structured_primary_goal_is_unknown() {
+        let prompt =
+            "## Questions to ask\n- Which packet follows SO-G2?\n- Which docs own the acceptance wall?";
+        let rows = vec![test_row(prompt)];
+
+        let summary = extract_objective(&rows);
+        assert_eq!(summary.text, prompt);
+
+        let Some(structured) = summary.structured else {
+            panic!("structured sidecar")
+        };
+        assert!(structured
+            .unknowns
+            .iter()
+            .any(|unknown| unknown.field_name == "primary_goal"));
     }
 
     #[test]
