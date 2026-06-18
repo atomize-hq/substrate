@@ -4570,6 +4570,39 @@ Keep the verifier evidence grounded to the clause. cargo fmt --check."#;
 }
 
 #[test]
+fn checkpoints_context_objective_extracts_verification_from_mixed_role_scope_clause() {
+    let prompt = r#"## Scope
+Review the objective extractor, run make test, and return concrete fixes."#;
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,260p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+
+    let objective = &result.sessions[0].context.objective;
+    assert_eq!(objective.text, "Review the objective extractor, run make test.");
+    assert_eq!(objective.verification_commands, vec!["make test"]);
+
+    let structured = objective.structured.as_ref().expect("structured objective");
+    assert_eq!(structured.verification_commands, vec!["make test"]);
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && matches!(span.section_kind, ObjectiveSectionKind::Scope)
+            && span.excerpt.contains("Review the objective extractor, run make test.")
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
+    assert!(structured
+        .deliverables
+        .iter()
+        .any(|deliverable| deliverable.display.contains("Return concrete fixes")));
+}
+
+#[test]
 fn checkpoints_context_objective_leaves_vague_targets_unknown() {
     let result = analyze_custom_rows(vec![
         prompt_row(0, "turn-001", "Look at the stuff above and make it better."),

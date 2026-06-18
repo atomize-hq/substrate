@@ -752,11 +752,16 @@ fn role_candidates_for_clause(
     let looks_like_verification = looks_like_verification_text(&lowered);
     let has_strong_constraint_cue = has_strong_constraint_cue(&lowered);
     let has_explicit_verification_cue = has_explicit_verification_cue(text, &lowered);
+    let has_mixed_goal_and_verification_cue = looks_like_goal_text(&lowered)
+        && has_explicit_verification_cue
+        && (text.contains(',') || lowered.contains(" and ") || lowered.contains(" then "));
     let mut candidates = Vec::new();
 
     match section_kind {
         ObjectiveSectionKind::Scope | ObjectiveSectionKind::Mission => {
-            if !has_strong_constraint_cue && !has_explicit_verification_cue {
+            if !has_strong_constraint_cue
+                && (!has_explicit_verification_cue || has_mixed_goal_and_verification_cue)
+            {
                 push_role_candidate(&mut candidates, ObjectiveRole::Goal, Confidence::High, 900);
             }
         }
@@ -1103,6 +1108,13 @@ fn top_role(clause: &ObjectiveClause) -> Option<&RoleCandidate> {
     clause.role_candidates.first()
 }
 
+fn clause_has_role_candidate(clause: &ObjectiveClause, role: ObjectiveRole) -> bool {
+    clause
+        .role_candidates
+        .iter()
+        .any(|candidate| candidate.role == role)
+}
+
 fn success_conditions_from_decomposition(
     decomposition: &ObjectiveDecomposition,
     goal_clause: Option<&ObjectiveClause>,
@@ -1203,11 +1215,13 @@ fn objective_confidence(
 fn verification_commands_from_decomposition(decomposition: &ObjectiveDecomposition) -> Vec<String> {
     let mut commands = Vec::new();
     for clause in &decomposition.clauses {
-        if top_role(clause).map(|role| role.role) == Some(ObjectiveRole::Verification) {
-            for command in extract_verification_commands(&clause.text) {
-                if !commands.iter().any(|existing| existing == &command) {
-                    commands.push(command);
-                }
+        if !clause_has_role_candidate(clause, ObjectiveRole::Verification) {
+            continue;
+        }
+
+        for command in extract_verification_commands(&clause.text) {
+            if !commands.iter().any(|existing| existing == &command) {
+                commands.push(command);
             }
         }
     }
@@ -2267,6 +2281,43 @@ mod tests {
             .as_ref()
             .map(|target| target.display.contains("cargo test"))
             .unwrap_or(false));
+    }
+
+    #[test]
+    fn collects_verification_commands_from_goal_led_mixed_role_clauses() {
+        let rows = vec![test_row(
+            "## Scope\nReview the objective extractor, run make test, and return concrete fixes.",
+        )];
+        let decomposition = decompose_objective_rows(&rows).expect("objective decomposition");
+        let mixed_clause = decomposition
+            .clauses
+            .iter()
+            .find(|clause| clause.text.contains("run make test"))
+            .expect("mixed role clause");
+
+        assert_eq!(
+            top_role(mixed_clause).map(|role| role.role),
+            Some(ObjectiveRole::Goal)
+        );
+        assert!(clause_has_role_candidate(
+            mixed_clause,
+            ObjectiveRole::Verification
+        ));
+        assert_eq!(
+            verification_commands_from_decomposition(&decomposition),
+            vec!["make test"]
+        );
+
+        let summary = extract_objective(&rows);
+        assert_eq!(summary.text, "Review the objective extractor, run make test.");
+        let Some(structured) = summary.structured else {
+            panic!("structured sidecar")
+        };
+        assert_eq!(structured.verification_commands, vec!["make test"]);
+        assert!(structured
+            .deliverables
+            .iter()
+            .any(|deliverable| deliverable.display.contains("Return concrete fixes")));
     }
 
     #[test]
