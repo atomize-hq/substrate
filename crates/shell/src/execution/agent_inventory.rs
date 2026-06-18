@@ -596,7 +596,7 @@ fn materialize_effective_inventory_entries_from_v2(
                     execution: AgentExecutionConfigV1 {
                         scope: Some(placement.execution_scope()),
                     },
-                    cli: placement_config.cli.clone(),
+                    cli: materialized_cli_config_from_v2(&file.id, placement_config.cli.as_ref()),
                     api: placement_config.api.clone(),
                     capabilities: placement_config.capabilities.clone(),
                 },
@@ -608,8 +608,24 @@ fn materialize_effective_inventory_entries_from_v2(
     entries
 }
 
+fn materialized_cli_config_from_v2(
+    logical_agent_id: &str,
+    cli: Option<&AgentCliConfigV1>,
+) -> Option<AgentCliConfigV1> {
+    let mut cli = cli.cloned()?;
+    if cli.binary.trim().is_empty() {
+        cli.binary = logical_agent_id.to_string();
+    }
+    Some(cli)
+}
+
 fn legacy_shadowed_agent_ids_from_v2(file: &AgentFileV2) -> Vec<String> {
-    vec![file.id.clone(), format!("{}_world", file.id)]
+    vec![
+        file.id.clone(),
+        format!("{}_world", file.id),
+        format!("{}-host", file.id),
+        format!("{}-world", file.id),
+    ]
 }
 
 pub(crate) fn resolve_gateway_backend_inventory_entry(
@@ -1724,6 +1740,42 @@ config:
     }
 
     #[test]
+    fn effective_inventory_materialization_preserves_logical_binary_shorthand_for_realized_v2_rows()
+    {
+        let raw = r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        runtime_family: codex
+      capabilities:
+        llm: true
+    world:
+      enabled: true
+      cli:
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#;
+        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+        let path = tempdir().expect("tempdir").path().join("codex.yaml");
+
+        let materialized = materialize_effective_inventory_entries_from_v2(&path, &parsed);
+
+        assert_eq!(materialized.len(), 2);
+        assert_eq!(materialized[0].file.id, "codex-host");
+        assert_eq!(materialized[0].file.effective_cli_binary(), Some("codex"));
+        assert_eq!(materialized[1].file.id, "codex-world");
+        assert_eq!(materialized[1].file.effective_cli_binary(), Some("codex"));
+    }
+
+    #[test]
     #[serial_test::serial]
     fn load_effective_agent_inventory_materializes_single_placement_version_2_files() {
         let temp = tempdir().expect("tempdir");
@@ -1983,6 +2035,106 @@ config:
         assert!(
             !inventory.contains_key("codex_world"),
             "workspace host-only version 2 truth must suppress the stale global world row"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_effective_agent_inventory_workspace_host_v2_shadow_suppresses_lower_root_v2_realized_world_row(
+    ) {
+        let temp = tempdir().expect("tempdir");
+        let substrate_home = temp.path().join("substrate-home");
+        let global_agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&global_agents_dir).expect("create global agents directory");
+        fs::write(
+            global_agents_dir.join("codex.yaml"),
+            r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: /var/lib/substrate/world-deps/bin/codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#,
+        )
+        .expect("write global multi-placement v2 inventory");
+
+        let workspace_root = temp.path().join("workspace");
+        let workspace_agents_dir = workspace_root.join(SUBSTRATE_DIR_NAME).join("agents");
+        fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
+        fs::write(workspace_marker_path(&workspace_root), "version: 1\n")
+            .expect("write workspace marker");
+        fs::write(
+            workspace_agents_dir.join("codex.yaml"),
+            r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#,
+        )
+        .expect("write workspace host-only v2 inventory");
+
+        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        let inventory_result = load_effective_agent_inventory(&workspace_root, &Policy::default());
+        match previous_substrate_home {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+        let inventory = inventory_result.expect(
+            "effective inventory should materialize the workspace host-only version 2 shadow",
+        );
+
+        assert_eq!(
+            inventory.len(),
+            1,
+            "workspace host-only version 2 shadow should replace the full lower-root logical agent view"
+        );
+        let codex = inventory.get("codex-host").expect(
+            "workspace version 2 inventory should materialize through the realized host id",
+        );
+        assert_eq!(
+            normalize_inventory_origin_path(&codex.path),
+            normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
+            "workspace version 2 inventory must win the shadowing boundary"
+        );
+        assert!(
+            !inventory.contains_key("codex-world"),
+            "workspace host-only version 2 truth must suppress the stale lower-root realized world row"
+        );
+        assert!(
+            !inventory.contains_key("codex"),
+            "workspace host-only version 2 truth must suppress the stale lower-root legacy host row"
+        );
+        assert!(
+            !inventory.contains_key("codex_world"),
+            "workspace host-only version 2 truth must suppress the stale lower-root legacy world row"
         );
     }
 

@@ -1717,6 +1717,104 @@ fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_stale_global_
 }
 
 #[test]
+fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_lower_root_v2_world_row() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex-host
+    - cli:codex-world
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        r#"version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        runtime_family: codex
+        binary: sh
+        mode: persistent
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
+    world:
+      enabled: true
+      cli:
+        runtime_family: codex
+        binary: /var/lib/substrate/world-deps/bin/codex
+        mode: persistent
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
+"#,
+    );
+    let workspace_agents_dir = fixture.workspace_root.join(".substrate").join("agents");
+    fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
+    fs::write(
+        workspace_agents_dir.join("codex.yaml"),
+        cli_agent_file_v2("codex", "host", true, false, true),
+    )
+    .expect("write workspace host-only v2 agent file");
+
+    let output = fixture.run(&["agent", "list", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent list should surface the workspace host-only version 2 shadow over lower-root v2 truth: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let agents = json["agents"]
+        .as_array()
+        .expect("agents should be an array");
+    let codex = agents
+        .iter()
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-host"))
+        .expect("workspace codex-host row should exist");
+    assert_eq!(
+        codex.pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:codex-host")
+    );
+    assert!(
+        agents
+            .iter()
+            .all(|agent| agent.pointer("/agent_id").and_then(Value::as_str) != Some("codex-world")),
+        "workspace host-only version 2 truth must suppress the stale lower-root v2 world row: {agents:?}"
+    );
+}
+
+#[test]
 fn agent_list_surfaces_multi_enabled_version_2_inventory_with_exact_backend_ids() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
