@@ -158,7 +158,7 @@ run_prod_rollback_remediation_scenario() {
     ORIGINAL_PATH="${PATH}"
     provision_agent_runtime_world_deps "${stub}"
     sync_world_deps "${stub}"
-  2>&1)"
+  )"
   local status=$?
   set -e
 
@@ -198,7 +198,7 @@ run_world_enable_helper_rollback_remediation_scenario() {
     ORIGINAL_PATH="${PATH}"
     provision_agent_runtime_world_deps "${stub}"
     sync_world_deps "${stub}"
-  2>&1)"
+  )"
   local status=$?
   set -e
 
@@ -234,7 +234,7 @@ run_dev_rollback_remediation_scenario() {
     BIN_DIR="${work_root}/bin"
     mkdir -p "${BIN_DIR}"
     provision_agent_runtime_with_sync "${stub}"
-  2>&1)"
+  )"
   local status=$?
   set -e
 

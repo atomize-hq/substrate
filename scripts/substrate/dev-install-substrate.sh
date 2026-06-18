@@ -102,8 +102,9 @@ rollback_agent_runtime_after_failed_sync() {
   local substrate_bin="$1"
   local deps_item="$2"
   local runtime_path="$3"
+  local original_path="${PATH}"
 
-  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global remove "${deps_item}"; then
+  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global remove "${deps_item}"; then
     warn "Rolled back world deps global enable for '${deps_item}' after sync failure."
     return 0
   fi
@@ -126,12 +127,13 @@ provision_agent_runtime_with_sync() {
 
   local deps_item
   local runtime_path
+  local original_path="${PATH}"
   deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
   runtime_path="${BIN_DIR}:${PATH}"
 
   log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The dev installer will run 'substrate world deps current sync' immediately after this step."
   local add_output
-  add_output="$(PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global add --json "${deps_item}")"
+  add_output="$(PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global add --json "${deps_item}")"
   if grep -Fq "\"${deps_item}\"" <<<"${add_output}"; then
     PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=1
   else
@@ -140,7 +142,7 @@ provision_agent_runtime_with_sync() {
   printf '%s\n' "${add_output}"
   log "Syncing world dependencies via 'substrate world deps current sync' for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}..."
   local rc=0
-  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps current sync; then
+  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps current sync; then
     return
   else
     rc=$?
