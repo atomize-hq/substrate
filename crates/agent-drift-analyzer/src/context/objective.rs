@@ -1073,15 +1073,21 @@ fn evidence_spans_from_decomposition(
 ) -> Vec<ObjectiveEvidenceSpan> {
     let mut spans = Vec::new();
     for clause in &decomposition.clauses {
-        if let Some(role) = top_role(clause) {
-            if role.role != ObjectiveRole::OtherRole
-                || matches!(clause.section_kind, ObjectiveSectionKind::Deliverables)
-            {
-                spans.push(evidence_span_for_clause(clause));
-            }
-        }
+        spans.extend(evidence_spans_for_clause(clause));
     }
     spans
+}
+
+fn evidence_spans_for_clause(clause: &ObjectiveClause) -> Vec<ObjectiveEvidenceSpan> {
+    clause
+        .role_candidates
+        .iter()
+        .filter(|role| {
+            role.role != ObjectiveRole::OtherRole
+                || matches!(clause.section_kind, ObjectiveSectionKind::Deliverables)
+        })
+        .map(|role| evidence_span_for_role(clause, role))
+        .collect()
 }
 
 fn evidence_span_for_clause(clause: &ObjectiveClause) -> ObjectiveEvidenceSpan {
@@ -1090,6 +1096,13 @@ fn evidence_span_for_clause(clause: &ObjectiveClause) -> ObjectiveEvidenceSpan {
         confidence: Confidence::Low,
         score: 0,
     });
+    evidence_span_for_role(clause, &role)
+}
+
+fn evidence_span_for_role(
+    clause: &ObjectiveClause,
+    role: &RoleCandidate,
+) -> ObjectiveEvidenceSpan {
     ObjectiveEvidenceSpan {
         row: clause.row_ref.clone(),
         source_kind: clause.source_kind,
@@ -2314,10 +2327,96 @@ mod tests {
             panic!("structured sidecar")
         };
         assert_eq!(structured.verification_commands, vec!["make test"]);
+        assert!(structured.evidence_spans.iter().any(|span| {
+            span.role == ObjectiveRole::Goal
+                && span.excerpt.contains("Review the objective extractor, run make test.")
+                && span.section_index == Some(0)
+                && span.clause_index == Some(0)
+        }));
+        assert!(structured.evidence_spans.iter().any(|span| {
+            span.role == ObjectiveRole::Verification
+                && span.excerpt.contains("Review the objective extractor, run make test.")
+                && span.section_index == Some(0)
+                && span.clause_index == Some(0)
+        }));
         assert!(structured
             .deliverables
             .iter()
             .any(|deliverable| deliverable.display.contains("Return concrete fixes")));
+    }
+
+    #[test]
+    fn verification_commands_prefer_clause_grounding_over_whole_candidate_fallback() {
+        let row = test_row(
+            "Review the objective extractor, run make test, and return concrete fixes. Record the literal string `cargo fmt --check` in the handoff.",
+        );
+        let decomposition = ObjectiveDecomposition {
+            candidates: vec![DirectiveRowCandidate {
+                candidate_index: 0,
+                row_ref: RowRef::from_row(&row),
+                source_kind: source_kind_for_row(&row),
+                text: row.text.clone(),
+                score: objective_score(&row),
+            }],
+            sections: Vec::new(),
+            clauses: vec![
+                ObjectiveClause {
+                    candidate_index: 0,
+                    row_ref: RowRef::from_row(&row),
+                    source_kind: source_kind_for_row(&row),
+                    section_index: 0,
+                    clause_index: 0,
+                    section_kind: ObjectiveSectionKind::Scope,
+                    text: "Review the objective extractor, run make test.".to_string(),
+                    role_candidates: vec![
+                        RoleCandidate {
+                            role: ObjectiveRole::Goal,
+                            confidence: Confidence::High,
+                            score: 900,
+                        },
+                        RoleCandidate {
+                            role: ObjectiveRole::Verification,
+                            confidence: Confidence::High,
+                            score: 825,
+                        },
+                    ],
+                },
+                ObjectiveClause {
+                    candidate_index: 0,
+                    row_ref: RowRef::from_row(&row),
+                    source_kind: source_kind_for_row(&row),
+                    section_index: 0,
+                    clause_index: 1,
+                    section_kind: ObjectiveSectionKind::Scope,
+                    text: "Return concrete fixes.".to_string(),
+                    role_candidates: vec![RoleCandidate {
+                        role: ObjectiveRole::OtherRole,
+                        confidence: Confidence::Medium,
+                        score: 700,
+                    }],
+                },
+                ObjectiveClause {
+                    candidate_index: 0,
+                    row_ref: RowRef::from_row(&row),
+                    source_kind: source_kind_for_row(&row),
+                    section_index: 0,
+                    clause_index: 2,
+                    section_kind: ObjectiveSectionKind::Scope,
+                    text: "Record the literal string `cargo fmt --check` in the handoff."
+                        .to_string(),
+                    role_candidates: vec![RoleCandidate {
+                        role: ObjectiveRole::OtherRole,
+                        confidence: Confidence::Medium,
+                        score: 400,
+                    }],
+                },
+            ],
+        };
+
+        assert_eq!(
+            verification_commands_from_decomposition(&decomposition),
+            vec!["make test"]
+        );
     }
 
     #[test]

@@ -4596,6 +4596,13 @@ Review the objective extractor, run make test, and return concrete fixes."#;
             && span.section_index.is_some()
             && span.clause_index.is_some()
     }));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Verification
+            && matches!(span.section_kind, ObjectiveSectionKind::Scope)
+            && span.excerpt.contains("Review the objective extractor, run make test.")
+            && span.section_index.is_some()
+            && span.clause_index.is_some()
+    }));
     assert!(structured
         .deliverables
         .iter()
