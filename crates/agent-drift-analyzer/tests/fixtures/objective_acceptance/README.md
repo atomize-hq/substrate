@@ -1,8 +1,10 @@
 # Objective acceptance fixture contract
 
 Packet `SO-4.1` establishes only the committed harness scaffold and deterministic fixture layout.
-It does **not** seed real cases yet, and it does **not** encode the detailed expected-shape
-contract from `SO-4.2`.
+Packet `SO-4.2` now commits the **expected-shape contract** for future cases, but the real family
+corpus is still intentionally tiny until `SO-5.*` seeds the locked acceptance wall. The harness
+must evaluate structured correctness from fixture metadata rather than reducing success to one exact
+objective string.
 
 The committed root must stay bounded to:
 
@@ -14,3 +16,90 @@ The committed root must stay bounded to:
 Each family directory is intentionally placeholder-only in this packet. Real case directories land
 later under `SO-5.*`, at which point the harness can enumerate `<case-id>/raw.json` and
 `<case-id>/expected.json` entries deterministically.
+
+## Case contract
+
+Each future case directory must contain:
+
+- `raw.json`
+- `expected.json`
+
+`raw.json` is the deterministic analyzer input for one acceptance case. Phase-1 cases should keep
+this format simple and explicit:
+
+```json
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+    }
+  ]
+}
+```
+
+`expected.json` defines the **expected shape** the harness validates. The harness must score
+structured semantics, grounding, forbidden promotions, compatibility rendering, and unknown-field
+honesty from this metadata:
+
+```json
+{
+  "case_id": "explicit_file_target_grounding_contract",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "target": {
+    "kind": "file_or_directory",
+    "display_contains": [
+      "crates/agent-drift-analyzer/src/context/objective.rs"
+    ]
+  },
+  "verification_commands": [],
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "user_prompt",
+      "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs"
+    }
+  ],
+  "field_evidence": {
+    "target": [
+      {
+        "role": "goal",
+        "source_kind": "user_prompt",
+        "excerpt_contains": "crates/agent-drift-analyzer/src/context/objective.rs"
+      }
+    ]
+  },
+  "forbidden_role_promotions": [
+    {
+      "forbidden_role": "goal",
+      "source_kind": "user_prompt",
+      "section_kind": "checklist",
+      "excerpt_contains": "Run this task on a linux machine."
+    }
+  ],
+  "compatibility_rendering": {
+    "acceptable_any_of": [
+      "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only."
+    ],
+    "comparison_key": "review|file_or_directory|crates_agent_drift_analyzer_src_context_objective_rs"
+  },
+  "required_unknown_fields": [],
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}
+```
+
+Notes:
+
+- `acceptable_any_of` is the compatibility wall. Cases may allow multiple rendered strings when the
+  structured frame is correct, but the harness must still enforce the semantic `comparison_key`
+  whenever the case specifies one.
+- `role_spans` and `field_evidence` are separate on purpose: the first proves clause-role labeling,
+  the second proves the extracted field stayed grounded to the right span.
+- `forbidden_role_promotions` is the anti-WDAP guardrail. Checklist or scaffolding text must be
+  able to fail the case even if the final rendered string still looks plausible.
+- `required_unknown_fields` and `forbidden_unknown_fields` keep the extractor honest when evidence
+  is weak. A case passes by leaving unsupported fields unknown rather than fabricating them.
