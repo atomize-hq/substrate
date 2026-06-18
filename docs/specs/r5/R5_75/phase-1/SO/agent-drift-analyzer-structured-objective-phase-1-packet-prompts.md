@@ -1,36 +1,35 @@
 # Structured Objective Phase 1 Packet Prompts
 Status: draft orchestration prompts created on 2026-06-14 and reconciled on 2026-06-17 against the
-live `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` ledger after the
+live `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` ledger after the
 grounding follow-on family closed through `SO-G6`.
-These prompts intentionally cover the phase-1 packets `SO-1.1` through `SO-6.2`. Already-landed
+These prompts intentionally cover the historical phase-1 packets `SO-1.1` through `SO-6.2`. Already-landed
 docs-lock packets `SO-0.*` are excluded, and deferred ask-first packets `SO-X.*` remain excluded
 until separately approved. Packet numbering below preserves phase-1 task order for auditability;
 however, the live post-grounding restart no longer begins inside this historical sequence. The
-active restart now goes through the dedicated `SO-2.3B-refine` packet prompts, and only after that
-subfamily lands should the remaining `SO-3.*` / `SO-4.*` prompts below be reused as applicable.
+active restart already passed through the dedicated `SO-2.3B-refine` packet prompts. The next prompts to reuse from this file are `SO-3.1` and `SO-3.2`, grounded on the already-landed grounding follow-on family through `SO-G6` plus `SO-2.3B-refine`; `SO-4.*` remains subsequent and must not be treated as a prerequisite for `SO-3.*`.
 Shared authority for all packets:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 ---
 ## Packet 1 Prompt — Task SO-1.1
 
 ````text
-/goal Land Packet `SO-1.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-1.1` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-1.1` only, assuming `SO-0` is already landed and no later `SO-1.2+` packet has started.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-1.1` scope only:
@@ -73,7 +72,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-1.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming `SO-0` is already landed and no later `SO-1.2+` packet has started.
+/goal Implement Packet `SO-1.1` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming `SO-0` is already landed and no later `SO-1.2+` packet has started.
 
 Use the `$incremental-implementation` skill.
 
@@ -83,12 +82,12 @@ You are landing only Packet `SO-1.1`:
 - match the architecture authority's minimum semantic coverage without widening into downstream consumer migration
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/src/checkpoint/schema.rs
 - crates/agent-drift-analyzer/src/context/objective.rs
@@ -125,12 +124,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-1.1` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -155,12 +154,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -188,17 +187,17 @@ Your job is done only when Packet `SO-1.1` is review-clean and every non-empty i
 ## Packet 2 Prompt — Task SO-1.2
 
 ````text
-/goal Land Packet `SO-1.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-1.2` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-1.2` only, assuming Packet `SO-1.1` is already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-1.2` scope only:
@@ -241,7 +240,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-1.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packet `SO-1.1` is already landed.
+/goal Implement Packet `SO-1.2` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packet `SO-1.1` is already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -251,12 +250,12 @@ You are landing only Packet `SO-1.2`:
 - update the minimum analyzer-local wiring so current callers still compile without assuming sidecar presence
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/src/context/objective.rs
 - crates/agent-drift-analyzer/src/context/mod.rs
@@ -295,12 +294,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-1.2` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -325,12 +324,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -358,17 +357,17 @@ Your job is done only when Packet `SO-1.2` is review-clean and every non-empty i
 ## Packet 3 Prompt — Task SO-2.1
 
 ````text
-/goal Land Packet `SO-2.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-2.1` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-2.1` only, assuming Packets `SO-1.1` and `SO-1.2` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-2.1` scope only:
@@ -409,7 +408,7 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-2.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` and `SO-1.2` are already landed.
+/goal Implement Packet `SO-2.1` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` and `SO-1.2` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -419,12 +418,12 @@ You are landing only Packet `SO-2.1`:
 - stop whole-row flattening from hiding the real mission without widening into full field assembly yet
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/src/context/objective.rs
 - crates/agent-drift-analyzer/tests/checkpoints.rs
@@ -461,12 +460,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-2.1` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -491,12 +490,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -524,17 +523,17 @@ Your job is done only when Packet `SO-2.1` is review-clean and every non-empty i
 ## Packet 4 Prompt — Task SO-2.2
 
 ````text
-/goal Land Packet `SO-2.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-2.2` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-2.2` only, assuming Packets `SO-1.1` through `SO-2.1` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-2.2` scope only:
@@ -575,7 +574,7 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-2.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-2.1` are already landed.
+/goal Implement Packet `SO-2.2` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-2.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -585,12 +584,12 @@ You are landing only Packet `SO-2.2`:
 - keep the work centered on deterministic clause-role logic and focused checkpoint regressions
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/src/context/objective.rs
 - crates/agent-drift-analyzer/tests/checkpoints.rs
@@ -627,12 +626,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-2.2` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -657,12 +656,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -690,17 +689,17 @@ Your job is done only when Packet `SO-2.2` is review-clean and every non-empty i
 ## Packet 5 Prompt — Task SO-2.3
 
 ````text
-/goal Land Packet `SO-2.3` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-2.3` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-2.3` only, assuming Packets `SO-1.1` through `SO-2.2` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-2.3` scope only:
@@ -742,7 +741,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-2.3` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-2.2` are already landed.
+/goal Implement Packet `SO-2.3` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming Packets `SO-1.1` through `SO-2.2` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -752,12 +751,12 @@ You are landing only Packet `SO-2.3`:
 - keep the work analyzer-local to structured extraction and focused checkpoint regressions
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/src/context/objective.rs
 - crates/agent-drift-analyzer/tests/checkpoints.rs
@@ -794,12 +793,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-2.3` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -824,12 +823,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -857,18 +856,19 @@ Your job is done only when Packet `SO-2.3` is review-clean and every non-empty i
 ## Packet 6 Prompt — Task SO-3.1
 
 ````text
-/goal Land Packet `SO-3.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-3.1` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-3.1` only, assuming the
-grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
+grounding follow-on family through `SO-G6` plus `SO-2.3B-refine` are already landed and no later
+`SO-3.2+` packet has started.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-3.1` scope only:
@@ -910,7 +910,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-3.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
+/goal Implement Packet `SO-3.1` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus `SO-2.3B-refine` are already landed and no later `SO-3.2+` packet has started.
 
 Use the `$incremental-implementation` skill.
 
@@ -920,12 +920,12 @@ You are landing only Packet `SO-3.1`:
 - prove the display string is a projection rather than the semantic authority
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/src/context/objective.rs
 - crates/agent-drift-analyzer/tests/checkpoints.rs
@@ -962,12 +962,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-3.1` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -992,12 +992,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -1025,19 +1025,19 @@ Your job is done only when Packet `SO-3.1` is review-clean and every non-empty i
 ## Packet 7 Prompt — Task SO-3.2
 
 ````text
-/goal Land Packet `SO-3.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-3.2` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-3.2` only, assuming the
-grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-3.1` are
-already landed.
+grounding follow-on family through `SO-G6` plus `SO-2.3B-refine` and Packet `SO-3.1` are already
+landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-3.2` scope only:
@@ -1079,7 +1079,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-3.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-3.1` are already landed.
+/goal Implement Packet `SO-3.2` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus `SO-2.3B-refine` and Packet `SO-3.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1089,12 +1089,12 @@ You are landing only Packet `SO-3.2`:
 - keep the work centered on objective comparison-bridge logic rather than downstream comparability consumers
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/src/context/objective.rs
 - crates/agent-drift-analyzer/tests/checkpoints.rs
@@ -1131,12 +1131,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-3.2` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -1161,12 +1161,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -1194,19 +1194,19 @@ Your job is done only when Packet `SO-3.2` is review-clean and every non-empty i
 ## Packet 8 Prompt — Task SO-4.1
 
 ````text
-/goal Land Packet `SO-4.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-4.1` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-4.1` only, assuming the
-grounding follow-on family through `SO-G6` is already landed and no later `SO-4.2+` packet has
-started.
+grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, and Packets
+`SO-3.1` / `SO-3.2` are already landed and no later `SO-4.2+` packet has started.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-4.1` scope only:
@@ -1248,7 +1248,7 @@ cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-4.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` is already landed and no later `SO-4.2+` packet has started.
+/goal Implement Packet `SO-4.1` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, and Packets `SO-3.1` / `SO-3.2` are already landed and no later `SO-4.2+` packet has started.
 
 Use the `$incremental-implementation` skill.
 
@@ -1258,12 +1258,12 @@ You are landing only Packet `SO-4.1`:
 - assert the fixture directory contract for `design-set`, `locked-acceptance`, and `stretch-external`
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/tests/support/mod.rs
 - crates/agent-drift-analyzer/tests/progress_acceptance.rs
@@ -1302,12 +1302,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-4.1` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -1332,12 +1332,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -1365,18 +1365,19 @@ Your job is done only when Packet `SO-4.1` is review-clean and every non-empty i
 ## Packet 9 Prompt — Task SO-4.2
 
 ````text
-/goal Land Packet `SO-4.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-4.2` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-4.2` only, assuming the
-grounding follow-on family through `SO-G6` and Packet `SO-4.1` are already landed.
+grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1`
+/ `SO-3.2`, and Packet `SO-4.1` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-4.2` scope only:
@@ -1416,7 +1417,7 @@ cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-4.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` and Packet `SO-4.1` are already landed.
+/goal Implement Packet `SO-4.2` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, and Packet `SO-4.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1426,12 +1427,12 @@ You are landing only Packet `SO-4.2`:
 - make the acceptance wall depend on structured correctness rather than one exact objective string
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/tests/objective_acceptance.rs
 - crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/README.md
@@ -1468,12 +1469,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-4.2` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -1498,12 +1499,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -1531,18 +1532,18 @@ Your job is done only when Packet `SO-4.2` is review-clean and every non-empty i
 ## Packet 10 Prompt — Task SO-5.1
 
 ````text
-/goal Land Packet `SO-5.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-5.1` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-5.1` only, assuming the
-grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
+grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, and Packets `SO-4.1` / `SO-4.2` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-5.1` scope only:
@@ -1584,7 +1585,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-5.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1` and `SO-4.2` are already landed.
+/goal Implement Packet `SO-5.1` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, and Packets `SO-4.1` / `SO-4.2` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1594,12 +1595,12 @@ You are landing only Packet `SO-5.1`:
 - keep the work centered on committed fixtures plus the harness updates needed to load and assert them
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/tests/objective_acceptance.rs
 - crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/README.md
@@ -1636,12 +1637,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-5.1` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -1666,12 +1667,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -1699,19 +1700,18 @@ Your job is done only when Packet `SO-5.1` is review-clean and every non-empty i
 ## Packet 11 Prompt — Task SO-5.2
 
 ````text
-/goal Land Packet `SO-5.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-5.2` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-5.2` only, assuming the
-grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-5.1` are
-already landed.
+grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, and Packet `SO-5.1` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-5.2` scope only:
@@ -1752,7 +1752,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-5.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, and `SO-5.1` are already landed.
+/goal Implement Packet `SO-5.2` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, and Packet `SO-5.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1762,12 +1762,12 @@ You are landing only Packet `SO-5.2`:
 - keep the work fixture-centered with only the harness updates strictly required to score those controls
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/tests/objective_acceptance.rs
 - crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/README.md
@@ -1804,12 +1804,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-5.2` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -1834,12 +1834,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -1867,19 +1867,19 @@ Your job is done only when Packet `SO-5.2` is review-clean and every non-empty i
 ## Packet 12 Prompt — Task SO-5.3
 
 ````text
-/goal Land Packet `SO-5.3` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-5.3` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-5.3` only, assuming the
-grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, `SO-5.1`, and
+grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, `SO-5.1`, and
 `SO-5.2` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-5.3` scope only:
@@ -1922,7 +1922,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-5.3` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6` plus Packets `SO-4.1`, `SO-4.2`, `SO-5.1`, and `SO-5.2` are already landed.
+/goal Implement Packet `SO-5.3` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, `SO-5.1`, and `SO-5.2` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -1932,12 +1932,12 @@ You are landing only Packet `SO-5.3`:
 - keep the work centered on design-set and locked-acceptance fixtures plus the harness updates needed to score them
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 - crates/agent-drift-analyzer/tests/objective_acceptance.rs
 - crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/README.md
@@ -1975,12 +1975,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-5.3` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -2005,12 +2005,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -2038,19 +2038,18 @@ Your job is done only when Packet `SO-5.3` is review-clean and every non-empty i
 ## Packet 13 Prompt — Task SO-6.1
 
 ````text
-/goal Land Packet `SO-6.1` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-6.1` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-6.1` only, assuming the
-grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and
-`SO-3.2`, and Packets `SO-5.1` through `SO-5.3` are already landed.
+grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, and Packets `SO-5.1` through `SO-5.3` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-6.1` scope only:
@@ -2094,7 +2093,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-6.1` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and `SO-3.2`, and Packets `SO-5.1` through `SO-5.3` are already landed.
+/goal Implement Packet `SO-6.1` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, and Packets `SO-5.1` through `SO-5.3` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -2104,16 +2103,16 @@ You are landing only Packet `SO-6.1`:
 - do not invent empty commits if validation passes with no code or doc changes
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 
 Files to inspect before editing:
 - no file edits required by default; only touch packet-scoped defects revealed by validation
@@ -2146,12 +2145,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-6.1` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -2176,12 +2175,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:
@@ -2209,19 +2208,18 @@ Your job is done only when Packet `SO-6.1` is review-clean and every non-empty i
 ## Packet 14 Prompt — Task SO-6.2
 
 ````text
-/goal Land Packet `SO-6.2` from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
+/goal Land Packet `SO-6.2` from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate` using a packet-scoped implementation -> commit -> review -> fix -> commit loop until the packet is review-clean.
 
 You are the orchestration agent. Stay strictly scoped to Packet `SO-6.2` only, assuming the
-grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and
-`SO-3.2`, Packets `SO-5.1` through `SO-5.3`, and Packet `SO-6.1` are already landed.
+grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, Packets `SO-5.1` through `SO-5.3`, and Packet `SO-6.1` are already landed.
 
 Packet authority:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Packet `SO-6.2` scope only:
@@ -2230,8 +2228,8 @@ Packet `SO-6.2` scope only:
 - make the closeout story honest instead of leaving implicit TODOs or half-wired code comments
 
 Primary files for this packet:
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 
 Out of scope:
 - implementing any deferred follow-on seam
@@ -2262,7 +2260,7 @@ Manual review of the landed phase-1 docs and code diff
 Implementation subagent prompt to send:
 
 ```text
-/goal Implement Packet `SO-6.2` only from `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, Packets `SO-4.1` and `SO-4.2`, Packets `SO-3.1` and `SO-3.2`, Packets `SO-5.1` through `SO-5.3`, and Packet `SO-6.1` are already landed.
+/goal Implement Packet `SO-6.2` only from `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md` in `/Users/spensermcconnell/.codex/worktrees/97a0/substrate`, assuming the grounding follow-on family through `SO-G6`, the already-landed `SO-2.3B-refine`, Packets `SO-3.1` / `SO-3.2`, Packets `SO-4.1` / `SO-4.2`, Packets `SO-5.1` through `SO-5.3`, and Packet `SO-6.1` are already landed.
 
 Use the `$incremental-implementation` skill.
 
@@ -2272,19 +2270,19 @@ You are landing only Packet `SO-6.2`:
 - make the closeout story honest instead of leaving implicit TODOs or half-wired code comments
 
 Authoritative docs to read first:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 
 Files to inspect before editing:
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 
 GitNexus requirements:
 - before modifying any Rust function, method, enum, struct, helper, or other indexed symbol, run impact analysis on the symbol first
@@ -2314,12 +2312,12 @@ Review subagent prompt to send after the implementation commit (or after the ver
 Use the `$code-review-and-quality` skill.
 
 Review only Packet `SO-6.2` from:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Focus:
@@ -2344,12 +2342,12 @@ Fix subagent prompt template to use if review flags issues:
 Use the `$incremental-implementation` skill.
 
 Authoritative packet docs:
-- docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
-- docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
-- docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
-- docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+- docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
+- docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
 - AGENTS.md
 
 Review findings to fix:

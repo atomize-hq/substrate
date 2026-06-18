@@ -18,20 +18,20 @@ stop and report it instead of letting the later packet absorb the earlier bug.
 ## SO-0: Docs Lock
 
 - [x] Task SO-0.1: Add the phase-1 SPEC.
-  - Acceptance: `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md` exists
+  - Acceptance: `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md` exists
     and covers assumptions, objective, commands, project structure, code style, testing strategy,
     boundaries, success criteria, and open questions.
   - Verify: Manual review against the five structured-objective design docs and `AGENTS.md`.
   - Files:
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md`
 
 - [x] Task SO-0.2: Add the phase-1 PLAN and TASKS.
   - Acceptance: the plan and task ledger exist, preserve the authority precedence, and keep Phase 1
     bounded to additive sidecar + acceptance work.
   - Verify: Manual review against the architecture, evaluation, and migration authorities.
   - Files:
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
 
 ## SO-1: Schema Bridge And Additive Sidecar
 
@@ -141,15 +141,13 @@ boundary before `SO-4` and `SO-5`. Do not start `SO-4` / `SO-5` from this ledger
 ## SO-4: Objective Acceptance Harness
 
 Remaining work note: this harness has not landed yet. The planned `objective_acceptance` test file
-and fixture families are still absent from the current crate snapshot. Do not start `SO-4` until
-`SO-2.3B-refine` lands and `SO-3.1` / `SO-3.2` have completed; the harness should validate those
-corrected semantics rather than stand in for them. Do not skip directly to SO-5 fixture seeding or
+and fixture families are still absent from the current crate snapshot. Do not start `SO-4` until `SO-3.1` / `SO-3.2` have completed on top of the already-landed `SO-2.3B-refine`; the harness should validate those corrected semantics rather than stand in for them. Do not skip directly to SO-5 fixture seeding or
 later migration work.
 
 - [ ] Task SO-4.1: Add the objective-acceptance test harness and fixture loader.
   - Acceptance: `tests/objective_acceptance.rs` exists, can load committed objective-acceptance
     fixtures deterministically, and asserts the fixture directory contract for the three evaluation
-    families. This packet starts only after `SO-2.3B-refine` and `SO-3.1` / `SO-3.2` are landed.
+    families. This packet starts only after the already-landed `SO-2.3B-refine` plus `SO-3.1` / `SO-3.2`.
   - Verify: `cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/objective_acceptance.rs`
@@ -168,8 +166,7 @@ later migration work.
 
 ## SO-5: Seed The Locked Acceptance Wall
 
-Packet-ordering note: do not start SO-5 until `SO-2.3B-refine`, `SO-3.1`, `SO-3.2`, and then
-SO-4.1 / SO-4.2 have landed as the explicit pre-fixture acceptance boundary.
+Packet-ordering note: do not start SO-5 until the already-landed `SO-2.3B-refine`, then `SO-3.1`, `SO-3.2`, and then SO-4.1 / SO-4.2 have landed as the explicit pre-fixture acceptance boundary.
 
 - [ ] Task SO-5.1: Add WDAP linux and macOS locked-acceptance seeds.
   - Acceptance: the committed objective-acceptance corpus includes the required WDAP kickoff seeds,
@@ -229,8 +226,8 @@ still missing.
     debt rather than left implicit in comments or half-wired code.
   - Verify: Manual review of the landed phase-1 docs and code diff.
   - Files:
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md`
-    - `docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md`
+    - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
 
 ## Deferred / Ask-First (Not Phase 1)
 

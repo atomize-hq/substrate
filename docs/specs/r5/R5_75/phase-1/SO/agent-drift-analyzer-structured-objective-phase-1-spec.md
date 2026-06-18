@@ -141,22 +141,22 @@ rg -n "ObjectiveSummary|StructuredObjective|comparison_key|objective_key|normali
 ## Project Structure
 
 ```text
-docs/specs/r5/DESIGN-r5-structured-objective-architecture.md
+docs/specs/design-arch/DESIGN-r5-structured-objective-architecture.md
   Semantic authority for fields, evidence, precedence, and compatibility rules.
 
-docs/specs/r5/DESIGN-r5-structured-objective-evaluation-and-annotation.md
+docs/specs/design-arch/DESIGN-r5-structured-objective-evaluation-and-annotation.md
   Acceptance authority for corpus families, fixture shape, metrics, and promotion gates.
 
-docs/specs/r5/DESIGN-r5-structured-objective-migration-and-integration.md
+docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md
   Landing-order authority for additive sidecar first, then downstream migration.
 
-docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-spec.md
+docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-spec.md
   This phase-1 implementation authority.
 
-docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-plan.md
+docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md
   Technical landing order for the phase-1 sidecar and acceptance wall.
 
-docs/specs/r5/agent-drift-analyzer-structured-objective-phase-1-tasks.md
+docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md
   Ordered implementation ledger for phase-1 work.
 
 crates/agent-drift-analyzer/src/context/objective.rs

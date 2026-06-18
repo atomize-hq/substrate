@@ -67,7 +67,7 @@ phase-1 docs lock
   -> schema bridge (`StructuredObjective`, `comparison_key`, optional sidecar) [landed]
   -> deterministic decomposition and preliminary structured assembly [landed]
   -> grounding identifier restoration + adversarial heading proof [landed later via `SO-G1`/`SO-G2`]
-  -> bridge-honesty corrective packet (`SO-2.3B-refine`) [remaining]
+  -> bridge-honesty corrective packet (`SO-2.3B-refine`) [landed]
   -> compatibility rendering from structured state + deterministic `comparison_key` derivation [remaining]
   -> objective-acceptance harness + committed fixtures [remaining]
   -> full analyzer regression closeout [remaining]
@@ -179,11 +179,12 @@ implementation still mirrors display text instead of deriving a stable semantic 
 structured frame, and compatibility text is still selected directly from decomposition rather than
 rendered from structured state as the semantic authority. Treat the live key as a provisional
 stopgap only; downstream migration must not anchor on it until the dedicated derivation work lands.
-After the grounding follow-on closes, however, this is also not the next packet to start: the
-bridge-honesty corrective packet `SO-2.3B-refine` comes first so checkpoint narrowing preserves the
-structured objective that `assemble_context(...)` already built. Only after that corrective bridge
-lands should `SO-3` start, and `SO-4` remains after `SO-3` so the acceptance harness validates the
-corrected semantics rather than silently defining them after the fact.
+After the grounding follow-on plus `SO-2.3B-refine` closeout, this packet family is now the active
+next packet boundary: checkpoint narrowing already preserves the structured objective that
+`assemble_context(...)` built, so the remaining work is to project compatibility text from
+structured state and derive the approved semantic `comparison_key`. `SO-4` remains after `SO-3` so
+the acceptance harness validates the corrected semantics rather than silently defining them after
+the fact.
 
 ### Scope
 
@@ -215,23 +216,19 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ### Current Remaining Gap
 
-This packet family is still open. The live crate now has additive structured-objective state,
-section/clause decomposition, and grounding identifiers, but the checkpoint bridge still overwrites
-the richer `assemble_context(window)` objective during narrowing, weak goal clauses can still
-overclaim `target`, and verification extraction is not yet fully locked to grounded clause
-evidence. In addition, `SO-3` remains open: `comparison_key` still mirrors display text and
-compatibility rendering is not yet projected from structured state. The `objective_acceptance`
-harness is also still absent.
+This packet family is still open, but its remaining gaps are now narrower than the earlier
+pre-closeout wording suggested. `SO-2.3B-refine` already closed the checkpoint-bridge preservation,
+weak-target honesty, and verification-role alignment gaps, so those issues are no longer current
+Phase-1 remaining work. The live blockers ahead of `SO-4` are now the still-open `SO-3`
+compatibility semantics (`comparison_key` still mirrors display text and compatibility rendering is
+not yet projected from structured state) plus the still-absent `objective_acceptance` harness.
 
 The reconciled next-packet order is therefore:
 
-1. `SO-2.3B-refine` — preserve structured state through checkpoint narrowing, stop target
-   fabrication, align verification grounding with extraction, and land the proving regressions in
-   the same behavior packets.
-2. `SO-3.1` / `SO-3.2` — render compatibility text from structured state when safe and derive
+1. `SO-3.1` / `SO-3.2` — render compatibility text from structured state when safe and derive
    deterministic `comparison_key` from structured semantic state.
-3. `SO-4.1` / `SO-4.2` — add the objective-acceptance harness and expected-shape contract.
-4. `SO-5.*` — seed the locked acceptance families only after the harness exists.
+2. `SO-4.1` / `SO-4.2` — add the objective-acceptance harness and expected-shape contract.
+3. `SO-5.*` — seed the locked acceptance families only after the harness exists.
 
 ### Scope
 
@@ -259,11 +256,7 @@ cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 
 ### Why After `SO-2.3B-refine` And `SO-3`
 
-The corrective bridge packet must land before `SO-3` so compatibility rendering and
-`comparison_key` do not rest on a checkpoint path that still erases or overclaims structured state.
-`SO-3` must land before `SO-4` so the acceptance harness validates the intended Phase-1 semantics
-(including compatibility rendering and semantic comparison) rather than silently defining them
-after the fact.
+`SO-2.3B-refine` is already landed, so `SO-3` is now the active next boundary. `SO-4` must still wait for `SO-3` so the acceptance harness validates the intended Phase-1 semantics (including compatibility rendering and semantic comparison) rather than silently defining them after the fact.
 
 ## SO-5: Seed The Locked Acceptance Wall
 
