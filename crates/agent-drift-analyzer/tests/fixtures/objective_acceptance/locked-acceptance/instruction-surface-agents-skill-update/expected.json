@@ -1,0 +1,58 @@
+{
+  "case_id": "instruction-surface-agents-skill-update",
+  "objective_class": "task_statement",
+  "primary_intent": "implement",
+  "target": {
+    "kind": "skill_or_instruction_surface",
+    "display_contains": [
+      "AGENTS.md",
+      "<skill>",
+      "instruction block"
+    ],
+    "paths": [
+      "AGENTS.md"
+    ],
+    "named_artifacts": [
+      "AGENTS.md",
+      "<skill>",
+      "instruction block"
+    ]
+  },
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "thread_goal",
+      "section_kind": "mission",
+      "excerpt_contains": "/goal Update the AGENTS.md instruction block and <skill> section so they clearly require fixture-first verification.",
+      "exact_ref": {
+        "source_file_suffix": "instruction-surface-agents-skill-update.jsonl",
+        "event_index": 0,
+        "row_ordinal": 0
+      }
+    }
+  ],
+  "field_evidence": {
+    "target": [
+      {
+        "role": "goal",
+        "source_kind": "thread_goal",
+        "section_kind": "mission",
+        "excerpt_contains": "/goal Update the AGENTS.md instruction block and <skill> section so they clearly require fixture-first verification.",
+        "exact_ref": {
+          "source_file_suffix": "instruction-surface-agents-skill-update.jsonl",
+          "event_index": 0,
+          "row_ordinal": 0
+        }
+      }
+    ]
+  },
+  "compatibility_rendering": {
+    "acceptable_any_of": [
+      "/goal Update the AGENTS.md instruction block and <skill> section so they clearly require fixture-first verification."
+    ],
+    "comparison_key": "implement|skill_or_instruction_surface|agents_md|instruction_block|skill"
+  },
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}

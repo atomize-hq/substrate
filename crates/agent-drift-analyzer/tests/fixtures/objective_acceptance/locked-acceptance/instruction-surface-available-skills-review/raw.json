@@ -1,0 +1,9 @@
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Review the Available skills section and plugin instructions only.\n\nAvailable skills\n- incremental-implementation\n- code-review-and-quality\n\nPlugin instructions\nUse Browser when localhost is involved."
+    }
+  ]
+}

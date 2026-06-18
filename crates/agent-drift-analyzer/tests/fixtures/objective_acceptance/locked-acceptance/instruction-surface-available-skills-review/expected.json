@@ -1,0 +1,53 @@
+{
+  "case_id": "instruction-surface-available-skills-review",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "target": {
+    "kind": "skill_or_instruction_surface",
+    "display_contains": [
+      "Available skills",
+      "plugin instructions"
+    ],
+    "named_artifacts": [
+      "Available skills",
+      "plugin instructions"
+    ]
+  },
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "user_prompt",
+      "section_kind": "mission",
+      "excerpt_contains": "Review the Available skills section and plugin instructions only.",
+      "exact_ref": {
+        "source_file_suffix": "instruction-surface-available-skills-review.jsonl",
+        "event_index": 0,
+        "row_ordinal": 0
+      }
+    }
+  ],
+  "field_evidence": {
+    "target": [
+      {
+        "role": "goal",
+        "source_kind": "user_prompt",
+        "section_kind": "mission",
+        "excerpt_contains": "Review the Available skills section and plugin instructions only.",
+        "exact_ref": {
+          "source_file_suffix": "instruction-surface-available-skills-review.jsonl",
+          "event_index": 0,
+          "row_ordinal": 0
+        }
+      }
+    ]
+  },
+  "compatibility_rendering": {
+    "acceptable_any_of": [
+      "Review the Available skills section and plugin instructions only."
+    ],
+    "comparison_key": "review|skill_or_instruction_surface|available_skills|plugin_instructions"
+  },
+  "forbidden_unknown_fields": [
+    "target"
+  ]
+}

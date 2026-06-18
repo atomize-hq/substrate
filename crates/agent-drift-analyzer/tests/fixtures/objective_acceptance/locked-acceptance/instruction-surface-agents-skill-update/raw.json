@@ -1,0 +1,9 @@
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update the AGENTS.md instruction block and <skill> section so they clearly require fixture-first verification.\n\nFilesystem sandboxing defines which files can be read or written. Approval policy is currently never.\n\n<skill>\n<name>incremental-implementation</name>\n</skill>"
+    }
+  ]
+}

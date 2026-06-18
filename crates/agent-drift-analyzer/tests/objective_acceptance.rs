@@ -48,10 +48,12 @@ fn objective_acceptance_family_dirs_keep_so_5_1_locked_cases_and_other_families_
                 actual_entries,
                 vec![
                     OBJECTIVE_ACCEPTANCE_FAMILY_README.to_owned(),
+                    "instruction-surface-agents-skill-update".to_owned(),
+                    "instruction-surface-available-skills-review".to_owned(),
                     "wdap0-integ-linux-kickoff".to_owned(),
                     "wdap0-integ-macos-kickoff".to_owned(),
                 ],
-                "Packet SO-5.1 must seed the locked acceptance family with the WDAP linux and macOS kickoff cases only"
+                "Packets SO-5.1 and SO-5.2 must seed the locked acceptance family with the WDAP kickoff cases plus preserved instruction-surface controls only"
             );
             assert_eq!(
                 corpus
@@ -60,10 +62,12 @@ fn objective_acceptance_family_dirs_keep_so_5_1_locked_cases_and_other_families_
                     .map(|case| case.case_id)
                     .collect::<Vec<_>>(),
                 vec![
+                    "instruction-surface-agents-skill-update".to_owned(),
+                    "instruction-surface-available-skills-review".to_owned(),
                     "wdap0-integ-linux-kickoff".to_owned(),
                     "wdap0-integ-macos-kickoff".to_owned(),
                 ],
-                "Packet SO-5.1 must keep the committed locked acceptance case list deterministic"
+                "Packets SO-5.1 and SO-5.2 must keep the committed locked acceptance case list deterministic"
             );
         } else {
             assert_eq!(
@@ -99,15 +103,20 @@ fn objective_acceptance_readme_documents_the_family_contract() {
         );
     }
     for required_fragment in [
+        "instruction-surface-agents-skill-update",
+        "instruction-surface-available-skills-review",
         "wdap0-integ-linux-kickoff",
         "wdap0-integ-macos-kickoff",
+        "AGENTS.md",
+        "<skill>",
+        "Available skills",
         "design-set/",
         "stretch-external/",
         "remain placeholder-only",
     ] {
         assert!(
             readme.contains(required_fragment),
-            "objective acceptance README must document SO-5.1 locked acceptance seeding detail `{required_fragment}`"
+            "objective acceptance README must document SO-5.2 locked acceptance seeding detail `{required_fragment}`"
         );
     }
 }

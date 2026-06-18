@@ -13,11 +13,13 @@ The committed root must stay bounded to:
 - `locked-acceptance/`
 - `stretch-external/`
 
-`locked-acceptance/` is now seeded by `SO-5.1` with the WDAP kickoff cases
-`wdap0-integ-linux-kickoff/` and `wdap0-integ-macos-kickoff/`. `design-set/` and
-`stretch-external/` remain placeholder-only until their later `SO-5.*` follow-on packets land.
-The harness must enumerate every committed `<case-id>/raw.json` and `<case-id>/expected.json`
-entry deterministically.
+`locked-acceptance/` is now seeded by `SO-5.1` and `SO-5.2` with the WDAP kickoff cases
+`wdap0-integ-linux-kickoff/` and `wdap0-integ-macos-kickoff/`, plus the preserved instruction-
+surface controls `instruction-surface-agents-skill-update/` and
+`instruction-surface-available-skills-review/`. Those controls prove deliberate `AGENTS.md`,
+`<skill>`, `Available skills`, and related instruction-surface targets survive shortening instead
+of being filtered away as generic boilerplate. `design-set/` and `stretch-external/` remain placeholder-only until their later `SO-5.*` follow-on packets land. The harness must enumerate
+every committed `<case-id>/raw.json` and `<case-id>/expected.json` entry deterministically.
 
 ## Case contract
 
