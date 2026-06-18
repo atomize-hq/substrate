@@ -6,6 +6,12 @@ SCRIPT_NAME="dev-install-substrate"
 log()   { printf '[%s] %s\n' "${SCRIPT_NAME}" "$1"; }
 warn()  { printf '[%s][WARN] %s\n' "${SCRIPT_NAME}" "$1" >&2; }
 fatal() { printf '[%s][ERROR] %s\n' "${SCRIPT_NAME}" "$1" >&2; exit 1; }
+fatal_with_code() {
+  local code="$1"
+  shift
+  printf '[%s][ERROR] %s\n' "${SCRIPT_NAME}" "$1" >&2
+  exit "${code}"
+}
 
 readonly DISTRO_UNKNOWN_SENTINEL="<unknown>"
 readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
@@ -19,7 +25,7 @@ freshly built binaries. This is intended for local iteration after removing any
 production installation.
 
 Usage:
-  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--anchor-mode <mode>] [--anchor-path <path>] [--caged|--uncaged] [--no-shims]
+  dev-install-substrate.sh [--prefix <path>] [--profile <debug|release>] [--version-label <name>] [--no-world] [--anchor-mode <mode>] [--anchor-path <path>] [--caged|--uncaged] [--no-shims] [--provision-agent-runtime <runtime_family>]
   dev-install-substrate.sh --help
 
 Options:
@@ -28,6 +34,9 @@ Options:
   --version-label <name>    Version directory label under <prefix>/versions (default: dev)
   --no-world                Mark install metadata as world_disabled (skips provisioning entirely)
   --world-netfilter         Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-service.service)
+  --provision-agent-runtime <runtime_family>
+                            Enable a world runtime globally (codex only in this slice), then run
+                            'substrate world deps current sync' before the dev install completes
   --anchor-mode <mode>      Default anchor mode (workspace|follow-cwd|custom; default: workspace)
   --anchor-path <path>      Default anchor path (for custom mode)
   --caged                   Write caged=true to install metadata (default)
@@ -35,6 +44,52 @@ Options:
   --no-shims                Skip shim deployment (only run cargo build)
   --help                    Show this message
 USAGE
+}
+
+supported_agent_runtime_list() {
+  printf 'codex'
+}
+
+world_deps_item_for_agent_runtime() {
+  local runtime_family="$1"
+
+  case "${runtime_family}" in
+    codex)
+      printf 'codex-runtime\n'
+      ;;
+    *)
+      fatal_with_code 2 "Unsupported value for --provision-agent-runtime: '${runtime_family}'. This slice supports: $(supported_agent_runtime_list)."
+      ;;
+  esac
+}
+
+validate_agent_runtime_provision_request() {
+  if [[ -z "${PROVISION_AGENT_RUNTIME}" ]]; then
+    return
+  fi
+
+  world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}" >/dev/null
+
+  if [[ "${WORLD_ENABLED}" -ne 1 ]]; then
+    fatal_with_code 2 "--provision-agent-runtime requires world provisioning. Remove --no-world or omit the runtime flag."
+  fi
+}
+
+provision_agent_runtime_with_sync() {
+  local substrate_bin="$1"
+  if [[ -z "${PROVISION_AGENT_RUNTIME}" ]]; then
+    return
+  fi
+
+  local deps_item
+  local runtime_path
+  deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
+  runtime_path="${BIN_DIR}:${PATH}"
+
+  log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The dev installer will run 'substrate world deps current sync' immediately after this step."
+  PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global add "${deps_item}"
+  log "Syncing world dependencies via 'substrate world deps current sync' for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}..."
+  PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps current sync
 }
 
 run_privileged() {
@@ -1424,6 +1479,7 @@ ANCHOR_PATH=""
 WORLD_CAGED=1
 VERSION_LABEL="dev"
 ENABLE_WORLD_NETFILTER=0
+PROVISION_AGENT_RUNTIME=""
 IS_LINUX=0
 IS_MAC=0
 IS_WSL=0
@@ -1473,6 +1529,11 @@ while [[ $# -gt 0 ]]; do
       ENABLE_WORLD_NETFILTER=1
       shift
       ;;
+    --provision-agent-runtime)
+      [[ $# -ge 2 ]] || fatal "--provision-agent-runtime requires a value"
+      PROVISION_AGENT_RUNTIME="$2"
+      shift 2
+      ;;
     --world-root-mode)
       fatal "--world-root-mode was removed; use --anchor-mode"
       ;;
@@ -1510,6 +1571,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+validate_agent_runtime_provision_request
 
 if [[ "${IS_WSL}" -eq 1 && "${WORLD_ENABLED}" -eq 1 ]]; then
   printf '[%s][ERROR] %s\n' "${SCRIPT_NAME}" "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract. Re-run with --no-world for a CLI-only dev install inside WSL." >&2
@@ -1744,6 +1807,10 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
     warn "macOS dev-install did not produce a reusable Linux guest-binary bundle under ${BIN_DIR}/linux."
     warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run dev-install after fixing Lima provisioning."
   fi
+fi
+
+if [[ "${WORLD_ENABLED}" -eq 1 ]]; then
+  provision_agent_runtime_with_sync "${SUBSTRATE_BIN}"
 fi
 
 cat >"${ENV_FILE}" <<EOF_ENV

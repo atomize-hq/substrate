@@ -108,6 +108,18 @@ detect_prefix() {
   printf '%s\n' "${prefix%/}"
 }
 
+args_request_help() {
+  local arg=""
+  for arg in "$@"; do
+    case "${arg}" in
+      -h|--help)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
 PREFIX="$(detect_prefix "$@")"
 BIN_DIR="${PREFIX}/bin"
 
@@ -127,6 +139,11 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+if args_request_help "$@"; then
+  "${UPSTREAM_INSTALL}" "$@"
+  exit $?
+fi
 
 printf "\033[32mSubstrate installer running…\033[0m\n"
 if [[ -t 1 && -n "${BLA_braille_fill_bar[*]}" ]]; then

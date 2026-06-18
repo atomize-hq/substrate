@@ -21,6 +21,7 @@ NO_SHIMS=0
 DRY_RUN=0
 SYNC_DEPS=0
 ENABLE_WORLD_NETFILTER=0
+PROVISION_AGENT_RUNTIME=""
 ARTIFACT_DIR="${SUBSTRATE_INSTALL_ARTIFACT_DIR:-${SUBSTRATE_INSTALL_ARCHIVE:-}}"
 BASE_URL="${SUBSTRATE_INSTALL_BASE_URL:-$DEFAULT_BASE_URL}"
 TMPDIR=""
@@ -86,6 +87,9 @@ Options:
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --sync-deps          Run 'substrate world deps current sync' after provisioning completes
+  --provision-agent-runtime <runtime_family>
+                       Enable a world runtime globally (codex only in this slice), then run
+                       'substrate world deps current sync' so the guest install step is impossible to miss
   --world-netfilter    Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-service.service)
   --dry-run            Print actions without executing
   --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
@@ -1356,6 +1360,11 @@ parse_args() {
         SYNC_DEPS=1
         shift
         ;;
+      --provision-agent-runtime)
+        [[ $# -lt 2 ]] && fatal "Missing value for --provision-agent-runtime"
+        PROVISION_AGENT_RUNTIME="$2"
+        shift 2
+        ;;
       --world-netfilter)
         ENABLE_WORLD_NETFILTER=1
         shift
@@ -1374,6 +1383,37 @@ parse_args() {
         ;;
     esac
   done
+}
+
+supported_agent_runtime_list() {
+  printf 'codex'
+}
+
+world_deps_item_for_agent_runtime() {
+  local runtime_family="$1"
+
+  case "${runtime_family}" in
+    codex)
+      printf 'codex-runtime\n'
+      ;;
+    *)
+      fatal_with_code 2 "Unsupported value for --provision-agent-runtime: '${runtime_family}'. This slice supports: $(supported_agent_runtime_list)."
+      ;;
+  esac
+}
+
+validate_agent_runtime_provision_request() {
+  if [[ -z "${PROVISION_AGENT_RUNTIME}" ]]; then
+    return
+  fi
+
+  world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}" >/dev/null
+
+  if [[ "${NO_WORLD}" -eq 1 ]]; then
+    fatal_with_code 2 "--provision-agent-runtime requires world provisioning. Remove --no-world or omit the runtime flag."
+  fi
+
+  SYNC_DEPS=1
 }
 
 fetch_latest_release_tag() {
@@ -2235,7 +2275,7 @@ print_world_deps_summary() {
 
 sync_world_deps() {
   local substrate_bin="$1"
-  if [[ "${SYNC_DEPS}" -ne 1 ]]; then
+  if [[ "${SYNC_DEPS}" -ne 1 && -z "${PROVISION_AGENT_RUNTIME}" ]]; then
     return
   fi
   if [[ "${NO_WORLD}" -eq 1 ]]; then
@@ -2248,7 +2288,11 @@ sync_world_deps() {
     return
   fi
 
-  log "Syncing world dependencies via 'substrate world deps current sync'..."
+  if [[ -n "${PROVISION_AGENT_RUNTIME}" ]]; then
+    log "Syncing world dependencies via 'substrate world deps current sync' for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}..."
+  else
+    log "Syncing world dependencies via 'substrate world deps current sync'..."
+  fi
   local rc=0
   if "${substrate_bin}" world deps current sync; then
     rc=0
@@ -2262,6 +2306,24 @@ sync_world_deps() {
     warn "world deps sync failed; run 'substrate world deps current sync' later to finish provisioning."
   fi
   print_world_deps_summary "${substrate_bin}"
+}
+
+provision_agent_runtime_world_deps() {
+  local substrate_bin="$1"
+  if [[ -z "${PROVISION_AGENT_RUNTIME}" ]]; then
+    return
+  fi
+
+  local deps_item
+  deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] %s world deps global add %s\n' "${INSTALLER_NAME}" "${substrate_bin}" "${deps_item}" >&2
+    return
+  fi
+
+  log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The installer will run 'substrate world deps current sync' immediately after this step."
+  "${substrate_bin}" world deps global add "${deps_item}"
 }
 
 PATH_SNIPPET_START="# >>> substrate >>>"
@@ -2415,6 +2477,7 @@ install_macos() {
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" run_world_checks "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" provision_agent_runtime_world_deps "${substrate_bin}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
@@ -2499,6 +2562,7 @@ install_linux() {
   doctor_original_path="${bin_dir}:${ORIGINAL_PATH}"
   log "Doctor PATH: ${doctor_original_path}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
+  PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" provision_agent_runtime_world_deps "${substrate_bin}"
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
@@ -2536,6 +2600,7 @@ install_linux() {
 main() {
   sanitize_env_path
   parse_args "$@"
+  validate_agent_runtime_provision_request
   normalize_prefix
   initialize_metadata_paths
   detect_platform

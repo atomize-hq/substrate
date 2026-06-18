@@ -36,6 +36,13 @@ pins those helper downloads to the **latest GitHub release tag** (not `main`)
 to avoid drift while still defaulting to the latest release. Use
 `SUBSTRATE_INSTALL_REF` only for development overrides.
 
+To provision the world-scoped Codex runtime during install, pass
+`--provision-agent-runtime codex`. In this slice that is the only supported
+runtime family, and the installer will enable the built-in `codex-runtime`
+world-deps item globally and then immediately run
+`substrate world deps current sync` so the guest install step is impossible to
+miss.
+
 For Linux hosted installs, `scripts/substrate/install.sh` and
 `scripts/substrate/install-substrate.sh` share one operator-facing contract:
 
@@ -106,6 +113,9 @@ writes
 the exact `substrate world enable` command to run when you are ready to
 provision the backend. You can still force a single world-isolated run later
 with `substrate --world ...` without changing the stored metadata.
+When you later enable the world through `scripts/substrate/world-enable.sh`,
+that helper also accepts `--provision-agent-runtime codex` and will run
+`substrate world deps current sync` before it exits.
 
 ### Installer Metadata & Cleanup
 
@@ -258,6 +268,7 @@ snippet (plus a `.bak` backup) to `~/.substrate_bashenv`.
 | `--no-world` | Skip provisioning the world backend (use `substrate world enable` later) |
 | `--no-shims` | Skip shim deployment (useful for CI images) |
 | `--sync-deps` | Run `substrate world deps current sync` after provisioning completes (best-effort; applies the enabled deps list into the world and may remediate APT-backed misses to `substrate world enable --provision-deps`) |
+| `--provision-agent-runtime <runtime_family>` | Enable a world runtime globally, then immediately run `substrate world deps current sync`; Slice 59 Packet 3 supports `codex` only and fails closed for any other value |
 | `--dry-run` | Print all actions without executing them |
 | `--archive <path>` | Install from a local tarball instead of downloading |
 
@@ -298,6 +309,7 @@ using your workspace build artifacts:
 make dev-bootstrap                                 # host-aware prerequisite bootstrap
 make dev-bootstrap ENABLE_WIN_PREFLIGHT=1          # Linux-only: add clang/wine/cargo-xwin for make preflight-win
 scripts/substrate/dev-install-substrate.sh --profile debug   # or --profile release
+scripts/substrate/dev-install-substrate.sh --profile debug --provision-agent-runtime codex
 source ~/.substrate/dev-shim-env.sh                          # refresh PATH/SHIM_ORIGINAL_PATH
 
 # Later, to remove the dev wiring:
@@ -311,6 +323,9 @@ symlink them into `~/.substrate/bin`, and deploy shim wrappers that point back t
 the bin and shim directories to `PATH` while preserving `SHIM_ORIGINAL_PATH`, so
 interactive sessions and the world backend see the same clean view of your
 tooling.
+When you pass `--provision-agent-runtime codex`, the dev installer enables the
+global `codex-runtime` world-deps item and then immediately runs
+`substrate world deps current sync` before it finishes.
 
 On Linux, the dev installer also mirrors the production socket-activation
 requirements: it creates the `substrate` group if needed, adds the invoking

@@ -20,6 +20,7 @@ DRY_RUN=0
 VERBOSE=0
 FORCE=0
 SYNC_DEPS=1
+NO_SYNC_DEPS_REQUESTED=0
 
 usage() {
   cat <<'USAGE'
@@ -33,6 +34,9 @@ Options:
   --dry-run          Show the provisioning commands without executing
   --verbose          Print verbose execution details
   --force            Rerun provisioning even if metadata reports enabled
+  --provision-agent-runtime <runtime_family>
+                     Enable a world runtime globally (codex only in this slice), then run
+                     'substrate world deps current sync' before the helper exits
   --no-sync-deps     Skip 'substrate world deps current sync' after provisioning
   -h, --help         Show this help message
 USAGE
@@ -63,8 +67,14 @@ while [[ $# -gt 0 ]]; do
       FORCE=1
       shift
       ;;
+    --provision-agent-runtime)
+      [[ $# -lt 2 ]] && fatal "Missing value for --provision-agent-runtime"
+      PROVISION_AGENT_RUNTIME="$2"
+      shift 2
+      ;;
     --no-sync-deps)
       SYNC_DEPS=0
+      NO_SYNC_DEPS_REQUESTED=1
       shift
       ;;
     -h|--help)
@@ -76,6 +86,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+validate_agent_runtime_provision_request
+
+if [[ -n "${PROVISION_AGENT_RUNTIME}" && "${NO_SYNC_DEPS_REQUESTED}" -eq 1 ]]; then
+  fatal_with_code 2 "--provision-agent-runtime requires 'substrate world deps current sync'. Remove --no-sync-deps or omit the runtime flag."
+fi
 
 if [[ ${VERBOSE} -eq 1 ]]; then
   set -x
@@ -123,6 +139,7 @@ fi
 
 doctor_path="${PREFIX}/bin:${ORIGINAL_PATH}"
 PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" run_world_checks "${substrate_bin}"
+PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" provision_agent_runtime_world_deps "${substrate_bin}"
 
 if [[ ${SYNC_DEPS} -eq 1 ]]; then
   PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" sync_world_deps "${substrate_bin}"
