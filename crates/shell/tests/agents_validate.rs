@@ -121,8 +121,17 @@ fn valid_cli_agent_file_v2_with_enabled_placements(
     host_enabled: bool,
     world_enabled: bool,
 ) -> String {
+    valid_cli_agent_file_v2_with_top_level_state(agent_id, true, host_enabled, world_enabled)
+}
+
+fn valid_cli_agent_file_v2_with_top_level_state(
+    agent_id: &str,
+    top_level_enabled: bool,
+    host_enabled: bool,
+    world_enabled: bool,
+) -> String {
     format!(
-        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  placements:\n    host:\n      enabled: {host_enabled}\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n    world:\n      enabled: {world_enabled}\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n"
+        "version: 2\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {top_level_enabled}\n  protocol: substrate.agent.session\n  placements:\n    host:\n      enabled: {host_enabled}\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n    world:\n      enabled: {world_enabled}\n      cli:\n        binary: codex\n        mode: persistent\n        runtime_family: codex\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n"
     )
 }
 
@@ -315,10 +324,7 @@ fn agents_validate_accepts_version_2_placement_inventory() {
 fn agents_validate_rejects_version_2_inventory_without_enabled_placements() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
-    fixture.write_agent_file(
-        "codex.yaml",
-        &valid_cli_agent_file_v2_with_enabled_placements("codex", false, false),
-    );
+    fixture.write_agent_file("codex.yaml", &valid_cli_agent_file_v2_with_enabled_placements("codex", false, false));
 
     let output = fixture.validate();
     assert_eq!(
@@ -331,6 +337,22 @@ fn agents_validate_rejects_version_2_inventory_without_enabled_placements() {
         stderr.contains("codex.yaml")
             && stderr.contains("must enable at least one placement"),
         "stderr should explain why all-disabled placement inventories are rejected\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn agents_validate_accepts_top_level_disabled_version_2_inventory_without_enabled_placements() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file(
+        "codex.yaml",
+        &valid_cli_agent_file_v2_with_top_level_state("codex", false, false, false),
+    );
+
+    let output = fixture.validate();
+    assert!(
+        output.status.success(),
+        "top-level disabled version 2 inventory should preserve disabled semantics: {output:?}"
     );
 }
 

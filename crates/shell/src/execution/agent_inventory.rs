@@ -518,9 +518,18 @@ pub(crate) fn load_effective_agent_inventory(
             )));
         }
         for path in collect_agent_files_in_root(&root)? {
-            let Some(file) =
-                materialize_effective_inventory_file(&path, validate_agent_file(&path, base_policy)?)?
-            else {
+            let file = validate_agent_file(&path, base_policy)?;
+            if file.version == 2
+                && inventory_path_origin(cwd, &path)
+                    == AgentInventoryBaselineOrigin::WorkspaceInventory
+            {
+                // Packet 1 keeps version-2 entries out of the legacy effective inventory,
+                // but a workspace-local version-2 file must still suppress any older global
+                // version-1 entry for the same logical id instead of leaving stale truth live.
+                effective.remove(&file.id);
+            }
+
+            let Some(file) = materialize_effective_inventory_file(&path, file)? else {
                 continue;
             };
             effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
@@ -732,7 +741,7 @@ fn validate_agent_schema_v2(path: &Path, parsed: &AgentFileV2, base_policy: &Pol
         )));
     }
     let enabled_placements = count_enabled_v2_placements(parsed);
-    if enabled_placements == 0 {
+    if parsed.config.enabled && enabled_placements == 0 {
         return Err(config_model::user_error(format!(
             "invalid agent file in {}: config.placements must enable at least one placement",
             path.display(),
@@ -1393,7 +1402,7 @@ config:
     }
 
     #[test]
-    fn validate_agent_schema_v2_rejects_inventory_without_enabled_placements() {
+    fn validate_agent_schema_v2_rejects_enabled_inventory_without_enabled_placements() {
         let temp = tempdir().expect("tempdir");
         let path = temp.path().join("codex.yaml");
         let base_policy = Policy::default();
@@ -1425,6 +1434,36 @@ config:
                 .contains("config.placements must enable at least one placement"),
             "unexpected validation error: {err:?}"
         );
+    }
+
+    #[test]
+    fn validate_agent_schema_v2_accepts_top_level_disabled_inventory_without_enabled_placements() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("codex.yaml");
+        let base_policy = Policy::default();
+
+        let raw = r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: false
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: false
+      cli:
+        binary: codex
+        runtime_family: codex
+    world:
+      enabled: false
+      cli:
+        binary: codex
+        runtime_family: codex
+"#;
+        let parsed: AgentFileV2 = serde_yaml::from_str(raw).expect("v2 inventory");
+        validate_agent_schema_v2(&path, &parsed, &base_policy)
+            .expect("top-level disabled inventory should preserve disabled semantics");
     }
 
     #[test]
@@ -1631,6 +1670,83 @@ config:
         assert!(
             !inventory.contains_key("codex"),
             "version 2 inventory must remain absent from legacy effective inventory"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_effective_agent_inventory_workspace_v2_shadow_suppresses_global_v1_entry() {
+        let temp = tempdir().expect("tempdir");
+        let substrate_home = temp.path().join("substrate-home");
+        let global_agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&global_agents_dir).expect("create global agents directory");
+        fs::write(
+            global_agents_dir.join("codex.yaml"),
+            r#"
+version: 1
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: host
+  cli:
+    binary: codex
+    runtime_family: codex
+  capabilities:
+    llm: true
+"#,
+        )
+        .expect("write global v1 inventory");
+
+        let workspace_root = temp.path().join("workspace");
+        let workspace_agents_dir = workspace_root.join(SUBSTRATE_DIR_NAME).join("agents");
+        fs::create_dir_all(&workspace_agents_dir).expect("create workspace agents directory");
+        fs::write(workspace_marker_path(&workspace_root), "version: 1\n")
+            .expect("write workspace marker");
+        fs::write(
+            workspace_agents_dir.join("codex.yaml"),
+            r#"
+version: 2
+id: codex
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  placements:
+    host:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+    world:
+      enabled: true
+      cli:
+        binary: codex
+        runtime_family: codex
+      capabilities:
+        llm: true
+"#,
+        )
+        .expect("write workspace v2 inventory");
+
+        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        let inventory_result =
+            load_effective_agent_inventory(&workspace_root, &Policy::default());
+        match previous_substrate_home {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+        let inventory = inventory_result
+            .expect("effective inventory should fail closed when workspace v2 shadows global v1");
+
+        assert!(
+            !inventory.contains_key("codex"),
+            "workspace version 2 inventory must suppress stale global version 1 truth"
         );
     }
 }
