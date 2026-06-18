@@ -1259,10 +1259,11 @@ mod tests {
     use super::{
         compatibility_inventory_file_from_v2, inventory_entry_origin,
         load_effective_agent_inventory, materialize_effective_inventory_file,
-        project_inventory_entry, project_inventory_v2_entry, validate_agent_schema_v2,
-        AgentCapabilitiesV1, AgentCliConfigV1, AgentCliRuntimeFamily, AgentConfigKind,
-        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentFileV2,
-        AgentInventoryBaselineOrigin, AgentInventoryEntryV1, AgentPlacement,
+        normalize_inventory_origin_path, project_inventory_entry, project_inventory_v2_entry,
+        validate_agent_schema_v2, AgentCapabilitiesV1, AgentCliConfigV1,
+        AgentCliRuntimeFamily, AgentConfigKind, AgentConfigV1, AgentExecutionConfigV1,
+        AgentFileV1, AgentFileV2, AgentInventoryBaselineOrigin, AgentInventoryEntryV1,
+        AgentPlacement,
     };
     use crate::execution::config_model::{AgentCliMode, SubstrateConfig};
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
@@ -1810,8 +1811,8 @@ config:
             .get("codex_world")
             .expect("workspace version 2 inventory should materialize through the legacy world compatibility id");
         assert_eq!(
-            codex.path,
-            workspace_agents_dir.join("codex.yaml"),
+            normalize_inventory_origin_path(&codex.path),
+            normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
             "workspace version 2 inventory must win the shadowing boundary"
         );
         assert_eq!(
@@ -1909,8 +1910,8 @@ config:
             .get("codex")
             .expect("workspace version 2 inventory should materialize through the legacy host compatibility id");
         assert_eq!(
-            codex.path,
-            workspace_agents_dir.join("codex.yaml"),
+            normalize_inventory_origin_path(&codex.path),
+            normalize_inventory_origin_path(&workspace_agents_dir.join("codex.yaml")),
             "workspace version 2 inventory must win the shadowing boundary"
         );
         assert_eq!(
