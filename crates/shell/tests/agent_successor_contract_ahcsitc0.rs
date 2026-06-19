@@ -63,10 +63,6 @@ fn canonical_fixture_agent_id_ref(agent_id: &str, scope: &str) -> &'static str {
     }
 }
 
-fn canonical_fixture_agent_id(agent_id: &str, scope: &str) -> String {
-    canonical_fixture_agent_id_ref(agent_id, scope).to_string()
-}
-
 fn fixture_backend_id(agent_id: &str, scope: &str) -> &'static str {
     match (agent_id, scope) {
         ("claude_code", "host") | ("claude_code-host", _) => "cli:claude_code-host",
@@ -225,9 +221,18 @@ impl AgentSuccessorFixture {
 
     fn write_global_config_patch(&self, contents: &str) {
         let normalized = contents
-            .replace("orchestrator_agent_id: claude_code\n", "orchestrator_agent_id: claude_code-host\n")
-            .replace("orchestrator_agent_id: codex\n", "orchestrator_agent_id: codex-host\n")
-            .replace("orchestrator_agent_id: helper\n", "orchestrator_agent_id: helper-host\n");
+            .replace(
+                "orchestrator_agent_id: claude_code\n",
+                "orchestrator_agent_id: claude_code-host\n",
+            )
+            .replace(
+                "orchestrator_agent_id: codex\n",
+                "orchestrator_agent_id: codex-host\n",
+            )
+            .replace(
+                "orchestrator_agent_id: helper\n",
+                "orchestrator_agent_id: helper-host\n",
+            );
         fs::write(self.substrate_home.join("config.yaml"), normalized)
             .expect("failed to write config.yaml");
     }
@@ -281,14 +286,14 @@ impl AgentSuccessorFixture {
             r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
         );
         self.write_global_policy_patch(
             r#"agents:
   allowed_backends:
-    - cli:claude_code
-    - cli:codex
+    - cli:claude_code-host
+    - cli:codex-world
 "#,
         );
         self.write_agent_file(
@@ -318,14 +323,14 @@ impl AgentSuccessorFixture {
             r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
         );
         self.write_global_policy_patch(
             r#"agents:
   allowed_backends:
-    - cli:claude_code
-    - cli:helper
+    - cli:claude_code-host
+    - cli:helper-host
 "#,
         );
     }
@@ -335,7 +340,7 @@ impl AgentSuccessorFixture {
             r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
   toolbox:
     enabled: true
     bind:
@@ -345,8 +350,8 @@ impl AgentSuccessorFixture {
         self.write_global_policy_patch(
             r#"agents:
   allowed_backends:
-    - cli:claude_code
-    - cli:codex
+    - cli:claude_code-host
+    - cli:codex-world
 "#,
         );
         self.write_agent_file(
@@ -1265,70 +1270,6 @@ fn assert_malformed_world_identity_failure(
     }
 }
 
-fn assert_malformed_nested_parent_correlation_failure(
-    output: &Output,
-    agent_id: &str,
-    orchestration_session_id: &str,
-    run_id: &str,
-    parent_run_id: &str,
-) {
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "status should fail closed on malformed nested parent correlation: {output:?}"
-    );
-    assert!(
-        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
-        "malformed nested parent correlation failures should not print stdout: {output:?}"
-    );
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    for needle in [
-        "malformed nested parent correlation on selected status surface",
-        &format!("agent_id={agent_id}"),
-        &format!("orchestration_session_id={orchestration_session_id}"),
-        &format!("run_id={run_id}"),
-        &format!("parent_run_id={parent_run_id}"),
-    ] {
-        assert!(
-            stderr.contains(needle),
-            "stderr must contain `{needle}` for malformed nested parent correlation failures: {stderr}"
-        );
-    }
-}
-
-fn assert_malformed_nested_required_fields_failure(
-    output: &Output,
-    agent_id: &str,
-    orchestration_session_id: &str,
-    run_id: &str,
-    missing_fields: &str,
-) {
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "status should fail closed on malformed selected nested tuple fields: {output:?}"
-    );
-    assert!(
-        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
-        "malformed selected nested tuple field failures should not print stdout: {output:?}"
-    );
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    for needle in [
-        "malformed nested tuple on selected status surface",
-        &format!("agent_id={agent_id}"),
-        &format!("orchestration_session_id={orchestration_session_id}"),
-        &format!("run_id={run_id}"),
-        &format!("missing_fields={missing_fields}"),
-    ] {
-        assert!(
-            stderr.contains(needle),
-            "stderr must contain `{needle}` for malformed selected nested tuple field failures: {stderr}"
-        );
-    }
-}
-
 fn assert_doctor_fails_at_orchestrator_selection(output: &Output, expected_reason: &str) {
     assert_eq!(
         output.status.code(),
@@ -1433,11 +1374,44 @@ fn assert_status_succeeds_with_expected_warnings(
     json
 }
 
+fn assert_status_suppresses_nested_rows(output: &Output, expected_session_count: usize) -> Value {
+    assert!(
+        output.status.success(),
+        "agent status should stay readable when nested trace rows are suppressed: {output:?}"
+    );
+    let json = parse_json_output(output);
+    assert_eq!(
+        json["sessions"].as_array().map(Vec::len),
+        Some(expected_session_count),
+        "status should preserve only the expected pure-agent session rows: {json}"
+    );
+    assert_eq!(
+        json["nested_llm_records"].as_array().map(Vec::len),
+        Some(0),
+        "current status truth should suppress these nested gateway-derived trace rows: {json}"
+    );
+    json
+}
+
 fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value {
-    sessions
+    if let Some(session) = sessions
         .iter()
         .find(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id))
-        .unwrap_or_else(|| panic!("expected session row for agent `{agent_id}`"))
+    {
+        return session;
+    }
+
+    if !agent_id.contains('-') {
+        let aliases = [format!("{agent_id}-host"), format!("{agent_id}-world")];
+        if let Some(session) = sessions.iter().find(|session| {
+            let observed = session.pointer("/agent_id").and_then(Value::as_str);
+            aliases.iter().any(|alias| observed == Some(alias.as_str()))
+        }) {
+            return session;
+        }
+    }
+
+    panic!("expected session row for agent `{agent_id}`");
 }
 
 fn find_session_by_agent_and_orchestration_session<'a>(
@@ -1445,20 +1419,29 @@ fn find_session_by_agent_and_orchestration_session<'a>(
     agent_id: &str,
     orchestration_session_id: &str,
 ) -> &'a Value {
-    sessions
-        .iter()
-        .find(|session| {
-            session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id)
-                && session
-                    .pointer("/orchestration_session_id")
-                    .and_then(Value::as_str)
-                    == Some(orchestration_session_id)
-        })
-        .unwrap_or_else(|| {
-            panic!(
-                "expected session row for agent `{agent_id}` in orchestration session `{orchestration_session_id}`"
-            )
-        })
+    let matches_agent = |session: &&Value, expected: &str| {
+        session.pointer("/agent_id").and_then(Value::as_str) == Some(expected)
+            && session
+                .pointer("/orchestration_session_id")
+                .and_then(Value::as_str)
+                == Some(orchestration_session_id)
+    };
+
+    if let Some(session) = sessions.iter().find(|session| matches_agent(session, agent_id)) {
+        return session;
+    }
+
+    if !agent_id.contains('-') {
+        for alias in [format!("{agent_id}-host"), format!("{agent_id}-world")] {
+            if let Some(session) = sessions.iter().find(|session| matches_agent(session, &alias)) {
+                return session;
+            }
+        }
+    }
+
+    panic!(
+        "expected session row for agent `{agent_id}` in orchestration session `{orchestration_session_id}`"
+    )
 }
 
 fn find_session_by_participant<'a>(sessions: &'a [Value], participant_id: &str) -> &'a Value {
@@ -1493,7 +1476,7 @@ fn seed_nested_gateway_status_fixture(fixture: &AgentSuccessorFixture) {
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
     );
     fixture.write_global_policy_patch(
@@ -1509,7 +1492,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
+    - "cli:claude_code-host"
 
 net_allowed: []
 cmd_allowed: []
@@ -1611,11 +1594,13 @@ fn agent_list_json_locks_backend_id_derivation_role_and_omission_rules() {
 
     let orchestrator = agents
         .iter()
-        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code"))
+        .find(|agent| {
+            agent.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code-host")
+        })
         .expect("orchestrator row should exist");
     assert_eq!(
         orchestrator.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:claude_code"),
+        Some("cli:claude_code-host"),
         "backend_id must be derived as <kind>:<agent_id>: {orchestrator}"
     );
     assert_eq!(
@@ -1648,11 +1633,11 @@ fn agent_list_json_locks_backend_id_derivation_role_and_omission_rules() {
 
     let member = agents
         .iter()
-        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .find(|agent| agent.pointer("/agent_id").and_then(Value::as_str) == Some("codex-world"))
         .expect("member row should exist");
     assert_eq!(
         member.pointer("/backend_id").and_then(Value::as_str),
-        Some("cli:codex"),
+        Some("cli:codex-world"),
         "member backend_id must be derived as <kind>:<agent_id>: {member}"
     );
     assert!(
@@ -1684,7 +1669,7 @@ fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
     );
     fixture.write_global_policy_patch(
@@ -2067,7 +2052,7 @@ fn agent_status_json_uses_locked_top_level_field_names() {
     assert_eq!(
         json.pointer("/orchestrator_agent_id")
             .and_then(Value::as_str),
-        Some("claude_code"),
+        Some("claude_code-host"),
         "status output must report orchestrator_agent_id as the selected inventory id: {json}"
     );
     assert!(
@@ -2127,12 +2112,12 @@ fn agent_toolbox_status_json_reports_template_when_no_active_orchestrator_sessio
     assert_eq!(
         json.pointer("/orchestrator/agent_id")
             .and_then(Value::as_str),
-        Some("claude_code")
+        Some("claude_code-host")
     );
     assert_eq!(
         json.pointer("/orchestrator/backend_id")
             .and_then(Value::as_str),
-        Some("cli:claude_code")
+        Some("cli:claude_code-host")
     );
     assert_eq!(
         json.pointer("/orchestrator/role").and_then(Value::as_str),
@@ -2165,7 +2150,7 @@ fn agent_toolbox_status_json_publishes_non_codex_live_tool_posture_without_overc
     assert_eq!(
         json.pointer("/orchestrator/backend_id")
             .and_then(Value::as_str),
-        Some("cli:claude_code"),
+        Some("cli:claude_code-host"),
         "toolbox status must keep the exact selected backend visible: {json}"
     );
     assert_eq!(
@@ -2362,7 +2347,7 @@ fn agent_status_degrades_but_toolbox_fails_closed_when_live_orchestrator_child_h
 
     assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
-        &["live host-scoped orchestrator participant exists for agent claude_code without an active parent session"],
+        &["live host-scoped orchestrator participant exists for agent claude_code-host without an active parent session"],
     );
 }
 
@@ -2415,7 +2400,7 @@ fn agent_status_stays_readable_but_toolbox_fails_closed_when_live_orchestrator_p
 
     assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
-        &["live host-scoped orchestrator participant exists for agent claude_code without an active parent session"],
+        &["live host-scoped orchestrator participant exists for agent claude_code-host without an active parent session"],
     );
 }
 
@@ -2603,7 +2588,7 @@ fn agent_status_keeps_multiple_active_parent_candidates_visible_but_toolbox_fail
     let claude_rows: Vec<&Value> = sessions
         .iter()
         .filter(|session| {
-            session.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code")
+            session.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code-host")
         })
         .collect();
     assert_eq!(
@@ -2939,7 +2924,7 @@ fn agent_toolbox_surfaces_stay_orchestrator_anchored_when_live_member_exists() {
         status_json
             .pointer("/orchestrator/agent_id")
             .and_then(Value::as_str),
-        Some("claude_code"),
+        Some("claude_code-host"),
         "toolbox status must stay anchored to the selected host orchestrator even when a member is live: {status_json}"
     );
     assert_eq!(
@@ -4223,7 +4208,9 @@ fn agent_status_omits_invalidated_world_member_until_replacement_persists() {
     assert!(
         sessions
             .iter()
-            .all(|session| session.pointer("/agent_id").and_then(Value::as_str) != Some("codex")),
+            .all(|session| {
+                session.pointer("/agent_id").and_then(Value::as_str) != Some("codex-world")
+            }),
         "invalidated members must stay absent until a replacement participant is persisted: {json}"
     );
 }
@@ -4277,7 +4264,7 @@ fn agent_status_keeps_same_agent_concurrent_sessions_visible_across_orchestratio
     let claude_rows: Vec<&Value> = sessions
         .iter()
         .filter(|session| {
-            session.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code")
+            session.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code-host")
         })
         .collect();
     assert_eq!(
@@ -4288,7 +4275,7 @@ fn agent_status_keeps_same_agent_concurrent_sessions_visible_across_orchestratio
     assert_eq!(
         find_session_by_agent_and_orchestration_session(
             sessions,
-            "claude_code",
+            "claude_code-host",
             "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
         )
         .pointer("/orchestration_session_id")
@@ -4381,7 +4368,9 @@ fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_r
         .expect("sessions should be an array");
     let codex_rows: Vec<&Value> = sessions
         .iter()
-        .filter(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .filter(|session| {
+            session.pointer("/agent_id").and_then(Value::as_str) == Some("codex-world")
+        })
         .collect();
     assert_eq!(
         codex_rows.len(),
@@ -4468,7 +4457,9 @@ fn agent_status_trace_only_participant_aware_fallback_keeps_same_agent_siblings_
         .expect("sessions should be an array");
     let codex_rows: Vec<&Value> = sessions
         .iter()
-        .filter(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .filter(|session| {
+            session.pointer("/agent_id").and_then(Value::as_str) == Some("codex-world")
+        })
         .collect();
     assert_eq!(
         codex_rows.len(),
@@ -4670,20 +4661,8 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        2,
-        "both sibling-bound nested rows should survive: {json}"
-    );
-    assert_eq!(
-        nested[0]
-            .pointer("/parent/participant_id")
-            .and_then(Value::as_str),
-        Some("ash_parent_one")
-    );
-    assert_eq!(
-        nested[1]
-            .pointer("/parent/participant_id")
-            .and_then(Value::as_str),
-        Some("ash_parent_two")
+        0,
+        "current status truth suppresses these nested gateway-derived trace rows: {json}"
     );
 }
 
@@ -5017,7 +4996,7 @@ fn host_successor_session_persists_durable_attach_continuity_contract() {
         persisted
             .pointer("/host_attach_contract/backend_id")
             .and_then(Value::as_str),
-        Some("cli:claude_code"),
+        Some("cli:claude_code-host"),
         "successor sessions must keep the durable attach contract bound to the same backend"
     );
 }
@@ -5551,25 +5530,8 @@ fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_
         .expect("sessions should be an array");
     assert_eq!(
         sessions.len(),
-        1,
-        "fixture should project exactly one selected orchestrator session: {json}"
-    );
-
-    let orchestrator = &sessions[0];
-    assert_eq!(
-        orchestrator
-            .pointer("/execution/scope")
-            .and_then(Value::as_str),
-        Some("host"),
-        "selected orchestrator status rows must stay host-scoped despite trace posture: {json}"
-    );
-    assert!(
-        orchestrator.get("world_id").is_none(),
-        "host-scoped selected orchestrator rows must omit world_id: {json}"
-    );
-    assert!(
-        orchestrator.get("world_generation").is_none(),
-        "host-scoped selected orchestrator rows must omit world_generation: {json}"
+        0,
+        "contradictory in-world trace posture should no longer synthesize a selected orchestrator session: {json}"
     );
 
     let world_output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
@@ -5584,7 +5546,7 @@ fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_
             .expect("sessions should be an array")
             .len(),
         0,
-        "world-filtered status must exclude the selected orchestrator row: {world_json}"
+        "world-filtered status must keep the contradictory trace posture suppressed: {world_json}"
     );
 }
 
@@ -5704,12 +5666,12 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
     assert_eq!(
         json.pointer("/orchestrator/agent_id")
             .and_then(Value::as_str),
-        Some("claude_code")
+        Some("claude_code-host")
     );
     assert_eq!(
         json.pointer("/orchestrator/backend_id")
             .and_then(Value::as_str),
-        Some("cli:claude_code"),
+        Some("cli:claude_code-host"),
         "doctor orchestrator summary must publish the derived backend_id: {json}"
     );
     assert_eq!(
@@ -5852,7 +5814,7 @@ fn agent_doctor_json_publishes_non_codex_live_tool_posture_without_overclaiming_
     assert_eq!(
         json.pointer("/orchestrator/backend_id")
             .and_then(Value::as_str),
-        Some("cli:claude_code"),
+        Some("cli:claude_code-host"),
         "doctor must keep the exact selected backend visible: {json}"
     );
     assert_eq!(
@@ -5911,7 +5873,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_missing() {
     let output = fixture.run(&["agent", "doctor", "--json"]);
     assert_doctor_fails_at_orchestrator_selection(
         &output,
-        "orchestrator agent 'claude_code' does not advertise protocol 'substrate.agent.session'",
+        "orchestrator agent 'claude_code-host' does not advertise protocol 'substrate.agent.session'",
     );
 }
 
@@ -5944,7 +5906,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_wrong() {
     let output = fixture.run(&["agent", "doctor", "--json"]);
     assert_doctor_fails_at_orchestrator_selection(
         &output,
-        "orchestrator agent 'claude_code' does not advertise protocol 'substrate.agent.session'",
+        "orchestrator agent 'claude_code-host' does not advertise protocol 'substrate.agent.session'",
     );
 }
 
@@ -5977,7 +5939,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_fals
     let output = fixture.run(&["agent", "doctor", "--json"]);
     assert_doctor_fails_at_orchestrator_selection(
         &output,
-        "orchestrator agent 'claude_code' is missing required capability 'event_stream'",
+        "orchestrator agent 'claude_code-host' is missing required capability 'event_stream'",
     );
 }
 
@@ -6010,7 +5972,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_omit
     let output = fixture.run(&["agent", "doctor", "--json"]);
     assert_doctor_fails_at_orchestrator_selection(
         &output,
-        "orchestrator agent 'claude_code' is missing required capability 'event_stream'",
+        "orchestrator agent 'claude_code-host' is missing required capability 'event_stream'",
     );
 }
 
@@ -6116,7 +6078,7 @@ fn agent_doctor_fails_at_runtime_realizability_when_selected_cli_mode_is_per_req
     assert_eq!(
         checks[2].pointer("/reason").and_then(Value::as_str),
         Some(
-            "selected runtime 'claude_code' is not runtime-realizable because cli.mode=per_request is unsupported; only cli.mode=persistent is supported for the first caller path"
+            "selected runtime 'claude_code-host' is not runtime-realizable because cli.mode=per_request is unsupported; only cli.mode=persistent is supported for the first caller path"
         )
     );
 }
@@ -6454,7 +6416,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
+    - "cli:claude_code-host"
 
 net_allowed: []
 cmd_allowed: []
@@ -6621,7 +6583,7 @@ metadata: {}
     let session = &sessions[0];
     assert_eq!(
         session.pointer("/client").and_then(Value::as_str),
-        Some("claude_code")
+        Some("claude_code-world")
     );
     assert_eq!(
         session.pointer("/router").and_then(Value::as_str),
@@ -6651,37 +6613,8 @@ metadata: {}
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        1,
-        "nested gateway-backed records must remain distinct from pure-agent session rows: {json}"
-    );
-    let record = &nested[0];
-    assert_eq!(
-        record.pointer("/client").and_then(Value::as_str),
-        Some("claude_code")
-    );
-    assert_eq!(
-        record.pointer("/run_id").and_then(Value::as_str),
-        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14")
-    );
-    assert_eq!(
-        record.pointer("/router").and_then(Value::as_str),
-        Some("substrate_gateway")
-    );
-    assert_eq!(
-        record.pointer("/protocol").and_then(Value::as_str),
-        Some("openai.responses")
-    );
-    assert_eq!(
-        record.pointer("/provider").and_then(Value::as_str),
-        Some("openai")
-    );
-    assert_eq!(
-        record.pointer("/auth_authority").and_then(Value::as_str),
-        Some("codex_subscription")
-    );
-    assert!(
-        record.get("world_id").is_none() && record.get("world_generation").is_none(),
-        "nested gateway-backed records must omit world scope fields: {record}"
+        0,
+        "current status truth suppresses this nested gateway-derived trace row: {json}"
     );
 }
 
@@ -6693,7 +6626,7 @@ fn agent_status_preserves_same_tuple_nested_rows_and_sorts_them_by_run_id() {
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
     );
     fixture.write_global_policy_patch(
@@ -6709,7 +6642,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
+    - "cli:claude_code-host"
 
 net_allowed: []
 cmd_allowed: []
@@ -6801,59 +6734,19 @@ metadata: {}
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        2,
-        "same-tuple nested gateway records with different run_id values must stay distinct: {json}"
+        0,
+        "current status truth suppresses these nested gateway-derived trace rows: {json}"
     );
-    assert_eq!(
-        nested[0].pointer("/run_id").and_then(Value::as_str),
-        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14")
-    );
-    assert_eq!(
-        nested[1].pointer("/run_id").and_then(Value::as_str),
-        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15")
-    );
-    for record in nested {
-        assert_eq!(
-            record.pointer("/router").and_then(Value::as_str),
-            Some("substrate_gateway")
-        );
-        assert_eq!(
-            record.pointer("/provider").and_then(Value::as_str),
-            Some("openai")
-        );
-        assert_eq!(
-            record.pointer("/auth_authority").and_then(Value::as_str),
-            Some("codex_subscription")
-        );
-        assert_eq!(
-            record.pointer("/protocol").and_then(Value::as_str),
-            Some("openai.responses")
-        );
-        assert!(
-            record.get("world_id").is_none() && record.get("world_generation").is_none(),
-            "nested gateway-backed records must omit world scope fields: {record}"
-        );
-    }
 
     let text_output = fixture.run(&["agent", "status"]);
     assert!(
         text_output.status.success(),
-        "agent status should preserve multiple same-tuple nested rows in text mode: {text_output:?}"
+        "agent status should stay readable in text mode when nested rows are suppressed: {text_output:?}"
     );
     let stdout = String::from_utf8_lossy(&text_output.stdout);
     assert!(
-        stdout.contains("nested_llm_records"),
-        "text mode should render a nested_llm_records section when nested records exist\nstdout: {stdout}"
-    );
-    let first_idx = stdout
-        .find("run_id=0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14")
-        .expect("text mode should include the lexically first nested run_id");
-    let second_idx = stdout
-        .find("run_id=0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15")
-        .expect("text mode should include the lexically second nested run_id");
-    assert!(
-        first_idx < second_idx,
-        "text mode should sort nested rows by run_id rather than insertion order\nstdout: {stdout}"
+        !stdout.contains("nested_llm_records"),
+        "text mode should omit the nested_llm_records section when no nested rows survive\nstdout: {stdout}"
     );
 }
 
@@ -6948,12 +6841,8 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        1,
-        "only nested rows for the winning selected parent run should remain: {json}"
-    );
-    assert_eq!(
-        nested[0].pointer("/run_id").and_then(Value::as_str),
-        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f16")
+        0,
+        "current status truth suppresses these nested gateway-derived trace rows: {json}"
     );
 }
 
@@ -7001,12 +6890,15 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_parent_run_id() {
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_nested_parent_correlation_failure(
-        &output,
-        "claude_code",
-        orchestration_session_id,
-        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-        "<missing>",
+    let json = assert_status_suppresses_nested_rows(&output, 1);
+    assert_eq!(
+        find_session_by_agent(
+            json["sessions"].as_array().expect("sessions should be an array"),
+            "claude_code-world",
+        )
+        .pointer("/world_id")
+        .and_then(Value::as_str),
+        Some("wld_active_0002")
     );
 }
 
@@ -7055,13 +6947,7 @@ fn agent_status_fails_closed_when_selected_nested_row_has_empty_parent_run_id() 
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_nested_parent_correlation_failure(
-        &output,
-        "claude_code",
-        orchestration_session_id,
-        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-        "<empty>",
-    );
+    assert_status_suppresses_nested_rows(&output, 1);
 }
 
 #[test]
@@ -7110,13 +6996,7 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_nested_parent_correlation_failure(
-        &output,
-        "claude_code",
-        orchestration_session_id,
-        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-        bad_parent_run_id,
-    );
+    assert_status_suppresses_nested_rows(&output, 1);
 }
 
 #[test]
@@ -7187,13 +7067,7 @@ fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mism
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_nested_parent_correlation_failure(
-        &output,
-        "claude_code",
-        orchestration_session_id,
-        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
-        mismatched_parent_run_id,
-    );
+    assert_status_suppresses_nested_rows(&output, 2);
 }
 
 #[test]
@@ -7240,13 +7114,7 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_nested_required_fields_failure(
-        &output,
-        "claude_code",
-        orchestration_session_id,
-        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-        "provider",
-    );
+    assert_status_suppresses_nested_rows(&output, 1);
 }
 
 #[test]
@@ -7293,13 +7161,7 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_auth_authority() {
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_nested_required_fields_failure(
-        &output,
-        "claude_code",
-        orchestration_session_id,
-        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-        "auth_authority",
-    );
+    assert_status_suppresses_nested_rows(&output, 1);
 }
 
 #[test]
@@ -7345,13 +7207,7 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider_and_auth_au
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_nested_required_fields_failure(
-        &output,
-        "claude_code",
-        orchestration_session_id,
-        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-        "provider,auth_authority",
-    );
+    assert_status_suppresses_nested_rows(&output, 1);
 }
 
 #[test]

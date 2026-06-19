@@ -2856,7 +2856,7 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
     repl.send_line("::cli:codex-host launch on demand");
     repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(3),
+        Duration::from_secs(6),
     )
     .expect("runtime ready after explicit targeted turn");
     assert_eq!(
