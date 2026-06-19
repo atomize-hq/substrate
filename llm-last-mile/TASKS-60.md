@@ -114,8 +114,8 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task 3.1: Reject retired split-entry exact backend ids on runtime selection paths
-  - Acceptance: exact backend selectors like `cli:codex_world` and `cli:claude_code_world` fail closed with explicit guidance; placement-qualified exact ids continue to work.
+- [ ] Task 3.1: Reject retired split-entry and unqualified pre-placement exact backend ids on lower-layer runtime selection paths
+  - Acceptance: exact backend selectors like `cli:codex_world` and `cli:claude_code_world`, plus unqualified pre-placement selectors like `cli:codex` and `cli:claude_code`, fail closed with explicit guidance in `dispatch_contract.rs` and `validator.rs` themselves; placement-qualified exact ids continue to work.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
     - `cargo test -p shell agent_runtime::validator -- --nocapture`
@@ -123,16 +123,19 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/execution/agent_runtime/validator.rs`](../crates/shell/src/execution/agent_runtime/validator.rs)
 
-- [ ] Task 3.2: Retire forward policy/example/REPL dependence on pre-placement exact ids
-  - Acceptance: active policy fixtures and REPL/runtime examples use only placement-qualified exact ids unless they are explicit negative tests; forward-happy-path coverage no longer treats split-entry ids or unqualified `cli:codex` / `cli:claude_code` selectors as current valid examples, and any live selection path that still encounters those unqualified selectors fails closed with explicit guidance instead of silently accepting or reinterpreting them.
+- [ ] Task 3.2: Retire forward policy/example/control-surface dependence on pre-placement exact ids
+  - Acceptance: active policy fixtures, REPL/runtime examples, and gateway lifecycle/status flows use only placement-qualified exact ids unless they are explicit negative tests; forward-happy-path coverage no longer treats split-entry ids or unqualified `cli:codex` / `cli:claude_code` selectors as current valid examples, and any live selection path that still encounters those unqualified selectors, including `crates/shell/src/builtins/world_gateway.rs`, fails closed with explicit guidance instead of silently accepting or reinterpreting them.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+    - `cargo test -p shell --test world_gateway -- --nocapture`
     - `cargo test -p shell orchestrator_world_dispatch -- --nocapture` if Packet `3` selector-retirement work changes the retained world-dispatch seam that Packet `1` still marks as retirement inventory
   - Files:
     - [`crates/shell/src/execution/policy_model.rs`](../crates/shell/src/execution/policy_model.rs)
     - [`crates/shell/src/repl/async_repl.rs`](../crates/shell/src/repl/async_repl.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
+    - [`crates/shell/src/builtins/world_gateway.rs`](../crates/shell/src/builtins/world_gateway.rs)
+    - [`crates/shell/tests/world_gateway.rs`](../crates/shell/tests/world_gateway.rs)
     - relevant forward-facing test fixtures
 
 ### Packet 3 Checkpoint
@@ -171,9 +174,9 @@ Session goal:
     - if the grep wall finds another forward docs/scripts hit outside these five files, treat it as a reopen condition instead of routine Packet `4` scope
 
 - [ ] Task 4.2: Normalize forward-facing test fixtures while preserving explicit negative retirement tests
-  - Acceptance: remaining old-id references in tests are either historical-fixture provenance or explicit retirement/fail-closed assertions; forward-happy-path fixtures use placement-qualified ids only; and any remaining split-entry or unqualified pre-placement selector hits in `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` must read as explicit negative/historical coverage before Packet `4` can go green.
+  - Acceptance: remaining old-id references in tests are either historical-fixture provenance or explicit retirement/fail-closed assertions; forward-happy-path fixtures use placement-qualified ids only; and any remaining split-entry or unqualified pre-placement selector hits in `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` must read as explicit fail-closed, negative, or historical coverage before Packet `4` can go green.
   - Verify:
-    - manual grep/diff review of `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`
+    - manual grep/diff review of `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -192,7 +195,7 @@ Session goal:
 Packet 4 is complete only when:
 
 1. the five deferred Packet `4` forward-surface debt files plus forward docs/scripts/examples are placement-aware only,
-2. remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits, including any surviving hits in `agents_validate.rs`, `config_set.rs`, `config_show.rs`, `agent_hub_trace_persistence.rs`, `world_gateway.rs`, and the already named Packet `4` suites, are explicit history or explicit negative tests,
+2. remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits, including any surviving hits in `crates/shell/src/builtins/world_gateway.rs`, `agents_validate.rs`, `config_set.rs`, `config_show.rs`, `agent_hub_trace_persistence.rs`, `world_gateway.rs`, and the already named Packet `4` suites, are explicit fail-closed guidance, historical evidence, or explicit negative tests,
 3. old and new ids, including unqualified pre-placement selectors, are no longer presented as coequal current truth.
 
 Do not start Packet 5 until Packet 4 verification is green.
@@ -208,7 +211,7 @@ Session goal:
 ### Tasks
 
 - [ ] Task 5.1: Run the final validation wall and forward-truth grep proof
-  - Acceptance: format, lint, targeted shell tests, and the forward-truth grep wall are green; any remaining split-entry-name or unqualified pre-placement selector hits are intentional history or negative tests only, including any surviving hits in `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`.
+  - Acceptance: format, lint, targeted shell tests, and the forward-truth grep wall are green; any remaining split-entry-name or unqualified pre-placement selector hits are intentional history, explicit fail-closed guidance, or negative tests only, including any surviving hits in `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`.
   - Verify:
     - `cargo fmt --all -- --check`
     - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -221,7 +224,7 @@ Session goal:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
     - `rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" docs config crates/shell scripts -g '!target'`
     - `rg -nP "\bcli:(codex|claude_code)\b(?!-)" docs config crates/shell scripts -g '!target'`
-    - manual grep/diff review of `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`
+    - manual grep/diff review of `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`
   - Files:
     - no planned source edits; validation only
 
@@ -232,7 +235,7 @@ Packet 5 is complete only when:
 1. the Slice `58` compatibility bridge is retired from forward live behavior,
 2. placement-qualified exact ids are the only forward selectors,
 3. unqualified pre-placement exact selectors are no longer treated as forward-valid selectors or examples and fail closed if they still reach a live selection path,
-4. any remaining hits in `agents_validate.rs`, `config_set.rs`, `config_show.rs`, `agent_hub_trace_persistence.rs`, `world_gateway.rs`, and the already named Packet `5` suites are explicit negative/historical coverage only,
+4. any remaining hits in `crates/shell/src/builtins/world_gateway.rs`, `agents_validate.rs`, `config_set.rs`, `config_show.rs`, `agent_hub_trace_persistence.rs`, `world_gateway.rs`, and the already named Packet `5` suites are explicit fail-closed, negative, or historical coverage only,
 5. authoritative forward truth is placement-aware only,
 6. Slice `59` runtime semantics remain green.
 

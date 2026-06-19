@@ -156,10 +156,13 @@ crates/shell/src/execution/agent_inventory.rs
 
 crates/shell/src/execution/agent_runtime/validator.rs
 crates/shell/src/execution/agent_runtime/dispatch_contract.rs
-  Exact backend selection and runtime-contract validation that still must reject retired split-entry selectors cleanly after the bridge is removed.
+  Exact backend selection and runtime-contract validation that still must reject retired split-entry selectors and unqualified pre-placement selectors cleanly after the bridge is removed; Packet `3` must prove that lower-layer validator/dispatch paths themselves fail closed for `cli:codex` / `cli:claude_code`, not just higher-level REPL or successor flows.
 
 crates/shell/src/execution/orchestrator_world_dispatch.rs
   Retained world-dispatch routing and control-surface coverage that remains Packet `2`/`3` retirement inventory while legacy backend assumptions are being removed.
+
+crates/shell/src/builtins/world_gateway.rs
+  Live gateway lifecycle/status selector resolution that still carries pre-placement and split-entry acceptance seams; Packet `3` owns retiring that positive selector posture and Packet `5` must manually verify the source seam alongside `crates/shell/tests/world_gateway.rs`.
 
 crates/shell/src/execution/policy_model.rs
 crates/shell/src/repl/async_repl.rs
@@ -200,7 +203,7 @@ Conventions:
 
 - **Unit tests**: inventory materialization, selector derivation, and validator fail-closed behavior.
 - **Integration tests**: public control surfaces, REPL routing, and policy/example surfaces that consume exact backend ids.
-- **Known verification surfaces**: `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` must be reviewed during Packet `4` and Packet `5`; the live Packet `1` grep wall still leaves `agents_validate.rs` in the remaining hit set because it carries bridge-removal coverage, and any remaining split-entry or unqualified pre-placement selector hits across those surfaces must end as explicit negative/historical coverage before those packets can go green.
+- **Known verification surfaces**: `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` must be reviewed during Packet `3` through Packet `5`; Packet `3` must make validator/dispatch and world-gateway source seams fail closed for retired selectors directly, the live Packet `1` grep wall still leaves `agents_validate.rs` in the remaining hit set because it carries bridge-removal coverage, and any remaining split-entry or unqualified pre-placement selector hits across those source/test surfaces must end as explicit fail-closed, negative, or historical coverage before those packets can go green.
 - **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids or unqualified pre-placement exact selectors as live current truth.
 - **Regression coverage**: preserve Slice `59` world-runtime truth while retiring old split-entry naming.
 - **Manual diff review**: ensure remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are historical records only, not forward product truth.
