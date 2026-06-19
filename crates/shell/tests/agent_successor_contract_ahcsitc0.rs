@@ -1300,7 +1300,13 @@ fn assert_status_succeeds_with_expected_warnings(
     json
 }
 
-fn assert_status_fails_closed_with_stderr(output: &Output, expected_stderr_fragments: &[&str]) {
+fn assert_status_fails_closed_with_stderr(
+    output: &Output,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    run_id: &str,
+    expected_stderr_fragments: &[&str],
+) {
     assert_eq!(
         output.status.code(),
         Some(2),
@@ -1311,6 +1317,16 @@ fn assert_status_fails_closed_with_stderr(output: &Output, expected_stderr_fragm
         "fail-closed selected-surface status fixtures must not emit stdout: {output:?}"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
+    for needle in [
+        format!("agent_id={agent_id}"),
+        format!("orchestration_session_id={orchestration_session_id}"),
+        format!("run_id={run_id}"),
+    ] {
+        assert!(
+            stderr.contains(&needle),
+            "stderr must contain `{needle}`: {stderr}"
+        );
+    }
     for needle in expected_stderr_fragments {
         assert!(
             stderr.contains(needle),
@@ -6889,9 +6905,11 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_parent_run_id() {
     let output = fixture.run(&["agent", "status", "--json"]);
     assert_status_fails_closed_with_stderr(
         &output,
+        "claude_code-world",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
         &[
             "malformed nested parent correlation on selected status surface",
-            "agent_id=claude_code-world",
             "parent_run_id=<missing>",
         ],
     );
@@ -6944,9 +6962,11 @@ fn agent_status_fails_closed_when_selected_nested_row_has_empty_parent_run_id() 
     let output = fixture.run(&["agent", "status", "--json"]);
     assert_status_fails_closed_with_stderr(
         &output,
+        "claude_code-world",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
         &[
             "malformed nested parent correlation on selected status surface",
-            "agent_id=claude_code-world",
             "parent_run_id=<empty>",
         ],
     );
@@ -7000,9 +7020,11 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
     let output = fixture.run(&["agent", "status", "--json"]);
     assert_status_fails_closed_with_stderr(
         &output,
+        "claude_code-world",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
         &[
             "malformed nested parent correlation on selected status surface",
-            "agent_id=claude_code-world",
             bad_parent_run_id,
         ],
     );
@@ -7078,9 +7100,11 @@ fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mism
     let output = fixture.run(&["agent", "status", "--json"]);
     assert_status_fails_closed_with_stderr(
         &output,
+        "claude_code-world",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
         &[
             "malformed nested parent correlation on selected status surface",
-            "agent_id=claude_code-world",
             mismatched_parent_run_id,
         ],
     );
@@ -7132,9 +7156,11 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
     let output = fixture.run(&["agent", "status", "--json"]);
     assert_status_fails_closed_with_stderr(
         &output,
+        "claude_code-world",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
         &[
             "malformed nested tuple on selected status surface",
-            "agent_id=claude_code-world",
             "missing_fields=provider",
         ],
     );
@@ -7186,9 +7212,11 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_auth_authority() {
     let output = fixture.run(&["agent", "status", "--json"]);
     assert_status_fails_closed_with_stderr(
         &output,
+        "claude_code-world",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
         &[
             "malformed nested tuple on selected status surface",
-            "agent_id=claude_code-world",
             "missing_fields=auth_authority",
         ],
     );
@@ -7239,9 +7267,11 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider_and_auth_au
     let output = fixture.run(&["agent", "status", "--json"]);
     assert_status_fails_closed_with_stderr(
         &output,
+        "claude_code-world",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
         &[
             "malformed nested tuple on selected status surface",
-            "agent_id=claude_code-world",
             "missing_fields=provider,auth_authority",
         ],
     );
