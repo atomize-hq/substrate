@@ -11743,12 +11743,12 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"spawn_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"spawn_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -11954,12 +11954,12 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12151,12 +12151,12 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -12607,12 +12607,12 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
@@ -13479,12 +13479,12 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
