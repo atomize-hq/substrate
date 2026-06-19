@@ -347,6 +347,12 @@ fn gateway_config_with_empty_backend() -> &'static str {
     "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: \"\"\n"
 }
 
+fn gateway_config_with_default_backend(default_backend: &str) -> String {
+    format!(
+        "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: {default_backend}\n"
+    )
+}
+
 fn assert_gateway_lifecycle_backend(request: &RecordedGatewayLifecycleRequest, backend_id: &str) {
     assert_eq!(
         request.body.pointer("/env/SUBSTRATE_LLM_DEFAULT_BACKEND"),
@@ -2116,6 +2122,80 @@ fn world_gateway_empty_default_backend_uses_exit_code_2() {
         .stderr(predicate::str::contains(
             "substrate world gateway status: invalid integration",
         ));
+}
+
+#[test]
+fn world_gateway_status_and_sync_reject_retired_selectors_with_migration_guidance() {
+    let temp = short_socket_tempdir("sub-gw-retired-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let selector_cases = [
+        (
+            "cli:codex",
+            "legacy exact backend 'cli:codex' is retired; use 'cli:codex-host' or 'cli:codex-world'",
+        ),
+        (
+            "cli:claude_code",
+            "legacy exact backend 'cli:claude_code' is retired; use 'cli:claude_code-host' or 'cli:claude_code-world'",
+        ),
+        (
+            "cli:codex_world",
+            "legacy exact backend 'cli:codex_world' is retired; use 'cli:codex-world'",
+        ),
+        (
+            "cli:claude_code_world",
+            "legacy exact backend 'cli:claude_code_world' is retired; use 'cli:claude_code-world'",
+        ),
+    ];
+    let command_cases = [
+        (
+            "status",
+            ["world", "gateway", "status"],
+            "substrate world gateway status: invalid integration",
+        ),
+        (
+            "sync",
+            ["world", "gateway", "sync"],
+            "substrate world gateway sync: invalid integration",
+        ),
+    ];
+
+    for (selector, guidance) in selector_cases {
+        for (command_name, args, surface_error) in command_cases {
+            let fixture = GatewayAuthFixture::new();
+            let config = gateway_config_with_default_backend(selector);
+            fixture.write_global_config(&config);
+            fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+
+            let output = fixture
+                .command()
+                .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+                .env("SUBSTRATE_WORLD_ENABLED", "1")
+                .env("SUBSTRATE_WORLD", "enabled")
+                .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+                .args(args)
+                .output()
+                .expect("run world gateway retired selector command");
+
+            assert_eq!(
+                output.status.code(),
+                Some(2),
+                "{command_name} must fail closed for retired selector {selector}: {output:?}"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains(surface_error),
+                "{command_name} must classify retired selector {selector} as invalid integration: {stderr}"
+            );
+            assert!(
+                stderr.contains(guidance),
+                "{command_name} must publish migration guidance for retired selector {selector}: {stderr}"
+            );
+            assert!(
+                !stderr.contains("required gateway/world component unavailable"),
+                "{command_name} must fail closed on retired selector {selector} before world socket fallback: {stderr}"
+            );
+        }
+    }
 }
 
 #[test]
