@@ -133,8 +133,8 @@ Packet `1` historical / retirement allowlist:
 
 Packet `1` reopen conditions:
 
-1. If any legacy-name hit in `docs/`, `config/`, or `scripts/` is discovered outside the five Packet `4` forward-surface debt files above, or if one of those five files turns out to require old ids beyond the planned Packet `4` cleanup, reopen Slice `60` instead of silently preserving dual truth.
-2. If any legacy-name hit outside the allowlist above is needed for supported persisted runtime/session continuity, reopen Slice `60` instead of broadening the allowlist ad hoc.
+1. If any split-entry legacy-name hit or unqualified pre-placement exact-selector hit in `docs/`, `config/`, or `scripts/` is discovered outside the five Packet `4` forward-surface debt files above, or if one of those five files turns out to require either debt class beyond the planned Packet `4` cleanup, reopen Slice `60` instead of silently preserving dual truth.
+2. If any split-entry legacy-name hit or unqualified pre-placement exact-selector hit outside the allowlist above is needed for supported persisted runtime/session continuity, reopen Slice `60` instead of broadening the allowlist ad hoc.
 3. If removing an allowlisted hit would force a Slice `59` runtime-semantic change rather than an identity-only change, treat that as a reopen condition.
 
 Placement-aware grep wall:
@@ -286,7 +286,7 @@ Rules:
 3. Deferred forward-surface Packet `4` debt is limited to `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`. These are current forward-surface debt, not historical allowlist entries, and their presence does not by itself block Packet `1` from being checkpoint-green.
 4. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions; Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
 5. Those temporary code/test hits are not forward truth, are not historical evidence, and must not be cited as support for keeping the compatibility posture.
-6. If a legacy-name hit is found in `docs/`, `config/`, or `scripts/` outside the five deferred Packet `4` files above, or in a live `crates/shell/` surface outside the bounded inventory above, treat that as a reopen condition for Slice `60` planning rather than silently widening implementation.
+6. If a split-entry legacy-name hit or unqualified pre-placement exact-selector hit is found in `docs/`, `config/`, or `scripts/` outside the five deferred Packet `4` files above, or in a live `crates/shell/` surface outside the bounded inventory above, treat that as a reopen condition for Slice `60` planning rather than silently widening implementation.
 
 ### 6. Slice 59 runtime truth remains untouched
 
