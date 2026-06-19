@@ -99,7 +99,7 @@ rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" \
 Packet `1` interpretation of that wall:
 
 1. `docs/`, `config/`, and `scripts/` are forward-truth surfaces. Any legacy-name hit there is in-scope current-truth debt, not acceptable history.
-2. `crates/shell/` stays inside the wall so later packets cannot hide behind a narrower search root, but Packet `1` treats those hits as packet-owned retirement inventory rather than proof that the old ids remain supported.
+2. `crates/shell/` stays inside the wall so later packets cannot hide behind a narrower search root, but Packet `1` treats only the explicit allowlisted seams below as packet-owned retirement inventory; any other live `crates/shell/` hit is a reopen condition rather than proof that the old ids remain supported.
 3. `llm-last-mile/` is intentionally outside the grep wall because planning provenance may retain old ids when explicitly historical.
 
 Packet `1` historical / retirement allowlist:
