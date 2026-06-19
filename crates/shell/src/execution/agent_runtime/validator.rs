@@ -8,6 +8,7 @@ use crate::execution::agent_inventory::{
     AgentCapabilitiesV1, AgentConfigKind, AgentInventoryEntryV1,
 };
 use crate::execution::agent_runtime::dispatch_contract::{
+    retired_exact_backend_selector_guidance,
     resolve_inventory_contract_for_exact_backend, resolve_inventory_contract_for_unique_scope,
     AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind, DispatchCallerKind,
     DispatchCapabilityOverrideSet, DispatchRequestEnvelope, HostExecutionClientStart,
@@ -417,6 +418,13 @@ pub(crate) fn validate_exact_backend_selection(
     scope: AgentExecutionScope,
     backend_id: &str,
 ) -> std::result::Result<Option<RuntimeSelectionDescriptor>, ExactBackendSelectionError> {
+    if let Some(reason) = retired_exact_backend_selector_guidance(backend_id) {
+        return Err(ExactBackendSelectionError {
+            exit_code: 2,
+            reason: reason.to_string(),
+        });
+    }
+
     let envelope = inventory_dispatch_envelope(
         if scope == AgentExecutionScope::Host {
             DispatchCallerKind::HumanStart
@@ -928,7 +936,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn validate_exact_backend_selection_bypasses_world_ambiguity_when_backend_matches_exactly() {
+    fn validate_exact_backend_selection_rejects_unqualified_preplacement_backend_ids() {
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -954,19 +962,23 @@ mod tests {
             ),
         );
 
-        let descriptor = assert_exact_selected_descriptor(validate_exact_backend_selection(
+        let error = validate_exact_backend_selection(
             &config,
             &inventory,
             AgentExecutionScope::World,
             "cli:codex",
-        ));
-        assert_eq!(descriptor.agent_id, "codex");
-        assert_eq!(descriptor.backend_id, "cli:codex");
+        )
+        .expect_err("legacy exact backend must fail closed");
+        assert_eq!(exact_backend_selection_error_exit_code(&error), 2);
+        assert_eq!(
+            error.reason,
+            "legacy exact backend 'cli:codex' is retired; use 'cli:codex-host' or 'cli:codex-world'"
+        );
     }
 
     #[test]
     #[serial]
-    fn validate_exact_backend_selection_preserves_codex_world_alias_identity() {
+    fn validate_exact_backend_selection_rejects_split_world_backend_ids() {
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -993,15 +1005,18 @@ mod tests {
             ),
         );
 
-        let descriptor = assert_exact_selected_descriptor(validate_exact_backend_selection(
+        let error = validate_exact_backend_selection(
             &config,
             &inventory,
             AgentExecutionScope::World,
             "cli:codex_world",
-        ));
-        assert_eq!(descriptor.agent_id, "codex_world");
-        assert_eq!(descriptor.backend_id, "cli:codex_world");
-        assert_eq!(descriptor.backend_kind, AgentRuntimeBackendKind::Codex);
+        )
+        .expect_err("legacy split exact backend must fail closed");
+        assert_eq!(exact_backend_selection_error_exit_code(&error), 2);
+        assert_eq!(
+            error.reason,
+            "legacy exact backend 'cli:codex_world' is retired; use 'cli:codex-world'"
+        );
     }
 
     #[test]
@@ -1063,9 +1078,9 @@ mod tests {
         let config = SubstrateConfig::default();
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "claude_code".to_string(),
+            "claude_code-host".to_string(),
             make_entry(
-                "claude_code",
+                "claude_code-host",
                 AgentExecutionScope::Host,
                 Some("other.protocol"),
                 AgentCliMode::Persistent,
@@ -1077,14 +1092,14 @@ mod tests {
             &config,
             &inventory,
             AgentExecutionScope::Host,
-            "cli:claude_code",
+            "cli:claude_code-host",
         )
         .expect_err("must fail closed");
         assert_eq!(exact_backend_selection_error_exit_code(&error), 2);
         assert!(
             error
                 .reason
-                .contains("selected host-scoped runtime 'claude_code' for backend 'cli:claude_code' does not advertise protocol 'substrate.agent.session'"),
+                .contains("selected host-scoped runtime 'claude_code-host' for backend 'cli:claude_code-host' does not advertise protocol 'substrate.agent.session'"),
             "unexpected reason: {}",
             error.reason
         );
@@ -1339,9 +1354,9 @@ mod tests {
             .to_string();
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex_world".to_string(),
+            "codex-world".to_string(),
             make_entry_with_runtime_family_and_binary(
-                "codex_world",
+                "codex-world",
                 AgentExecutionScope::World,
                 Some(PURE_AGENT_PROTOCOL),
                 AgentCliMode::Persistent,
@@ -1355,7 +1370,7 @@ mod tests {
             &config,
             &inventory,
             AgentExecutionScope::World,
-            "cli:codex_world",
+            "cli:codex-world",
         )
         .expect_err("must fail closed");
         assert_eq!(exact_backend_selection_error_exit_code(&error), 4);

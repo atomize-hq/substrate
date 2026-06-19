@@ -1563,6 +1563,24 @@ impl std::fmt::Display for DispatchResolutionError {
 
 impl std::error::Error for DispatchResolutionError {}
 
+pub(crate) fn retired_exact_backend_selector_guidance(backend_id: &str) -> Option<&'static str> {
+    match backend_id {
+        "cli:codex" => {
+            Some("legacy exact backend 'cli:codex' is retired; use 'cli:codex-host' or 'cli:codex-world'")
+        }
+        "cli:claude_code" => Some(
+            "legacy exact backend 'cli:claude_code' is retired; use 'cli:claude_code-host' or 'cli:claude_code-world'",
+        ),
+        "cli:codex_world" => {
+            Some("legacy exact backend 'cli:codex_world' is retired; use 'cli:codex-world'")
+        }
+        "cli:claude_code_world" => Some(
+            "legacy exact backend 'cli:claude_code_world' is retired; use 'cli:claude_code-world'",
+        ),
+        _ => None,
+    }
+}
+
 pub(crate) fn resolve_inventory_contract_for_exact_backend(
     cwd: &Path,
     effective_config: &SubstrateConfig,
@@ -1586,6 +1604,14 @@ pub(crate) fn resolve_inventory_contract_for_exact_backend(
         rejecting_layer: DispatchRejectingLayer::CallerContract,
         reason: err.to_string(),
     })?;
+    if let Some(reason) = retired_exact_backend_selector_guidance(backend_id) {
+        return Err(DispatchResolutionError {
+            kind: DispatchResolutionErrorKind::BaselineIneligible,
+            field: "backend_id",
+            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+            reason: reason.to_string(),
+        });
+    }
 
     let mut matches = inventory
         .values()
@@ -2444,10 +2470,10 @@ mod tests {
         std::fs::create_dir_all(&cwd).expect("cwd");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry(
                 workspace_agents.join("codex.yaml"),
-                "codex",
+                "codex-host",
                 None,
                 None,
                 required_capabilities(),
@@ -2458,7 +2484,7 @@ mod tests {
         config.agents.defaults.execution.scope = AgentExecutionScope::Host;
         config.agents.defaults.cli.mode = AgentCliMode::Persistent;
         let policy = Policy {
-            agents_allowed_backends: vec!["cli:codex".to_string()],
+            agents_allowed_backends: vec!["cli:codex-host".to_string()],
             ..Policy::default()
         };
 
@@ -2470,7 +2496,7 @@ mod tests {
             &exact_backend_envelope(
                 DispatchCallerKind::HumanStart,
                 DispatchBaselineKind::InventoryLaunch,
-                "cli:codex",
+                "cli:codex-host",
             ),
             AgentExecutionScope::Host,
         )
@@ -2497,7 +2523,7 @@ mod tests {
                 .value_origin,
             FieldValueOrigin::EffectiveConfigDefault
         );
-        assert_eq!(resolved.backend_id, "cli:codex");
+        assert_eq!(resolved.backend_id, "cli:codex-host");
         assert_eq!(resolved.execution_scope, AgentExecutionScope::Host);
     }
 
@@ -2695,7 +2721,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_backend_alias_resolves_canonical_runtime_family_from_inventory_truth() {
+    fn retired_exact_backend_alias_fails_closed_with_guidance() {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
@@ -2730,7 +2756,7 @@ mod tests {
         };
         let config = SubstrateConfig::default();
 
-        let resolved = resolve_inventory_contract_for_exact_backend(
+        let error = resolve_inventory_contract_for_exact_backend(
             &cwd,
             &config,
             &inventory,
@@ -2742,12 +2768,18 @@ mod tests {
             ),
             AgentExecutionScope::World,
         )
-        .expect("resolution should succeed")
-        .expect("contract");
+        .expect_err("legacy exact backend must fail closed");
 
-        assert_eq!(resolved.agent_id, "codex_world");
-        assert_eq!(resolved.backend_id, "cli:codex_world");
-        assert_eq!(resolved.backend_kind, AgentRuntimeBackendKind::Codex);
+        assert_eq!(
+            error.kind,
+            DispatchResolutionErrorKind::BaselineIneligible
+        );
+        assert_eq!(error.field, "backend_id");
+        assert_eq!(error.rejecting_layer, DispatchRejectingLayer::BaselineTruth);
+        assert_eq!(
+            error.reason,
+            "legacy exact backend 'cli:codex_world' is retired; use 'cli:codex-world'"
+        );
     }
 
     #[test]
@@ -2755,10 +2787,10 @@ mod tests {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry_with_overlay(
                 PathBuf::from("codex.yaml"),
-                "codex",
+                "codex-host",
                 Some(AgentExecutionScope::Host),
                 Some(AgentCliMode::Persistent),
                 required_capabilities(),
@@ -2769,7 +2801,7 @@ mod tests {
             ),
         );
         let policy = Policy {
-            agents_allowed_backends: vec!["cli:codex".to_string()],
+            agents_allowed_backends: vec!["cli:codex-host".to_string()],
             require_approval: false,
             ..Policy::default()
         };
@@ -2783,7 +2815,7 @@ mod tests {
             &exact_backend_envelope(
                 DispatchCallerKind::HumanStart,
                 DispatchBaselineKind::InventoryLaunch,
-                "cli:codex",
+                "cli:codex-host",
             ),
             AgentExecutionScope::Host,
         )
@@ -2806,17 +2838,17 @@ mod tests {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry(
                 PathBuf::from("codex.yaml"),
-                "codex",
+                "codex-host",
                 Some(AgentExecutionScope::Host),
                 Some(AgentCliMode::Persistent),
                 required_capabilities(),
             ),
         );
         let policy = Policy {
-            agents_allowed_backends: vec!["cli:codex".to_string()],
+            agents_allowed_backends: vec!["cli:codex-host".to_string()],
             require_approval: false,
             ..Policy::default()
         };
@@ -2830,7 +2862,7 @@ mod tests {
             &exact_backend_envelope(
                 DispatchCallerKind::HumanStart,
                 DispatchBaselineKind::InventoryLaunch,
-                "cli:codex",
+                "cli:codex-host",
             ),
             AgentExecutionScope::Host,
         )
@@ -3058,24 +3090,24 @@ mod tests {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry(
                 PathBuf::from("codex.yaml"),
-                "codex",
+                "codex-host",
                 Some(AgentExecutionScope::Host),
                 Some(AgentCliMode::Persistent),
                 required_capabilities(),
             ),
         );
         let policy = Policy {
-            agents_allowed_backends: vec!["cli:codex".to_string()],
+            agents_allowed_backends: vec!["cli:codex-host".to_string()],
             ..Policy::default()
         };
         let config = SubstrateConfig::default();
         let mut envelope = exact_backend_envelope(
             DispatchCallerKind::HumanStart,
             DispatchBaselineKind::InventoryLaunch,
-            "cli:codex",
+            "cli:codex-host",
         );
         envelope.requested_execution_scope_override = Some(AgentExecutionScope::World);
 
@@ -3101,10 +3133,10 @@ mod tests {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry(
                 PathBuf::from("codex.yaml"),
-                "codex",
+                "codex-host",
                 Some(AgentExecutionScope::Host),
                 Some(AgentCliMode::Persistent),
                 required_capabilities(),
@@ -3121,7 +3153,7 @@ mod tests {
             &exact_backend_envelope(
                 DispatchCallerKind::HumanStart,
                 DispatchBaselineKind::InventoryLaunch,
-                "cli:codex",
+                "cli:codex-host",
             ),
             AgentExecutionScope::Host,
         )
@@ -3142,24 +3174,24 @@ mod tests {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry(
                 PathBuf::from("codex.yaml"),
-                "codex",
+                "codex-host",
                 Some(AgentExecutionScope::Host),
                 Some(AgentCliMode::Persistent),
                 required_capabilities(),
             ),
         );
         let policy = Policy {
-            agents_allowed_backends: vec!["cli:codex".to_string()],
+            agents_allowed_backends: vec!["cli:codex-host".to_string()],
             ..Policy::default()
         };
         let config = SubstrateConfig::default();
         let mut envelope = exact_backend_envelope(
             DispatchCallerKind::HumanStart,
             DispatchBaselineKind::InventoryLaunch,
-            "cli:codex",
+            "cli:codex-host",
         );
         envelope.capability_overrides.session_resume = Some(false);
         envelope.capability_overrides.session_fork = Some(false);
@@ -3206,17 +3238,17 @@ mod tests {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry(
                 PathBuf::from("codex.yaml"),
-                "codex",
+                "codex-host",
                 Some(AgentExecutionScope::Host),
                 Some(AgentCliMode::Persistent),
                 required_capabilities(),
             ),
         );
         let policy = Policy {
-            agents_allowed_backends: vec!["cli:codex".to_string()],
+            agents_allowed_backends: vec!["cli:codex-host".to_string()],
             ..Policy::default()
         };
         let config = SubstrateConfig::default();
@@ -3225,7 +3257,7 @@ mod tests {
             let mut envelope = exact_backend_envelope(
                 DispatchCallerKind::HumanStart,
                 DispatchBaselineKind::InventoryLaunch,
-                "cli:codex",
+                "cli:codex-host",
             );
             match field {
                 "session_start" => envelope.capability_overrides.session_start = Some(false),
@@ -3265,24 +3297,24 @@ mod tests {
         let cwd = PathBuf::from(".");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex".to_string(),
+            "codex-host".to_string(),
             make_entry(
                 PathBuf::from("codex.yaml"),
-                "codex",
+                "codex-host",
                 Some(AgentExecutionScope::Host),
                 Some(AgentCliMode::Persistent),
                 required_capabilities(),
             ),
         );
         let policy = Policy {
-            agents_allowed_backends: vec!["cli:codex".to_string()],
+            agents_allowed_backends: vec!["cli:codex-host".to_string()],
             ..Policy::default()
         };
         let config = SubstrateConfig::default();
         let mut envelope = exact_backend_envelope(
             DispatchCallerKind::HumanStart,
             DispatchBaselineKind::InventoryLaunch,
-            "cli:codex",
+            "cli:codex-host",
         );
         envelope.capability_overrides.session_resume = Some(true);
 

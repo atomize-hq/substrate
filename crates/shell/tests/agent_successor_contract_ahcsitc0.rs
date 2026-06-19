@@ -7103,13 +7103,13 @@ fn nested_gateway_policy_does_not_inherit_agent_hub_success_by_implication() {
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 llm:
   enabled: true
   gateway:
     enabled: true
   routing:
-    default_backend: cli:codex
+    default_backend: cli:codex-host
 "#,
     );
     fixture.write_global_policy_patch(
@@ -7129,7 +7129,7 @@ llm:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
+    - "cli:claude_code-host"
 
 net_allowed: []
 cmd_allowed: []
@@ -7150,11 +7150,11 @@ metadata: {}
     );
     fixture.write_agent_file(
         "claude_code.yaml",
-        &cli_agent_file("claude_code", "host", true, true, true),
+        &cli_agent_file_v2("claude_code", "host", true, true, true),
     );
     fixture.write_agent_file(
         "codex.yaml",
-        &cli_agent_file("codex", "host", true, false, true),
+        &cli_agent_file_v2("codex", "host", true, false, true),
     );
 
     let doctor = fixture.run(&["agent", "doctor", "--json"]);
@@ -7187,7 +7187,8 @@ metadata: {}
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("cli:codex is not allowlisted by effective policy llm.allowed_backends"),
+        stderr
+            .contains("cli:codex-host is not allowlisted by effective policy llm.allowed_backends"),
         "nested gateway denial must come from llm.allowed_backends, not implied success: {stderr}"
     );
     assert!(

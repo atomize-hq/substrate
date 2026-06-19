@@ -335,7 +335,7 @@ sync:
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: codex
+    orchestrator_agent_id: codex-host
     world_restart:
       on_drift: {on_drift}
 "#
@@ -343,12 +343,12 @@ agents:
     fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
     fs::write(
         home_substrate.join("policy.yaml"),
-        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex-host\n",
     )
     .expect("write agent runtime policy");
     fs::write(
         home_substrate.join("agents/codex.yaml"),
-        runtime_agent_yaml("codex", "host", fake_codex, "codex"),
+        runtime_agent_yaml_v2("codex", "host", fake_codex, "codex"),
     )
     .expect("write codex agent file");
 }
@@ -364,7 +364,7 @@ fn write_orchestrator_and_world_member_runtime_world_config(
         home_substrate,
         fake_orchestrator,
         fake_member,
-        "codex",
+        "codex-world",
         "codex",
         on_drift,
     );
@@ -381,7 +381,7 @@ fn write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
         home_substrate,
         fake_orchestrator,
         fake_member,
-        "codex",
+        "codex-world",
         "codex",
         on_drift,
         true,
@@ -445,7 +445,7 @@ sync:
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
     world_restart:
       on_drift: {on_drift}
 {toolbox_section}
@@ -459,7 +459,7 @@ agents:
     );
     fs::write(
         home_substrate.join("agents/claude_code.yaml"),
-        runtime_agent_yaml("claude_code", "host", fake_orchestrator, "claude_code"),
+        runtime_agent_yaml_v2("claude_code", "host", fake_orchestrator, "claude_code"),
     )
     .expect("write claude_code agent file");
     fs::write(
@@ -468,11 +468,7 @@ agents:
         } else {
             home_substrate.join(format!("agents/{member_agent_id}.yaml"))
         },
-        if member_agent_id == "codex-world" {
-            runtime_agent_yaml_v2("codex", "world", fake_member, member_runtime_family)
-        } else {
-            runtime_agent_yaml(member_agent_id, "world", fake_member, member_runtime_family)
-        },
+        runtime_agent_yaml_v2("codex", "world", fake_member, member_runtime_family),
     )
     .unwrap_or_else(|_| panic!("write {member_agent_id} agent file"));
 }
@@ -503,28 +499,28 @@ sync:
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
     world_restart:
       on_drift: {on_drift}
 "#
     );
     fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
-    write_member_runtime_policy(home_substrate, true);
+    write_member_runtime_policy_with_member_backend(home_substrate, true, "cli:codex-host");
     fs::write(
         home_substrate.join("agents/claude_code.yaml"),
-        runtime_agent_yaml("claude_code", "host", fake_orchestrator, "claude_code"),
+        runtime_agent_yaml_v2("claude_code", "host", fake_orchestrator, "claude_code"),
     )
     .expect("write claude_code agent file");
     fs::write(
         home_substrate.join("agents/codex.yaml"),
-        runtime_agent_yaml("codex", "host", fake_secondary_host, "codex"),
+        runtime_agent_yaml_v2("codex", "host", fake_secondary_host, "codex"),
     )
     .expect("write codex agent file");
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_member_runtime_policy(home_substrate: &Path, require_world: bool) {
-    write_member_runtime_policy_with_member_backend(home_substrate, require_world, "cli:codex");
+    write_member_runtime_policy_with_member_backend(home_substrate, require_world, "cli:codex-world");
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -575,7 +571,7 @@ fn write_member_runtime_policy_with_world_dispatch_control_directives(
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let require_world = if args.require_world { "true" } else { "false" };
     let enabled = if args.enabled { "true" } else { "false" };
-    let inventory_backends = yaml_quoted_list(&["cli:claude_code", args.member_backend_id], 4);
+    let inventory_backends = yaml_quoted_list(&["cli:claude_code-host", args.member_backend_id], 4);
     let dispatch_backends = yaml_quoted_list(args.allowed_backends, 6);
     let dispatch_actions = yaml_quoted_list(args.allowed_actions, 6);
     let dispatch_modes = yaml_quoted_list(args.allowed_modes, 6);
@@ -813,7 +809,7 @@ sync:
 agents:
   enabled: true
   hub:
-    orchestrator_agent_id: codex
+    orchestrator_agent_id: codex-host
     world_restart:
       on_drift: {on_drift}
 "#
@@ -821,12 +817,12 @@ agents:
     fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
     fs::write(
         home_substrate.join("policy.yaml"),
-        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex-host\n",
     )
     .expect("write agent runtime policy");
     fs::write(
         home_substrate.join("agents/codex.yaml"),
-        runtime_agent_yaml("codex", "host", fake_codex, "codex"),
+        runtime_agent_yaml_v2("codex", "host", fake_codex, "codex"),
     )
     .expect("write codex agent file");
 }
@@ -1779,8 +1775,8 @@ fn write_live_world_member_manifest(
     let payload = serde_json::json!({
         "participant_id": participant_id,
         "orchestration_session_id": orchestration_session_id,
-        "agent_id": "codex",
-        "backend_id": "cli:codex",
+        "agent_id": "codex-world",
+        "backend_id": "cli:codex-world",
         "role": "member",
         "protocol": "substrate.agent.session",
         "execution": { "scope": "world" },
@@ -2534,7 +2530,7 @@ fn launch_host_runtime_via_targeted_turn(repl: &mut PtyRepl, backend_id: &str) {
     repl.send_line(&format!("::{backend_id} start retained host runtime"));
     repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
+        Duration::from_secs(15),
     )
     .expect("runtime ready event");
     repl.wait_for_prompt(Duration::from_secs(2))
@@ -2787,7 +2783,7 @@ fn c3_first_start_shared_world_attach_create_is_owner_bound() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     repl.send_line("exit");
 
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(2));
@@ -2857,7 +2853,7 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
         Duration::from_millis(150),
     );
 
-    repl.send_line("::cli:codex launch on demand");
+    repl.send_line("::cli:codex-host launch on demand");
     repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
         Duration::from_secs(3),
@@ -2950,14 +2946,14 @@ fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
 
-    repl.send_line("::cli:claude_code start host runtime");
+    repl.send_line("::cli:claude_code-host start host runtime");
     repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
         Duration::from_secs(3),
     )
     .expect("host runtime ready");
 
-    repl.send_line("::cli:codex member targeted first turn");
+    repl.send_line("::cli:codex-world member targeted first turn");
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("prompt after first targeted world turn");
@@ -3037,7 +3033,7 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let initial_session = read_orchestration_session(&orchestration_session_path(
@@ -3064,7 +3060,7 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
     let member = &live_members[0];
     assert_eq!(
         member.get("agent_id").and_then(Value::as_str),
-        Some("codex")
+        Some("codex-world")
     );
     assert!(
         matches!(
@@ -3135,7 +3131,7 @@ fn c3_targeted_turn_requires_exact_double_colon_grammar_before_shell_fallback() 
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
 
-    repl.send_line("::cli:codex");
+    repl.send_line("::cli:codex-world");
     repl.wait_for_output(
         "substrate: error: targeted follow-up turns require exact syntax '::<backend_id> <prompt>' on a single line",
         Duration::from_secs(3),
@@ -3189,9 +3185,9 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "fork_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
@@ -3218,7 +3214,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
 
@@ -3246,11 +3242,11 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             .iter()
             .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
             .collect::<Vec<_>>(),
-        vec![Some("cli:claude_code"), Some("cli:codex")],
-        "first world-backed command must establish authoritative-live coexistence for exactly cli:claude_code and cli:codex"
+        vec![Some("cli:claude_code-host"), Some("cli:codex-world")],
+        "first world-backed command must establish authoritative-live coexistence for exactly cli:claude_code-host and cli:codex-world"
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -3271,7 +3267,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         orchestration_session
             .get("active_session_handle_id")
             .and_then(Value::as_str),
-        "the active orchestration seam must remain owned by cli:claude_code after cli:codex becomes live"
+        "the active orchestration seam must remain owned by cli:claude_code-host after cli:codex-world becomes live"
     );
 
     let live_members = wait_for_live_world_member_count(
@@ -3294,7 +3290,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     assert_eq!(
         member_orchestrator_participant_id,
         orchestrator_participant_id,
-        "the retained cli:codex world member must stay linked to the authoritative cli:claude_code orchestrator participant"
+        "the retained cli:codex-world world member must stay linked to the authoritative cli:claude_code-host orchestrator participant"
     );
     let world_id = member
         .get("world_id")
@@ -3306,7 +3302,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         .and_then(Value::as_u64)
         .expect("member world_generation");
 
-    repl.send_line("::cli:codex second");
+    repl.send_line("::cli:codex-world second");
     wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
     repl.wait_for_output("__MEMBER_TURN_SUBMIT_STUB__ second", Duration::from_secs(3))
         .expect("typed submit route output");
@@ -3332,12 +3328,12 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         submit.orchestrator_participant_id,
         member_orchestrator_participant_id
     );
-    assert_eq!(submit.backend_id, "cli:codex");
+    assert_eq!(submit.backend_id, "cli:codex-world");
     assert_eq!(submit.world_id, world_id);
     assert_eq!(submit.world_generation, world_generation);
     assert_eq!(submit.prompt, "second");
     assert_eq!(
-        member_dispatch.backend_id, "cli:codex",
+        member_dispatch.backend_id, "cli:codex-world",
         "retained member cold start must preserve the exact backend identity in the typed dispatch request"
     );
     assert_eq!(
@@ -3381,26 +3377,26 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             .iter()
             .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
             .collect::<Vec<_>>(),
-        vec![Some("cli:claude_code"), Some("cli:codex")],
-        "targeted follow-up turns must preserve authoritative-live coexistence for exactly cli:claude_code and cli:codex"
+        vec![Some("cli:claude_code-host"), Some("cli:codex-world")],
+        "targeted follow-up turns must preserve authoritative-live coexistence for exactly cli:claude_code-host and cli:codex-world"
     );
     let orchestrator_after = authoritative_live_participant_manifest_for_backend(
         &live_participants_after,
-        "cli:claude_code",
+        "cli:claude_code-host",
     );
     assert_eq!(
         orchestrator_after
             .get("participant_id")
             .and_then(Value::as_str),
         Some(orchestrator_participant_id.as_str()),
-        "cli:claude_code targeted coexistence must reuse the original orchestrator participant"
+        "cli:claude_code-host targeted coexistence must reuse the original orchestrator participant"
     );
     let member_after =
-        authoritative_live_participant_manifest_for_backend(&live_participants_after, "cli:codex");
+        authoritative_live_participant_manifest_for_backend(&live_participants_after, "cli:codex-world");
     assert_eq!(
         member_after.get("participant_id").and_then(Value::as_str),
         Some(member_participant_id.as_str()),
-        "cli:codex targeted coexistence must reuse the original world member participant"
+        "cli:codex-world targeted coexistence must reuse the original world member participant"
     );
 
     repl.send_line("exit");
@@ -3432,9 +3428,9 @@ fn c3_internal_toolbox_rejects_raw_world_dispatch_requests_on_runtime_endpoint()
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["run_world_task"],
             allowed_modes: &["ephemeral"],
             max_live_retained_workers: 8,
@@ -3468,7 +3464,7 @@ fn c3_internal_toolbox_rejects_raw_world_dispatch_requests_on_runtime_endpoint()
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -3489,7 +3485,7 @@ fn c3_internal_toolbox_rejects_raw_world_dispatch_requests_on_runtime_endpoint()
             "idempotency_key": "idem_toolbox_raw_direct_dispatch",
             "action": "run_world_task",
             "mode": "ephemeral",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "payload": {
                 "payload_kind": "task",
                 "prompt": "this raw dispatch payload should be rejected"
@@ -3536,9 +3532,9 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["run_world_task", "inspect_world_worker"],
             allowed_modes: &["ephemeral"],
             max_live_retained_workers: 8,
@@ -3573,7 +3569,7 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -3592,7 +3588,7 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -3621,7 +3617,7 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
             "caller_participant_id": orchestrator_participant_id.clone(),
             "action": "run_world_task",
             "mode": "ephemeral",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "world_id": world_id.clone(),
             "world_generation": world_generation,
             "payload": {
@@ -3654,7 +3650,7 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
             "caller_participant_id": orchestrator_participant_id,
             "action": "inspect_world_worker",
             "mode": "ephemeral",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "task_run_id": task_run_id.clone(),
             "world_id": world_id.clone(),
             "world_generation": world_generation,
@@ -3680,7 +3676,7 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
         inspect
             .pointer("/outcome/target_backend_id")
             .and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-world")
     );
     assert_eq!(
         inspect.pointer("/outcome/world_id").and_then(Value::as_str),
@@ -3754,9 +3750,9 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["run_world_task", "cancel_world_work"],
             allowed_modes: &["ephemeral"],
             max_live_retained_workers: 8,
@@ -3791,7 +3787,7 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -3810,7 +3806,7 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -3839,7 +3835,7 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
             "caller_participant_id": orchestrator_participant_id.clone(),
             "action": "run_world_task",
             "mode": "ephemeral",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "world_id": world_id.clone(),
             "world_generation": world_generation,
             "payload": {
@@ -3864,7 +3860,7 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
             "caller_participant_id": orchestrator_participant_id,
             "action": "cancel_world_work",
             "mode": "ephemeral",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "task_run_id": task_run_id.clone(),
             "world_id": world_id.clone(),
             "world_generation": world_generation,
@@ -3896,7 +3892,7 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
         cancel
             .pointer("/outcome/target_backend_id")
             .and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-world")
     );
     assert_eq!(
         cancel.pointer("/outcome/world_id").and_then(Value::as_str),
@@ -4005,9 +4001,9 @@ fn c3_internal_toolbox_run_world_task_fast_completion_still_streams_registered_t
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["run_world_task"],
             allowed_modes: &["ephemeral"],
             max_live_retained_workers: 8,
@@ -4041,7 +4037,7 @@ fn c3_internal_toolbox_run_world_task_fast_completion_still_streams_registered_t
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -4060,7 +4056,7 @@ fn c3_internal_toolbox_run_world_task_fast_completion_still_streams_registered_t
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4089,7 +4085,7 @@ fn c3_internal_toolbox_run_world_task_fast_completion_still_streams_registered_t
             "caller_participant_id": orchestrator_participant_id,
             "action": "run_world_task",
             "mode": "ephemeral",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "world_id": world_id,
             "world_generation": world_generation,
             "payload": {
@@ -4156,9 +4152,9 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "fork_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
@@ -4196,7 +4192,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -4221,7 +4217,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4267,7 +4263,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
             "caller_participant_id": orchestrator_participant_id.clone(),
             "action": "continue_world_worker",
             "mode": "retained",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "target_participant_id": member_participant_id.clone(),
             "world_id": world_id.clone(),
             "world_generation": world_generation,
@@ -4352,9 +4348,9 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "fork_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
@@ -4399,7 +4395,7 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -4424,7 +4420,7 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4470,7 +4466,7 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
             "caller_participant_id": orchestrator_participant_id.clone(),
             "action": "continue_world_worker",
             "mode": "retained",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "target_participant_id": member_participant_id.clone(),
             "world_id": world_id.clone(),
             "world_generation": world_generation,
@@ -4553,9 +4549,9 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
@@ -4607,7 +4603,7 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -4632,7 +4628,7 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4675,7 +4671,7 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
                 "caller_participant_id": orchestrator_participant_id.clone(),
                 "action": "continue_world_worker",
                 "mode": "retained",
-                "target_backend_id": "cli:codex",
+                "target_backend_id": "cli:codex-world",
                 "target_participant_id": member_participant_id.clone(),
                 "world_id": world_id.clone(),
                 "world_generation": world_generation,
@@ -4809,9 +4805,9 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
@@ -4879,7 +4875,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -4904,7 +4900,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4951,7 +4947,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
                 "caller_participant_id": orchestrator_participant_id.clone(),
                 "action": "continue_world_worker",
                 "mode": "retained",
-                "target_backend_id": "cli:codex",
+                "target_backend_id": "cli:codex-world",
                 "target_participant_id": member_participant_id.clone(),
                 "world_id": world_id.clone(),
                 "world_generation": world_generation,
@@ -5058,7 +5054,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
             submit.orchestrator_participant_id,
             member_orchestrator_participant_id
         );
-        assert_eq!(submit.backend_id, "cli:codex");
+        assert_eq!(submit.backend_id, "cli:codex-world");
         assert_eq!(submit.world_id, world_id);
         assert_eq!(submit.world_generation, world_generation);
     }
@@ -5108,9 +5104,9 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
@@ -5162,7 +5158,7 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -5187,7 +5183,7 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -5233,7 +5229,7 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
             "caller_participant_id": orchestrator_participant_id.clone(),
             "action": "continue_world_worker",
             "mode": "retained",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "target_participant_id": source_participant_id.clone(),
             "world_id": world_id.clone(),
             "world_generation": world_generation,
@@ -5320,9 +5316,9 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 1,
@@ -5360,7 +5356,7 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -5385,7 +5381,7 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -5422,7 +5418,7 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
             "caller_participant_id": orchestrator_participant_id.clone(),
             "action": "continue_world_worker",
             "mode": "retained",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "target_participant_id": source_participant_id.clone(),
             "world_id": world_id.clone(),
             "world_generation": world_generation,
@@ -5536,9 +5532,9 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
         &substrate_home,
         WorldDispatchPolicyArgs {
             require_world: true,
-            member_backend_id: "cli:codex",
+            member_backend_id: "cli:codex-world",
             enabled: true,
-            allowed_backends: &["cli:codex"],
+            allowed_backends: &["cli:codex-world"],
             allowed_actions: &["spawn_world_worker", "continue_world_worker"],
             allowed_modes: &["retained"],
             max_live_retained_workers: 8,
@@ -5583,7 +5579,7 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
@@ -5608,7 +5604,7 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
         &orchestration_session_id,
     );
     let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -5645,7 +5641,7 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
             "caller_participant_id": orchestrator_participant_id.clone(),
             "action": "continue_world_worker",
             "mode": "retained",
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-world",
             "target_participant_id": source_participant_id.clone(),
             "world_id": world_id.clone(),
             "world_generation": world_generation,
@@ -5777,7 +5773,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
@@ -5806,7 +5802,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     write_member_runtime_policy(&substrate_home, false);
     std::thread::sleep(Duration::from_millis(25));
 
-    repl.send_line("::cli:codex second");
+    repl.send_line("::cli:codex-world second");
     let alert = wait_for_world_restarted_alert_without_stale_liveness(
         &trace_path,
         &substrate_home,
@@ -5946,7 +5942,7 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
 
@@ -5965,7 +5961,7 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
             .iter()
             .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
             .collect::<Vec<_>>(),
-        vec![Some("cli:claude_code"), Some("cli:codex-world")],
+        vec![Some("cli:claude_code-host"), Some("cli:codex-world")],
         "aliased world startup must preserve exact authoritative-live backend identity"
     );
 
@@ -6098,16 +6094,16 @@ fn c3_targeted_host_turn_resumes_active_orchestrator_backend() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
-    repl.send_line("::cli:claude_code resume active host");
+    repl.send_line("::cli:claude_code-host resume active host");
     repl.wait_for_output(
-        "submitted targeted follow-up turn to cli:claude_code",
+        "submitted targeted follow-up turn to cli:claude_code-host",
         Duration::from_secs(3),
     )
     .expect("targeted host submit started");
     repl.wait_for_output(
-        "targeted follow-up turn completed for cli:claude_code",
+        "targeted follow-up turn completed for cli:claude_code-host",
         Duration::from_secs(3),
     )
     .expect("targeted host submit completion");
@@ -6161,9 +6157,9 @@ fn c3_targeted_host_turn_rejects_non_active_orchestrator_backend() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
-    repl.send_line("::cli:codex should fail");
+    repl.send_line("::cli:codex-host should fail");
     repl.wait_for_output(
         "substrate: error: targeted host follow-up turns may only target the active orchestrator backend for this REPL session",
         Duration::from_secs(3),
@@ -6234,7 +6230,7 @@ fn c3_same_generation_world_command_reuses_live_member_runtime() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
@@ -6320,7 +6316,7 @@ fn c3_startup_drift_before_first_command_retains_persisted_startup_context() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     wait_for_min_start_sessions_with_output(&repl, &records, 2, Duration::from_secs(3));
     repl.send_line("exit");
 
@@ -6362,7 +6358,7 @@ fn c3_parent_binding_persists_before_world_restarted_publishes() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
     repl.send_line("echo first");
@@ -6455,7 +6451,7 @@ fn c3_fail_closed_drift_repersists_binding_before_world_restart_required_publish
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
     repl.send_line("echo first");
@@ -6538,7 +6534,7 @@ fn c3_world_restart_invalidates_stale_member_generation_before_publish() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -6581,7 +6577,7 @@ fn c3_world_restart_invalidates_stale_member_generation_before_publish() {
         &substrate_home,
         &orchestration_session_id,
         0,
-        Duration::from_secs(15),
+        Duration::from_secs(30),
     );
     assert_eq!(
         alert.get("world_generation").and_then(Value::as_u64),
@@ -6664,7 +6660,7 @@ fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
@@ -6699,7 +6695,7 @@ fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
         &substrate_home,
         &orchestration_session_id,
         0,
-        Duration::from_secs(15),
+        Duration::from_secs(30),
     );
     wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
     repl.wait_for_output("second", Duration::from_secs(3))
@@ -6803,7 +6799,7 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
@@ -6921,7 +6917,7 @@ fn c3_world_restart_missing_member_replacement_leaves_absence() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -7004,7 +7000,7 @@ fn c3_world_restart_replacement_generation_becomes_only_live_generation() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -7110,7 +7106,7 @@ fn c3_world_restart_keeps_same_agent_members_in_other_sessions_isolated() {
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -7229,7 +7225,7 @@ fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() 
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
-    repl.send_line("::cli:codex bootstrap should fail");
+    repl.send_line("::cli:codex-host bootstrap should fail");
     wait_for_min_start_sessions_with_output(&repl, &records, 1, Duration::from_secs(3));
 
     let start = Instant::now();

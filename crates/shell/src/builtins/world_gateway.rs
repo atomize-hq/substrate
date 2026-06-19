@@ -1,4 +1,5 @@
 use crate::execution::agent_inventory;
+use crate::execution::agent_runtime::dispatch_contract::retired_exact_backend_selector_guidance;
 use crate::execution::config_model::{self, CliConfigOverrides, LlmGatewayMode};
 use crate::execution::policy_snapshot::{
     request_world_network_routing, resolve_world_network_policy_for_cwd,
@@ -33,11 +34,10 @@ const EXIT_INVALID_INTEGRATION: i32 = 2;
 const EXIT_TRANSIENT_FAILURE: i32 = 3;
 const EXIT_COMPONENT_UNAVAILABLE: i32 = 4;
 const EXIT_POLICY_FAILURE: i32 = 5;
-const CLI_CLAUDE_CODE_BACKEND: &str = "cli:claude_code";
-const CLI_CODEX_BACKEND: &str = "cli:codex";
+const CLI_CLAUDE_CODE_HOST_BACKEND: &str = "cli:claude_code-host";
+const CLI_CLAUDE_CODE_WORLD_BACKEND: &str = "cli:claude_code-world";
 const CLI_CODEX_HOST_BACKEND: &str = "cli:codex-host";
 const CLI_CODEX_WORLD_BACKEND: &str = "cli:codex-world";
-const CLI_CODEX_WORLD_BACKEND_LEGACY: &str = "cli:codex_world";
 const API_OPENAI_BACKEND: &str = "api:openai";
 const API_ANTHROPIC_BACKEND: &str = "api:anthropic";
 const SUBSTRATE_GATEWAY_ROUTER: &str = "substrate_gateway";
@@ -411,7 +411,9 @@ fn derive_gateway_identity_tuple(
         backend if is_cli_codex_backend(backend) || backend == API_OPENAI_BACKEND => {
             "openai.responses"
         }
-        CLI_CLAUDE_CODE_BACKEND | API_ANTHROPIC_BACKEND => "anthropic.messages",
+        CLI_CLAUDE_CODE_HOST_BACKEND | CLI_CLAUDE_CODE_WORLD_BACKEND | API_ANTHROPIC_BACKEND => {
+            "anthropic.messages"
+        }
         other => {
             return Err(gateway_invalid_integration_error(format!(
                 "unsupported backend '{}' for gateway identity tuple publication",
@@ -423,7 +425,9 @@ fn derive_gateway_identity_tuple(
         backend if is_cli_codex_backend(backend) || backend == API_OPENAI_BACKEND => {
             Some("openai".to_string())
         }
-        CLI_CLAUDE_CODE_BACKEND | API_ANTHROPIC_BACKEND => Some("anthropic".to_string()),
+        CLI_CLAUDE_CODE_HOST_BACKEND | CLI_CLAUDE_CODE_WORLD_BACKEND | API_ANTHROPIC_BACKEND => {
+            Some("anthropic".to_string())
+        }
         _ => None,
     };
     let tuple = IdentityTuple {
@@ -476,13 +480,7 @@ fn derive_gateway_auth_authority(
 }
 
 fn is_cli_codex_backend(backend_id: &str) -> bool {
-    matches!(
-        backend_id,
-        CLI_CODEX_BACKEND
-            | CLI_CODEX_HOST_BACKEND
-            | CLI_CODEX_WORLD_BACKEND
-            | CLI_CODEX_WORLD_BACKEND_LEGACY
-    )
+    matches!(backend_id, CLI_CODEX_HOST_BACKEND | CLI_CODEX_WORLD_BACKEND)
 }
 
 fn derive_gateway_placement_posture(
@@ -618,6 +616,10 @@ fn validate_gateway_backend_selection(
     effective_policy: &substrate_broker::Policy,
     selected_backend: &str,
 ) -> anyhow::Result<agent_inventory::AgentInventoryEntryV1> {
+    if let Some(reason) = retired_exact_backend_selector_guidance(selected_backend) {
+        return Err(gateway_invalid_integration_error(reason));
+    }
+
     let entry = agent_inventory::resolve_gateway_backend_inventory_entry(
         cwd,
         selected_backend,
@@ -703,7 +705,12 @@ fn resolve_integrated_auth_payload(
                 api_env: None,
             }))
         }
-        agent_inventory::AgentConfigKind::Cli if selected_backend == CLI_CLAUDE_CODE_BACKEND => {
+        agent_inventory::AgentConfigKind::Cli
+            if matches!(
+                selected_backend,
+                CLI_CLAUDE_CODE_HOST_BACKEND | CLI_CLAUDE_CODE_WORLD_BACKEND
+            ) =>
+        {
             resolve_claude_code_integrated_auth(selected_backend, effective_policy)
         }
         agent_inventory::AgentConfigKind::Cli => Ok(None),

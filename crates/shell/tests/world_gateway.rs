@@ -24,7 +24,7 @@ mod socket;
 use socket::{AgentSocket, SocketResponse};
 
 const SOCKET_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const REGRESSION_FLOOR_BACKEND_ID: &str = "cli:codex";
+const REGRESSION_FLOOR_BACKEND_ID: &str = "cli:codex-host";
 const FIRST_ADDITIONAL_BACKEND_ID: &str = "api:openai";
 
 fn short_socket_tempdir(prefix: &str) -> TempDir {
@@ -332,7 +332,7 @@ fn write_http_json_response(stream: &mut UnixStream, body: &str) -> std::io::Res
 }
 
 fn gateway_config_with_codex_backend() -> &'static str {
-    "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: cli:codex\n"
+    "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: cli:codex-host\n"
 }
 
 fn gateway_config_with_generic_backend() -> &'static str {
@@ -340,7 +340,7 @@ fn gateway_config_with_generic_backend() -> &'static str {
 }
 
 fn gateway_config_with_gateway_disabled() -> &'static str {
-    "llm:\n  enabled: true\n  gateway:\n    enabled: false\n  routing:\n    default_backend: cli:codex\n"
+    "llm:\n  enabled: true\n  gateway:\n    enabled: false\n  routing:\n    default_backend: cli:codex-host\n"
 }
 
 fn gateway_config_with_empty_backend() -> &'static str {
@@ -405,16 +405,27 @@ fn assert_gateway_lifecycle_api_env_auth(request: &RecordedGatewayLifecycleReque
 }
 
 fn gateway_inventory_for_codex() -> &'static str {
-    r#"version: 1
+    r#"version: 2
 id: codex
 config:
   enabled: true
   kind: cli
-  cli:
-    binary: codex
-  capabilities:
-    llm: true
-    mcp_client: false
+  placements:
+    host:
+      enabled: true
+      cli:
+        runtime_family: codex
+        binary: codex
+        mode: persistent
+      capabilities:
+        session_start: true
+        session_resume: true
+        session_fork: true
+        session_stop: true
+        status_snapshot: true
+        event_stream: true
+        llm: true
+        mcp_client: false
 "#
 }
 
@@ -483,13 +494,13 @@ world_fs:
 
 llm:
   allowed_backends:
-    - "cli:codex"
+    - "cli:codex-host"
 
 agents:
   host_credentials:
     read:
       allowed_backends:
-        - "cli:codex"
+        - "cli:codex-host"
 
 net_allowed: []
 cmd_allowed: []
@@ -592,7 +603,7 @@ world_fs:
 
 llm:
   allowed_backends:
-    - "cli:codex"
+    - "cli:codex-host"
   secrets:
     env_allowed:
       - "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"
@@ -629,7 +640,7 @@ world_fs:
 
 llm:
   allowed_backends:
-    - "cli:codex"
+    - "cli:codex-host"
 
 net_allowed: []
 cmd_allowed: []
@@ -1492,7 +1503,7 @@ fn world_gateway_backend_allowlist_denial_happens_before_tuple_narrowing() {
     fixture.write_global_config(gateway_config_with_generic_backend());
     fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
     fixture.write_global_policy(&gateway_policy_with_openai_runtime_constraints(
-        &["cli:codex"],
+        &["cli:codex-host"],
         &[],
         &["direct_provider_path"],
         &["anthropic.messages"],
@@ -1692,7 +1703,7 @@ fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
     let request = socket.recorded_request();
     assert_eq!(
         request.pointer("/integrated_auth/backend_id"),
-        Some(&json!("cli:codex"))
+        Some(&json!("cli:codex-host"))
     );
     assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),
@@ -1740,7 +1751,7 @@ fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override
     let request = socket.recorded_request();
     assert_eq!(
         request.pointer("/integrated_auth/backend_id"),
-        Some(&json!("cli:codex"))
+        Some(&json!("cli:codex-host"))
     );
     assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),
@@ -1796,7 +1807,7 @@ fn world_gateway_status_prefers_allowed_env_auth_over_host_auth_file() {
     let request = socket.recorded_request();
     assert_eq!(
         request.pointer("/integrated_auth/backend_id"),
-        Some(&json!("cli:codex"))
+        Some(&json!("cli:codex-host"))
     );
     assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),

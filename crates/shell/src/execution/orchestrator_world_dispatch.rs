@@ -4452,7 +4452,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::RunWorldTask,
             mode: WorldDispatchModeV1::Ephemeral,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
@@ -4469,7 +4469,7 @@ mod tests {
     fn sample_world_dispatch_policy() -> Policy {
         Policy {
             agents_world_dispatch_enabled: true,
-            agents_world_dispatch_allowed_backends: vec!["cli:codex_world".to_string()],
+            agents_world_dispatch_allowed_backends: vec!["cli:codex-world".to_string()],
             agents_world_dispatch_allowed_actions: vec![
                 "run_world_task".to_string(),
                 "spawn_world_worker".to_string(),
@@ -4753,7 +4753,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::ContinueWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4781,7 +4781,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::ContinueWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4805,7 +4805,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::ContinueWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4830,7 +4830,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::ContinueWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4854,7 +4854,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::ContinueWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4876,7 +4876,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::ContinueWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4901,7 +4901,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::ForkWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4930,7 +4930,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::InspectWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4950,7 +4950,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::InspectWorldWorker,
             mode: WorldDispatchModeV1::Ephemeral,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: Some(task_run_id.to_string()),
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
@@ -4968,7 +4968,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::StopWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -4988,7 +4988,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::CancelWorldWork,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: Some("ash_member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -5009,7 +5009,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::CancelWorldWork,
             mode: WorldDispatchModeV1::Ephemeral,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: Some(task_run_id.to_string()),
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
@@ -5055,8 +5055,8 @@ mod tests {
         serde_json::from_value(json!({
             "participant_id": "ash_member",
             "orchestration_session_id": "sess_dispatch",
-            "agent_id": "codex_world",
-            "backend_id": "cli:codex_world",
+            "agent_id": "codex-world",
+            "backend_id": "cli:codex-world",
             "role": "member",
             "protocol": "substrate.agent.session",
             "execution": { "scope": "world" },
@@ -5091,7 +5091,7 @@ mod tests {
             caller_participant_id: Some("orch_dispatch".to_string()),
             action: WorldDispatchActionV1::SpawnWorldWorker,
             mode: WorldDispatchModeV1::Retained,
-            target_backend_id: Some("cli:codex_world".to_string()),
+            target_backend_id: Some("cli:codex-world".to_string()),
             task_run_id: None,
             target_participant_id: None,
             world_id: Some("world-17".to_string()),
@@ -5111,7 +5111,7 @@ mod tests {
             orchestration_session_id: "sess_dispatch".to_string(),
             participant_id: "ash_member".to_string(),
             orchestrator_participant_id: "orch_dispatch".to_string(),
-            backend_id: "cli:codex_world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
             run_id: "req_continue".to_string(),
             world_id: "world-17".to_string(),
             world_generation: 2,
@@ -5127,14 +5127,14 @@ mod tests {
             ts: chrono::Utc::now(),
             kind: AgentEventKind::TaskProgress,
             data,
-            agent_id: "codex_world".to_string(),
+            agent_id: "codex-world".to_string(),
             orchestration_session_id: "sess_dispatch".to_string(),
             run_id: "req_continue".to_string(),
             parent_run_id: None,
             participant_id: Some("ash_member".to_string()),
             parent_participant_id: None,
             resumed_from_participant_id: None,
-            backend_id: Some("cli:codex_world".to_string()),
+            backend_id: Some("cli:codex-world".to_string()),
             thread_id: Some("thread-direct".to_string()),
             role: Some("member".to_string()),
             world_id: Some("world-17".to_string()),
@@ -5279,7 +5279,7 @@ mod tests {
                 orchestrator_participant_id: "orch_dispatch".to_string(),
                 parent_participant_id: None,
                 resumed_from_participant_id: None,
-                backend_id: "cli:codex_world".to_string(),
+                backend_id: "cli:codex-world".to_string(),
                 protocol: "substrate.agent.session".to_string(),
                 run_id: run_id.to_string(),
                 world_id: world_id.to_string(),
@@ -5400,7 +5400,7 @@ mod tests {
         obligation.attention_required = true;
         obligation.attach_state = OrchestrationObligationAttachState::Eligible;
         obligation.source_participant_id = Some("ash_member".to_string());
-        obligation.target_backend_id = Some("cli:codex_world".to_string());
+        obligation.target_backend_id = Some("cli:codex-world".to_string());
         obligation.world_id = Some(world_id.to_string());
         obligation.world_generation = Some(world_generation);
         store
@@ -5424,7 +5424,7 @@ mod tests {
         obligation.attention_required = true;
         obligation.attach_state = OrchestrationObligationAttachState::Eligible;
         obligation.source_participant_id = Some("ash_member".to_string());
-        obligation.target_backend_id = Some("cli:codex_world".to_string());
+        obligation.target_backend_id = Some("cli:codex-world".to_string());
         obligation.world_id = Some(world_id.to_string());
         obligation.world_generation = Some(world_generation);
         store
@@ -5750,7 +5750,7 @@ mod tests {
         assert_eq!(submit.orchestration_session_id, "sess_dispatch");
         assert_eq!(submit.participant_id, "ash_member");
         assert_eq!(submit.orchestrator_participant_id, "orch_dispatch");
-        assert_eq!(submit.backend_id, "cli:codex_world");
+        assert_eq!(submit.backend_id, "cli:codex-world");
         assert_eq!(submit.run_id, "req_continue");
         assert_eq!(submit.world_id, "world-17");
         assert_eq!(submit.world_generation, 2);
@@ -6033,7 +6033,7 @@ mod tests {
             );
             assert_eq!(classified.source_participant_id, "ash_member");
             assert_eq!(classified.target_participant_id, "orch_dispatch");
-            assert_eq!(classified.source_backend_id, "cli:codex_world");
+            assert_eq!(classified.source_backend_id, "cli:codex-world");
             assert_eq!(classified.thread_id.as_deref(), Some("thread-direct"));
             assert_eq!(classified.stream_channel.as_deref(), Some("worker.reply"));
             assert_eq!(classified.attention_required, attention_required);
@@ -7492,7 +7492,7 @@ mod tests {
                 event_class,
                 source_participant_id: "ash_member".to_string(),
                 target_participant_id: "orch_dispatch".to_string(),
-                source_backend_id: "cli:codex_world".to_string(),
+                source_backend_id: "cli:codex-world".to_string(),
                 attention_required: expected_attention,
                 thread_id: Some(thread_id.clone()),
                 stream_channel: Some("worker.request".to_string()),
@@ -7525,7 +7525,7 @@ mod tests {
             );
             assert_eq!(
                 obligation.target_backend_id.as_deref(),
-                Some("cli:codex_world")
+                Some("cli:codex-world")
             );
             assert_eq!(
                 obligation.ingress_source_kind.as_deref(),
@@ -7576,7 +7576,7 @@ mod tests {
                     .as_ref()
                     .and_then(|payload| payload.get("source_backend_id"))
                     .and_then(serde_json::Value::as_str),
-                Some("cli:codex_world")
+                Some("cli:codex-world")
             );
             assert_eq!(
                 obligation
@@ -7623,7 +7623,7 @@ mod tests {
             event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
             source_participant_id: "ash_member".to_string(),
             target_participant_id: "orch_dispatch".to_string(),
-            source_backend_id: "cli:codex_world".to_string(),
+            source_backend_id: "cli:codex-world".to_string(),
             attention_required: true,
             thread_id: Some("thread_packet3_exact".to_string()),
             stream_channel: Some("worker.request".to_string()),
@@ -7682,7 +7682,7 @@ mod tests {
             event_class: ContinueWorldWorkerEventClassV1::Blocked,
             source_participant_id: "ash_member".to_string(),
             target_participant_id: "orch_dispatch".to_string(),
-            source_backend_id: "cli:codex_world".to_string(),
+            source_backend_id: "cli:codex-world".to_string(),
             attention_required: true,
             thread_id: Some("thread_packet3_ambiguous".to_string()),
             stream_channel: Some("worker.request".to_string()),
@@ -7734,7 +7734,7 @@ mod tests {
             event_class: ContinueWorldWorkerEventClassV1::ApprovalRequest,
             source_participant_id: "ash_member".to_string(),
             target_participant_id: "orch_dispatch".to_string(),
-            source_backend_id: "cli:codex_world".to_string(),
+            source_backend_id: "cli:codex-world".to_string(),
             attention_required: true,
             thread_id: Some("thread_router".to_string()),
             stream_channel: Some("worker.request".to_string()),
@@ -7848,7 +7848,7 @@ mod tests {
             event_class: ContinueWorldWorkerEventClassV1::ApprovalRequest,
             source_participant_id: "ash_member".to_string(),
             target_participant_id: "orch_dispatch".to_string(),
-            source_backend_id: "cli:codex_world".to_string(),
+            source_backend_id: "cli:codex-world".to_string(),
             attention_required: true,
             thread_id: Some("thread_router_target".to_string()),
             stream_channel: Some("worker.request".to_string()),
@@ -7977,7 +7977,7 @@ mod tests {
             event_class: ContinueWorldWorkerEventClassV1::ApprovalRequest,
             source_participant_id: "ash_member".to_string(),
             target_participant_id: "orch_dispatch".to_string(),
-            source_backend_id: "cli:codex_world".to_string(),
+            source_backend_id: "cli:codex-world".to_string(),
             attention_required: true,
             thread_id: Some("thread_router".to_string()),
             stream_channel: Some("worker.request".to_string()),
@@ -7996,7 +7996,7 @@ mod tests {
         );
         sibling.attention_required = true;
         sibling.attach_state = OrchestrationObligationAttachState::Eligible;
-        sibling.target_backend_id = Some("cli:codex_world".to_string());
+        sibling.target_backend_id = Some("cli:codex-world".to_string());
         sibling.world_id = Some("world-17".to_string());
         sibling.world_generation = Some(2);
         store
@@ -8027,7 +8027,7 @@ mod tests {
             outcome.attach_claim_owner.as_deref(),
             Some(CONTINUE_WORLD_WORKER_ROUTER_IDENTITY)
         );
-        assert_eq!(outcome.backend_id.as_deref(), Some("cli:codex_world"));
+        assert_eq!(outcome.backend_id.as_deref(), Some("cli:codex-world"));
         assert_eq!(outcome.world_id.as_deref(), Some("world-17"));
         assert_eq!(outcome.world_generation, Some(2));
         assert_eq!(outcome.outcome, "failed_closed");
@@ -8080,7 +8080,7 @@ mod tests {
             "blocked while detached".to_string(),
         );
         claimed.attention_required = true;
-        claimed.target_backend_id = Some("cli:codex_world".to_string());
+        claimed.target_backend_id = Some("cli:codex-world".to_string());
         claimed.world_id = Some("world-55".to_string());
         claimed.world_generation = Some(55);
         claimed.mark_attach_claimed("router::local", chrono::Utc::now());
@@ -8111,7 +8111,7 @@ mod tests {
                     helper_pid: 100,
                     orchestration_session_id: "sess_router_attached".to_string(),
                     participant_id: "ash_attached".to_string(),
-                    backend_id: "cli:codex_world".to_string(),
+                    backend_id: "cli:codex-world".to_string(),
                 },
                 settled: SessionAutoAttachSettleResult {
                     satisfied_obligation_ids: vec!["obl_claimed".to_string()],
@@ -8131,7 +8131,7 @@ mod tests {
             Some(OrchestrationObligationKind::Blocked)
         );
         assert_eq!(outcome.attach_claim_owner.as_deref(), Some("router::local"));
-        assert_eq!(outcome.backend_id.as_deref(), Some("cli:codex_world"));
+        assert_eq!(outcome.backend_id.as_deref(), Some("cli:codex-world"));
         assert_eq!(outcome.world_id.as_deref(), Some("world-55"));
         assert_eq!(outcome.world_generation, Some(55));
         assert_eq!(outcome.outcome, "attached");
@@ -8227,11 +8227,11 @@ mod tests {
 name: Test Global Policy
 agents:
   allowed_backends:
-    - "cli:codex_world"
+    - "cli:codex-world"
   world_dispatch:
     enabled: true
     allowed_backends:
-      - "cli:codex_world"
+      - "cli:codex-world"
     allowed_actions:
       - "continue_world_worker"
     allowed_modes:
@@ -8398,11 +8398,11 @@ agents:
 name: Test Global Policy
 agents:
   allowed_backends:
-    - "cli:codex_world"
+    - "cli:codex-world"
   world_dispatch:
     enabled: true
     allowed_backends:
-      - "cli:codex_world"
+      - "cli:codex-world"
     allowed_actions:
       - "continue_world_worker"
     allowed_modes:
@@ -8588,11 +8588,11 @@ agents:
 name: Test Global Policy
 agents:
   allowed_backends:
-    - "cli:codex_world"
+    - "cli:codex-world"
   world_dispatch:
     enabled: true
     allowed_backends:
-      - "cli:codex_world"
+      - "cli:codex-world"
     allowed_actions:
       - "continue_world_worker"
     allowed_modes:
@@ -8667,7 +8667,7 @@ agents:
             );
             assert_eq!(
                 obligation.target_backend_id.as_deref(),
-                Some("cli:codex_world")
+                Some("cli:codex-world")
             );
             assert_eq!(
                 obligation.ingress_source_kind.as_deref(),
@@ -8832,11 +8832,11 @@ agents:
 name: Test Global Policy
 agents:
   allowed_backends:
-    - "cli:codex_world"
+    - "cli:codex-world"
   world_dispatch:
     enabled: true
     allowed_backends:
-      - "cli:codex_world"
+      - "cli:codex-world"
     allowed_actions:
       - "continue_world_worker"
     allowed_modes:
@@ -8970,21 +8970,21 @@ agents:
         let cases = [
             DenialCase {
                 enabled: false,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["continue_world_worker"],
                 allowed_modes: &["retained"],
                 expected_denial: "world_dispatch_disabled:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["spawn_world_worker"],
                 allowed_modes: &["retained"],
                 expected_denial: "action_not_allowed:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["continue_world_worker"],
                 allowed_modes: &["ephemeral"],
                 expected_denial: "mode_not_allowed:",
@@ -9050,7 +9050,7 @@ agents:
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9093,7 +9093,7 @@ agents:
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9136,7 +9136,7 @@ agents:
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9179,7 +9179,7 @@ agents:
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9222,7 +9222,7 @@ agents:
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9270,7 +9270,7 @@ agents:
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9428,7 +9428,7 @@ agents:
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9569,7 +9569,7 @@ agents:
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9617,13 +9617,13 @@ agents:
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
         write_runtime_inventory_entry(
             substrate_home.path(),
-            "codex_world",
+            "codex-world",
             AgentExecutionScope::World,
         );
 
@@ -9882,7 +9882,7 @@ agents:
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -9925,7 +9925,7 @@ agents:
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -10046,11 +10046,11 @@ agents:
 name: Test Global Policy
 agents:
   allowed_backends:
-    - "cli:codex_world"
+    - "cli:codex-world"
   world_dispatch:
     enabled: true
     allowed_backends:
-      - "cli:codex_world"
+      - "cli:codex-world"
     allowed_actions:
       - "continue_world_worker"
     allowed_modes:
@@ -10197,7 +10197,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         fs::write(
             substrate_home.path().join("policy.yaml"),
-            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n    - \"cli:codex_world\"\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"continue_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 1\n    max_concurrent_ephemeral: 4\n    fork:\n      commands_allowed: true\n",
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n    - \"cli:codex-world\"\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"continue_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 1\n    max_concurrent_ephemeral: 4\n    fork:\n      commands_allowed: true\n",
         )
         .expect("write policy");
         let missing_socket = substrate_home.path().join("missing-world.sock");
@@ -10231,7 +10231,7 @@ agents:
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -10387,7 +10387,7 @@ agents:
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -10528,7 +10528,7 @@ agents:
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -10584,7 +10584,7 @@ agents:
             write_world_dispatch_policy_with_approval_responses(
                 substrate_home.path(),
                 true,
-                &["cli:codex_world"],
+                &["cli:codex-world"],
                 &["continue_world_worker"],
                 &["retained"],
             );
@@ -10765,7 +10765,7 @@ agents:
         write_world_dispatch_policy_with_approval_responses(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -10821,7 +10821,7 @@ agents:
         write_world_dispatch_policy_with_clarification_responses(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -11026,7 +11026,7 @@ agents:
         write_world_dispatch_policy_with_clarification_responses(
             substrate_home.path(),
             true,
-            &["cli:codex_world"],
+            &["cli:codex-world"],
             &["continue_world_worker"],
             &["retained"],
         );
@@ -11091,21 +11091,21 @@ agents:
         let cases = [
             DenialCase {
                 enabled: false,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["inspect_world_worker"],
                 allowed_modes: &["retained"],
                 expected_denial: "world_dispatch_disabled:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["continue_world_worker"],
                 allowed_modes: &["retained"],
                 expected_denial: "action_not_allowed:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["inspect_world_worker"],
                 allowed_modes: &["ephemeral"],
                 expected_denial: "mode_not_allowed:",
@@ -11174,21 +11174,21 @@ agents:
         let cases = [
             DenialCase {
                 enabled: false,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["stop_world_worker"],
                 allowed_modes: &["retained"],
                 expected_denial: "world_dispatch_disabled:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["inspect_world_worker"],
                 allowed_modes: &["retained"],
                 expected_denial: "action_not_allowed:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["stop_world_worker"],
                 allowed_modes: &["ephemeral"],
                 expected_denial: "mode_not_allowed:",
@@ -11255,7 +11255,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["retained"],
         );
@@ -11281,7 +11281,7 @@ agents:
         assert_eq!(outcome.mode, WorldDispatchModeV1::Retained);
         assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
         assert_eq!(outcome.target_participant_id, "ash_member");
-        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
         assert_eq!(
@@ -11314,7 +11314,7 @@ agents:
             adapter_outcome.participant_id.as_deref(),
             Some("ash_member")
         );
-        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
 
         let session_after = store
             .load_session("sess_dispatch")
@@ -11339,7 +11339,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["ephemeral"],
         );
@@ -11362,7 +11362,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-47".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -11380,7 +11380,7 @@ agents:
         assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
         assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
         assert_eq!(outcome.target_participant_id, "task-run-47");
-        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
         assert_eq!(
@@ -11415,7 +11415,7 @@ agents:
             .expect("normalize ephemeral inspect");
         assert_eq!(adapter_outcome.task_run_id.as_deref(), Some("task-run-47"));
         assert_eq!(adapter_outcome.participant_id, None);
-        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
 
         let session_after = store
             .load_session("sess_dispatch")
@@ -11440,7 +11440,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["ephemeral"],
         );
@@ -11464,7 +11464,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-shared".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -11478,7 +11478,7 @@ agents:
 
         assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
         assert_eq!(outcome.target_participant_id, "task-run-shared");
-        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
         assert_eq!(
@@ -11496,7 +11496,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["ephemeral"],
         );
@@ -11526,7 +11526,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["ephemeral"],
         );
@@ -11539,7 +11539,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-stale".to_string(),
                 caller_participant_id: "orch_other".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -11566,7 +11566,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["ephemeral"],
         );
@@ -11594,7 +11594,7 @@ agents:
 
         assert_eq!(
             err.to_string(),
-            "backend_mismatch: orchestration session sess_dispatch active ephemeral task task-run-backend backend is cli:other_world not cli:codex_world"
+            "backend_mismatch: orchestration session sess_dispatch active ephemeral task task-run-backend backend is cli:other_world not cli:codex-world"
         );
     }
 
@@ -11607,7 +11607,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["ephemeral"],
         );
@@ -11620,7 +11620,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-binding".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 3,
             })
@@ -11651,7 +11651,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-duplicate".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -11662,7 +11662,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-duplicate".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -11682,7 +11682,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["inspect_world_worker"],
             &["ephemeral"],
         );
@@ -11697,7 +11697,7 @@ agents:
                     orchestration_session_id: "sess_dispatch".to_string(),
                     task_run_id: "task-run-terminal".to_string(),
                     caller_participant_id: "orch_dispatch".to_string(),
-                    target_backend_id: "cli:codex_world".to_string(),
+                    target_backend_id: "cli:codex-world".to_string(),
                     world_id: "world-17".to_string(),
                     world_generation: 2,
                 })
@@ -11726,7 +11726,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["cancel_world_work"],
             &["retained"],
         );
@@ -11810,7 +11810,7 @@ agents:
         assert_eq!(outcome.mode, WorldDispatchModeV1::Retained);
         assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
         assert_eq!(outcome.target_participant_id, "ash_member");
-        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
         assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
@@ -11870,21 +11870,21 @@ agents:
         let cases = [
             DenialCase {
                 enabled: false,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["cancel_world_work"],
                 allowed_modes: &["retained"],
                 expected_denial: "world_dispatch_disabled:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["inspect_world_worker"],
                 allowed_modes: &["retained"],
                 expected_denial: "action_not_allowed:",
             },
             DenialCase {
                 enabled: true,
-                allowed_backends: &["cli:codex_world"],
+                allowed_backends: &["cli:codex-world"],
                 allowed_actions: &["cancel_world_work"],
                 allowed_modes: &["ephemeral"],
                 expected_denial: "mode_not_allowed:",
@@ -11951,7 +11951,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["cancel_world_work"],
             &["ephemeral"],
         );
@@ -11964,7 +11964,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-cancel-live".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -12049,7 +12049,7 @@ agents:
         assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
         assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
         assert_eq!(outcome.target_participant_id, "task-run-cancel-live");
-        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
         assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
@@ -12074,7 +12074,7 @@ agents:
             Some("task-run-cancel-live")
         );
         assert_eq!(adapter_outcome.participant_id, None);
-        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
 
         server.abort();
     }
@@ -12185,7 +12185,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["cancel_world_work"],
             &["ephemeral"],
         );
@@ -12198,7 +12198,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-cancel-shared".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -12317,7 +12317,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["cancel_world_work"],
             &["ephemeral"],
         );
@@ -12330,7 +12330,7 @@ agents:
                 orchestration_session_id: "sess_dispatch".to_string(),
                 task_run_id: "task-run-cancel-race".to_string(),
                 caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex_world".to_string(),
+                target_backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
             })
@@ -12395,7 +12395,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["stop_world_worker"],
             &["retained"],
         );
@@ -12460,7 +12460,7 @@ agents:
         assert_eq!(outcome.mode, WorldDispatchModeV1::Retained);
         assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
         assert_eq!(outcome.target_participant_id, "ash_member");
-        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
         assert_eq!(
@@ -12481,7 +12481,7 @@ agents:
         let adapter_outcome =
             normalize_stop_world_worker_outcome_v1(&outcome).expect("normalize retained stop");
         assert_eq!(adapter_outcome.participant_id, "ash_member");
-        assert_eq!(adapter_outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
 
         let participant_after = store
             .load_participant("ash_member")
@@ -12865,7 +12865,7 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["continue_world_worker"],
             &["retained"],
         );
@@ -12928,7 +12928,7 @@ agents:
 
     #[cfg(target_os = "linux")]
     fn inventory_entry(agent_id: &str, scope: AgentExecutionScope) -> AgentInventoryEntryV1 {
-        let binary = if scope == AgentExecutionScope::World && agent_id == "codex_world" {
+        let binary = if scope == AgentExecutionScope::World && agent_id == "codex-world" {
             crate::execution::agent_runtime::validator::CODEX_WORLD_GUEST_ENTRYPOINT
         } else {
             "sh"
@@ -13113,7 +13113,7 @@ agents:
 
         assert_eq!(
             err.to_string(),
-            "backend_not_allowed: effective policy does not allow backend cli:codex_world"
+            "backend_not_allowed: effective policy does not allow backend cli:codex-world"
         );
     }
 
@@ -13316,7 +13316,7 @@ agents:
 
     #[test]
     fn run_world_task_summary_mentions_terminal_registered_metadata_without_retention() {
-        let summary = summarize_run_world_task_result("cli:codex_world", 0, true);
+        let summary = summarize_run_world_task_result("cli:codex-world", 0, true);
         assert!(
             summary.contains("surfaced continuity metadata"),
             "summary should explain terminal continuity metadata handling: {summary}"
@@ -13348,7 +13348,7 @@ agents:
             orchestrator_participant_id: "orch_dispatch".to_string(),
             parent_participant_id: None,
             resumed_from_participant_id: None,
-            target_backend_id: "cli:codex_world".to_string(),
+            target_backend_id: "cli:codex-world".to_string(),
             world_id: "world-17".to_string(),
             world_generation: 2,
             launch_span_id: "launch-span-packet3".to_string(),
@@ -13359,7 +13359,7 @@ agents:
         assert_eq!(run_receipt.task_run_id, "task-run-packet3");
         assert_eq!(run_receipt.mode, WorldDispatchModeV1::Ephemeral);
         assert_eq!(spawn_receipt.participant_id, "ash_packet3");
-        assert_eq!(spawn_receipt.target_backend_id, "cli:codex_world");
+        assert_eq!(spawn_receipt.target_backend_id, "cli:codex-world");
         assert_eq!(spawn_receipt.world_id, "world-17");
         assert_eq!(spawn_receipt.world_generation, 2);
     }
@@ -13368,8 +13368,8 @@ agents:
     #[test]
     fn build_spawn_world_worker_transport_request_preserves_authoritative_binding() {
         let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
-            agent_id: "codex_world".to_string(),
-            backend_id: "cli:codex_world".to_string(),
+            agent_id: "codex-world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
             protocol: "substrate.agent.session".to_string(),
             backend_kind: AgentRuntimeBackendKind::Codex,
             execution_scope: crate::execution::config_model::AgentExecutionScope::World,
@@ -13382,7 +13382,7 @@ agents:
 
         assert_eq!(transport.orchestration_session_id, "sess_dispatch");
         assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
-        assert_eq!(transport.backend_id, "cli:codex_world");
+        assert_eq!(transport.backend_id, "cli:codex-world");
         assert_eq!(transport.world_id, "world-17");
         assert_eq!(transport.world_generation, 2);
         assert_eq!(
@@ -13400,8 +13400,8 @@ agents:
     #[test]
     fn build_fork_world_worker_transport_request_preserves_exact_source_lineage() {
         let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
-            agent_id: "codex_world".to_string(),
-            backend_id: "cli:codex_world".to_string(),
+            agent_id: "codex-world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
             protocol: "substrate.agent.session".to_string(),
             backend_kind: AgentRuntimeBackendKind::Codex,
             execution_scope: crate::execution::config_model::AgentExecutionScope::World,
@@ -13420,7 +13420,7 @@ agents:
             Some("ash_member")
         );
         assert_eq!(transport.resumed_from_participant_id, None);
-        assert_eq!(transport.backend_id, "cli:codex_world");
+        assert_eq!(transport.backend_id, "cli:codex-world");
         assert_eq!(transport.world_id, "world-17");
         assert_eq!(transport.world_generation, 2);
         assert_eq!(
@@ -13440,13 +13440,13 @@ agents:
         let temp = tempdir().expect("tempdir");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex_world".to_string(),
-            inventory_entry("codex_world", AgentExecutionScope::Host),
+            "codex-world".to_string(),
+            inventory_entry("codex-world", AgentExecutionScope::Host),
         );
         let context = InternalDispatchContext {
             effective_config: SubstrateConfig::default(),
             base_policy: Policy {
-                agents_allowed_backends: vec!["cli:codex_world".to_string()],
+                agents_allowed_backends: vec!["cli:codex-world".to_string()],
                 ..Policy::default()
             },
             inventory,
@@ -13462,7 +13462,7 @@ agents:
 
         assert_eq!(
             err.to_string(),
-            "unsupported_platform_or_posture: backend 'cli:codex_world' resolves only to a host-scoped runtime; run_world_task requires an exact world-scoped backend"
+            "unsupported_platform_or_posture: backend 'cli:codex-world' resolves only to a host-scoped runtime; run_world_task requires an exact world-scoped backend"
         );
     }
 
@@ -13472,13 +13472,13 @@ agents:
         let temp = tempdir().expect("tempdir");
         let mut inventory = BTreeMap::new();
         inventory.insert(
-            "codex_world".to_string(),
-            inventory_entry_with_binary("codex_world", AgentExecutionScope::World, "sh"),
+            "codex-world".to_string(),
+            inventory_entry_with_binary("codex-world", AgentExecutionScope::World, "sh"),
         );
         let context = InternalDispatchContext {
             effective_config: SubstrateConfig::default(),
             base_policy: Policy {
-                agents_allowed_backends: vec!["cli:codex_world".to_string()],
+                agents_allowed_backends: vec!["cli:codex-world".to_string()],
                 ..Policy::default()
             },
             inventory,
@@ -13538,7 +13538,7 @@ agents:
             ts: chrono::Utc::now(),
             kind: AgentEventKind::Registered,
             data: json!({}),
-            agent_id: "codex_world".to_string(),
+            agent_id: "codex-world".to_string(),
             orchestration_session_id: request.orchestration_session_id.clone(),
             run_id: request.request_id.clone(),
             parent_run_id: None,
@@ -13557,7 +13557,7 @@ agents:
             placement_posture: None,
             project: None,
         };
-        event.set_pure_agent_telemetry_identity("codex_world".to_string());
+        event.set_pure_agent_telemetry_identity("codex-world".to_string());
 
         let receipt = receipt_from_registered_event(
             event.clone(),
@@ -13568,7 +13568,7 @@ agents:
         .expect("receipt");
         assert_eq!(receipt.participant_id, "ash_member_receipt");
         assert_eq!(receipt.orchestrator_participant_id, "orch_dispatch");
-        assert_eq!(receipt.backend_id, "cli:codex_world");
+        assert_eq!(receipt.backend_id, "cli:codex-world");
         assert_eq!(receipt.world_id, "world-17");
         assert_eq!(receipt.world_generation, 2);
         assert_eq!(receipt.launch_span_id, "spn_spawn");
@@ -13583,7 +13583,7 @@ agents:
         .expect_err("backend drift must fail");
         assert!(
             err.to_string().contains(
-                "registered backend_id cli:other_world did not match requested cli:codex_world"
+                "registered backend_id cli:other_world did not match requested cli:codex-world"
             ),
             "unexpected error: {err}"
         );
@@ -13603,13 +13603,13 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["fork_world_worker"],
             &["retained"],
         );
         write_runtime_inventory_entry(
             substrate_home.path(),
-            "codex_world",
+            "codex-world",
             AgentExecutionScope::World,
         );
 
@@ -13742,7 +13742,7 @@ agents:
         assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
         assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
         assert_eq!(outcome.source_participant_id, "ash_member");
-        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
         assert_eq!(outcome.world_id, "world-17");
         assert_eq!(outcome.world_generation, 2);
         assert!(
@@ -13784,13 +13784,13 @@ agents:
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
-            "cli:codex_world",
+            "cli:codex-world",
             &["fork_world_worker"],
             &["retained"],
         );
         write_runtime_inventory_entry(
             substrate_home.path(),
-            "codex_world",
+            "codex-world",
             AgentExecutionScope::World,
         );
 
@@ -14036,7 +14036,7 @@ agents:
             orchestrator_participant_id: "orch_dispatch".to_string(),
             parent_participant_id: None,
             resumed_from_participant_id: None,
-            backend_id: "cli:codex_world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
             world_id: "world-17".to_string(),
             world_generation: 2,
             launch_span_id: "spn_spawn".to_string(),
@@ -14056,7 +14056,7 @@ agents:
                 orchestrator_participant_id: "orch_dispatch".to_string(),
                 parent_participant_id: Some("ash_member".to_string()),
                 resumed_from_participant_id: None,
-                backend_id: "cli:codex_world".to_string(),
+                backend_id: "cli:codex-world".to_string(),
                 world_id: "world-17".to_string(),
                 world_generation: 2,
                 launch_span_id: "spn_fork".to_string(),
@@ -14072,7 +14072,7 @@ agents:
     #[cfg(target_os = "linux")]
     #[test]
     fn inspect_world_worker_summary_stays_snapshot_only() {
-        let summary = summarize_inspect_world_worker_result("ash_member", "cli:codex_world");
+        let summary = summarize_inspect_world_worker_result("ash_member", "cli:codex-world");
         assert!(
             summary.contains("authoritative retained snapshot"),
             "summary should describe inspect as a snapshot surface: {summary}"
@@ -14133,7 +14133,7 @@ agents:
             event_class: ContinueWorldWorkerEventClassV1::ControlAck,
             source_participant_id: "ash_member".to_string(),
             target_participant_id: "orch_dispatch".to_string(),
-            source_backend_id: "cli:codex_world".to_string(),
+            source_backend_id: "cli:codex-world".to_string(),
             attention_required: false,
             thread_id: Some("thread-direct".to_string()),
             stream_channel: Some("worker.reply".to_string()),
@@ -14191,7 +14191,7 @@ agents:
             event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
             source_participant_id: "ash_member".to_string(),
             target_participant_id: "orch_dispatch".to_string(),
-            source_backend_id: "cli:codex_world".to_string(),
+            source_backend_id: "cli:codex-world".to_string(),
             attention_required: true,
             thread_id: Some("thread-direct".to_string()),
             stream_channel: Some("worker.reply".to_string()),
