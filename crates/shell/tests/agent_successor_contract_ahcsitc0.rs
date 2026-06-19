@@ -1038,10 +1038,9 @@ fn orchestration_session_manifest_with_options(
             host_attach_contract_manifest(host_agent_id, continuity_uaa_session_id)
         }
         Some(None) => Value::Null,
-        None => host_attach_contract_manifest(
-            host_agent_id,
-            &format!("uaa-{orchestration_session_id}"),
-        ),
+        None => {
+            host_attach_contract_manifest(host_agent_id, &format!("uaa-{orchestration_session_id}"))
+        }
     };
     json!({
         "orchestration_session_id": orchestration_session_id,
@@ -1374,7 +1373,10 @@ fn find_session_by_participant<'a>(sessions: &'a [Value], participant_id: &str) 
 fn find_text_session_line<'a>(stdout: &'a str, agent_id: &str) -> &'a str {
     stdout
         .lines()
-        .find(|line| line.split_whitespace().any(|field| field == format!("agent_id={agent_id}")))
+        .find(|line| {
+            line.split_whitespace()
+                .any(|field| field == format!("agent_id={agent_id}"))
+        })
         .unwrap_or_else(|| panic!("expected text session row for agent `{agent_id}`"))
 }
 
@@ -4124,11 +4126,9 @@ fn agent_status_omits_invalidated_world_member_until_replacement_persists() {
         Some("ash_orchestrator_live")
     );
     assert!(
-        sessions
-            .iter()
-            .all(|session| {
-                session.pointer("/agent_id").and_then(Value::as_str) != Some("codex-world")
-            }),
+        sessions.iter().all(|session| {
+            session.pointer("/agent_id").and_then(Value::as_str) != Some("codex-world")
+        }),
         "invalidated members must stay absent until a replacement participant is persisted: {json}"
     );
 }
@@ -5480,7 +5480,9 @@ fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_
         Some("claude_code-host")
     );
     assert_eq!(
-        sessions[0].pointer("/execution/scope").and_then(Value::as_str),
+        sessions[0]
+            .pointer("/execution/scope")
+            .and_then(Value::as_str),
         Some("host")
     );
 
@@ -6567,7 +6569,9 @@ metadata: {}
         "placement-qualified selected fixtures should surface the matching nested gateway row: {json}"
     );
     assert_eq!(
-        nested[0].pointer("/parent/agent_id").and_then(Value::as_str),
+        nested[0]
+            .pointer("/parent/agent_id")
+            .and_then(Value::as_str),
         Some("claude_code-world")
     );
     assert_eq!(

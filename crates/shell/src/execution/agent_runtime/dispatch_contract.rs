@@ -2770,10 +2770,7 @@ mod tests {
         )
         .expect_err("legacy exact backend must fail closed");
 
-        assert_eq!(
-            error.kind,
-            DispatchResolutionErrorKind::BaselineIneligible
-        );
+        assert_eq!(error.kind, DispatchResolutionErrorKind::BaselineIneligible);
         assert_eq!(error.field, "backend_id");
         assert_eq!(error.rejecting_layer, DispatchRejectingLayer::BaselineTruth);
         assert_eq!(

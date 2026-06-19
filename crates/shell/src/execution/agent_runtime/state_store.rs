@@ -7760,8 +7760,7 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_turn_target_recovers_stale_attached_host_owner_as_detached() {
         with_store(|store| {
-            let mut participant =
-                live_orchestrator("codex-host", "sess_turn_stale", "ash_stale");
+            let mut participant = live_orchestrator("codex-host", "sess_turn_stale", "ash_stale");
             participant.internal.shell_owner_pid = 999_999_999;
             let parent = active_parent(&participant);
             store
@@ -7786,8 +7785,7 @@ mod tests {
     fn resolve_public_turn_target_does_not_recover_stale_attached_owner_when_live_successor_exists()
     {
         with_store(|store| {
-            let mut stale =
-                live_orchestrator("codex-host", "sess_turn_stale_blocked", "ash_stale");
+            let mut stale = live_orchestrator("codex-host", "sess_turn_stale_blocked", "ash_stale");
             stale.internal.shell_owner_pid = 999_999_999;
             let live_successor =
                 live_orchestrator("codex-host", "sess_turn_stale_blocked", "ash_successor");

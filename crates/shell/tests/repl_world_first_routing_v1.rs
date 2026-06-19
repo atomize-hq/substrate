@@ -520,7 +520,11 @@ agents:
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_member_runtime_policy(home_substrate: &Path, require_world: bool) {
-    write_member_runtime_policy_with_member_backend(home_substrate, require_world, "cli:codex-world");
+    write_member_runtime_policy_with_member_backend(
+        home_substrate,
+        require_world,
+        "cli:codex-world",
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -662,19 +666,6 @@ fn write_member_runtime_policy_with_member_backend(
             fork_commands_allowed: false,
         },
     );
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn runtime_agent_yaml(agent_id: &str, scope: &str, binary: &Path, runtime_family: &str) -> String {
-    let binary_path = if scope == "world" && runtime_family == "codex" {
-        TEST_CODEX_WORLD_GUEST_ENTRYPOINT.to_string()
-    } else {
-        binary.display().to_string()
-    };
-    format!(
-        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: {scope}\n  cli:\n    runtime_family: {runtime_family}\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
-        binary_path
-    )
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -3245,8 +3236,10 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         vec![Some("cli:claude_code-host"), Some("cli:codex-world")],
         "first world-backed command must establish authoritative-live coexistence for exactly cli:claude_code-host and cli:codex-world"
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -3391,8 +3384,10 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         Some(orchestrator_participant_id.as_str()),
         "cli:claude_code-host targeted coexistence must reuse the original orchestrator participant"
     );
-    let member_after =
-        authoritative_live_participant_manifest_for_backend(&live_participants_after, "cli:codex-world");
+    let member_after = authoritative_live_participant_manifest_for_backend(
+        &live_participants_after,
+        "cli:codex-world",
+    );
     assert_eq!(
         member_after.get("participant_id").and_then(Value::as_str),
         Some(member_participant_id.as_str()),
@@ -3587,8 +3582,10 @@ fn c3_internal_toolbox_run_world_task_streams_registered_task_run_id_before_term
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -3805,8 +3802,10 @@ fn c3_internal_toolbox_run_world_task_ephemeral_cancel_uses_registered_task_run_
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4055,8 +4054,10 @@ fn c3_internal_toolbox_run_world_task_fast_completion_still_streams_registered_t
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4216,8 +4217,10 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4419,8 +4422,10 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4627,8 +4632,10 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -4899,8 +4906,10 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -5182,8 +5191,10 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -5380,8 +5391,10 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)
@@ -5603,8 +5616,10 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
         &substrate_home,
         &orchestration_session_id,
     );
-    let orchestrator =
-        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code-host");
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
     let orchestrator_participant_id = orchestrator
         .get("participant_id")
         .and_then(Value::as_str)

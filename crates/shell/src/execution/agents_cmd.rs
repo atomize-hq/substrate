@@ -4662,7 +4662,10 @@ mod tests {
             build_start_launch_plan(&omitted_scope_start_args("cli:claude_code-host"), &context)
                 .expect("omitted scope launch plan");
 
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code-host");
+        assert_eq!(
+            plan.helper_plan.descriptor.backend_id,
+            "cli:claude_code-host"
+        );
         assert_eq!(
             plan.resolved_contract.execution_scope,
             AgentExecutionScope::Host
@@ -4691,7 +4694,10 @@ mod tests {
             .expect("selected claude_code host launch plan should still resolve");
 
         assert_eq!(plan.public_identity.backend_id, "cli:claude_code-host");
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code-host");
+        assert_eq!(
+            plan.helper_plan.descriptor.backend_id,
+            "cli:claude_code-host"
+        );
         assert_eq!(
             plan.helper_plan.descriptor.backend_kind,
             ResolvedRuntimeBackendKind::ClaudeCode

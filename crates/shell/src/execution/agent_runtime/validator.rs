@@ -8,11 +8,11 @@ use crate::execution::agent_inventory::{
     AgentCapabilitiesV1, AgentConfigKind, AgentInventoryEntryV1,
 };
 use crate::execution::agent_runtime::dispatch_contract::{
-    retired_exact_backend_selector_guidance,
     resolve_inventory_contract_for_exact_backend, resolve_inventory_contract_for_unique_scope,
-    AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind, DispatchCallerKind,
-    DispatchCapabilityOverrideSet, DispatchRequestEnvelope, HostExecutionClientStart,
-    LiveToolSupportPosture, ResolvedLaunchContract,
+    retired_exact_backend_selector_guidance, AttachLaunchKnobs, AttachModePreference,
+    DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
+    DispatchRequestEnvelope, HostExecutionClientStart, LiveToolSupportPosture,
+    ResolvedLaunchContract,
 };
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 
