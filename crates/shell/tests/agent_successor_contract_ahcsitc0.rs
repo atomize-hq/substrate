@@ -83,56 +83,6 @@ fn canonical_fixture_file_name(file_name: &str, contents: &str) -> String {
         .unwrap_or_else(|| file_name.to_string())
 }
 
-fn normalize_agent_event_trace_identities(event: &mut Value) {
-    let Some(object) = event.as_object_mut() else {
-        return;
-    };
-    if object.get("event_type").and_then(Value::as_str) != Some("agent_event") {
-        return;
-    }
-
-    let scope = if object.get("role").and_then(Value::as_str) == Some("member")
-        || object.contains_key("world_id")
-        || object.contains_key("world_generation")
-    {
-        "world"
-    } else {
-        "host"
-    };
-
-    if let Some(agent_id) = object.get("agent_id").and_then(Value::as_str) {
-        let normalized = match agent_id {
-            "claude_code" | "claude_code-host" | "claude_code-world" => {
-                canonical_fixture_agent_id_ref("claude_code", scope)
-            }
-            "codex" | "codex-host" | "codex-world" => {
-                canonical_fixture_agent_id_ref("codex", scope)
-            }
-            "helper" | "helper-host" | "helper-world" => {
-                canonical_fixture_agent_id_ref("helper", scope)
-            }
-            _ => agent_id,
-        };
-        object.insert("agent_id".to_string(), json!(normalized));
-    }
-
-    if let Some(backend_id) = object.get("backend_id").and_then(Value::as_str) {
-        let normalized = match backend_id {
-            "cli:claude_code" | "cli:claude_code-host" | "cli:claude_code-world" => {
-                fixture_backend_id("claude_code", scope)
-            }
-            "cli:codex" | "cli:codex-host" | "cli:codex-world" => {
-                fixture_backend_id("codex", scope)
-            }
-            "cli:helper" | "cli:helper-host" | "cli:helper-world" => {
-                fixture_backend_id("helper", scope)
-            }
-            _ => backend_id,
-        };
-        object.insert("backend_id".to_string(), json!(normalized));
-    }
-}
-
 fn expected_toolbox_endpoint(substrate_home: &Path, orchestration_session_id: &str) -> String {
     let socket_name = format!("{orchestration_session_id}.sock");
     let preferred = substrate_home
@@ -220,32 +170,12 @@ impl AgentSuccessorFixture {
     }
 
     fn write_global_config_patch(&self, contents: &str) {
-        let normalized = contents
-            .replace(
-                "orchestrator_agent_id: claude_code\n",
-                "orchestrator_agent_id: claude_code-host\n",
-            )
-            .replace(
-                "orchestrator_agent_id: codex\n",
-                "orchestrator_agent_id: codex-host\n",
-            )
-            .replace(
-                "orchestrator_agent_id: helper\n",
-                "orchestrator_agent_id: helper-host\n",
-            );
-        fs::write(self.substrate_home.join("config.yaml"), normalized)
+        fs::write(self.substrate_home.join("config.yaml"), contents)
             .expect("failed to write config.yaml");
     }
 
     fn write_global_policy_patch(&self, contents: &str) {
-        let normalized = contents
-            .replace("- cli:claude_code\n", "- cli:claude_code-host\n")
-            .replace("- \"cli:claude_code\"\n", "- \"cli:claude_code-host\"\n")
-            .replace("- cli:codex\n", "- cli:codex-host\n")
-            .replace("- \"cli:codex\"\n", "- \"cli:codex-host\"\n")
-            .replace("- cli:helper\n", "- cli:helper-host\n")
-            .replace("- \"cli:helper\"\n", "- \"cli:helper-host\"\n");
-        fs::write(self.substrate_home.join("policy.yaml"), normalized)
+        fs::write(self.substrate_home.join("policy.yaml"), contents)
             .expect("failed to write policy.yaml");
     }
 
@@ -263,11 +193,7 @@ impl AgentSuccessorFixture {
         let trace = self.substrate_home.join("trace.jsonl");
         let body = events
             .iter()
-            .map(|event| {
-                let mut normalized = event.clone();
-                normalize_agent_event_trace_identities(&mut normalized);
-                serde_json::to_string(&normalized).expect("serialize trace event")
-            })
+            .map(|event| serde_json::to_string(event).expect("serialize trace event"))
             .collect::<Vec<_>>()
             .join("\n");
         fs::write(trace, format!("{body}\n")).expect("failed to write trace.jsonl");
@@ -1374,23 +1300,23 @@ fn assert_status_succeeds_with_expected_warnings(
     json
 }
 
-fn assert_status_suppresses_nested_rows(output: &Output, expected_session_count: usize) -> Value {
+fn assert_status_fails_closed_with_stderr(output: &Output, expected_stderr_fragments: &[&str]) {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "agent status must fail closed for malformed selected-surface fixtures: {output:?}"
+    );
     assert!(
-        output.status.success(),
-        "agent status should stay readable when nested trace rows are suppressed: {output:?}"
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "fail-closed selected-surface status fixtures must not emit stdout: {output:?}"
     );
-    let json = parse_json_output(output);
-    assert_eq!(
-        json["sessions"].as_array().map(Vec::len),
-        Some(expected_session_count),
-        "status should preserve only the expected pure-agent session rows: {json}"
-    );
-    assert_eq!(
-        json["nested_llm_records"].as_array().map(Vec::len),
-        Some(0),
-        "current status truth should suppress these nested gateway-derived trace rows: {json}"
-    );
-    json
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for needle in expected_stderr_fragments {
+        assert!(
+            stderr.contains(needle),
+            "stderr must contain `{needle}`: {stderr}"
+        );
+    }
 }
 
 fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value {
@@ -1452,7 +1378,7 @@ fn seed_nested_gateway_status_fixture(fixture: &AgentSuccessorFixture) {
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code-host
+    orchestrator_agent_id: claude_code-world
 "#,
     );
     fixture.write_global_policy_patch(
@@ -1468,7 +1394,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code-host"
+    - "cli:claude_code-world"
 
 net_allowed: []
 cmd_allowed: []
@@ -2190,10 +2116,10 @@ fn agent_toolbox_env_trace_history_does_not_authorize_active_session() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-host",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-host",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -2257,10 +2183,10 @@ fn agent_toolbox_env_prefers_live_manifest_over_trace_fallback() {
         "session_id": "ses_agent_hub",
         "component": "agent-hub",
         "kind": "status",
-        "agent_id": "claude_code",
+        "agent_id": "claude_code-host",
         "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fac",
-        "backend_id": "cli:claude_code",
+        "backend_id": "cli:claude_code-host",
         "client": "claude_code",
         "router": "agent_hub",
         "protocol": "substrate.agent.session",
@@ -2609,10 +2535,10 @@ fn agent_toolbox_env_invalidated_manifest_and_trace_still_fail_closed() {
         "session_id": "ses_agent_hub",
         "component": "agent-hub",
         "kind": "status",
-        "agent_id": "claude_code",
+        "agent_id": "claude_code-host",
         "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fac",
-        "backend_id": "cli:claude_code",
+        "backend_id": "cli:claude_code-host",
         "client": "claude_code",
         "router": "agent_hub",
         "protocol": "substrate.agent.session",
@@ -3373,10 +3299,10 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-host",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-host",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -3389,10 +3315,10 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -3931,11 +3857,11 @@ fn agent_status_json_trace_fallback_rows_emit_explicit_null_posture_fields() {
         "session_id": "ses_agent_hub",
         "component": "agent-hub",
         "kind": "status",
-        "agent_id": "claude_code",
+        "agent_id": "claude_code-host",
         "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
         "participant_id": "ash_trace_only",
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fbd",
-        "backend_id": "cli:claude_code",
+        "backend_id": "cli:claude_code-host",
         "client": "claude_code",
         "router": "agent_hub",
         "protocol": "substrate.agent.session",
@@ -4036,11 +3962,11 @@ fn agent_status_human_output_marks_fallback_rows_unknown_for_durable_session_fie
         "session_id": "ses_agent_hub",
         "component": "agent-hub",
         "kind": "status",
-        "agent_id": "claude_code",
+        "agent_id": "claude_code-host",
         "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbf",
         "participant_id": "ash_text_trace",
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fc0",
-        "backend_id": "cli:claude_code",
+        "backend_id": "cli:claude_code-host",
         "client": "claude_code",
         "router": "agent_hub",
         "protocol": "substrate.agent.session",
@@ -4216,10 +4142,10 @@ fn agent_status_keeps_same_agent_concurrent_sessions_visible_across_orchestratio
         "session_id": "ses_agent_hub",
         "component": "agent-hub",
         "kind": "status",
-        "agent_id": "claude_code",
+        "agent_id": "claude_code-host",
         "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fac",
-        "backend_id": "cli:claude_code",
+        "backend_id": "cli:claude_code-host",
         "client": "claude_code",
         "router": "agent_hub",
         "protocol": "substrate.agent.session",
@@ -4387,11 +4313,11 @@ fn agent_status_trace_only_participant_aware_fallback_keeps_same_agent_siblings_
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
             "participant_id": "ash_trace_codex_one",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd2",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -4406,11 +4332,11 @@ fn agent_status_trace_only_participant_aware_fallback_keeps_same_agent_siblings_
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
             "participant_id": "ash_trace_codex_two",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd3",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -4479,11 +4405,11 @@ fn agent_status_sibling_specific_suppression_keeps_other_trace_participants_visi
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd4",
             "participant_id": "ash_trace_suppressed",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd5",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -4498,11 +4424,11 @@ fn agent_status_sibling_specific_suppression_keeps_other_trace_participants_visi
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd4",
             "participant_id": "ash_trace_survives",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd6",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -4548,11 +4474,11 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "participant_id": "ash_parent_one",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd8",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -4567,11 +4493,11 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "participant_id": "ash_parent_two",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd9",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -4586,12 +4512,12 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fda",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd8",
             "parent_participant_id": "ash_parent_one",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -4605,12 +4531,12 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fdb",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd9",
             "parent_participant_id": "ash_parent_two",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -4637,8 +4563,20 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        0,
-        "current status truth suppresses these nested gateway-derived trace rows: {json}"
+        2,
+        "placement-qualified sibling fixtures should preserve both nested correlations: {json}"
+    );
+    assert_eq!(
+        nested[0]
+            .pointer("/parent/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_parent_one")
+    );
+    assert_eq!(
+        nested[1]
+            .pointer("/parent/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_parent_two")
     );
 }
 
@@ -5197,10 +5135,10 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": run_id,
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5213,10 +5151,10 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5228,7 +5166,13 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_world_identity_failure(&output, "codex", orchestration_session_id, run_id, ts);
+    assert_malformed_world_identity_failure(
+        &output,
+        "codex-world",
+        orchestration_session_id,
+        run_id,
+        ts,
+    );
 }
 
 #[test]
@@ -5246,10 +5190,10 @@ fn agent_status_fails_when_newest_world_scoped_event_omits_top_level_world_id() 
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": run_id,
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5263,10 +5207,10 @@ fn agent_status_fails_when_newest_world_scoped_event_omits_top_level_world_id() 
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5278,7 +5222,13 @@ fn agent_status_fails_when_newest_world_scoped_event_omits_top_level_world_id() 
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_malformed_world_identity_failure(&output, "codex", orchestration_session_id, run_id, ts);
+    assert_malformed_world_identity_failure(
+        &output,
+        "codex-world",
+        orchestration_session_id,
+        run_id,
+        ts,
+    );
 }
 
 #[test]
@@ -5293,10 +5243,10 @@ fn agent_status_scope_host_ignores_filtered_out_malformed_world_rows() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f17",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5309,10 +5259,10 @@ fn agent_status_scope_host_ignores_filtered_out_malformed_world_rows() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-host",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f18",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-host",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5355,10 +5305,10 @@ fn agent_status_ignores_non_selected_trace_orchestrator_roles() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-host",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-host",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5371,10 +5321,10 @@ fn agent_status_ignores_non_selected_trace_orchestrator_roles() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5460,13 +5410,13 @@ fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
     );
     fixture.write_global_policy_patch(
         r#"agents:
   allowed_backends:
-    - cli:claude_code
+    - cli:claude_code-host
 "#,
     );
     fixture.write_agent_file(
@@ -5479,10 +5429,10 @@ fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_
         "session_id": "ses_agent_hub",
         "component": "agent-hub",
         "kind": "status",
-        "agent_id": "claude_code",
+        "agent_id": "claude_code-host",
         "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-        "backend_id": "cli:claude_code",
+        "backend_id": "cli:claude_code-host",
         "client": "claude_code",
         "router": "agent_hub",
         "protocol": "substrate.agent.session",
@@ -5506,8 +5456,16 @@ fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_
         .expect("sessions should be an array");
     assert_eq!(
         sessions.len(),
-        0,
-        "contradictory in-world trace posture should no longer synthesize a selected orchestrator session: {json}"
+        1,
+        "placement-qualified host fixtures should remain visible even if trace posture claims in_world: {json}"
+    );
+    assert_eq!(
+        sessions[0].pointer("/agent_id").and_then(Value::as_str),
+        Some("claude_code-host")
+    );
+    assert_eq!(
+        sessions[0].pointer("/execution/scope").and_then(Value::as_str),
+        Some("host")
     );
 
     let world_output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
@@ -5538,10 +5496,10 @@ fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-host",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-host",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -5554,10 +5512,10 @@ fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "codex",
+            "agent_id": "codex-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-            "backend_id": "cli:codex",
+            "backend_id": "cli:codex-world",
             "client": "codex",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6463,7 +6421,7 @@ fn agent_status_uses_top_level_tuple_fields_for_pure_and_nested_records() {
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-world
 "#,
     );
     fixture.write_global_policy_patch(
@@ -6479,7 +6437,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code"
+    - "cli:claude_code-world"
 
 net_allowed: []
 cmd_allowed: []
@@ -6509,10 +6467,10 @@ metadata: {}
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6527,11 +6485,11 @@ metadata: {}
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6589,8 +6547,16 @@ metadata: {}
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        0,
-        "current status truth suppresses this nested gateway-derived trace row: {json}"
+        1,
+        "placement-qualified selected fixtures should surface the matching nested gateway row: {json}"
+    );
+    assert_eq!(
+        nested[0].pointer("/parent/agent_id").and_then(Value::as_str),
+        Some("claude_code-world")
+    );
+    assert_eq!(
+        nested[0].pointer("/backend_id").and_then(Value::as_str),
+        Some("cli:claude_code-world")
     );
 }
 
@@ -6602,7 +6568,7 @@ fn agent_status_preserves_same_tuple_nested_rows_and_sorts_them_by_run_id() {
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code-host
+    orchestrator_agent_id: claude_code-world
 "#,
     );
     fixture.write_global_policy_patch(
@@ -6618,7 +6584,7 @@ world_fs:
 
 agents:
   allowed_backends:
-    - "cli:claude_code-host"
+    - "cli:claude_code-world"
 
 net_allowed: []
 cmd_allowed: []
@@ -6648,10 +6614,10 @@ metadata: {}
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6666,11 +6632,11 @@ metadata: {}
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6684,11 +6650,11 @@ metadata: {}
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6710,19 +6676,22 @@ metadata: {}
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        0,
-        "current status truth suppresses these nested gateway-derived trace rows: {json}"
+        2,
+        "placement-qualified same-tuple fixtures should retain both nested gateway rows: {json}"
+    );
+    assert_eq!(
+        nested[0].pointer("/run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14")
+    );
+    assert_eq!(
+        nested[1].pointer("/run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15")
     );
 
     let text_output = fixture.run(&["agent", "status"]);
     assert!(
         text_output.status.success(),
         "agent status should stay readable in text mode when nested rows are suppressed: {text_output:?}"
-    );
-    let stdout = String::from_utf8_lossy(&text_output.stdout);
-    assert!(
-        !stdout.contains("nested_llm_records"),
-        "text mode should omit the nested_llm_records section when no nested rows survive\nstdout: {stdout}"
     );
 }
 
@@ -6737,10 +6706,10 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6755,11 +6724,11 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6773,10 +6742,10 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6791,11 +6760,11 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f16",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6817,8 +6786,12 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
         .expect("nested_llm_records should be an array");
     assert_eq!(
         nested.len(),
-        0,
-        "current status truth suppresses these nested gateway-derived trace rows: {json}"
+        1,
+        "placement-qualified fixtures should retain the current nested row while dropping the stale one: {json}"
+    );
+    assert_eq!(
+        nested[0].pointer("/run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f16")
     );
 }
 
@@ -6834,10 +6807,10 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_parent_run_id() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6852,10 +6825,10 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_parent_run_id() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6866,15 +6839,13 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_parent_run_id() {
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    let json = assert_status_suppresses_nested_rows(&output, 1);
-    assert_eq!(
-        find_session_by_agent(
-            json["sessions"].as_array().expect("sessions should be an array"),
-            "claude_code-world",
-        )
-        .pointer("/world_id")
-        .and_then(Value::as_str),
-        Some("wld_active_0002")
+    assert_status_fails_closed_with_stderr(
+        &output,
+        &[
+            "malformed nested parent correlation on selected status surface",
+            "agent_id=claude_code-world",
+            "parent_run_id=<missing>",
+        ],
     );
 }
 
@@ -6890,10 +6861,10 @@ fn agent_status_fails_closed_when_selected_nested_row_has_empty_parent_run_id() 
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6908,11 +6879,11 @@ fn agent_status_fails_closed_when_selected_nested_row_has_empty_parent_run_id() 
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": "",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6923,7 +6894,14 @@ fn agent_status_fails_closed_when_selected_nested_row_has_empty_parent_run_id() 
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_status_suppresses_nested_rows(&output, 1);
+    assert_status_fails_closed_with_stderr(
+        &output,
+        &[
+            "malformed nested parent correlation on selected status surface",
+            "agent_id=claude_code-world",
+            "parent_run_id=<empty>",
+        ],
+    );
 }
 
 #[test]
@@ -6939,10 +6917,10 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -6957,11 +6935,11 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": bad_parent_run_id,
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -6972,7 +6950,14 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_status_suppresses_nested_rows(&output, 1);
+    assert_status_fails_closed_with_stderr(
+        &output,
+        &[
+            "malformed nested parent correlation on selected status surface",
+            "agent_id=claude_code-world",
+            bad_parent_run_id,
+        ],
+    );
 }
 
 #[test]
@@ -6989,11 +6974,11 @@ fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mism
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "participant_id": "ash_parent_one",
             "run_id": mismatched_parent_run_id,
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -7008,11 +6993,11 @@ fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mism
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "participant_id": "ash_parent_two",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -7027,12 +7012,12 @@ fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mism
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
             "parent_run_id": mismatched_parent_run_id,
             "parent_participant_id": "ash_parent_two",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -7043,7 +7028,14 @@ fn agent_status_fails_closed_when_selected_nested_row_parent_participant_id_mism
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_status_suppresses_nested_rows(&output, 2);
+    assert_status_fails_closed_with_stderr(
+        &output,
+        &[
+            "malformed nested parent correlation on selected status surface",
+            "agent_id=claude_code-world",
+            mismatched_parent_run_id,
+        ],
+    );
 }
 
 #[test]
@@ -7058,10 +7050,10 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -7076,11 +7068,11 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -7090,7 +7082,14 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_status_suppresses_nested_rows(&output, 1);
+    assert_status_fails_closed_with_stderr(
+        &output,
+        &[
+            "malformed nested tuple on selected status surface",
+            "agent_id=claude_code-world",
+            "missing_fields=provider",
+        ],
+    );
 }
 
 #[test]
@@ -7105,10 +7104,10 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_auth_authority() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -7123,11 +7122,11 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_auth_authority() {
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -7137,7 +7136,14 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_auth_authority() {
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_status_suppresses_nested_rows(&output, 1);
+    assert_status_fails_closed_with_stderr(
+        &output,
+        &[
+            "malformed nested tuple on selected status surface",
+            "agent_id=claude_code-world",
+            "missing_fields=auth_authority",
+        ],
+    );
 }
 
 #[test]
@@ -7152,10 +7158,10 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider_and_auth_au
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -7170,11 +7176,11 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider_and_auth_au
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
             "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
@@ -7183,7 +7189,14 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider_and_auth_au
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
-    assert_status_suppresses_nested_rows(&output, 1);
+    assert_status_fails_closed_with_stderr(
+        &output,
+        &[
+            "malformed nested tuple on selected status surface",
+            "agent_id=claude_code-world",
+            "missing_fields=provider,auth_authority",
+        ],
+    );
 }
 
 #[test]
