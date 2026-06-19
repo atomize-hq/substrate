@@ -35,6 +35,9 @@ const EXIT_COMPONENT_UNAVAILABLE: i32 = 4;
 const EXIT_POLICY_FAILURE: i32 = 5;
 const CLI_CLAUDE_CODE_BACKEND: &str = "cli:claude_code";
 const CLI_CODEX_BACKEND: &str = "cli:codex";
+const CLI_CODEX_HOST_BACKEND: &str = "cli:codex-host";
+const CLI_CODEX_WORLD_BACKEND: &str = "cli:codex-world";
+const CLI_CODEX_WORLD_BACKEND_LEGACY: &str = "cli:codex_world";
 const API_OPENAI_BACKEND: &str = "api:openai";
 const API_ANTHROPIC_BACKEND: &str = "api:anthropic";
 const SUBSTRATE_GATEWAY_ROUTER: &str = "substrate_gateway";
@@ -405,7 +408,9 @@ fn derive_gateway_identity_tuple(
     selected_backend: &str,
 ) -> anyhow::Result<IdentityTuple> {
     let protocol = match selected_backend {
-        CLI_CODEX_BACKEND | API_OPENAI_BACKEND => "openai.responses",
+        backend if is_cli_codex_backend(backend) || backend == API_OPENAI_BACKEND => {
+            "openai.responses"
+        }
         CLI_CLAUDE_CODE_BACKEND | API_ANTHROPIC_BACKEND => "anthropic.messages",
         other => {
             return Err(gateway_invalid_integration_error(format!(
@@ -415,7 +420,9 @@ fn derive_gateway_identity_tuple(
         }
     };
     let provider = match selected_backend {
-        CLI_CODEX_BACKEND | API_OPENAI_BACKEND => Some("openai".to_string()),
+        backend if is_cli_codex_backend(backend) || backend == API_OPENAI_BACKEND => {
+            Some("openai".to_string())
+        }
         CLI_CLAUDE_CODE_BACKEND | API_ANTHROPIC_BACKEND => Some("anthropic".to_string()),
         _ => None,
     };
@@ -466,6 +473,16 @@ fn derive_gateway_auth_authority(
             None
         }
     })
+}
+
+fn is_cli_codex_backend(backend_id: &str) -> bool {
+    matches!(
+        backend_id,
+        CLI_CODEX_BACKEND
+            | CLI_CODEX_HOST_BACKEND
+            | CLI_CODEX_WORLD_BACKEND
+            | CLI_CODEX_WORLD_BACKEND_LEGACY
+    )
 }
 
 fn derive_gateway_placement_posture(
@@ -676,10 +693,13 @@ fn resolve_integrated_auth_payload(
 
     let selected_backend = effective_config.llm.routing.default_backend.trim();
     match backend_entry.file.config.kind {
-        agent_inventory::AgentConfigKind::Cli if selected_backend == CLI_CODEX_BACKEND => {
+        agent_inventory::AgentConfigKind::Cli if is_cli_codex_backend(selected_backend) => {
             Ok(Some(GatewayIntegratedAuthPayloadV1 {
                 backend_id: selected_backend.to_string(),
-                cli_codex: Some(resolve_cli_codex_integrated_auth(effective_policy)?),
+                cli_codex: Some(resolve_cli_codex_integrated_auth(
+                    effective_policy,
+                    selected_backend,
+                )?),
                 api_env: None,
             }))
         }
@@ -716,6 +736,7 @@ fn resolve_claude_code_integrated_auth(
 
 fn resolve_cli_codex_integrated_auth(
     effective_policy: &substrate_broker::Policy,
+    backend_id: &str,
 ) -> anyhow::Result<GatewayCliCodexIntegratedAuthV1> {
     let env_access_token = read_trimmed_env(CODEX_ACCESS_TOKEN_ENV)
         .map_err(|err| gateway_invalid_integration_error(err.to_string()))?;
@@ -744,7 +765,7 @@ fn resolve_cli_codex_integrated_auth(
     ensure_backend_allowed(
         &effective_policy.agents_host_credentials_read_allowed_backends,
         "agents.host_credentials.read.allowed_backends",
-        CLI_CODEX_BACKEND,
+        backend_id,
     )?;
 
     let auth_path = codex_auth_state_path();
@@ -1069,29 +1090,67 @@ mod tests {
     use super::*;
     use crate::execution::world_env_guard;
     use serial_test::serial;
-    use std::{fs, path::Path};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+
+    struct EnvVarGuard {
+        key: String,
+        prev: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &str, value: Option<&std::ffi::OsStr>) -> Self {
+            let prev = std::env::var_os(key);
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+            Self {
+                key: key.to_string(),
+                prev,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(value) => std::env::set_var(&self.key, value),
+                None => std::env::remove_var(&self.key),
+            }
+        }
+    }
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
         let _guard = world_env_guard();
-        let prev = std::env::var_os(key);
-        match value {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
+        let _env_guard = EnvVarGuard::set(key, value);
+        f()
+    }
+
+    struct CurrentDirGuard {
+        prev: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn set(path: &Path) -> Self {
+            let prev = std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { prev }
         }
-        let result = f();
-        match prev {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.prev);
         }
-        result
     }
 
     fn with_current_dir<T>(path: &Path, f: impl FnOnce() -> T) -> T {
-        let prev = std::env::current_dir().expect("current dir");
-        std::env::set_current_dir(path).expect("set current dir");
-        let result = f();
-        std::env::set_current_dir(prev).expect("restore current dir");
-        result
+        let _guard = CurrentDirGuard::set(path);
+        f()
     }
 
     fn write_gateway_test_config(substrate_home: &Path) {
@@ -1108,7 +1167,7 @@ llm:
     enabled: true
     mode: in_world
   routing:
-    default_backend: cli:codex
+    default_backend: cli:codex-world
 agents:
   enabled: true
 "#,
@@ -1119,7 +1178,7 @@ agents:
             format!(
                 r#"llm:
   allowed_backends:
-    - cli:codex
+    - cli:codex-world
   secrets:
     env_allowed:
       - {CODEX_ACCOUNT_ID_ENV}
