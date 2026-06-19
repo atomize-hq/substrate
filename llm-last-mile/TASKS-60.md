@@ -41,7 +41,7 @@ Session goal:
   - Boundary contract:
     - `docs/`, `config/`, and `scripts/` are forward-truth surfaces and must not keep legacy split-entry ids or unqualified pre-placement exact selectors such as `cli:codex` / `cli:claude_code` as acceptable history, except for the five explicitly deferred Packet `4` debt files named below.
     - `llm-last-mile/` planning records may retain old ids only as explicitly historical provenance.
-    - temporary Packet `1` allowlist seams are `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/host_inbox_materialization.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/auto_attach.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/shell/src/repl/async_repl.rs`.
+    - temporary Packet `1` allowlist seams are `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/host_inbox_materialization.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/auto_attach.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/shell/src/repl/async_repl.rs`; within that temporary inventory, Packet `3` explicitly owns retirement of the live selector seam in `crates/shell/src/builtins/world_gateway.rs`, while Packet `4` owns only the downstream verification/fixture cleanup boundary.
     - active forward docs/scripts may still hit the widened Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` retires those current-truth examples; those five files are deferred forward-surface debt, not historical allowlist entries, and do not block Packet `1` from being checkpoint-green.
     - `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy ids only for explicit bridge-removal coverage, persisted-state continuity, or fail-closed retirement assertions; Packet `4` must narrow the remaining hits to those intentional cases.
     - if a live dependency on split-entry legacy ids or unqualified pre-placement exact selectors appears outside that bounded allowlist, if any hit from either debt class must remain in `docs/`, `config/`, or `scripts/` outside those five deferred Packet `4` files, if one of those five files cannot be cleaned up in Packet `4`, or if removal would reopen Slice `59` runtime semantics, reopen Slice `60` planning before starting Packet `2`.
@@ -60,7 +60,8 @@ Packet 1 is complete only when:
 
 1. forward truth versus historical evidence is explicit, including the difference between current forward-surface pre-placement-selector debt and the bounded historical/compatibility allowlist,
 2. the grep wall is defined,
-3. reopen conditions are stated if hidden live dependencies appear.
+3. later-packet ownership is explicit for the remaining live selector seam in `crates/shell/src/builtins/world_gateway.rs`,
+4. reopen conditions are stated if hidden live dependencies appear.
 
 Do not start Packet 2 until Packet 1 is reviewed and green.
 
@@ -143,9 +144,10 @@ Session goal:
 Packet 3 is complete only when:
 
 1. split-entry exact ids are no longer forward-valid selectors,
-2. unqualified pre-placement exact selectors are no longer forward-valid selectors or forward-happy-path examples and fail closed if they still reach a live selection path,
-3. placement-qualified exact ids are the only green path,
-4. runtime truth from Slice `59` remains untouched.
+2. unqualified pre-placement exact selectors are no longer forward-valid selectors or forward-happy-path examples and fail closed at the lower `dispatch_contract` / `agent_runtime::validator` layers if they still reach a live selection path,
+3. the live selector seam in `crates/shell/src/builtins/world_gateway.rs` is retired or aligned to the same fail-closed behavior,
+4. placement-qualified exact ids are the only green path,
+5. runtime truth from Slice `59` remains untouched.
 
 Do not start Packet 4 until Packet 3 verification is green.
 
@@ -219,6 +221,7 @@ Session goal:
     - `cargo test -p shell agent_inventory -- --nocapture`
     - `cargo test -p shell dispatch_contract -- --nocapture`
     - `cargo test -p shell agent_runtime::validator -- --nocapture`
+    - `cargo test -p shell --test world_gateway -- --nocapture`
     - `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`

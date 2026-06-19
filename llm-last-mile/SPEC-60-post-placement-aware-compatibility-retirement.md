@@ -83,6 +83,7 @@ cargo test -p shell agents_validate -- --nocapture
 cargo test -p shell agent_inventory -- --nocapture
 cargo test -p shell dispatch_contract -- --nocapture
 cargo test -p shell agent_runtime::validator -- --nocapture
+cargo test -p shell --test world_gateway -- --nocapture
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
@@ -113,7 +114,7 @@ Packet `1` historical / retirement allowlist:
    - `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
    - `crates/shell/src/execution/agent_runtime/validator.rs`
    - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
-2. compatibility-adjacent control/state seams may keep legacy names only while they are proving retained-worker continuity, persisted-state compatibility, or fail-closed retirement behavior:
+2. compatibility-adjacent control/state seams may keep legacy names only while they are proving retained-worker continuity, persisted-state compatibility, or fail-closed retirement behavior. Within that bounded inventory, `crates/shell/src/builtins/world_gateway.rs` remains temporary only until Packet `3` retires the live selector seam; Packet `4` may verify the resulting test/fixture posture, but it does not own the production-seam retirement:
    - `crates/shell/src/builtins/world_gateway.rs`
    - `crates/shell/src/execution/agents_cmd.rs`
    - `crates/shell/src/execution/cli.rs`
@@ -206,7 +207,7 @@ Conventions:
 - **Known verification surfaces**: `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` must be reviewed during Packet `3` through Packet `5`; Packet `3` must make validator/dispatch and world-gateway source seams fail closed for retired selectors directly, the live Packet `1` grep wall still leaves `agents_validate.rs` in the remaining hit set because it carries bridge-removal coverage, and any remaining split-entry or unqualified pre-placement selector hits across those source/test surfaces must end as explicit fail-closed, negative, or historical coverage before those packets can go green.
 - **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids or unqualified pre-placement exact selectors as live current truth.
 - **Regression coverage**: preserve Slice `59` world-runtime truth while retiring old split-entry naming.
-- **Manual diff review**: ensure remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are historical records only, not forward product truth.
+- **Manual diff review**: ensure remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are explicit fail-closed guidance, negative coverage, or historical records only, not forward product truth.
 
 ## Boundaries
 
@@ -290,7 +291,7 @@ Rules:
 Rules:
 
 1. Historical allowlist: `llm-last-mile/` planning records, Slice `59` closeout notes, and any explicitly labeled historical comment that preserves provenance may retain legacy ids.
-2. Temporary retirement inventory is limited to `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/auto_attach.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/host_inbox_materialization.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/shell/src/repl/async_repl.rs`.
+2. Temporary retirement inventory is limited to `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/auto_attach.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/host_inbox_materialization.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/shell/src/repl/async_repl.rs`. Packet `3` explicitly owns retirement of the live selector seam in `crates/shell/src/builtins/world_gateway.rs`; Packet `4` owns only the downstream verification/fixture cleanup boundary.
 3. Deferred forward-surface Packet `4` debt for both split-entry legacy-name hits and unqualified pre-placement exact-selector hits is limited to `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`. These are current forward-surface debt, not historical allowlist entries, and their presence does not by itself block Packet `1` from being checkpoint-green.
 4. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions; Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
 5. Those temporary code/test hits are not forward truth, are not historical evidence, and must not be cited as support for keeping the compatibility posture.

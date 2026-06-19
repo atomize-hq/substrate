@@ -114,6 +114,7 @@ Phase `1` boundary contract:
    - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
    - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
    - `crates/shell/src/repl/async_repl.rs`
+   Within that temporary inventory, `crates/shell/src/builtins/world_gateway.rs` stays allowlisted only until Phase `3` retires the live selector seam; Phase `4` may verify the follow-on coverage but does not own the production-seam retirement.
 5. Active forward docs/scripts may still trip the widened Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` retires those current-truth examples. Those five files are deferred forward-surface debt, not historical allowlist entries, and their presence alone does not block Packet `1` from going green.
 6. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only when asserting bridge-removal coverage, persisted-state continuity, or fail-closed retirement behavior; Packet `4` must narrow the remaining hits to those intentional cases.
 7. Packet `1` therefore freezes two forward-surface debt classes at once: split-entry names like `codex_world` / `cli:codex_world`, and unqualified pre-placement exact selectors like `cli:codex` / `cli:claude_code`.
@@ -235,11 +236,12 @@ Verification wall:
 4. `cargo test -p shell agent_inventory -- --nocapture`
 5. `cargo test -p shell dispatch_contract -- --nocapture`
 6. `cargo test -p shell agent_runtime::validator -- --nocapture`
-7. `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
-8. `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
-9. `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
-10. forward-truth negative grep on `docs`, `config`, `crates/shell`, and `scripts`
-11. manual grep/diff review of `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` so any remaining split-entry or unqualified pre-placement hits are explicitly fail-closed, negative, or historical rather than positive acceptance logic
+7. `cargo test -p shell --test world_gateway -- --nocapture`
+8. `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+9. `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
+10. `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
+11. forward-truth negative grep on `docs`, `config`, `crates/shell`, and `scripts`
+12. manual grep/diff review of `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` so any remaining split-entry or unqualified pre-placement hits are explicitly fail-closed guidance, negative coverage, or historical records rather than positive acceptance logic
 
 Exit criteria:
 
@@ -247,7 +249,7 @@ Exit criteria:
 2. placement-qualified exact ids are the only forward selectors,
 3. retired split-entry ids fail closed with explicit guidance,
 4. unqualified pre-placement exact selectors are no longer treated as forward-valid selectors or forward examples and fail closed on live selection paths,
-5. any remaining hits in the known Packet `4`/`5` verification surfaces are explicit negative/historical coverage only,
+5. any remaining hits in the known Packet `4`/`5` verification surfaces are explicit fail-closed guidance, negative coverage, or historical records only,
 6. forward product truth is placement-aware only,
 7. Slice `59` runtime truth remains intact.
 
