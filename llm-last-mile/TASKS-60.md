@@ -102,11 +102,11 @@ Packet 2 is complete only when:
 
 Do not start Packet 3 until Packet 2 verification is green.
 
-## Packet 3: Retire Split-Entry Exact Selector Compatibility
+## Packet 3: Retire Legacy Exact Selector Compatibility
 
 Session goal:
 
-1. stop accepting split-entry exact backend ids as live forward selectors,
+1. stop accepting split-entry exact backend ids or unqualified pre-placement exact selectors as live forward selectors/examples,
 2. keep placement-qualified exact ids green,
 3. fail closed with explicit migration guidance.
 
@@ -136,8 +136,9 @@ Session goal:
 Packet 3 is complete only when:
 
 1. split-entry exact ids are no longer forward-valid selectors,
-2. placement-qualified exact ids are the only green path,
-3. runtime truth from Slice `59` remains untouched.
+2. unqualified pre-placement exact selectors are no longer forward-valid selectors or forward-happy-path examples,
+3. placement-qualified exact ids are the only green path,
+4. runtime truth from Slice `59` remains untouched.
 
 Do not start Packet 4 until Packet 3 verification is green.
 
@@ -145,7 +146,7 @@ Do not start Packet 4 until Packet 3 verification is green.
 
 Session goal:
 
-1. remove contradictory current-truth examples,
+1. remove contradictory current-truth examples from the five deferred Packet `4` forward-surface debt files and aligned forward fixtures,
 2. keep remaining legacy-name hits only as history or explicit retirement tests,
 3. align active scripts and docs with the final identity model.
 
@@ -158,10 +159,12 @@ Session goal:
     - `rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" docs scripts -g '!target'`
     - `rg -nP "\bcli:(codex|claude_code)\b(?!-)" docs scripts -g '!target'`
   - Files:
-    - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md)
-    - [`scripts/substrate/dev-fresh-install-gateway-smoke.sh`](../scripts/substrate/dev-fresh-install-gateway-smoke.sh)
-    - [`scripts/substrate/dev-fresh-install-gateway-smoke-claude-code.sh`](../scripts/substrate/dev-fresh-install-gateway-smoke-claude-code.sh)
-    - any other forward docs/scripts discovered by the grep wall
+    - [`docs/TRACE.md`](../docs/TRACE.md)
+    - [`docs/internals/world/gateway_auth_handoff.md`](../docs/internals/world/gateway_auth_handoff.md)
+    - [`docs/reference/world/verification/gateway_auth_handoff.md`](../docs/reference/world/verification/gateway_auth_handoff.md)
+    - [`scripts/linux/world-provision.sh`](../scripts/linux/world-provision.sh)
+    - [`scripts/mac/smoke.sh`](../scripts/mac/smoke.sh)
+    - if the grep wall finds another forward docs/scripts hit outside these five files, treat it as a reopen condition instead of routine Packet `4` scope
 
 - [ ] Task 4.2: Normalize forward-facing test fixtures while preserving explicit negative retirement tests
   - Acceptance: remaining old-id references in tests are either historical-fixture provenance or explicit retirement/fail-closed assertions; forward-happy-path fixtures use placement-qualified ids only.
@@ -176,8 +179,8 @@ Session goal:
 
 Packet 4 is complete only when:
 
-1. forward docs/scripts/examples are placement-aware only,
-2. remaining legacy-name hits are explicit history or explicit negative tests,
+1. the five deferred Packet `4` forward-surface debt files plus forward docs/scripts/examples are placement-aware only,
+2. remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are explicit history or explicit negative tests,
 3. old and new ids, including unqualified pre-placement selectors, are no longer presented as coequal current truth.
 
 Do not start Packet 5 until Packet 4 verification is green.
@@ -215,8 +218,9 @@ Packet 5 is complete only when:
 
 1. the Slice `58` compatibility bridge is retired from forward live behavior,
 2. placement-qualified exact ids are the only forward selectors,
-3. authoritative forward truth is placement-aware only,
-4. Slice `59` runtime semantics remain green.
+3. unqualified pre-placement exact selectors are no longer treated as forward-valid selectors or examples,
+4. authoritative forward truth is placement-aware only,
+5. Slice `59` runtime semantics remain green.
 
 ## Cross-Packet Dependency Order
 
@@ -232,7 +236,7 @@ After each packet:
 1. confirm its verification commands are green,
 2. confirm the packet checkpoint is satisfied,
 3. confirm no packet reopened Slice `59` runtime semantics,
-4. confirm remaining legacy-name hits are either intentional history or explicit negative tests.
+4. confirm remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are either intentional history or explicit negative tests.
 
 Implementation-gate rules for packet sessions:
 

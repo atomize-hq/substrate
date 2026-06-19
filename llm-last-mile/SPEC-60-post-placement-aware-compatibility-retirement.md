@@ -52,7 +52,7 @@ Success means the repo stops carrying both the old pre-placement selector mental
 - `crates/shell` inventory, selector, validator, REPL, and policy surfaces
 - YAML agent inventory under `config/agents/`
 - Operator/config documentation under `docs/`
-- Shell smoke helpers under `scripts/substrate/`
+- Deferred forward-surface smoke/helper debt under `scripts/linux/world-provision.sh` and `scripts/mac/smoke.sh`
 - Contract and regression tests in `crates/shell/tests/`
 - `llm-last-mile/` spec/plan/tasks authority
 
@@ -166,10 +166,11 @@ crates/shell/tests/
   Contract and regression suites that currently pin both placement-aware exact ids and some legacy split-entry aliases.
 
 docs/
-  Authoritative operator truth. Historical references are allowed only where explicitly marked as historical.
+  Authoritative operator truth. Packet 4's deferred forward-surface debt is limited to `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, and `docs/reference/world/verification/gateway_auth_handoff.md`.
 
-scripts/substrate/
-  Smoke helpers and install-time examples that must align with the final placement-aware identity model.
+scripts/linux/world-provision.sh
+scripts/mac/smoke.sh
+  The only deferred forward-surface script debt files Packet 4 should clean up for this slice; they must align with the final placement-aware identity model.
 
 llm-last-mile/
   Planning authority. Historical slice docs may retain old names when clearly historical, but Slice 60 must replace the placeholder with executable retirement guidance.
@@ -198,7 +199,7 @@ Conventions:
 - **Integration tests**: public control surfaces, REPL routing, and policy/example surfaces that consume exact backend ids.
 - **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids or unqualified pre-placement exact selectors as live current truth.
 - **Regression coverage**: preserve Slice `59` world-runtime truth while retiring old split-entry naming.
-- **Manual diff review**: ensure remaining legacy-name hits are historical records only, not forward product truth.
+- **Manual diff review**: ensure remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are historical records only, not forward product truth.
 
 ## Boundaries
 
@@ -265,8 +266,8 @@ Rules:
 
 Rules:
 
-1. authoritative docs under `docs/`, active scripts under `scripts/substrate/`, and forward-facing test fixtures must use the final placement-aware identity model,
-2. a file may retain old ids only when it is clearly historical or explicitly tests retirement/fail-closed behavior,
+1. the five deferred Packet `4` forward-surface debt files named in Section `5.1`, plus forward-facing test fixtures, must use the final placement-aware identity model,
+2. a file may retain retired split-entry ids or unqualified pre-placement exact selectors only when it is clearly historical or explicitly tests retirement/fail-closed behavior,
 3. old and new exact ids, including unqualified `cli:codex` / `cli:claude_code` examples, must not be shown as coequal valid operator choices.
 
 ### 5. Historical evidence is allowed, but only as history
@@ -283,7 +284,7 @@ Rules:
 
 1. Historical allowlist: `llm-last-mile/` planning records, Slice `59` closeout notes, and any explicitly labeled historical comment that preserves provenance may retain legacy ids.
 2. Temporary retirement inventory is limited to `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/auto_attach.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/host_inbox_materialization.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/shell/src/repl/async_repl.rs`.
-3. Deferred forward-surface Packet `4` debt is limited to `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`. These are current forward-surface debt, not historical allowlist entries, and their presence does not by itself block Packet `1` from being checkpoint-green.
+3. Deferred forward-surface Packet `4` debt for both split-entry legacy-name hits and unqualified pre-placement exact-selector hits is limited to `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`. These are current forward-surface debt, not historical allowlist entries, and their presence does not by itself block Packet `1` from being checkpoint-green.
 4. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions; Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
 5. Those temporary code/test hits are not forward truth, are not historical evidence, and must not be cited as support for keeping the compatibility posture.
 6. If a split-entry legacy-name hit or unqualified pre-placement exact-selector hit is found in `docs/`, `config/`, or `scripts/` outside the five deferred Packet `4` files above, or in a live `crates/shell/` surface outside the bounded inventory above, treat that as a reopen condition for Slice `60` planning rather than silently widening implementation.
