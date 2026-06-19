@@ -243,9 +243,9 @@ crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/**
 cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 ```
 
-### Why After `SO-2.3B-refine` And `SO-3`
+### Historical Ordering Note
 
-`SO-2.3B-refine` is already landed, so `SO-3` is now the active next boundary. `SO-4` must still wait for `SO-3` so the acceptance harness validates the intended Phase-1 semantics (including compatibility rendering and semantic comparison) rather than silently defining them after the fact.
+This packet originally followed `SO-2.3B-refine` and `SO-3` so the acceptance harness would validate the intended Phase-1 semantics (including compatibility rendering and semantic comparison) instead of defining them after the fact. That sequencing dependency is already satisfied in the live repo snapshot because `SO-3`, `SO-4`, `SO-5`, and `SO-6.1` are now landed; keep this note only as historical rationale, not as still-open backlog.
 
 ## SO-5: Seed The Locked Acceptance Wall
 
