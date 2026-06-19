@@ -104,7 +104,7 @@ Packet `1` interpretation of that wall:
 1. `docs/`, `config/`, and `scripts/` are forward-truth surfaces. Any split-entry legacy-name hit or unqualified pre-placement exact-selector hit there is in-scope current-truth debt, not acceptable history.
 2. `crates/shell/` stays inside the wall so later packets cannot hide behind a narrower search root, but Packet `1` treats only the explicit allowlisted seams below as packet-owned retirement inventory; any other live `crates/shell/` hit from either grep is a reopen condition rather than proof that the old ids remain supported.
 3. `llm-last-mile/` is intentionally outside the grep wall because planning provenance may retain old ids when explicitly historical.
-4. The expanded wall is expected to expose active forward-surface Packet `4` debt in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`; those hits are not part of the historical allowlist.
+4. The expanded wall is expected to expose active forward-surface Packet `4` debt in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`; those hits are not part of the historical allowlist, but they are the bounded Packet `1`-acknowledged forward-surface debt that may remain open until Packet `4`.
 
 Packet `1` historical / retirement allowlist:
 
@@ -127,13 +127,13 @@ Packet `1` historical / retirement allowlist:
    - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
    - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
    - `crates/shell/src/repl/async_repl.rs`
-3. Active forward docs/scripts may still hit the expanded Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` normalizes those operator/product surfaces to placement-qualified ids.
+3. Active forward docs/scripts may still hit the expanded Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` normalizes those operator/product surfaces to placement-qualified ids. Those five files are deferred forward-surface debt, not historical evidence and not a reason to mark Packet `1` red.
 4. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions. Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
 5. Any split-entry legacy-name hit or unqualified pre-placement exact-selector hit outside this bounded allowlist is presumed to be forward-surface scope, not an automatic exception.
 
 Packet `1` reopen conditions:
 
-1. If any legacy-name hit in `docs/`, `config/`, or `scripts/` turns out to be required by a still-supported operator flow, reopen Slice `60` instead of silently preserving dual truth.
+1. If any legacy-name hit in `docs/`, `config/`, or `scripts/` is discovered outside the five Packet `4` forward-surface debt files above, or if one of those five files turns out to require old ids beyond the planned Packet `4` cleanup, reopen Slice `60` instead of silently preserving dual truth.
 2. If any legacy-name hit outside the allowlist above is needed for supported persisted runtime/session continuity, reopen Slice `60` instead of broadening the allowlist ad hoc.
 3. If removing an allowlisted hit would force a Slice `59` runtime-semantic change rather than an identity-only change, treat that as a reopen condition.
 
@@ -282,10 +282,11 @@ Rules:
 Rules:
 
 1. Historical allowlist: `llm-last-mile/` planning records, Slice `59` closeout notes, and any explicitly labeled historical comment that preserves provenance may retain legacy ids.
-2. Temporary retirement inventory is limited to `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, and `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`.
-3. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions; Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
-4. Those temporary code/test hits are not forward truth, are not historical evidence, and must not be cited as support for keeping the compatibility posture.
-5. If a legacy-name hit is found in `docs/`, `config/`, or `scripts/`, or in a live `crates/shell/` surface outside the bounded inventory above, treat that as a reopen condition for Slice `60` planning rather than silently widening implementation.
+2. Temporary retirement inventory is limited to `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/auto_attach.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/host_inbox_materialization.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/shell/src/repl/async_repl.rs`.
+3. Deferred forward-surface Packet `4` debt is limited to `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`. These are current forward-surface debt, not historical allowlist entries, and their presence does not by itself block Packet `1` from being checkpoint-green.
+4. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions; Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
+5. Those temporary code/test hits are not forward truth, are not historical evidence, and must not be cited as support for keeping the compatibility posture.
+6. If a legacy-name hit is found in `docs/`, `config/`, or `scripts/` outside the five deferred Packet `4` files above, or in a live `crates/shell/` surface outside the bounded inventory above, treat that as a reopen condition for Slice `60` planning rather than silently widening implementation.
 
 ### 6. Slice 59 runtime truth remains untouched
 

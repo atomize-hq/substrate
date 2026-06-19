@@ -94,7 +94,7 @@ Verification checkpoint:
 Phase `1` boundary contract:
 
 1. The forward-truth grep wall remains `docs/`, `config/`, `crates/shell/`, and `scripts/` so the final slice proof stays honest.
-2. `docs/`, `config/`, and `scripts/` are zero-tolerance forward-truth surfaces for legacy split-entry ids and unqualified pre-placement exact selectors such as `cli:codex` and `cli:claude_code`.
+2. `docs/`, `config/`, and `scripts/` are zero-tolerance forward-truth surfaces for legacy split-entry ids and unqualified pre-placement exact selectors such as `cli:codex` and `cli:claude_code`, except for the five explicitly deferred Packet `4` debt files named below.
 3. `llm-last-mile/` remains outside that wall as historical provenance, not active operator truth.
 4. Temporary allowlist seams are limited to:
    - `crates/shell/src/execution/agent_inventory.rs`
@@ -114,10 +114,10 @@ Phase `1` boundary contract:
    - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
    - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
    - `crates/shell/src/repl/async_repl.rs`
-5. Active forward docs/scripts may still trip the widened Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` retires those current-truth examples.
+5. Active forward docs/scripts may still trip the widened Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` retires those current-truth examples. Those five files are deferred forward-surface debt, not historical allowlist entries, and their presence alone does not block Packet `1` from going green.
 6. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only when asserting bridge-removal coverage, persisted-state continuity, or fail-closed retirement behavior; Packet `4` must narrow the remaining hits to those intentional cases.
 7. Packet `1` therefore freezes two forward-surface debt classes at once: split-entry names like `codex_world` / `cli:codex_world`, and unqualified pre-placement exact selectors like `cli:codex` / `cli:claude_code`.
-8. If implementation discovers a live dependency outside that bounded allowlist, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
+8. If implementation discovers a live dependency outside that bounded allowlist, any old-id hit in `docs/`, `config/`, or `scripts/` outside the five deferred Packet `4` debt files, or a need to preserve old ids in one of those five files beyond the planned Packet `4` cleanup, stop and reopen spec/plan/tasks before widening scope.
 9. If removing an allowlisted hit would reopen Slice `59` runtime semantics, treat that as a reopen condition rather than routine Slice `60` work.
 
 ### Phase 2: Retire The Effective-Inventory Compatibility Bridge
