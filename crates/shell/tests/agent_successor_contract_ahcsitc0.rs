@@ -1577,7 +1577,7 @@ fn agent_list_json_materializes_workspace_version_2_single_placement_shadow() {
     fixture.write_global_policy_patch(
         r#"agents:
   allowed_backends:
-    - cli:claude_code
+    - cli:claude_code-host
     - cli:codex-world
 "#,
     );
@@ -1642,13 +1642,13 @@ fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_stale_global_
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
     );
     fixture.write_global_policy_patch(
         r#"agents:
   allowed_backends:
-    - cli:claude_code
+    - cli:claude_code-host
     - cli:codex-host
     - cli:codex-world
 "#,
@@ -1713,13 +1713,13 @@ fn agent_list_json_host_only_workspace_version_2_shadow_suppresses_lower_root_v2
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
     );
     fixture.write_global_policy_patch(
         r#"agents:
   allowed_backends:
-    - cli:claude_code
+    - cli:claude_code-host
     - cli:codex-host
     - cli:codex-world
 "#,
@@ -1811,13 +1811,13 @@ fn agent_list_surfaces_multi_enabled_version_2_inventory_with_exact_backend_ids(
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: claude_code
+    orchestrator_agent_id: claude_code-host
 "#,
     );
     fixture.write_global_policy_patch(
         r#"agents:
   allowed_backends:
-    - cli:claude_code
+    - cli:claude_code-host
 "#,
     );
     fixture.write_agent_file(
@@ -4677,13 +4677,13 @@ fn agent_status_alias_world_member_keeps_exact_backend_and_canonical_runtime_fam
         r#"agents:
   enabled: true
   hub:
-    orchestrator_agent_id: codex
+    orchestrator_agent_id: codex-host
 "#,
     );
     fixture.write_global_policy_patch(
         r#"agents:
   allowed_backends:
-    - cli:codex
+    - cli:codex-host
     - cli:codex-world
 "#,
     );
@@ -6693,6 +6693,54 @@ metadata: {}
         text_output.status.success(),
         "agent status should stay readable in text mode when nested rows are suppressed: {text_output:?}"
     );
+    let stdout = String::from_utf8_lossy(&text_output.stdout);
+    let session_line = find_text_session_line(&stdout, "claude_code-world");
+    assert_substrings_in_order(
+        session_line,
+        &[
+            "agent_id=claude_code-world",
+            "source_kind=trace_fallback",
+            "backend_id=cli:claude_code-world",
+            "client=claude_code-world",
+            "router=agent_hub",
+            "protocol=substrate.agent.session",
+            "execution.scope=world",
+            "role=orchestrator",
+            "posture=<unknown>",
+            "attached_participant_id=<unknown>",
+            "pending_inbox_count=<unknown>",
+            "world_id=wld_active_0002",
+            "world_generation=7",
+        ],
+    );
+    assert_eq!(
+        stdout
+            .lines()
+            .filter(|line| line.contains("| agent_id=claude_code-world |"))
+            .count(),
+        1,
+        "text mode should keep one rendered session row for the parent pure-agent tuple: {stdout}"
+    );
+    assert_eq!(
+        stdout
+            .lines()
+            .filter(|line| line.contains("parent.agent_id=claude_code-world"))
+            .count(),
+        2,
+        "text mode should retain both nested rows for the same tuple: {stdout}"
+    );
+    assert!(
+        stdout.contains("nested_llm_records"),
+        "text mode should surface nested_llm_records explicitly: {stdout}"
+    );
+    assert_substrings_in_order(
+        &stdout,
+        &[
+            "nested_llm_records",
+            "run_id=0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "run_id=0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+        ],
+    );
 }
 
 #[test]
@@ -7210,10 +7258,10 @@ fn agent_status_ignores_malformed_nested_rows_when_parent_surface_is_filtered_ou
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "agent_hub",
             "protocol": "substrate.agent.session",
@@ -7228,10 +7276,10 @@ fn agent_status_ignores_malformed_nested_rows_when_parent_surface_is_filtered_ou
             "session_id": "ses_agent_hub",
             "component": "agent-hub",
             "kind": "status",
-            "agent_id": "claude_code",
+            "agent_id": "claude_code-world",
             "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
-            "backend_id": "cli:claude_code",
+            "backend_id": "cli:claude_code-world",
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
