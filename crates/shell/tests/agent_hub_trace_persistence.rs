@@ -148,7 +148,7 @@ fn write_orchestrator_runtime_config(home_substrate: &Path, fake_codex: &Path) {
     fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
     fs::write(
         home_substrate.join("config.yaml"),
-        "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
     )
     .expect("write config.yaml");
     fs::write(
@@ -157,9 +157,9 @@ fn write_orchestrator_runtime_config(home_substrate: &Path, fake_codex: &Path) {
     )
     .expect("write agent runtime policy");
     fs::write(
-        home_substrate.join("agents/codex.yaml"),
+        home_substrate.join("agents/codex-host.yaml"),
         format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    runtime_family: codex\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: codex-host\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    runtime_family: codex\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_codex.display()
         ),
     )
@@ -697,12 +697,12 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
     let runtime_records = events
         .iter()
         .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
-        .filter(|event| event.get("agent_id").and_then(Value::as_str) == Some("codex"))
+        .filter(|event| event.get("agent_id").and_then(Value::as_str) == Some("codex-host"))
         .collect::<Vec<_>>();
 
     assert!(
         !runtime_records.is_empty(),
-        "expected runtime-owned codex agent_event rows in trace; got: {events:?}"
+        "expected runtime-owned codex-host agent_event rows in trace; got: {events:?}"
     );
     assert!(
         canonical_session.is_file(),
