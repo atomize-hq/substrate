@@ -41,10 +41,10 @@ Retire the temporary compatibility posture that survived the placement-aware cut
 
 1. multi-placement CLI agents are modeled as placement-aware `version: 2` logical-agent manifests,
 2. exact selectors are placement-qualified exact backend ids such as `cli:codex-host` and `cli:codex-world`,
-3. forward docs/examples/tests/policies no longer describe split-entry ids such as `codex_world` / `cli:codex_world` as live current truth,
+3. forward docs/examples/tests/policies no longer describe split-entry ids such as `codex_world` / `cli:codex_world` or unqualified pre-placement exact selectors such as `cli:codex` / `cli:claude_code` as live current truth,
 4. and the shell no longer depends on the Slice `58` compatibility bridge that materializes placement-aware inventory back into split-entry-shaped effective rows.
 
-Success means the repo stops carrying both the old split-entry mental model and the new placement-aware model at the same time.
+Success means the repo stops carrying both the old pre-placement selector mental model and the new placement-aware model at the same time.
 
 ## Tech Stack
 
@@ -104,7 +104,7 @@ Packet `1` interpretation of that wall:
 1. `docs/`, `config/`, and `scripts/` are forward-truth surfaces. Any split-entry legacy-name hit or unqualified pre-placement exact-selector hit there is in-scope current-truth debt, not acceptable history.
 2. `crates/shell/` stays inside the wall so later packets cannot hide behind a narrower search root, but Packet `1` treats only the explicit allowlisted seams below as packet-owned retirement inventory; any other live `crates/shell/` hit from either grep is a reopen condition rather than proof that the old ids remain supported.
 3. `llm-last-mile/` is intentionally outside the grep wall because planning provenance may retain old ids when explicitly historical.
-4. The expanded wall is expected to expose active forward-surface Packet `4` debt such as unqualified `cli:codex` / `cli:claude_code` hits in operator docs and platform smoke/provisioning helpers; those hits are not part of the historical allowlist.
+4. The expanded wall is expected to expose active forward-surface Packet `4` debt in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh`; those hits are not part of the historical allowlist.
 
 Packet `1` historical / retirement allowlist:
 
@@ -115,12 +115,21 @@ Packet `1` historical / retirement allowlist:
    - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
 2. compatibility-adjacent control/state seams may keep legacy names only while they are proving retained-worker continuity, persisted-state compatibility, or fail-closed retirement behavior:
    - `crates/shell/src/builtins/world_gateway.rs`
+   - `crates/shell/src/execution/agents_cmd.rs`
+   - `crates/shell/src/execution/cli.rs`
    - `crates/shell/src/execution/agent_runtime/control.rs`
+   - `crates/shell/src/execution/agent_runtime/auto_attach.rs`
    - `crates/shell/src/execution/agent_runtime/host_inbox.rs`
+   - `crates/shell/src/execution/host_inbox_materialization.rs`
+   - `crates/shell/src/execution/agent_runtime/orchestration_session.rs`
+   - `crates/shell/src/execution/agent_runtime/session.rs`
    - `crates/shell/src/execution/agent_runtime/state_store.rs`
    - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
-3. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions. Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
-4. Any split-entry legacy-name hit or unqualified pre-placement exact-selector hit outside this bounded allowlist is presumed to be forward-surface scope, not an automatic exception.
+   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+   - `crates/shell/src/repl/async_repl.rs`
+3. Active forward docs/scripts may still hit the expanded Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` normalizes those operator/product surfaces to placement-qualified ids.
+4. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions. Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
+5. Any split-entry legacy-name hit or unqualified pre-placement exact-selector hit outside this bounded allowlist is presumed to be forward-surface scope, not an automatic exception.
 
 Packet `1` reopen conditions:
 
@@ -187,7 +196,6 @@ Conventions:
 
 - **Unit tests**: inventory materialization, selector derivation, and validator fail-closed behavior.
 - **Integration tests**: public control surfaces, REPL routing, and policy/example surfaces that consume exact backend ids.
-- **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids as live current truth.
 - **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids or unqualified pre-placement exact selectors as live current truth.
 - **Regression coverage**: preserve Slice `59` world-runtime truth while retiring old split-entry naming.
 - **Manual diff review**: ensure remaining legacy-name hits are historical records only, not forward product truth.
@@ -211,17 +219,17 @@ Conventions:
 
 ## Current Repo-Truth Gut Check
 
-### 1. Forward product truth is already placement-aware
+### 1. Forward product truth is only partially placement-aware
 
-The forward config/docs surface already describes placement-aware `version: 2` manifests and placement-qualified exact backend ids such as `cli:codex-host` and `cli:codex-world`.
+The forward config/docs surface already includes placement-aware `version: 2` manifests and placement-qualified exact backend ids such as `cli:codex-host` and `cli:codex-world`, but active docs/scripts still retain unqualified pre-placement selectors such as `cli:codex` and `cli:claude_code`. Those hits are current forward-surface debt, not historical evidence.
 
 ### 2. The compatibility bridge is still present in code
 
 `agent_inventory.rs` still materializes placement-aware `version: 2` entries into split-entry-shaped effective rows for compatibility consumers. That is intentional bridge posture, not the desired end state.
 
-### 3. Old split-entry ids still survive in repo truth
+### 3. Pre-placement selector debt still survives in repo truth
 
-The tree still contains many references to `codex_world`, `claude_code_world`, `cli:codex_world`, and `cli:claude_code_world`, especially in tests, fixtures, policy examples, and older docs. Slice `60` must separate historical evidence from forward truth and retire the remaining live compatibility paths.
+The tree still contains both split-entry names (`codex_world`, `claude_code_world`, `cli:codex_world`, `cli:claude_code_world`) and unqualified pre-placement exact selectors (`cli:codex`, `cli:claude_code`), including active forward-surface hits in docs/scripts plus compatibility/test seams under `crates/shell/`. Slice `60` must separate current forward-surface debt from the historical allowlist and retire the remaining live compatibility paths.
 
 ### 4. Slice 59 must remain frozen floor
 
@@ -242,7 +250,7 @@ Rules:
 Rules:
 
 1. forward exact selectors are placement-qualified ids such as `cli:codex-host`, `cli:codex-world`, `cli:claude_code-host`, and `cli:claude_code-world`,
-2. retired split-entry selectors such as `cli:codex_world` and `cli:claude_code_world` must not remain documented as current truth,
+2. retired split-entry selectors such as `cli:codex_world` and `cli:claude_code_world`, and unqualified pre-placement selectors such as `cli:codex` and `cli:claude_code`, must not remain documented as current truth,
 3. if a runtime surface still encounters a retired split-entry selector, it must fail closed with explicit migration guidance rather than silently remapping.
 
 ### 3. The Slice 58 effective-inventory compatibility bridge must retire
@@ -259,7 +267,7 @@ Rules:
 
 1. authoritative docs under `docs/`, active scripts under `scripts/substrate/`, and forward-facing test fixtures must use the final placement-aware identity model,
 2. a file may retain old ids only when it is clearly historical or explicitly tests retirement/fail-closed behavior,
-3. old and new exact ids must not be shown as coequal valid operator choices.
+3. old and new exact ids, including unqualified `cli:codex` / `cli:claude_code` examples, must not be shown as coequal valid operator choices.
 
 ### 5. Historical evidence is allowed, but only as history
 
@@ -294,7 +302,7 @@ Slice `60` is complete when:
 1. the repo has one clear forward identity model: placement-aware manifests plus placement-qualified exact backend ids,
 2. the effective-inventory compatibility bridge for placement-aware manifests is removed or demoted out of forward live behavior,
 3. retired split-entry selectors fail closed with explicit guidance instead of silently mapping,
-4. authoritative docs, active scripts, forward fixtures, and policy examples no longer present legacy split-entry ids as current truth,
+4. authoritative docs, active scripts, forward fixtures, and policy examples no longer present legacy split-entry ids or unqualified pre-placement selectors as current truth,
 5. targeted inventory/selector/runtime tests and the forward-truth grep wall are green,
 6. Slice `59` runtime-realizability and world-deps proof remain green after the retirement.
 

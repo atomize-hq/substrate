@@ -41,7 +41,8 @@ Session goal:
   - Boundary contract:
     - `docs/`, `config/`, and `scripts/` are forward-truth surfaces and must not keep legacy split-entry ids or unqualified pre-placement exact selectors such as `cli:codex` / `cli:claude_code` as acceptable history.
     - `llm-last-mile/` planning records may retain old ids only as explicitly historical provenance.
-    - temporary Packet `1` allowlist seams are `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, and `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`.
+    - temporary Packet `1` allowlist seams are `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/host_inbox_materialization.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/auto_attach.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/shell/src/repl/async_repl.rs`.
+    - active forward docs/scripts may still hit the widened Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` retires those current-truth examples.
     - `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy ids only for explicit bridge-removal coverage, persisted-state continuity, or fail-closed retirement assertions; Packet `4` must narrow the remaining hits to those intentional cases.
     - if a live old-id dependency appears outside that bounded allowlist, if any old-id hit must remain in `docs/`, `config/`, or `scripts/`, or if removal would reopen Slice `59` runtime semantics, reopen Slice `60` planning before starting Packet `2`.
   - Verify:
@@ -57,7 +58,7 @@ Session goal:
 
 Packet 1 is complete only when:
 
-1. forward truth versus historical evidence is explicit,
+1. forward truth versus historical evidence is explicit, including the difference between current forward-surface pre-placement-selector debt and the bounded historical/compatibility allowlist,
 2. the grep wall is defined,
 3. reopen conditions are stated if hidden live dependencies appear.
 
@@ -120,8 +121,8 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/dispatch_contract.rs`](../crates/shell/src/execution/agent_runtime/dispatch_contract.rs)
     - [`crates/shell/src/execution/agent_runtime/validator.rs`](../crates/shell/src/execution/agent_runtime/validator.rs)
 
-- [ ] Task 3.2: Retire forward policy/example/REPL dependence on split-entry exact ids
-  - Acceptance: active policy fixtures and REPL/runtime examples use only placement-qualified exact ids unless they are explicit negative tests.
+- [ ] Task 3.2: Retire forward policy/example/REPL dependence on pre-placement exact ids
+  - Acceptance: active policy fixtures and REPL/runtime examples use only placement-qualified exact ids unless they are explicit negative tests; forward-happy-path coverage no longer treats split-entry ids or unqualified `cli:codex` / `cli:claude_code` selectors as current valid examples.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
@@ -177,7 +178,7 @@ Packet 4 is complete only when:
 
 1. forward docs/scripts/examples are placement-aware only,
 2. remaining legacy-name hits are explicit history or explicit negative tests,
-3. old and new ids are no longer presented as coequal current truth.
+3. old and new ids, including unqualified pre-placement selectors, are no longer presented as coequal current truth.
 
 Do not start Packet 5 until Packet 4 verification is green.
 

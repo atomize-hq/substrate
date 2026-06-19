@@ -25,9 +25,9 @@ This plan must land:
 The repo has already crossed the meaningful semantic boundary:
 
 1. placement-aware `version: 2` manifests are the forward inventory model,
-2. placement-qualified exact backend ids are already present in forward docs/config,
+2. placement-qualified exact backend ids are already present in parts of forward docs/config,
 3. Slice `59` has already made world-runtime truth honest,
-4. but the tree still carries compatibility posture from the cutover and still contains forward-facing references to split-entry ids.
+4. but the tree still carries compatibility posture from the cutover and still contains forward-facing references to both split-entry ids and unqualified pre-placement exact selectors.
 
 So the correct next move is:
 
@@ -102,14 +102,23 @@ Phase `1` boundary contract:
    - `crates/shell/src/execution/agent_runtime/validator.rs`
    - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
    - `crates/shell/src/builtins/world_gateway.rs`
+   - `crates/shell/src/execution/agents_cmd.rs`
+   - `crates/shell/src/execution/cli.rs`
+   - `crates/shell/src/execution/host_inbox_materialization.rs`
    - `crates/shell/src/execution/agent_runtime/control.rs`
+   - `crates/shell/src/execution/agent_runtime/auto_attach.rs`
    - `crates/shell/src/execution/agent_runtime/host_inbox.rs`
+   - `crates/shell/src/execution/agent_runtime/orchestration_session.rs`
+   - `crates/shell/src/execution/agent_runtime/session.rs`
    - `crates/shell/src/execution/agent_runtime/state_store.rs`
    - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
-5. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only when asserting bridge-removal coverage, persisted-state continuity, or fail-closed retirement behavior; Packet `4` must narrow the remaining hits to those intentional cases.
-6. Packet `1` therefore freezes two forward-surface debt classes at once: split-entry names like `codex_world` / `cli:codex_world`, and unqualified pre-placement exact selectors like `cli:codex` / `cli:claude_code`.
-7. If implementation discovers a live dependency outside that bounded allowlist, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
-8. If removing an allowlisted hit would reopen Slice `59` runtime semantics, treat that as a reopen condition rather than routine Slice `60` work.
+   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+   - `crates/shell/src/repl/async_repl.rs`
+5. Active forward docs/scripts may still trip the widened Packet `1` wall only in `docs/TRACE.md`, `docs/internals/world/gateway_auth_handoff.md`, `docs/reference/world/verification/gateway_auth_handoff.md`, `scripts/linux/world-provision.sh`, and `scripts/mac/smoke.sh` until Packet `4` retires those current-truth examples.
+6. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only when asserting bridge-removal coverage, persisted-state continuity, or fail-closed retirement behavior; Packet `4` must narrow the remaining hits to those intentional cases.
+7. Packet `1` therefore freezes two forward-surface debt classes at once: split-entry names like `codex_world` / `cli:codex_world`, and unqualified pre-placement exact selectors like `cli:codex` / `cli:claude_code`.
+8. If implementation discovers a live dependency outside that bounded allowlist, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
+9. If removing an allowlisted hit would reopen Slice `59` runtime semantics, treat that as a reopen condition rather than routine Slice `60` work.
 
 ### Phase 2: Retire The Effective-Inventory Compatibility Bridge
 
@@ -181,7 +190,7 @@ Primary touch surface:
 2. `scripts/substrate/dev-fresh-install-gateway-smoke.sh`
 3. `scripts/substrate/dev-fresh-install-gateway-smoke-claude-code.sh`
 4. forward-facing test fixtures under `crates/shell/tests/`
-5. any active policy/example surfaces still pinning split-entry ids
+5. any active policy/example surfaces still pinning split-entry ids or unqualified pre-placement exact selectors
 
 Required changes:
 
@@ -195,7 +204,7 @@ Verification reminder for Phase `4`:
 
 Verification checkpoint:
 
-1. forward docs/scripts/examples no longer present old ids as live current truth,
+1. forward docs/scripts/examples no longer present old ids or unqualified pre-placement exact selectors as live current truth,
 2. remaining old-id hits are either historical evidence or explicit retirement tests,
 3. operator guidance is consistent end to end.
 
