@@ -111,6 +111,63 @@ run_substrate() {
   "${SUBSTRATE_BIN}" "$@"
 }
 
+capture_substrate() {
+  printf '[%s] Running: %s %s\n' "${SCRIPT_NAME}" "${SUBSTRATE_BIN}" "$*" >&2
+  "${SUBSTRATE_BIN}" "$@"
+}
+
+preflight_world_socket_access() {
+  local host_doctor_json=""
+  local host_doctor_status=0
+  local probe_ok=""
+  local access_status=""
+  local access_source=""
+  local remediation=""
+  local parsed_access=""
+
+  set +e
+  host_doctor_json="$(capture_substrate host doctor --json)"
+  host_doctor_status=$?
+  set -e
+
+  [[ -n "${host_doctor_json}" ]] || fatal "World socket access preflight could not read 'substrate host doctor --json'."
+
+  set +e
+  parsed_access="$(python3 - "${host_doctor_json}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+socket = payload.get("host", {}).get("world_socket", {})
+access = socket.get("access", {})
+
+print(
+    "{}\t{}\t{}\t{}".format(
+        "true" if socket.get("probe_ok") else "false",
+        access.get("status", "unknown"),
+        access.get("authorization_source", "unknown"),
+        access.get("remediation", ""),
+    )
+)
+PY
+)"
+  local parsed_status=$?
+  set -e
+
+  [[ ${parsed_status} -eq 0 ]] || fatal "World socket access preflight could not parse 'substrate host doctor --json'."
+  read -r probe_ok access_status access_source remediation <<< "${parsed_access}"
+
+  if [[ ${host_doctor_status} -ne 0 && "${probe_ok}" != "true" ]]; then
+    fatal "World socket access preflight failed (status=${access_status}, authorization_source=${access_source}). ${remediation}"
+  fi
+
+  if [[ "${probe_ok}" != "true" ]]; then
+    fatal "World socket access preflight failed (status=${access_status}, authorization_source=${access_source}). ${remediation}"
+  fi
+
+  log "World socket access preflight passed via ${access_source} (status=${access_status})."
+}
+
 agents_dir="${PREFIX}/agents"
 mkdir -p "${agents_dir}"
 cp "${AGENT_MANIFEST}" "${agents_dir}/claude_code.yaml"
@@ -138,6 +195,7 @@ run_substrate policy global set 'agents.world_dispatch.max_live_retained_workers
 run_substrate policy global set 'agents.world_dispatch.max_concurrent_ephemeral=8'
 
 log "Configured fresh install for Claude Code host-orchestrator plus world-dispatch smoke."
+preflight_world_socket_access
 run_substrate world gateway status
 
 if [[ "${RUN_SYNC}" -eq 1 ]]; then

@@ -35,6 +35,7 @@ smoke path:
   - config/agents/codex.yaml is copied into <prefix>/agents/codex.yaml
   - agents.toolbox is enabled with UDS transport
   - agents.world_dispatch is enabled for exact backend cli:codex-world
+  - the Codex guest runtime is already provisioned at /var/lib/substrate/world-deps/bin/codex
 USAGE
 }
 
@@ -168,6 +169,28 @@ PY
   log "World socket access preflight passed via ${access_source} (status=${access_status})."
 }
 
+preflight_codex_world_runtime() {
+  local helper_path="${PREFIX}/scripts/substrate/world-enable.sh"
+  local remediation=""
+
+  if [[ -x "${helper_path}" ]]; then
+    remediation="Run '${helper_path} --home ${PREFIX} --provision-agent-runtime codex' and rerun this helper."
+  else
+    remediation="Provision the world runtime with the installed world-enable helper under '${PREFIX}/scripts/substrate/world-enable.sh --home ${PREFIX} --provision-agent-runtime codex', or rerun the dev install with '--provision-agent-runtime codex'."
+  fi
+
+  set +e
+  capture_substrate --world -c 'test -x /var/lib/substrate/world-deps/bin/codex' >/dev/null
+  local runtime_status=$?
+  set -e
+
+  if [[ ${runtime_status} -ne 0 ]]; then
+    fatal "Codex world runtime preflight failed: guest entrypoint '/var/lib/substrate/world-deps/bin/codex' is unavailable. ${remediation}"
+  fi
+
+  log "Codex world runtime preflight passed at /var/lib/substrate/world-deps/bin/codex."
+}
+
 agents_dir="${PREFIX}/agents"
 mkdir -p "${agents_dir}"
 cp "${AGENT_MANIFEST}" "${agents_dir}/codex.yaml"
@@ -195,6 +218,7 @@ run_substrate policy global set 'agents.world_dispatch.max_concurrent_ephemeral=
 
 log "Configured fresh install for Codex host-orchestrator plus world-dispatch smoke."
 preflight_world_socket_access
+preflight_codex_world_runtime
 run_substrate world gateway status
 
 if [[ "${RUN_SYNC}" -eq 1 ]]; then

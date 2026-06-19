@@ -751,350 +751,148 @@ rm -rf "$TMP"
 
 ---
 
-## Smoke Set 5: Toolbox Transport and Runtime-Family Host-Tool Parity
+## Smoke Set 5: Toolbox Transport and World-Scoped Codex UX Smoke
 
 ### 1. What this set proves
 
-This set proves the runtime-owned toolbox transport and the current runtime-family parity claim: `toolbox status|env` tell the truth, the frozen seven-tool adapter contract is the one live contract, Codex is a validated host-tool floor, selected-host `claude_code` follows the same semantic path, and world-backed sessions project binding proof onto the same session-scoped toolbox surface.
+This set proves the regular user-facing runtime/toolbox flow after the placement-aware and world-runtime work landed: `toolbox status|env` tell the truth, host-scoped Codex starts cleanly, the world-scoped Codex path uses the guest runtime contract instead of host-local NVM truth, and world-backed sessions persist authoritative binding proof.
 
 ### 2. Landed seams/slices covered
 
 Primary slices:
 
 1. `SPEC-52` runtime-owned host-orchestrator tool adapter contract freeze
-2. `SPEC-53` first runtime-family host-tool surface landing
-3. `SPEC-54` second runtime-family host-tool parity
+2. `SPEC-58` placement-aware agent inventory and selector contract
+3. `SPEC-59` world-scoped CLI runtime realizability and Codex guest runtime delivery
+4. `SPEC-60` post-placement-aware compatibility retirement
 
 ### 3. Platform scope
 
 1. Linux: required full pass surface
-2. macOS/Lima: host-session parity surfaces should be readable; world-member host-tool validation is not the claimed pass floor here
-3. Windows/WSL: world-backed host-tool parity is not claimed; fail-closed behavior is acceptable and expected
+2. macOS/Lima: host-scoped surfaces should be readable; the direct world-scoped Codex runtime proof depends on the supported guest runtime flow being ready
+3. Windows/WSL: world-backed Codex runtime delivery is not the claimed pass floor here; fail-closed behavior is acceptable and expected
 
 ### 4. Preconditions
 
-1. `target/debug/substrate` exists
+1. `substrate` is installed and on `PATH`, or you are intentionally using a locally built binary
 2. `jq` is available
-3. you are willing to use disposable fake runtime wrappers to capture env injection and prompt/runtime behavior
+3. your normal `SUBSTRATE_HOME` is available
+4. the world backend is already enabled
+5. if you want the world-scoped Codex proof to pass, the guest runtime is provisioned through the normal helper flow
 
 ### 5. Setup
 
-Create a disposable harness:
+Use your normal install:
 
 ```bash
 cd /home/azureuser/__Active_Code/atomize-hq/substrate
-export S="$PWD/target/debug/substrate"
-export TMP="$(mktemp -d /tmp/substrate-set5-XXXXXX)"
-export HOME="$TMP/home"
-export SUBSTRATE_HOME="$TMP/substrate-home"
-mkdir -p "$HOME" "$SUBSTRATE_HOME/agents" "$TMP/workspace/.substrate"
-cd "$TMP/workspace"
+command -v substrate
+substrate --version
 ```
 
-Create fake Codex and Claude wrappers that record the injected toolbox env and stay alive long enough for follow-up turns:
+If the world-scoped Codex runtime is not already provisioned, use the installed helper flow before you continue:
 
 ```bash
-cat > "$TMP/fake-codex.sh" <<SH
-#!/bin/sh
-STATE_FILE="$TMP/fake-codex.count"
-SCRIPT_DIR="$TMP"
-count=0
-if [ -f "$STATE_FILE" ]; then count=$(cat "$STATE_FILE"); fi
-count=$((count + 1))
-printf '%s' "$count" > "$STATE_FILE"
-printf '%s\n' "$@" > "$SCRIPT_DIR/fake-codex-$count.args"
-TOOLBOX_ENDPOINT="${SUBSTRATE_AGENT_TOOLBOX_ENDPOINT-}"
-TOOLBOX_VERSION="${SUBSTRATE_AGENT_TOOLBOX_VERSION-}"
-TOOLBOX_BOUND=
-case "$TOOLBOX_ENDPOINT" in
-  unix://*)
-    TOOLBOX_SOCKET="${TOOLBOX_ENDPOINT#unix://}"
-    if [ -S "$TOOLBOX_SOCKET" ]; then TOOLBOX_BOUND=1; else TOOLBOX_BOUND=0; fi
-    ;;
-esac
-{
-  printf 'SUBSTRATE_AGENT_TOOLBOX_ENDPOINT=%s\n' "$TOOLBOX_ENDPOINT"
-  printf 'SUBSTRATE_AGENT_TOOLBOX_VERSION=%s\n' "$TOOLBOX_VERSION"
-  printf 'SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_BOUND=%s\n' "$TOOLBOX_BOUND"
-} > "$SCRIPT_DIR/fake-codex-$count.env"
-cat > "$SCRIPT_DIR/fake-codex-$count.stdin"
-if [ "$count" -eq 1 ]; then
-  trap 'exit 0' INT TERM
-  printf '{"type":"thread.started","thread_id":"thread-test"}\r\n'
-  printf '{"type":"turn.started","thread_id":"thread-test","turn_id":"turn-1"}\r\n'
-  printf '{"type":"item.completed","thread_id":"thread-test","turn_id":"turn-1","item_id":"msg-1","status":"completed","item_type":"agent_message","content":{"text":"startup prompt success"}}\r\n'
-  printf '{"type":"turn.completed","thread_id":"thread-test","turn_id":"turn-1"}\r\n'
-  while :; do sleep 1; done
-fi
-printf '{"type":"thread.resumed","thread_id":"thread-test"}\r\n'
-printf '{"type":"turn.started","thread_id":"thread-test","turn_id":"turn-%s"}\r\n' "$count"
-printf '{"type":"item.completed","thread_id":"thread-test","turn_id":"turn-%s","item_id":"msg-%s","status":"completed","item_type":"agent_message","content":{"text":"follow-up prompt success"}}\r\n' "$count" "$count"
-printf '{"type":"turn.completed","thread_id":"thread-test","turn_id":"turn-%s"}\r\n' "$count"
-SH
-chmod +x "$TMP/fake-codex.sh"
-
-cat > "$TMP/fake-claude.sh" <<SH
-#!/bin/sh
-STATE_FILE="$TMP/fake-claude.count"
-SCRIPT_DIR="$TMP"
-count=0
-if [ -f "$STATE_FILE" ]; then count=$(cat "$STATE_FILE"); fi
-count=$((count + 1))
-printf '%s' "$count" > "$STATE_FILE"
-ARGS_PATH="$SCRIPT_DIR/fake-claude-$count.args"
-PROMPT_PATH="$SCRIPT_DIR/fake-claude-$count.prompt"
-STDIN_PATH="$SCRIPT_DIR/fake-claude-$count.stdin"
-: > "$ARGS_PATH"
-last_arg=
-for arg in "$@"; do
-  printf '%s\n' "$arg" >> "$ARGS_PATH"
-  last_arg="$arg"
-done
-printf '%s' "$last_arg" > "$PROMPT_PATH"
-TOOLBOX_ENDPOINT="${SUBSTRATE_AGENT_TOOLBOX_ENDPOINT-}"
-TOOLBOX_VERSION="${SUBSTRATE_AGENT_TOOLBOX_VERSION-}"
-TOOLBOX_BOUND=
-case "$TOOLBOX_ENDPOINT" in
-  unix://*)
-    TOOLBOX_SOCKET="${TOOLBOX_ENDPOINT#unix://}"
-    if [ -S "$TOOLBOX_SOCKET" ]; then TOOLBOX_BOUND=1; else TOOLBOX_BOUND=0; fi
-    ;;
-esac
-{
-  printf 'SUBSTRATE_AGENT_TOOLBOX_ENDPOINT=%s\n' "$TOOLBOX_ENDPOINT"
-  printf 'SUBSTRATE_AGENT_TOOLBOX_VERSION=%s\n' "$TOOLBOX_VERSION"
-  printf 'SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_BOUND=%s\n' "$TOOLBOX_BOUND"
-} > "$SCRIPT_DIR/fake-claude-$count.env"
-cat > "$STDIN_PATH"
-printf '{"type":"system","subtype":"init","session_id":"thread-test"}\n'
-if [ "$count" -eq 1 ]; then
-  printf '{"type":"assistant","session_id":"thread-test","message":{"content":[{"type":"text","text":"startup prompt success"}]}}\n'
-else
-  printf '{"type":"assistant","session_id":"thread-test","message":{"content":[{"type":"text","text":"follow-up prompt success"}]}}\n'
-fi
-printf '{"type":"user","session_id":"thread-test","message":{"content":[{"type":"text","text":"ack"}]}}\n'
-printf '{"type":"result","subtype":"success","session_id":"thread-test","is_error":false}\n'
-if [ "$count" -eq 1 ]; then
-  trap 'exit 0' INT TERM
-  while :; do sleep 1; done
-fi
-SH
-chmod +x "$TMP/fake-claude.sh"
-```
-
-Create a disposable config, policy, and agent inventory:
-
-```bash
-cat > "$SUBSTRATE_HOME/config.yaml" <<'YAML'
-agents:
-  enabled: true
-  hub:
-    orchestrator_agent_id: codex
-  toolbox:
-    enabled: true
-    bind:
-      transport: uds
-YAML
-
-cat > "$SUBSTRATE_HOME/policy.yaml" <<'YAML'
-id: set5-policy
-name: set5-policy
-world_fs:
-  host_visible: true
-  fail_closed:
-    routing: true
-  write:
-    enabled: true
-net_allowed: []
-cmd_allowed: []
-cmd_denied: []
-cmd_isolated: []
-require_approval: false
-allow_shell_operators: true
-limits:
-  max_memory_mb: null
-  max_cpu_percent: null
-  max_runtime_ms: null
-  max_egress_bytes: null
-metadata: {}
-agents:
-  allowed_backends:
-    - "cli:codex"
-    - "cli:claude_code"
-    - "cli:codex_world"
-YAML
-
-cat > "$SUBSTRATE_HOME/agents/codex.yaml" <<YAML
-version: 1
-id: codex
-config:
-  kind: cli
-  enabled: true
-  protocol: pure_agent
-  execution:
-    scope: host
-  cli:
-    runtime_family: codex
-    binary: $TMP/fake-codex.sh
-    mode: persistent
-  capabilities:
-    session_start: true
-    session_resume: true
-    session_fork: true
-    session_stop: true
-    status_snapshot: true
-    event_stream: true
-    llm: true
-    mcp_client: false
-YAML
-
-cat > "$SUBSTRATE_HOME/agents/claude_code.yaml" <<YAML
-version: 1
-id: claude_code
-config:
-  kind: cli
-  enabled: true
-  protocol: pure_agent
-  execution:
-    scope: host
-  cli:
-    runtime_family: claude_code
-    binary: $TMP/fake-claude.sh
-    mode: persistent
-  capabilities:
-    session_start: true
-    session_resume: true
-    session_fork: true
-    session_stop: true
-    status_snapshot: true
-    event_stream: true
-    llm: true
-    mcp_client: false
-YAML
-
-cat > "$SUBSTRATE_HOME/agents/codex_world.yaml" <<YAML
-version: 1
-id: codex_world
-config:
-  kind: cli
-  enabled: true
-  protocol: pure_agent
-  execution:
-    scope: world
-  cli:
-    runtime_family: codex
-    binary: $TMP/fake-codex.sh
-    mode: persistent
-  capabilities:
-    session_start: true
-    session_resume: true
-    session_fork: true
-    session_stop: true
-    status_snapshot: true
-    event_stream: true
-    llm: true
-    mcp_client: false
-YAML
+ls ~/.substrate/versions
+~/.substrate/versions/<installed-version>/scripts/substrate/world-enable.sh --home ~/.substrate --provision-agent-runtime codex
 ```
 
 ### 6. Step-by-step manual procedure
 
-1. Prove pre-runtime truth: `toolbox status` is readable, `toolbox env` is strict, and UDS is the supported pre-runtime transport.
+1. Confirm the live inventory and doctor surfaces use the placement-aware selectors.
 
 ```bash
-"$S" world doctor --json | jq '.'
-"$S" agent doctor --json | tee "$TMP/doctor-codex.json"
-"$S" agent toolbox status --json | tee "$TMP/toolbox-status-pre.json"
-"$S" agent toolbox env --json ; echo "exit=$?"
+substrate world doctor --json
+substrate agent doctor --json
+substrate agent list --json
 ```
 
-2. Linux-only negative control: change the transport to TCP and prove the surface does not overclaim a live pre-runtime TCP endpoint.
+2. Prove pre-runtime toolbox truth: `toolbox status` is readable, and `toolbox env` stays strict before a live host session exists.
 
 ```bash
-perl -0pi -e 's/transport: uds/transport: tcp/' "$SUBSTRATE_HOME/config.yaml"
-"$S" agent toolbox status --json | tee "$TMP/toolbox-status-tcp.json"
-perl -0pi -e 's/transport: tcp/transport: uds/' "$SUBSTRATE_HOME/config.yaml"
+substrate agent toolbox status --json
+substrate agent toolbox env --json || echo "expected: no live host session yet"
 ```
 
-3. With `codex` selected, prove the first validated host-tool floor.
+3. Start a normal host-scoped Codex session and prove follow-up works on the host placement.
 
 ```bash
-"$S" agent start --backend cli:codex --prompt "codex startup" --json | tee "$TMP/start-codex.json"
-export CODEX_SESSION="$(jq -r '.orchestration_session_id' "$TMP/start-codex.json")"
-"$S" agent turn --session "$CODEX_SESSION" --backend cli:codex --prompt "codex follow-up" --json | tee "$TMP/turn-codex.json"
+HOST_SESSION="$(
+  substrate agent start --backend cli:codex-host --prompt 'Reply with READY only.' --json \
+    | tee /dev/stderr \
+    | jq -r '.orchestration_session_id'
+)"
+substrate agent turn --session "$HOST_SESSION" --backend cli:codex-host --prompt 'Reply with STILL READY only.' --json
 ```
 
-4. Inspect the fake Codex env capture.
+4. With the host session live, prove the runtime-owned toolbox env is now available and session-scoped.
 
 ```bash
-cat "$TMP/fake-codex-1.env"
-cat "$TMP/fake-codex-2.env"
+substrate agent toolbox status --json
+substrate agent toolbox env --json
 ```
 
-5. Switch the selected host orchestrator to `claude_code` and prove the same semantic path.
+5. Prove the guest-visible Codex runtime exists in the world.
 
 ```bash
-perl -0pi -e 's/orchestrator_agent_id: codex/orchestrator_agent_id: claude_code/' "$SUBSTRATE_HOME/config.yaml"
-"$S" agent doctor --json | tee "$TMP/doctor-claude.json"
-"$S" agent start --backend cli:claude_code --prompt "claude startup" --json | tee "$TMP/start-claude.json"
-export CLAUDE_SESSION="$(jq -r '.orchestration_session_id' "$TMP/start-claude.json")"
-"$S" agent turn --session "$CLAUDE_SESSION" --backend cli:claude_code --prompt "claude follow-up" --json | tee "$TMP/turn-claude.json"
-cat "$TMP/fake-claude-1.env"
-cat "$TMP/fake-claude-2.env"
+substrate --world -c 'test -x /var/lib/substrate/world-deps/bin/codex && echo guest-codex-present'
 ```
 
-6. Linux-only: keep the selected host as `claude_code`, then start a world-backed Codex member and inspect the session-bound toolbox projection.
+6. Run the narrow direct world-scoped Codex runtime proof using the new selector.
 
 ```bash
-"$S" agent start --backend cli:codex_world --scope world --prompt "world startup" --json | tee "$TMP/start-world.json"
-"$S" agent toolbox status --json | tee "$TMP/toolbox-status-world.json"
-"$S" agent toolbox env --json | tee "$TMP/toolbox-env-world.json"
+WORLD_SESSION="$(
+  substrate agent start --backend cli:codex-world --scope world --prompt 'Reply with WORLD READY only.' --json \
+    | tee /dev/stderr \
+    | jq -r '.orchestration_session_id'
+)"
+jq '{backend_id, world_id, world_generation}' "$HOME/.substrate/run/agent-hub/sessions/$WORLD_SESSION.json"
+rg -n "/var/lib/substrate/world-deps/bin/codex|\\.config/nvm/.*/codex" "$HOME/.substrate/run" "$HOME/.substrate/trace.jsonl"
 ```
 
 ### 7. What to verify after each step
 
-1. Step 1: `toolbox status` succeeds before runtime start; `toolbox env` fails closed with exit `3`
-2. Step 2: the transport truth changes in status output, but the surface does not pretend a live endpoint exists without a live host session
-3. Step 3: the Codex path starts and turns successfully on the selected host path
-4. Step 4: the fake Codex env capture contains `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT`, `SUBSTRATE_AGENT_TOOLBOX_VERSION`, and `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT_BOUND=1`
-5. Step 5: the selected-host Claude path also receives the same runtime-owned env hints and succeeds on the same `start` and `turn` semantics
-6. Step 6: when the live session is world-backed, `toolbox status` projects the same session-rooted endpoint plus authoritative `world_id` and `world_generation`
+1. Step 1: `agent list` and `agent doctor` show placement-qualified backends such as `cli:codex-host` and `cli:codex-world`; they should not present `cli:codex_world` as live truth.
+2. Step 2: `toolbox status` succeeds before runtime start, while `toolbox env` fails closed because no live host session exists yet.
+3. Step 3: the host-scoped Codex path starts and accepts a follow-up turn through `cli:codex-host`.
+4. Step 4: once the host session is live, `toolbox env` returns runtime-owned values instead of failing closed.
+5. Step 5: the guest-visible Codex entrypoint exists at `/var/lib/substrate/world-deps/bin/codex`.
+6. Step 6: the world-scoped start succeeds through `cli:codex-world`, the persisted session shows authoritative `world_id` and `world_generation`, and the launch evidence points at `/var/lib/substrate/world-deps/bin/codex` rather than a host NVM path.
 
 ### 8. Pass/fail criteria
 
 Pass if:
 
-1. `toolbox status` and `toolbox env` tell the truth both before and after runtime start,
-2. Codex and selected-host `claude_code` receive the same runtime-owned toolbox env contract,
-3. world-backed sessions project authoritative binding proof onto the same toolbox surface,
-4. the surface remains session-scoped and runtime-owned rather than model-invented.
+1. `toolbox status` and `toolbox env` tell the truth both before and after host runtime start.
+2. Host-scoped Codex works through `cli:codex-host`.
+3. The world-scoped runtime proof works through `cli:codex-world`.
+4. The persisted world session carries authoritative binding proof.
+5. Launch evidence shows the guest runtime path `/var/lib/substrate/world-deps/bin/codex`, not a host-local NVM path.
 
 Fail if:
 
-1. `toolbox env` succeeds pre-runtime,
-2. either runtime family launches without the injected endpoint/version,
-3. the fake wrappers show an unbound or missing UDS endpoint during a live host session,
-4. world binding is guessed or omitted when the live session actually has authoritative proof.
+1. `toolbox env` succeeds before any live host session exists.
+2. `agent doctor` or `agent list` still presents retired selectors like `cli:codex_world` as live current truth.
+3. The world-scoped launch fails late with the old host-NVM `127` shape instead of failing early or succeeding on the guest runtime path.
+4. The persisted world session is missing `world_id` or `world_generation`.
+5. Launch evidence points at `~/.config/nvm/.../codex` for the world-scoped runtime.
 
 ### 9. Cleanup
 
 1. stop any sessions created during the set:
 
 ```bash
-"$S" agent status --json
-```
-
-2. remove the disposable harness:
-
-```bash
-rm -rf "$TMP"
+[ -n "${HOST_SESSION-}" ] && substrate agent stop --session "$HOST_SESSION" --json
+[ -n "${WORLD_SESSION-}" ] && substrate agent stop --session "$WORLD_SESSION" --json
+substrate agent status --json
 ```
 
 ### 10. Notes / intentional fail-closed cases
 
-1. The frozen contract is seven internal host tools. This set does not widen into public `substrate agent toolbox <verb>` execution.
-2. The endpoint is runtime-owned and session-bound. The model is not supposed to invent it.
-3. On Windows/WSL, world-backed host-tool parity is not claimed. Fail-closed behavior is acceptable and expected.
+1. The regular product flow is still host orchestration creating world agents internally. The direct `cli:codex-world` start in Step 6 is the narrowest user-runnable proof that the guest runtime contract is correct.
+2. The endpoint exposed by `toolbox env` is runtime-owned and session-bound. The model is not supposed to invent it.
+3. Retired selectors such as `cli:codex` and `cli:codex_world` are not part of the forward truth for this smoke.
+4. On Windows/WSL, world-backed Codex runtime delivery is not claimed here. Fail-closed behavior is acceptable and expected.
 
 ---
 
