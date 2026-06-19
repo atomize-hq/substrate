@@ -10798,7 +10798,7 @@ mod tests {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
+            agents_dir.join("codex-host.yaml"),
             runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
@@ -10830,7 +10830,7 @@ mod tests {
             assert!(
                 AgentRuntimeStateStore::new()
                     .expect("state store")
-                    .find_live_orchestrator("codex")
+                    .find_live_orchestrator("codex-host")
                     .expect("load live orchestrator")
                     .is_none(),
                 "bootstrap failure before session handle ownership must not leave a live manifest"
@@ -10838,7 +10838,7 @@ mod tests {
             assert!(
                 AgentRuntimeStateStore::new()
                     .expect("state store")
-                    .resolve_live_orchestrator_session("codex")
+                    .resolve_live_orchestrator_session("codex-host")
                     .expect("resolve live orchestrator session")
                     .is_none(),
                 "bootstrap failure before session handle ownership must not resolve a live parent session"
@@ -10849,7 +10849,7 @@ mod tests {
                 .list_manifests()
                 .expect("list manifests")
                 .into_iter()
-                .find(|manifest| manifest.handle.agent_id == "codex")
+                .find(|manifest| manifest.handle.agent_id == "codex-host")
                 .expect("failed manifest should exist");
             assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Failed);
             assert!(!manifest.internal.ownership_valid);
@@ -10896,7 +10896,7 @@ mod tests {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
+            agents_dir.join("codex-host.yaml"),
             runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
@@ -10936,7 +10936,7 @@ mod tests {
                 .list_manifests()
                 .expect("list manifests")
                 .into_iter()
-                .find(|manifest| manifest.handle.agent_id == "codex")
+                .find(|manifest| manifest.handle.agent_id == "codex-host")
                 .expect("stopped manifest should exist");
             assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Stopped);
             assert_eq!(
@@ -10974,7 +10974,7 @@ mod tests {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
+            agents_dir.join("codex-host.yaml"),
             runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
@@ -11122,7 +11122,7 @@ mod tests {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
+            agents_dir.join("codex-host.yaml"),
             runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
@@ -11759,7 +11759,7 @@ mod tests {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
+            agents_dir.join("codex-host.yaml"),
             runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
@@ -11970,7 +11970,7 @@ mod tests {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
+            agents_dir.join("codex-host.yaml"),
             runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
