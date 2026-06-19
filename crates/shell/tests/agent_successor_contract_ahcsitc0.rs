@@ -43,8 +43,8 @@ impl SessionContractOptions<'_> {
 
 fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
     match agent_id {
-        "claude_code" | "claude_code-world" => "claude_code",
-        "codex" | "codex-world" | "helper" => "codex",
+        "claude_code" | "claude_code-host" | "claude_code-world" => "claude_code",
+        "codex" | "codex-host" | "codex-world" | "helper" => "codex",
         other => panic!("fixture runtime_family is not specified for agent `{other}`"),
     }
 }
@@ -2891,7 +2891,7 @@ fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_is_mis
     write_runtime_participant(
         &fixture,
         "ash_turn_member_missing",
-        "codex",
+        "codex-world",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
         RuntimeParticipantOptions::world_member(
             "running",
@@ -2909,7 +2909,7 @@ fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_is_mis
         "--session",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fca",
         "--backend",
-        "cli:codex",
+        "cli:codex-world",
         "--prompt",
         "next",
         "--json",
@@ -2954,7 +2954,7 @@ fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_mismat
     write_runtime_participant(
         &fixture,
         "ash_turn_member_mismatch",
-        "codex",
+        "codex-world",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
         RuntimeParticipantOptions::world_member(
             "running",
@@ -2972,7 +2972,7 @@ fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_mismat
         "--session",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcb",
         "--backend",
-        "cli:codex",
+        "cli:codex-world",
         "--prompt",
         "next",
         "--json",
@@ -2990,6 +2990,104 @@ fn agent_turn_world_member_fails_closed_when_authoritative_parent_binding_mismat
     assert!(
         stderr.contains("no longer has an authoritative retained turn target"),
         "mismatched authoritative world binding must explain why the retained world member cannot be reused: {stderr}"
+    );
+}
+
+#[test]
+fn agent_turn_rejects_retired_codex_exact_selector_with_migration_guidance() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcc",
+        "ash_turn_parent_retired_codex",
+        "2026-04-07T00:00:01Z",
+    );
+    write_active_orchestration_session_with_world_binding(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcc",
+        Some("ash_turn_parent_retired_codex"),
+        "2026-04-07T00:00:01Z",
+        "wld_parent_binding_0002",
+        7,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_member_retired_codex",
+        "codex-world",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcc",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-07T00:00:02Z",
+            "wld_parent_binding_0002",
+            7,
+            "ash_turn_parent_retired_codex",
+        ),
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcc",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "legacy exact backend 'cli:codex' is retired; use 'cli:codex-host' or 'cli:codex-world'"
+        ),
+        "retired codex selector must publish migration guidance: {stderr}"
+    );
+}
+
+#[test]
+fn agent_turn_rejects_retired_claude_code_exact_selector_with_migration_guidance() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcd",
+        "ash_turn_parent_retired_claude",
+        "2026-04-07T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcd",
+        Some("ash_turn_parent_retired_claude"),
+        "2026-04-07T00:00:01Z",
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fcd",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "legacy exact backend 'cli:claude_code' is retired; use 'cli:claude_code-host' or 'cli:claude_code-world'"
+        ),
+        "retired claude_code selector must publish migration guidance: {stderr}"
     );
 }
 

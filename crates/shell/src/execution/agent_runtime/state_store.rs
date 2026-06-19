@@ -2288,6 +2288,9 @@ impl AgentRuntimeStateStore {
         if backend_id.trim().is_empty() {
             anyhow::bail!("missing_backend: public turn actions require --backend <backend_id>");
         }
+        if let Some(guidance) = retired_public_turn_backend_guidance(backend_id) {
+            anyhow::bail!("{guidance}");
+        }
 
         let Some(record) = self.load_session(orchestration_session_id)? else {
             return Err(self.public_turn_session_selector_error(orchestration_session_id));
@@ -4266,6 +4269,18 @@ impl AgentRuntimeStateStore {
         }
 
         Ok(obligation)
+    }
+}
+
+fn retired_public_turn_backend_guidance(backend_id: &str) -> Option<&'static str> {
+    match backend_id {
+        "cli:codex" => {
+            Some("legacy exact backend 'cli:codex' is retired; use 'cli:codex-host' or 'cli:codex-world'")
+        }
+        "cli:claude_code" => Some(
+            "legacy exact backend 'cli:claude_code' is retired; use 'cli:claude_code-host' or 'cli:claude_code-world'",
+        ),
+        _ => None,
     }
 }
 
@@ -7678,7 +7693,8 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_turn_target_reports_detached_posture_for_parked_host_session() {
         with_store(|store| {
-            let participant = detached_orchestrator("codex", "sess_turn_parked", "ash_detached");
+            let participant =
+                detached_orchestrator("codex-host", "sess_turn_parked", "ash_detached");
             let mut parent = active_parent(&participant);
             parent.mark_parked_resumable("owner detached cleanly");
             store
@@ -7689,7 +7705,7 @@ mod tests {
                 .expect("persist participant");
 
             let target = store
-                .resolve_public_turn_target("sess_turn_parked", "cli:codex")
+                .resolve_public_turn_target("sess_turn_parked", "cli:codex-host")
                 .expect("parked host target");
             assert_eq!(
                 target.session_posture,
@@ -7703,7 +7719,8 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_turn_target_uses_persisted_continuity_truth() {
         with_store(|store| {
-            let participant = detached_orchestrator("codex", "sess_turn_persisted", "ash_detached");
+            let participant =
+                detached_orchestrator("codex-host", "sess_turn_persisted", "ash_detached");
             let mut parent = active_parent(&participant);
             parent.mark_parked_resumable("owner detached cleanly");
             let mut participant = participant;
@@ -7717,7 +7734,7 @@ mod tests {
                 .expect("persist participant");
 
             let target = store
-                .resolve_public_turn_target("sess_turn_persisted", "cli:codex")
+                .resolve_public_turn_target("sess_turn_persisted", "cli:codex-host")
                 .expect("persisted contract continuity should keep detached posture");
             assert_eq!(
                 target.session_posture,
@@ -7737,7 +7754,8 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_turn_target_recovers_stale_attached_host_owner_as_detached() {
         with_store(|store| {
-            let mut participant = live_orchestrator("codex", "sess_turn_stale", "ash_stale");
+            let mut participant =
+                live_orchestrator("codex-host", "sess_turn_stale", "ash_stale");
             participant.internal.shell_owner_pid = 999_999_999;
             let parent = active_parent(&participant);
             store
@@ -7748,7 +7766,7 @@ mod tests {
                 .expect("persist participant");
 
             let target = store
-                .resolve_public_turn_target("sess_turn_stale", "cli:codex")
+                .resolve_public_turn_target("sess_turn_stale", "cli:codex-host")
                 .expect("stale attached host target");
             assert_eq!(
                 target.session_posture,
@@ -7762,10 +7780,11 @@ mod tests {
     fn resolve_public_turn_target_does_not_recover_stale_attached_owner_when_live_successor_exists()
     {
         with_store(|store| {
-            let mut stale = live_orchestrator("codex", "sess_turn_stale_blocked", "ash_stale");
+            let mut stale =
+                live_orchestrator("codex-host", "sess_turn_stale_blocked", "ash_stale");
             stale.internal.shell_owner_pid = 999_999_999;
             let live_successor =
-                live_orchestrator("codex", "sess_turn_stale_blocked", "ash_successor");
+                live_orchestrator("codex-host", "sess_turn_stale_blocked", "ash_successor");
             let parent = active_parent(&stale);
             store
                 .persist_orchestration_session(&parent)
@@ -7776,7 +7795,7 @@ mod tests {
                 .expect("persist live successor");
 
             let target = store
-                .resolve_public_turn_target("sess_turn_stale_blocked", "cli:codex")
+                .resolve_public_turn_target("sess_turn_stale_blocked", "cli:codex-host")
                 .expect("stale attached host target with live successor should still resolve");
             assert_eq!(target.session_posture, PublicSessionPosture::Terminal);
         });
@@ -7976,7 +7995,7 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_turn_target_rejects_active_session_handle_selector() {
         with_store(|store| {
-            let participant = live_orchestrator("codex", "sess_public_turn", "ash_selected");
+            let participant = live_orchestrator("codex-host", "sess_public_turn", "ash_selected");
             let parent = active_parent(&participant);
             store
                 .persist_orchestration_session(&parent)
@@ -7986,7 +8005,7 @@ mod tests {
                 .expect("persist participant");
 
             let err = store
-                .resolve_public_turn_target("ash_selected", "cli:codex")
+                .resolve_public_turn_target("ash_selected", "cli:codex-host")
                 .expect_err("non-canonical active_session_handle_id selectors must be rejected");
             assert!(err.to_string().contains("noncanonical_session_selector"));
             assert!(err.to_string().contains("active_session_handle_id"));
@@ -7997,7 +8016,7 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_turn_target_rejects_internal_uaa_selector() {
         with_store(|store| {
-            let participant = live_orchestrator("codex", "sess_public_turn", "ash_selected");
+            let participant = live_orchestrator("codex-host", "sess_public_turn", "ash_selected");
             let parent = active_parent(&participant);
             store
                 .persist_orchestration_session(&parent)
@@ -8007,7 +8026,7 @@ mod tests {
                 .expect("persist participant");
 
             let err = store
-                .resolve_public_turn_target("uaa_session", "cli:codex")
+                .resolve_public_turn_target("uaa_session", "cli:codex-host")
                 .expect_err("internal uaa session selectors must be rejected");
             assert!(err.to_string().contains("noncanonical_session_selector"));
             assert!(err.to_string().contains("internal.uaa_session_id"));
@@ -8018,9 +8037,10 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_turn_target_requires_exact_world_member_linkage() {
         with_store(|store| {
-            let orchestrator = live_orchestrator("codex", "sess_world_turn_stale", "ash_selected");
+            let orchestrator =
+                live_orchestrator("codex-host", "sess_world_turn_stale", "ash_selected");
             let mut member = live_member(
-                "codex",
+                "codex-world",
                 "sess_world_turn_stale",
                 "ash_member",
                 "ash_stale_owner",
@@ -8041,6 +8061,53 @@ mod tests {
                 .resolve_public_turn_target("sess_world_turn_stale", "cli:world-member")
                 .expect_err("stale world-member linkage must fail closed");
             assert!(err.to_string().contains("stale_linkage"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_rejects_retired_codex_exact_selector() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex-host", "sess_public_turn", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_turn_target("sess_public_turn", "cli:codex")
+                .expect_err("retired codex selector must fail closed");
+            assert_eq!(
+                err.to_string(),
+                "legacy exact backend 'cli:codex' is retired; use 'cli:codex-host' or 'cli:codex-world'"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_rejects_retired_claude_code_exact_selector() {
+        with_store(|store| {
+            let participant =
+                live_orchestrator("claude_code-host", "sess_public_turn", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_turn_target("sess_public_turn", "cli:claude_code")
+                .expect_err("retired claude_code selector must fail closed");
+            assert_eq!(
+                err.to_string(),
+                "legacy exact backend 'cli:claude_code' is retired; use 'cli:claude_code-host' or 'cli:claude_code-world'"
+            );
         });
     }
 

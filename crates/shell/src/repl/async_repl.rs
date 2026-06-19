@@ -9992,8 +9992,8 @@ mod tests {
     #[cfg(unix)]
     fn test_runtime_selection_descriptor() -> RuntimeSelectionDescriptor {
         RuntimeSelectionDescriptor {
-            agent_id: "codex".to_string(),
-            backend_id: "cli:codex".to_string(),
+            agent_id: "codex-host".to_string(),
+            backend_id: "cli:codex-host".to_string(),
             backend_kind: AgentRuntimeBackendKind::Codex,
             protocol: PURE_AGENT_PROTOCOL.to_string(),
             execution_scope: AgentExecutionScope::Host,
@@ -10430,24 +10430,29 @@ mod tests {
     ) {
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: claude_code\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: claude_code-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:claude_code\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:claude_code-host\n    - cli:codex-world\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("claude_code.yaml"),
-            runtime_agent_file("claude_code", "host", "claude_code", orchestrator_binary),
+            agents_dir.join("claude_code-host.yaml"),
+            runtime_agent_file(
+                "claude_code-host",
+                "host",
+                "claude_code",
+                orchestrator_binary,
+            ),
         )
         .expect("write claude_code agent file");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "world", "codex", member_binary),
+            agents_dir.join("codex-world.yaml"),
+            runtime_agent_file("codex-world", "world", "codex", member_binary),
         )
         .expect("write codex agent file");
     }
@@ -10503,19 +10508,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -10532,7 +10537,7 @@ mod tests {
 
             let (parent, live) = runtime
                 .store
-                .resolve_live_orchestrator_session("codex")
+                .resolve_live_orchestrator_session("codex-host")
                 .expect("resolve live orchestrator session")
                 .expect("live orchestration session should exist");
             let participant_id = live.handle.participant_id.clone();
@@ -10549,7 +10554,7 @@ mod tests {
             let host_attach_contract = parent
                 .host_attach_contract()
                 .expect("repl-born host session should persist durable attach truth");
-            assert_eq!(host_attach_contract.backend_id, "cli:codex");
+            assert_eq!(host_attach_contract.backend_id, "cli:codex-host");
             assert_eq!(host_attach_contract.protocol, PURE_AGENT_PROTOCOL);
             assert_eq!(
                 host_attach_contract
@@ -10563,7 +10568,7 @@ mod tests {
                     .expect("deserialize persisted policy snapshot");
             assert_eq!(
                 persisted_policy.agents_allowed_backends,
-                vec!["cli:codex".to_string()]
+                vec!["cli:codex-host".to_string()]
             );
             assert_eq!(
                 host_attach_contract.continuity_uaa_session_id.as_deref(),
@@ -10633,7 +10638,7 @@ mod tests {
             let manifests = store.list_manifests().expect("list manifests");
             let stopped = manifests
                 .into_iter()
-                .find(|manifest| manifest.handle.agent_id == "codex")
+                .find(|manifest| manifest.handle.agent_id == "codex-host")
                 .expect("stopped manifest should exist");
             assert_eq!(stopped.handle.state, AgentRuntimeSessionState::Stopped);
             assert!(!stopped.internal.ownership_valid);
@@ -10675,19 +10680,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -10718,7 +10723,7 @@ mod tests {
 
             let live_orchestrator = AgentRuntimeStateStore::new()
                 .expect("state store")
-                .find_live_orchestrator("codex");
+                .find_live_orchestrator("codex-host");
             assert!(
                 match &live_orchestrator {
                     Ok(None) => true,
@@ -10729,7 +10734,7 @@ mod tests {
             );
             let live_session = AgentRuntimeStateStore::new()
                 .expect("state store")
-                .resolve_live_orchestrator_session("codex");
+                .resolve_live_orchestrator_session("codex-host");
             assert!(
                 match &live_session {
                     Ok(None) => true,
@@ -10744,7 +10749,7 @@ mod tests {
                 .list_manifests()
                 .expect("list manifests")
                 .into_iter()
-                .find(|manifest| manifest.handle.agent_id == "codex")
+                .find(|manifest| manifest.handle.agent_id == "codex-host")
                 .expect("failed manifest should exist");
             assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Failed);
             assert!(!manifest.internal.ownership_valid);
@@ -10782,19 +10787,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -10880,19 +10885,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -10958,19 +10963,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -11106,19 +11111,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -11233,19 +11238,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -11373,19 +11378,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -11475,19 +11480,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_codex),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_codex),
         )
         .expect("write codex agent file");
 
@@ -11755,7 +11760,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
         fs::write(
@@ -12330,18 +12335,18 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
+            agents_dir.join("codex-host.yaml"),
             runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
@@ -12468,19 +12473,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
 
@@ -12618,8 +12623,8 @@ mod tests {
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
         fs::write(
@@ -12798,19 +12803,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
 
@@ -12937,19 +12942,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
 
@@ -13073,19 +13078,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
 
@@ -13207,19 +13212,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
 
@@ -13343,19 +13348,19 @@ mod tests {
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
         )
         .expect("write config");
         fs::write(
             substrate_home.join("policy.yaml"),
-            "agents:\n  allowed_backends:\n    - cli:codex\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
         )
         .expect("write policy");
         let agents_dir = substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
-            agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
 
@@ -13965,7 +13970,7 @@ mod tests {
             build_member_dispatch_transport_request(&member_prepared, Some("hello".to_string()))
                 .expect("member dispatch request");
 
-        assert_eq!(request.backend_id, "cli:codex");
+        assert_eq!(request.backend_id, "cli:codex-world");
         assert_eq!(request.protocol, expected_protocol);
         assert_eq!(request.binary_path, expected_binary_path);
         assert_eq!(

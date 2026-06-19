@@ -4162,7 +4162,7 @@ mod tests {
                     },
                 },
                 hub: crate::execution::config_model::AgentHubConfig {
-                    orchestrator_agent_id: "codex".to_string(),
+                    orchestrator_agent_id: "codex-host".to_string(),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -4192,7 +4192,7 @@ mod tests {
 
     fn host_start_args() -> AgentStartArgs {
         AgentStartArgs {
-            backend: "cli:codex".to_string(),
+            backend: "cli:codex-host".to_string(),
             scope: Some(AgentStartScopeArg::Host),
             disable_capability: vec![AgentDisableCapabilityArg::SessionFork],
             prompt_source: crate::execution::cli::PublicPromptArgs::default(),
@@ -4202,7 +4202,7 @@ mod tests {
 
     fn world_start_args() -> AgentStartArgs {
         AgentStartArgs {
-            backend: "cli:claude_code".to_string(),
+            backend: "cli:claude_code-world".to_string(),
             scope: Some(AgentStartScopeArg::World),
             disable_capability: vec![AgentDisableCapabilityArg::SessionStop],
             prompt_source: crate::execution::cli::PublicPromptArgs::default(),
@@ -4221,8 +4221,8 @@ mod tests {
 
     fn host_descriptor() -> RuntimeSelectionDescriptor {
         RuntimeSelectionDescriptor {
-            agent_id: "codex".to_string(),
-            backend_id: "cli:codex".to_string(),
+            agent_id: "codex-host".to_string(),
+            backend_id: "cli:codex-host".to_string(),
             backend_kind: AgentRuntimeBackendKind::Codex,
             protocol: PURE_AGENT_PROTOCOL.to_string(),
             execution_scope: AgentExecutionScope::Host,
@@ -4468,9 +4468,9 @@ mod tests {
     fn host_start_launch_plan_keeps_eager_host_attach_behavior() {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::Host),
-            base_policy_for_test(&["cli:codex"]),
+            base_policy_for_test(&["cli:codex-host"]),
             inventory_for_test(vec![inventory_entry_for_test(
-                "codex",
+                "codex-host",
                 "codex",
                 AgentExecutionScope::Host,
             )]),
@@ -4478,7 +4478,7 @@ mod tests {
         let plan =
             build_host_start_launch_plan(&host_start_args(), &context).expect("host launch plan");
 
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex-host");
         assert_eq!(
             plan.helper_plan
                 .host_attach_contract
@@ -4559,24 +4559,28 @@ mod tests {
     fn world_start_launch_plan_builds_host_helper_with_world_visible_identity() {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::Host),
-            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            base_policy_for_test(&["cli:codex-host", "cli:claude_code-world"]),
             inventory_for_test(vec![
-                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
-                inventory_entry_for_test("claude_code", "claude_code", AgentExecutionScope::World),
+                inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
+                inventory_entry_for_test(
+                    "claude_code-world",
+                    "claude_code",
+                    AgentExecutionScope::World,
+                ),
             ]),
         );
         let plan = build_world_start_session_birth_plan(&world_start_args(), &context)
             .expect("world session birth plan");
 
-        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code-world");
         assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex-host");
         let attach_contract = plan
             .helper_plan
             .host_attach_contract
             .as_ref()
             .expect("persisted attach contract");
-        assert_eq!(attach_contract.backend_id, "cli:codex");
+        assert_eq!(attach_contract.backend_id, "cli:codex-host");
         assert_eq!(
             attach_contract
                 .attach_launch_knobs
@@ -4597,18 +4601,22 @@ mod tests {
     fn build_start_launch_plan_routes_world_scope_to_host_helper_path() {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::Host),
-            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            base_policy_for_test(&["cli:codex-host", "cli:claude_code-world"]),
             inventory_for_test(vec![
-                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
-                inventory_entry_for_test("claude_code", "claude_code", AgentExecutionScope::World),
+                inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
+                inventory_entry_for_test(
+                    "claude_code-world",
+                    "claude_code",
+                    AgentExecutionScope::World,
+                ),
             ]),
         );
         let plan = build_start_launch_plan(&world_start_args(), &context)
             .expect("world start launch plan");
 
-        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code-world");
         assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex-host");
     }
 
     #[test]
@@ -4616,18 +4624,23 @@ mod tests {
     fn build_start_launch_plan_resolves_omitted_scope_from_workspace_defaults_before_global() {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::World),
-            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            base_policy_for_test(&["cli:codex-host", "cli:claude_code-host"]),
             inventory_for_test(vec![
-                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
-                inventory_entry_with_optional_scope_for_test("claude_code", "claude_code", None),
+                inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
+                inventory_entry_with_optional_scope_for_test(
+                    "claude_code-host",
+                    "claude_code",
+                    None,
+                ),
             ]),
         );
-        let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
-            .expect("omitted scope launch plan");
+        let plan =
+            build_start_launch_plan(&omitted_scope_start_args("cli:claude_code-host"), &context)
+                .expect("omitted scope launch plan");
 
-        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code-host");
         assert_eq!(plan.public_identity.scope, AgentExecutionScope::World);
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex");
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:codex-host");
     }
 
     #[test]
@@ -4635,16 +4648,21 @@ mod tests {
     fn build_start_launch_plan_resolves_omitted_scope_from_global_defaults_when_workspace_unset() {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::Host),
-            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            base_policy_for_test(&["cli:codex-host", "cli:claude_code-host"]),
             inventory_for_test(vec![
-                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
-                inventory_entry_with_optional_scope_for_test("claude_code", "claude_code", None),
+                inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
+                inventory_entry_with_optional_scope_for_test(
+                    "claude_code-host",
+                    "claude_code",
+                    None,
+                ),
             ]),
         );
-        let plan = build_start_launch_plan(&omitted_scope_start_args("cli:claude_code"), &context)
-            .expect("omitted scope launch plan");
+        let plan =
+            build_start_launch_plan(&omitted_scope_start_args("cli:claude_code-host"), &context)
+                .expect("omitted scope launch plan");
 
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code");
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code-host");
         assert_eq!(
             plan.resolved_contract.execution_scope,
             AgentExecutionScope::Host
@@ -4657,19 +4675,23 @@ mod tests {
     {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::Host),
-            base_policy_for_test(&["cli:codex", "cli:claude_code"]),
+            base_policy_for_test(&["cli:codex-host", "cli:claude_code-host"]),
             inventory_for_test(vec![
-                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
-                inventory_entry_with_optional_scope_for_test("claude_code", "claude_code", None),
+                inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
+                inventory_entry_with_optional_scope_for_test(
+                    "claude_code-host",
+                    "claude_code",
+                    None,
+                ),
             ]),
         );
-        let mut args = omitted_scope_start_args("cli:claude_code");
+        let mut args = omitted_scope_start_args("cli:claude_code-host");
         args.prompt_source.prompt = Some("hello from claude start".to_string());
         let plan = build_start_launch_plan(&args, &context)
             .expect("selected claude_code host launch plan should still resolve");
 
-        assert_eq!(plan.public_identity.backend_id, "cli:claude_code");
-        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code");
+        assert_eq!(plan.public_identity.backend_id, "cli:claude_code-host");
+        assert_eq!(plan.helper_plan.descriptor.backend_id, "cli:claude_code-host");
         assert_eq!(
             plan.helper_plan.descriptor.backend_kind,
             ResolvedRuntimeBackendKind::ClaudeCode
@@ -4685,10 +4707,14 @@ mod tests {
     fn world_start_session_birth_plan_fails_closed_without_host_attach_backend() {
         let context = command_context_for_test(
             effective_config_for_test(AgentExecutionScope::Host),
-            base_policy_for_test(&["cli:claude_code"]),
+            base_policy_for_test(&["cli:claude_code-world"]),
             inventory_for_test(vec![
-                inventory_entry_for_test("codex", "codex", AgentExecutionScope::Host),
-                inventory_entry_for_test("claude_code", "claude_code", AgentExecutionScope::World),
+                inventory_entry_for_test("codex-host", "codex", AgentExecutionScope::Host),
+                inventory_entry_for_test(
+                    "claude_code-world",
+                    "claude_code",
+                    AgentExecutionScope::World,
+                ),
             ]),
         );
         let err = build_world_start_session_birth_plan(&world_start_args(), &context)
