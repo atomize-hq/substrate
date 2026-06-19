@@ -1394,24 +1394,10 @@ fn assert_status_suppresses_nested_rows(output: &Output, expected_session_count:
 }
 
 fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value {
-    if let Some(session) = sessions
+    sessions
         .iter()
         .find(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id))
-    {
-        return session;
-    }
-
-    if !agent_id.contains('-') {
-        let aliases = [format!("{agent_id}-host"), format!("{agent_id}-world")];
-        if let Some(session) = sessions.iter().find(|session| {
-            let observed = session.pointer("/agent_id").and_then(Value::as_str);
-            aliases.iter().any(|alias| observed == Some(alias.as_str()))
-        }) {
-            return session;
-        }
-    }
-
-    panic!("expected session row for agent `{agent_id}`");
+        .unwrap_or_else(|| panic!("expected session row for agent `{agent_id}`"))
 }
 
 fn find_session_by_agent_and_orchestration_session<'a>(
@@ -1419,29 +1405,19 @@ fn find_session_by_agent_and_orchestration_session<'a>(
     agent_id: &str,
     orchestration_session_id: &str,
 ) -> &'a Value {
-    let matches_agent = |session: &&Value, expected: &str| {
-        session.pointer("/agent_id").and_then(Value::as_str) == Some(expected)
+    let matches_agent = |session: &&Value| {
+        session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id)
             && session
                 .pointer("/orchestration_session_id")
                 .and_then(Value::as_str)
                 == Some(orchestration_session_id)
     };
 
-    if let Some(session) = sessions.iter().find(|session| matches_agent(session, agent_id)) {
-        return session;
-    }
-
-    if !agent_id.contains('-') {
-        for alias in [format!("{agent_id}-host"), format!("{agent_id}-world")] {
-            if let Some(session) = sessions.iter().find(|session| matches_agent(session, &alias)) {
-                return session;
-            }
-        }
-    }
-
-    panic!(
-        "expected session row for agent `{agent_id}` in orchestration session `{orchestration_session_id}`"
-    )
+    sessions.iter().find(matches_agent).unwrap_or_else(|| {
+        panic!(
+            "expected session row for agent `{agent_id}` in orchestration session `{orchestration_session_id}`"
+        )
+    })
 }
 
 fn find_session_by_participant<'a>(sessions: &'a [Value], participant_id: &str) -> &'a Value {
@@ -1456,7 +1432,7 @@ fn find_session_by_participant<'a>(sessions: &'a [Value], participant_id: &str) 
 fn find_text_session_line<'a>(stdout: &'a str, agent_id: &str) -> &'a str {
     stdout
         .lines()
-        .find(|line| line.contains(&format!("agent_id={agent_id}")))
+        .find(|line| line.split_whitespace().any(|field| field == format!("agent_id={agent_id}")))
         .unwrap_or_else(|| panic!("expected text session row for agent `{agent_id}`"))
 }
 
@@ -2339,7 +2315,7 @@ fn agent_status_degrades_but_toolbox_fails_closed_when_live_orchestrator_child_h
         "status should keep the visible participant: {json}"
     );
     assert_eq!(
-        find_session_by_agent(sessions, "claude_code")
+        find_session_by_agent(sessions, "claude_code-host")
             .pointer("/participant_id")
             .and_then(Value::as_str),
         Some("ash_missing_parent")
@@ -2392,7 +2368,7 @@ fn agent_status_stays_readable_but_toolbox_fails_closed_when_live_orchestrator_p
         "status should keep the visible participant: {json}"
     );
     assert_eq!(
-        find_session_by_agent(sessions, "claude_code")
+        find_session_by_agent(sessions, "claude_code-host")
             .pointer("/participant_id")
             .and_then(Value::as_str),
         Some("ash_inactive_parent")
@@ -2439,7 +2415,7 @@ fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_omits_activ
         "status should keep the visible participant: {json}"
     );
     assert_eq!(
-        find_session_by_agent(sessions, "claude_code")
+        find_session_by_agent(sessions, "claude_code-host")
             .pointer("/participant_id")
             .and_then(Value::as_str),
         Some("ash_missing_active_handle")
@@ -2488,7 +2464,7 @@ fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_points_to_d
         "status should keep the visible participant: {json}"
     );
     assert_eq!(
-        find_session_by_agent(sessions, "claude_code")
+        find_session_by_agent(sessions, "claude_code-host")
             .pointer("/participant_id")
             .and_then(Value::as_str),
         Some("ash_live_handle")
@@ -3338,7 +3314,7 @@ fn agent_status_selected_host_row_stays_unchanged_when_parent_session_has_world_
     let sessions = status_json["sessions"]
         .as_array()
         .expect("sessions should be an array");
-    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    let orchestrator = find_session_by_agent(sessions, "claude_code-host");
     assert_eq!(
         orchestrator.pointer("/execution/scope").and_then(Value::as_str),
         Some("host"),
@@ -3448,14 +3424,14 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
         "unfiltered status should keep both orchestrator and member sessions: {json}"
     );
 
-    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    let orchestrator = find_session_by_agent(sessions, "claude_code-host");
     assert_eq!(
         orchestrator.pointer("/role").and_then(Value::as_str),
         Some("orchestrator"),
         "orchestrator session must preserve the orchestrator role label: {json}"
     );
 
-    let member = find_session_by_agent(sessions, "codex");
+    let member = find_session_by_agent(sessions, "codex-world");
     assert_eq!(
         member.pointer("/role").and_then(Value::as_str),
         Some("member"),
@@ -3491,7 +3467,7 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
         1,
         "--role member should return exactly one member session: {member_json}"
     );
-    let member_only = find_session_by_agent(member_sessions, "codex");
+    let member_only = find_session_by_agent(member_sessions, "codex-world");
     assert_eq!(
         member_only.pointer("/role").and_then(Value::as_str),
         Some("member")
@@ -3528,7 +3504,7 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
         1,
         "--role orchestrator should return exactly one orchestrator session: {orchestrator_json}"
     );
-    let orchestrator_only = find_session_by_agent(orchestrator_sessions, "claude_code");
+    let orchestrator_only = find_session_by_agent(orchestrator_sessions, "claude_code-host");
     assert_eq!(
         orchestrator_only.pointer("/role").and_then(Value::as_str),
         Some("orchestrator")
@@ -3581,7 +3557,7 @@ fn agent_status_prefers_live_manifest_over_trace_fallback_for_selected_orchestra
     let sessions = json["sessions"]
         .as_array()
         .expect("sessions should be an array");
-    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    let orchestrator = find_session_by_agent(sessions, "claude_code-host");
     assert_eq!(
         orchestrator
             .pointer("/orchestration_session_id")
@@ -3762,7 +3738,7 @@ fn agent_status_json_surfaces_born_unattached_fields_for_legacy_world_started_se
         .expect("sessions should be an array");
     let born_unattached = find_session_by_agent_and_orchestration_session(
         sessions,
-        "codex",
+        "codex-world",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
     );
     assert_eq!(
@@ -4027,15 +4003,15 @@ fn agent_status_human_output_includes_durable_session_fields_for_live_rows() {
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let session_line = find_text_session_line(&stdout, "claude_code");
+    let session_line = find_text_session_line(&stdout, "claude_code-host");
     assert_substrings_in_order(
         session_line,
         &[
             "orchestration_session_id=0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbe",
             "participant_id=ash_text_live",
-            "agent_id=claude_code",
+            "agent_id=claude_code-host",
             "source_kind=live_runtime",
-            "backend_id=cli:claude_code",
+            "backend_id=cli:claude_code-host",
             "client=claude_code",
             "router=agent_hub",
             "protocol=substrate.agent.session",
@@ -4079,15 +4055,15 @@ fn agent_status_human_output_marks_fallback_rows_unknown_for_durable_session_fie
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let session_line = find_text_session_line(&stdout, "claude_code");
+    let session_line = find_text_session_line(&stdout, "claude_code-host");
     assert_substrings_in_order(
         session_line,
         &[
             "orchestration_session_id=0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbf",
             "participant_id=ash_text_trace",
-            "agent_id=claude_code",
+            "agent_id=claude_code-host",
             "source_kind=trace_fallback",
-            "backend_id=cli:claude_code",
+            "backend_id=cli:claude_code-host",
             "client=claude_code",
             "router=agent_hub",
             "protocol=substrate.agent.session",
@@ -4198,7 +4174,7 @@ fn agent_status_omits_invalidated_world_member_until_replacement_persists() {
         1,
         "missing replacements must leave omission rather than stale liveness on the selected status surface: {json}"
     );
-    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    let orchestrator = find_session_by_agent(sessions, "claude_code-host");
     assert_eq!(
         orchestrator
             .pointer("/participant_id")
@@ -4285,7 +4261,7 @@ fn agent_status_keeps_same_agent_concurrent_sessions_visible_across_orchestratio
     assert_eq!(
         find_session_by_agent_and_orchestration_session(
             sessions,
-            "claude_code",
+            "claude_code-host",
             "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
         )
         .pointer("/orchestration_session_id")
@@ -4380,7 +4356,7 @@ fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_r
     assert_eq!(
         find_session_by_agent_and_orchestration_session(
             sessions,
-            "codex",
+            "codex-world",
             "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc1",
         )
         .pointer("/participant_id")
@@ -4390,7 +4366,7 @@ fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_r
     assert_eq!(
         find_session_by_agent_and_orchestration_session(
             sessions,
-            "codex",
+            "codex-world",
             "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc2",
         )
         .pointer("/participant_id")
@@ -4723,7 +4699,7 @@ fn agent_status_persists_resumed_from_participant_id_for_replacement_members() {
         1,
         "replacement member should win world status selection: {json}"
     );
-    let replacement = find_session_by_agent(sessions, "codex");
+    let replacement = find_session_by_agent(sessions, "codex-world");
     assert_eq!(
         replacement
             .pointer("/participant_id")
@@ -5064,7 +5040,7 @@ fn agent_status_json_prefers_live_runtime_member_manifest_with_top_level_world_i
     let sessions = json["sessions"]
         .as_array()
         .expect("sessions should be an array");
-    let member = find_session_by_agent(sessions, "codex");
+    let member = find_session_by_agent(sessions, "codex-world");
     assert_eq!(
         member.pointer("/source_kind").and_then(Value::as_str),
         Some("live_runtime")
@@ -5187,7 +5163,7 @@ fn agent_status_keeps_stale_terminal_member_trace_rows_auditable_without_revivin
         1,
         "stale terminal trace rows must remain auditable without reviving an old live member: {json}"
     );
-    let replacement = find_session_by_agent(sessions, "codex");
+    let replacement = find_session_by_agent(sessions, "codex-world");
     assert_eq!(
         replacement
             .pointer("/participant_id")
@@ -5360,7 +5336,7 @@ fn agent_status_scope_host_ignores_filtered_out_malformed_world_rows() {
         1,
         "--scope host should only emit the host-scoped session row: {json}"
     );
-    let session = find_session_by_agent(sessions, "claude_code");
+    let session = find_session_by_agent(sessions, "claude_code-host");
     assert_eq!(
         session.pointer("/execution/scope").and_then(Value::as_str),
         Some("host")
@@ -5419,14 +5395,14 @@ fn agent_status_ignores_non_selected_trace_orchestrator_roles() {
         .as_array()
         .expect("sessions should be an array");
 
-    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    let orchestrator = find_session_by_agent(sessions, "claude_code-host");
     assert_eq!(
         orchestrator.pointer("/role").and_then(Value::as_str),
         Some("orchestrator"),
         "selected orchestrator must remain the only orchestrator session: {json}"
     );
 
-    let codex = find_session_by_agent(sessions, "codex");
+    let codex = find_session_by_agent(sessions, "codex-world");
     assert!(
         codex
             .pointer("/role")
@@ -5449,7 +5425,7 @@ fn agent_status_ignores_non_selected_trace_orchestrator_roles() {
         "only the configured orchestrator should match --role orchestrator: {orchestrator_json}"
     );
     assert_eq!(
-        find_session_by_agent(orchestrator_sessions, "claude_code")
+        find_session_by_agent(orchestrator_sessions, "claude_code-host")
             .pointer("/role")
             .and_then(Value::as_str),
         Some("orchestrator")
@@ -5602,14 +5578,14 @@ fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
         .as_array()
         .expect("sessions should be an array");
 
-    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    let orchestrator = find_session_by_agent(sessions, "claude_code-host");
     assert_eq!(
         orchestrator.pointer("/role").and_then(Value::as_str),
         Some("orchestrator"),
         "unsupported explicit roles for the configured orchestrator must fall back to orchestrator: {json}"
     );
 
-    let member = find_session_by_agent(sessions, "codex");
+    let member = find_session_by_agent(sessions, "codex-world");
     assert!(
         member
             .pointer("/role")
