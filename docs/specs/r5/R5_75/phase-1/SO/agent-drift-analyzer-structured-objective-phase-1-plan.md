@@ -1,9 +1,11 @@
 # Plan: Agent Drift Analyzer Structured Objective Phase 1
 
 Status: draft plan created on 2026-06-14 from the structured-objective design stack; reconciled
-on 2026-06-17 against the live crate snapshot plus the grounding follow-on family through `SO-G6`.
-The map doc was used only as a routing overview; architecture owns semantics, evaluation owns
-acceptance, migration owns landing order, and classifier taxonomy remains deferred for this phase.
+on 2026-06-17 against the live crate snapshot plus the grounding follow-on family through `SO-G6`,
+then reconciled again after the landed `SO-3` through `SO-6.1` packets so this plan reflects the
+live phase-1 closeout and the remaining post-phase-1 debt explicitly. The map doc was used only as
+a routing overview; architecture owns semantics, evaluation owns acceptance, migration owns landing
+order, and classifier taxonomy remains deferred for this phase.
 
 ## Objective
 
@@ -53,10 +55,11 @@ It is a new architecture-valid seam with a different proof wall:
 3. **Keep acceptance close to the design.** The objective-acceptance suite should be committed and
    reviewable, not left as an aspirational future TODO.
 4. **Preserve compatibility honestly.** The legacy string remains available, but new correctness
-   claims should route through structured state plus a derived `comparison_key`. Until SO-3.2
-   lands, the live key remains provisional because it still mirrors display text. The checkpoint
-   bridge must preserve the richer `assemble_context(...)` objective when structured state already
-   exists; legacy narrowing is fallback/display-only, not semantic truth replacement.
+   claims should route through structured state plus a derived `comparison_key`. That semantic-key
+   derivation is now landed; any remaining follow-on work should treat downstream migration, not
+   `comparison_key` derivation itself, as the open seam. The checkpoint bridge must preserve the
+   richer `assemble_context(...)` objective when structured state already exists; legacy narrowing
+   is fallback/display-only, not semantic truth replacement.
 5. **Defer risky downstream edits.** `working_set`, `checkpoint/mod.rs`, and `checkpoint/progress.rs`
    should stay untouched in Phase 1 unless a later approved follow-on explicitly promotes them.
 
@@ -68,15 +71,16 @@ phase-1 docs lock
   -> deterministic decomposition and preliminary structured assembly [landed]
   -> grounding identifier restoration + adversarial heading proof [landed later via `SO-G1`/`SO-G2`]
   -> bridge-honesty corrective packet (`SO-2.3B-refine`) [landed]
-  -> compatibility rendering from structured state + deterministic `comparison_key` derivation [remaining]
-  -> objective-acceptance harness + committed fixtures [remaining]
-  -> full analyzer regression closeout [remaining]
+  -> compatibility rendering from structured state + deterministic `comparison_key` derivation [landed]
+  -> objective-acceptance harness + committed fixtures [landed]
+  -> full analyzer regression closeout [landed]
+  -> explicit follow-on seam capture in the phase-1 docs [this packet]
 
 explicitly deferred:
-  -> TaskFrame coexistence
-  -> working-set migration
-  -> checkpoint semantic predicate migration
-  -> progress comparability migration
+  -> TaskFrame coexistence (`checkpoint/schema.rs`, `inference/mod.rs`)
+  -> working-set path-attribution migration (`context/working_set.rs`)
+  -> checkpoint semantic predicate migration (`checkpoint/mod.rs`)
+  -> progress comparability migration (`checkpoint/progress.rs`)
   -> classifier experiments
 ```
 
@@ -172,19 +176,13 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ## SO-3: Compatibility Rendering And Comparison-Key Derivation
 
-### Current Remaining Gap
+### Reconciled Live Status
 
-This packet family is still open. The live crate exposes `comparison_key`, but the current
-implementation still mirrors display text instead of deriving a stable semantic key from the
-structured frame, and compatibility text is still selected directly from decomposition rather than
-rendered from structured state as the semantic authority. Treat the live key as a provisional
-stopgap only; downstream migration must not anchor on it until the dedicated derivation work lands.
-After the grounding follow-on plus `SO-2.3B-refine` closeout, this packet family is now the active
-next packet boundary: checkpoint narrowing already preserves the structured objective that
-`assemble_context(...)` built, so the remaining work is to project compatibility text from
-structured state and derive the approved semantic `comparison_key`. `SO-4` remains after `SO-3` so
-the acceptance harness validates the corrected semantics rather than silently defining them after
-the fact.
+This packet family is now landed in the live crate snapshot. `ObjectiveSummary.text` is rendered
+from structured state when the evidence is strong enough, and `comparison_key` is derived from the
+structured frame rather than mirroring display text. The remaining migration work is downstream of
+Phase 1 and is now tracked explicitly under the deferred follow-on list instead of being left as an
+implicit blocker here.
 
 ### Scope
 
@@ -214,21 +212,12 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ## SO-4: Objective Acceptance Harness And Fixture Contract
 
-### Current Remaining Gap
+### Reconciled Live Status
 
-This packet family is still open, but its remaining gaps are now narrower than the earlier
-pre-closeout wording suggested. `SO-2.3B-refine` already closed the checkpoint-bridge preservation,
-weak-target honesty, and verification-role alignment gaps, so those issues are no longer current
-Phase-1 remaining work. The live blockers ahead of `SO-4` are now the still-open `SO-3`
-compatibility semantics (`comparison_key` still mirrors display text and compatibility rendering is
-not yet projected from structured state) plus the still-absent `objective_acceptance` harness.
-
-The reconciled next-packet order is therefore:
-
-1. `SO-3.1` / `SO-3.2` — render compatibility text from structured state when safe and derive
-   deterministic `comparison_key` from structured semantic state.
-2. `SO-4.1` / `SO-4.2` — add the objective-acceptance harness and expected-shape contract.
-3. `SO-5.*` — seed the locked acceptance families only after the harness exists.
+This packet family is now landed in the live crate snapshot. The `objective_acceptance` harness,
+fixture loader/support, and expected-shape contract are committed, and the locked corpus is part of
+the validation wall that `SO-6.1` ran green. The remaining gaps are not harness gaps; they are the
+explicit downstream follow-on seams captured at the end of this plan.
 
 ### Scope
 
@@ -259,6 +248,12 @@ cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 `SO-2.3B-refine` is already landed, so `SO-3` is now the active next boundary. `SO-4` must still wait for `SO-3` so the acceptance harness validates the intended Phase-1 semantics (including compatibility rendering and semantic comparison) rather than silently defining them after the fact.
 
 ## SO-5: Seed The Locked Acceptance Wall
+
+### Reconciled Live Status
+
+This packet family is now landed in the live crate snapshot. The locked acceptance corpus includes
+the WDAP kickoff seeds, preserved instruction-surface controls, concise `/goal` controls, and the
+review/no-code plus planning/docs controls needed for the phase-1 acceptance wall.
 
 ### Scope
 
@@ -292,11 +287,12 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ## SO-6: Full Phase-1 Validation And Closeout Review
 
-### Current Remaining Gap
+### Reconciled Live Status
 
-This closeout packet is still blocked on the unfinished compatibility/comparison-key work and the
-missing objective-acceptance harness. It should remain open until those remaining seams land and
-the analyzer-local validation wall can be run honestly.
+The analyzer-local validation wall is now landed and was rerun green after the `SO-5.3` review-fix
+loop. Phase 1 can now close honestly because the remaining non-phase-1 work is explicit: the docs
+record the downstream migration seams and classifier deferrals instead of leaving them implied by
+stale “remaining gap” language or half-wired code comments.
 
 ### Scope
 
@@ -350,12 +346,29 @@ Mitigation:
 
 ## Deferred Follow-On Work (Not Phase 1)
 
-These are intentionally out of scope for this plan unless a later approval promotes them:
+These are intentionally out of scope for this plan unless a later approval promotes them. They are
+not hidden phase-1 TODOs; they are the explicit post-phase-1 seam list.
 
-1. `TaskFrame.objective_key` and `structured_objective` coexistence (migration Phase 2)
-2. `context/working_set.rs` path attribution migration
-3. `checkpoint/mod.rs` typed closeout/review/no-code predicates
-4. `checkpoint/progress.rs` comparability migration away from raw objective strings
-   - do not start this migration while `comparison_key` still mirrors display text; wait for the
-     approved SO-3.2 derivation first
-5. any classifier experiment, training pipeline, or model dependency
+1. **TaskFrame coexistence (`checkpoint/schema.rs`, `inference/mod.rs`)**
+   - live repo truth: `TaskFrame` still carries only the legacy `objective` string plus companion
+     evidence/working-set fields; it does not yet expose `objective_key` or
+     `structured_objective`.
+   - follow-on requirement: add the coexistence bridge only after an approved Phase 2 promotion so
+     downstream code can consume structured semantics without deleting the compatibility surface.
+2. **Working-set path attribution migration (`context/working_set.rs`)**
+   - live repo truth: path attribution still uses `objective.text.contains(&path)` as the bridge.
+   - follow-on requirement: migrate to structured target/evidence-driven attribution with explicit
+     sidecar-presence guards.
+3. **Checkpoint predicate migration (`checkpoint/mod.rs`)**
+   - live repo truth: closeout/review/no-code predicates still inspect objective text directly.
+   - follow-on requirement: port those predicates to typed structured fields only after TaskFrame
+     coexistence is available and validated.
+4. **Progress comparability migration (`checkpoint/progress.rs`)**
+   - live repo truth: comparability still depends on legacy TaskFrame/objective/working-set
+     surfaces rather than a richer structured-objective continuity contract.
+   - follow-on requirement: migrate progress reasoning only after TaskFrame coexistence plus the
+     earlier downstream seams are stable; do not move this seam first.
+5. **Classifier work**
+   - live repo truth: no classifier/runtime dependency is part of the landed phase-1 slice.
+   - follow-on requirement: keep classifier experiments, training pipelines, or model dependencies
+     as ask-first work after the deterministic baseline has already proved itself.
