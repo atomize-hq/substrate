@@ -197,6 +197,7 @@ Conventions:
 
 - **Unit tests**: inventory materialization, selector derivation, and validator fail-closed behavior.
 - **Integration tests**: public control surfaces, REPL routing, and policy/example surfaces that consume exact backend ids.
+- **Known verification surfaces**: `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` must be reviewed during Packet `4` and Packet `5`; any remaining split-entry or unqualified pre-placement selector hits there must end as explicit negative/historical coverage before those packets can go green.
 - **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids or unqualified pre-placement exact selectors as live current truth.
 - **Regression coverage**: preserve Slice `59` world-runtime truth while retiring old split-entry naming.
 - **Manual diff review**: ensure remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are historical records only, not forward product truth.
@@ -252,7 +253,7 @@ Rules:
 
 1. forward exact selectors are placement-qualified ids such as `cli:codex-host`, `cli:codex-world`, `cli:claude_code-host`, and `cli:claude_code-world`,
 2. retired split-entry selectors such as `cli:codex_world` and `cli:claude_code_world`, and unqualified pre-placement selectors such as `cli:codex` and `cli:claude_code`, must not remain documented as current truth,
-3. if a runtime surface still encounters a retired split-entry selector, it must fail closed with explicit migration guidance rather than silently remapping.
+3. if a live selection path still encounters a retired split-entry selector or an unqualified pre-placement selector, it must fail closed with explicit migration guidance rather than silently remapping or treating the selector as a current valid choice.
 
 ### 3. The Slice 58 effective-inventory compatibility bridge must retire
 

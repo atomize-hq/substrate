@@ -151,7 +151,7 @@ Verification checkpoint:
 
 Goal:
 
-1. stop treating split-entry exact backend ids as forward-valid selectors,
+1. stop treating split-entry exact backend ids and unqualified pre-placement exact selectors as forward-valid selectors,
 2. keep exact backend selection fail-closed,
 3. preserve Slice `59` runtime truth and exact placement semantics.
 
@@ -165,7 +165,7 @@ Primary touch surface:
 
 Required changes:
 
-1. reject retired exact ids with explicit migration guidance,
+1. reject retired exact ids and unqualified pre-placement exact selectors on live selection paths with explicit migration guidance,
 2. keep placement-qualified exact ids working,
 3. ensure runtime/control/policy surfaces do not silently reinterpret old ids as new ids,
 4. preserve exact host/world placement truth after retirement.
@@ -174,7 +174,7 @@ Verification checkpoint:
 
 1. `cli:codex-host` / `cli:codex-world` remain green,
 2. `cli:codex_world` / `cli:claude_code_world` fail closed with stable guidance,
-3. unqualified pre-placement exact selectors such as `cli:codex` / `cli:claude_code` are no longer treated as forward-valid runtime, policy, or REPL examples,
+3. unqualified pre-placement exact selectors such as `cli:codex` / `cli:claude_code` are no longer treated as forward-valid runtime, policy, or REPL examples and fail closed if they still reach a live selection path,
 4. no runtime surface silently cross-maps old and new ids.
 
 ### Phase 4: Migrate Forward Docs, Fixtures, Policies, And Smoke Helpers
@@ -199,7 +199,8 @@ Required changes:
 1. update those five deferred forward-surface debt files plus forward-facing fixtures/examples to placement-qualified exact ids only,
 2. keep negative tests that intentionally mention retired ids clearly negative,
 3. if Packet `4` verification finds another active docs/script surface outside those five files, treat it as a reopen condition instead of routine cleanup,
-4. avoid scrubbing historical `llm-last-mile/` records unless clarification is required.
+4. avoid scrubbing historical `llm-last-mile/` records unless clarification is required,
+5. treat `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, and the already named Packet `4` suites as expected verification surfaces; Packet `4` cannot go green while remaining hits there still read as forward-happy-path/current-truth coverage.
 
 Verification reminder for Phase `4`:
 
@@ -208,7 +209,7 @@ Verification reminder for Phase `4`:
 Verification checkpoint:
 
 1. the five deferred Packet `4` forward-surface debt files plus forward docs/scripts/examples no longer present old ids or unqualified pre-placement exact selectors as live current truth,
-2. remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits are either historical evidence or explicit retirement tests,
+2. remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits, including any surviving hits in `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`, are either historical evidence or explicit retirement tests,
 3. operator guidance is consistent end to end.
 
 ### Phase 5: Final Validation Wall
@@ -231,15 +232,17 @@ Verification wall:
 8. `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
 9. `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
 10. forward-truth negative grep on `docs`, `config`, `crates/shell`, and `scripts`
+11. manual grep/diff review of `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` so any remaining split-entry or unqualified pre-placement hits are explicitly negative/historical
 
 Exit criteria:
 
 1. the effective-inventory compatibility bridge is gone from forward live behavior,
 2. placement-qualified exact ids are the only forward selectors,
 3. retired split-entry ids fail closed with explicit guidance,
-4. unqualified pre-placement exact selectors are no longer treated as forward-valid selectors or forward examples,
-5. forward product truth is placement-aware only,
-6. Slice `59` runtime truth remains intact.
+4. unqualified pre-placement exact selectors are no longer treated as forward-valid selectors or forward examples and fail closed on live selection paths,
+5. any remaining hits in the known Packet `4`/`5` verification surfaces are explicit negative/historical coverage only,
+6. forward product truth is placement-aware only,
+7. Slice `59` runtime truth remains intact.
 
 ## Sequencing And Parallelism
 
