@@ -41,8 +41,9 @@ Session goal:
   - Boundary contract:
     - `docs/`, `config/`, and `scripts/` are forward-truth surfaces and must not keep legacy split-entry ids as acceptable history.
     - `llm-last-mile/` planning records may retain old ids only as explicitly historical provenance.
-    - legacy-name hits under `crates/shell/src/execution/**`, `crates/shell/src/builtins/world_gateway.rs`, and targeted `crates/shell/tests/**` files are temporary Packet `2` through `4` retirement inventory or explicit negative coverage, not forward truth.
-    - if a live old-id dependency appears outside that bounded `crates/shell/` inventory, or any old-id hit must remain in `docs/`, `config/`, or `scripts/`, reopen Slice `60` planning before starting Packet `2`.
+    - temporary Packet `1` allowlist seams are `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, and `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`.
+    - `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy ids only for explicit bridge-removal coverage, persisted-state continuity, or fail-closed retirement assertions; Packet `4` must narrow the remaining hits to those intentional cases.
+    - if a live old-id dependency appears outside that bounded allowlist, if any old-id hit must remain in `docs/`, `config/`, or `scripts/`, or if removal would reopen Slice `59` runtime semantics, reopen Slice `60` planning before starting Packet `2`.
   - Verify:
     - manual review of [SPEC-60-post-placement-aware-compatibility-retirement.md](./SPEC-60-post-placement-aware-compatibility-retirement.md), [PLAN-60-post-placement-aware-compatibility-retirement.md](./PLAN-60-post-placement-aware-compatibility-retirement.md), and [TASKS-60.md](./TASKS-60.md)
     - `rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" docs config crates/shell scripts -g '!target'`

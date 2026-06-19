@@ -82,7 +82,8 @@ Required changes:
 
 1. define which surfaces count as forward truth,
 2. define which surfaces may keep old ids as history or negative tests,
-3. encode the grep wall the slice will use for verification.
+3. encode the grep wall the slice will use for verification,
+4. name the temporary Packet `1` allowlist seams so later packets can remove them deliberately instead of treating every grep hit as equally in-scope.
 
 Verification checkpoint:
 
@@ -95,8 +96,19 @@ Phase `1` boundary contract:
 1. The forward-truth grep wall remains `docs/`, `config/`, `crates/shell/`, and `scripts/` so the final slice proof stays honest.
 2. `docs/`, `config/`, and `scripts/` are zero-tolerance forward-truth surfaces for legacy split-entry ids.
 3. `llm-last-mile/` remains outside that wall as historical provenance, not active operator truth.
-4. Until later packets land, legacy-name hits in `crates/shell/src/execution/**`, `crates/shell/src/builtins/world_gateway.rs`, and targeted `crates/shell/tests/**` files count as packet-owned retirement inventory or explicit negative coverage only.
-5. If implementation discovers a live dependency outside that bounded `crates/shell/` inventory, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
+4. Temporary allowlist seams are limited to:
+   - `crates/shell/src/execution/agent_inventory.rs`
+   - `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+   - `crates/shell/src/execution/agent_runtime/validator.rs`
+   - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
+   - `crates/shell/src/builtins/world_gateway.rs`
+   - `crates/shell/src/execution/agent_runtime/control.rs`
+   - `crates/shell/src/execution/agent_runtime/host_inbox.rs`
+   - `crates/shell/src/execution/agent_runtime/state_store.rs`
+   - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
+5. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only when asserting bridge-removal coverage, persisted-state continuity, or fail-closed retirement behavior; Packet `4` must narrow the remaining hits to those intentional cases.
+6. If implementation discovers a live dependency outside that bounded allowlist, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
+7. If removing an allowlisted hit would reopen Slice `59` runtime semantics, treat that as a reopen condition rather than routine Slice `60` work.
 
 ### Phase 2: Retire The Effective-Inventory Compatibility Bridge
 
