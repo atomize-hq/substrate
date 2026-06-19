@@ -96,6 +96,12 @@ rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" \
   -g '!target'
 ```
 
+Packet `1` interpretation of that wall:
+
+1. `docs/`, `config/`, and `scripts/` are forward-truth surfaces. Any legacy-name hit there is in-scope current-truth debt, not acceptable history.
+2. `crates/shell/` stays inside the wall so later packets cannot hide behind a narrower search root, but Packet `1` treats those hits as packet-owned retirement inventory rather than proof that the old ids remain supported.
+3. `llm-last-mile/` is intentionally outside the grep wall because planning provenance may retain old ids when explicitly historical.
+
 Placement-aware grep wall:
 
 ```bash
@@ -235,6 +241,15 @@ Rules:
 1. `llm-last-mile/` records, archived smoke notes, or historical findings may retain legacy split-entry names,
 2. those surfaces must not be used as evidence that the old names are still supported current contract,
 3. if historical docs need clarification, add explicit historical framing rather than rewriting provenance away.
+
+### 5.1 Packet 1 historical allowlist and temporary retirement inventory
+
+Rules:
+
+1. Historical allowlist: `llm-last-mile/` planning records, Slice `59` closeout notes, and any explicitly labeled historical comment that preserves provenance may retain legacy ids.
+2. Temporary retirement inventory: legacy-name hits under `crates/shell/src/execution/**`, `crates/shell/src/builtins/world_gateway.rs`, and targeted `crates/shell/tests/**` coverage are allowed to remain only until their owning Packets `2` through `4` land.
+3. Those temporary code/test hits are not forward truth, are not historical evidence, and must not be cited as support for keeping the compatibility posture.
+4. If a legacy-name hit is found in `docs/`, `config/`, or `scripts/`, or in a live `crates/shell/` surface outside the packet-owned retirement inventory above, treat that as a reopen condition for Slice `60` planning rather than silently widening implementation.
 
 ### 6. Slice 59 runtime truth remains untouched
 

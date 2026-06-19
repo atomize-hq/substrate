@@ -38,6 +38,11 @@ Session goal:
 
 - [ ] Task 1.1: Freeze the forward-surface grep wall and historical allowlist
   - Acceptance: the slice names the directories/files that must become legacy-name-free current truth and separately names the historical or negative-test allowlist; implementation no longer has to guess whether a hit is in scope.
+  - Boundary contract:
+    - `docs/`, `config/`, and `scripts/` are forward-truth surfaces and must not keep legacy split-entry ids as acceptable history.
+    - `llm-last-mile/` planning records may retain old ids only as explicitly historical provenance.
+    - legacy-name hits under `crates/shell/src/execution/**`, `crates/shell/src/builtins/world_gateway.rs`, and targeted `crates/shell/tests/**` files are temporary Packet `2` through `4` retirement inventory or explicit negative coverage, not forward truth.
+    - if a live old-id dependency appears outside that bounded `crates/shell/` inventory, or any old-id hit must remain in `docs/`, `config/`, or `scripts/`, reopen Slice `60` planning before starting Packet `2`.
   - Verify:
     - manual review of [SPEC-60-post-placement-aware-compatibility-retirement.md](./SPEC-60-post-placement-aware-compatibility-retirement.md), [PLAN-60-post-placement-aware-compatibility-retirement.md](./PLAN-60-post-placement-aware-compatibility-retirement.md), and [TASKS-60.md](./TASKS-60.md)
     - `rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" docs config crates/shell scripts -g '!target'`

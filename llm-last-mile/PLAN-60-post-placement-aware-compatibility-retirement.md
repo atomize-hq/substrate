@@ -90,6 +90,14 @@ Verification checkpoint:
 2. implementation work can focus on forward surfaces without rewriting provenance,
 3. reopen criteria are explicit if hidden live dependencies appear.
 
+Phase `1` boundary contract:
+
+1. The forward-truth grep wall remains `docs/`, `config/`, `crates/shell/`, and `scripts/` so the final slice proof stays honest.
+2. `docs/`, `config/`, and `scripts/` are zero-tolerance forward-truth surfaces for legacy split-entry ids.
+3. `llm-last-mile/` remains outside that wall as historical provenance, not active operator truth.
+4. Until later packets land, legacy-name hits in `crates/shell/src/execution/**`, `crates/shell/src/builtins/world_gateway.rs`, and targeted `crates/shell/tests/**` files count as packet-owned retirement inventory or explicit negative coverage only.
+5. If implementation discovers a live dependency outside that bounded `crates/shell/` inventory, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
+
 ### Phase 2: Retire The Effective-Inventory Compatibility Bridge
 
 Goal:
@@ -227,7 +235,7 @@ Mitigation:
 
 1. freeze the boundary first,
 2. use control-surface tests as the checkpoint,
-3. reopen the slice only if a genuine live dependency survives.
+3. reopen the slice only if a genuine live dependency survives outside the Packet `1` retirement inventory.
 
 ### Risk 2: Historical docs get mistaken for forward truth
 
