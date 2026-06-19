@@ -131,15 +131,17 @@ Goal:
 Primary touch surface:
 
 1. `crates/shell/src/execution/agent_inventory.rs`
-2. `crates/shell/tests/agents_validate.rs`
-3. `crates/shell/tests/agent_public_control_surface_v1.rs`
-4. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+2. `crates/shell/src/execution/orchestrator_world_dispatch.rs`
+3. `crates/shell/tests/agents_validate.rs`
+4. `crates/shell/tests/agent_public_control_surface_v1.rs`
+5. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
 
 Required changes:
 
 1. retire the Packet `1.5` compatibility materialization path from normal live behavior,
 2. keep placement-aware realized identities authoritative in effective inventory,
-3. make any unsupported legacy path fail closed explicitly instead of silently backfilling split-entry rows.
+3. keep world-dispatch routing and adjacent control surfaces aligned with realized placement identities instead of silently depending on compatibility-generated split-entry rows,
+4. make any unsupported legacy path fail closed explicitly instead of silently backfilling split-entry rows.
 
 Verification checkpoint:
 
@@ -161,14 +163,16 @@ Primary touch surface:
 2. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
 3. `crates/shell/src/execution/policy_model.rs`
 4. `crates/shell/src/repl/async_repl.rs`
-5. adjacent runtime/control tests
+5. `crates/shell/src/execution/orchestrator_world_dispatch.rs`
+6. adjacent runtime/control tests
 
 Required changes:
 
 1. reject retired exact ids and unqualified pre-placement exact selectors on live selection paths with explicit migration guidance,
 2. keep placement-qualified exact ids working,
 3. ensure runtime/control/policy surfaces do not silently reinterpret old ids as new ids,
-4. preserve exact host/world placement truth after retirement.
+4. keep world-dispatch request preparation and retained-worker follow-up routing consistent with the same fail-closed selector retirement,
+5. preserve exact host/world placement truth after retirement.
 
 Verification checkpoint:
 
@@ -200,7 +204,7 @@ Required changes:
 2. keep negative tests that intentionally mention retired ids clearly negative,
 3. if Packet `4` verification finds another active docs/script surface outside those five files, treat it as a reopen condition instead of routine cleanup,
 4. avoid scrubbing historical `llm-last-mile/` records unless clarification is required,
-5. treat `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, and the already named Packet `4` suites as expected verification surfaces; Packet `4` cannot go green while remaining hits there still read as forward-happy-path/current-truth coverage.
+5. treat `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, and the already named Packet `4` suites as expected verification surfaces; the live Packet `1` wall still leaves `agents_validate.rs` in the remaining hit set, and Packet `4` cannot go green while remaining hits across those surfaces still read as forward-happy-path/current-truth coverage.
 
 Verification reminder for Phase `4`:
 
@@ -209,7 +213,7 @@ Verification reminder for Phase `4`:
 Verification checkpoint:
 
 1. the five deferred Packet `4` forward-surface debt files plus forward docs/scripts/examples no longer present old ids or unqualified pre-placement exact selectors as live current truth,
-2. remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits, including any surviving hits in `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`, are either historical evidence or explicit retirement tests,
+2. remaining split-entry legacy-name hits and remaining unqualified pre-placement exact-selector hits, including any surviving hits in `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs`, are either historical evidence or explicit retirement tests,
 3. operator guidance is consistent end to end.
 
 ### Phase 5: Final Validation Wall
@@ -232,7 +236,7 @@ Verification wall:
 8. `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
 9. `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
 10. forward-truth negative grep on `docs`, `config`, `crates/shell`, and `scripts`
-11. manual grep/diff review of `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` so any remaining split-entry or unqualified pre-placement hits are explicitly negative/historical
+11. manual grep/diff review of `crates/shell/tests/agents_validate.rs`, `crates/shell/tests/config_set.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs`, `crates/shell/tests/world_gateway.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, and `crates/shell/tests/repl_world_first_routing_v1.rs` so any remaining split-entry or unqualified pre-placement hits are explicitly negative/historical
 
 Exit criteria:
 
