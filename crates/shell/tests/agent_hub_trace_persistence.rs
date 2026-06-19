@@ -153,7 +153,7 @@ fn write_orchestrator_runtime_config(home_substrate: &Path, fake_codex: &Path) {
     .expect("write config.yaml");
     fs::write(
         home_substrate.join("policy.yaml"),
-        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex-host\n",
     )
     .expect("write agent runtime policy");
     fs::write(
@@ -650,7 +650,7 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
         "initial prompt; output:\n{}",
         repl.output_string()
     );
-    repl.send_line("::cli:codex trace owned runtime");
+    repl.send_line("::cli:codex-host trace owned runtime");
     let runtime_ready = repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
         Duration::from_secs(5),

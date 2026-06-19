@@ -39,7 +39,7 @@ The Codex path in `resolve_cli_codex_integrated_auth` currently does this in ord
 2. enforce `llm.secrets.env_allowed` for the names that were present;
 3. if the access token was present, stop there and build the payload from env;
 4. if only the account id was present, fail closed as incomplete env auth;
-5. otherwise fall back to `~/.codex/auth.json` only when `agents.host_credentials.read.allowed_backends` allows `cli:codex`.
+5. otherwise fall back to `~/.codex/auth.json` only when `agents.host_credentials.read.allowed_backends` allows the selected placement-qualified Codex backend such as `cli:codex-host`.
 
 That source-selection policy is documented contractually in `docs/contracts/gateway/policy-evaluation.md`.
 
@@ -63,10 +63,10 @@ Important invariants:
 
 Examples:
 
-- `cli:codex`
+- `cli:codex-host`
   - allowed: `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`, `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
   - required: `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
-- `cli:claude_code`
+- `cli:claude_code-host`
   - allowed/required: `SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY`
 - `api:openai`
   - allowed/required: `SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY`
@@ -233,7 +233,7 @@ These tests pin:
 
 ### `find ... | head -n1` can select the wrong runtime
 
-The runtime root is keyed by backend id and world id. If multiple backends are live, a naive `find ... | head -n1` can easily return `cli:claude_code` when you meant `cli:codex`.
+The runtime root is keyed by backend id and world id. If multiple backends are live, a naive `find ... | head -n1` can easily return `cli:claude_code-host` when you meant `cli:codex-host`.
 
 Prefer matching by:
 

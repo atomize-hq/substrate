@@ -75,10 +75,10 @@ echo "$PID"
 
 ### Backend-specific alternative
 
-If you are validating the Codex runtime specifically, inspect the `cli:codex` subtree directly:
+If you are validating the host-scoped Codex runtime specifically, inspect the `cli:codex-host` subtree directly:
 
 ```bash
-CODEX_RUNTIME_JSON="$(find /run/substrate/substrate-gateway-runtime/cli:codex -name runtime.json -print | head -n1)"
+CODEX_RUNTIME_JSON="$(find /run/substrate/substrate-gateway-runtime/cli:codex-host -name runtime.json -print | head -n1)"
 jq . "$CODEX_RUNTIME_JSON"
 CODEX_PID="$(jq -r '.pid' "$CODEX_RUNTIME_JSON")"
 echo "$CODEX_PID"
@@ -319,7 +319,7 @@ If multiple backends are active, `find /run/substrate/substrate-gateway-runtime 
 Match by:
 
 - active port from `status --json`; or
-- backend-specific directory such as `.../cli:codex/...`.
+- backend-specific directory such as `.../cli:codex-host/...`.
 
 ### The PID did not change after restart
 

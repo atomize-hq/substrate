@@ -271,7 +271,7 @@ llm:
   gateway:
     enabled: true
   routing:
-    default_backend: cli:codex
+    default_backend: cli:codex-host
 EOF
 }
 
@@ -291,7 +291,7 @@ world_fs:
 
 llm:
   allowed_backends:
-    - "cli:codex"
+    - "cli:codex-host"
   secrets:
     env_allowed:
       - "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"
@@ -301,7 +301,7 @@ agents:
   host_credentials:
     read:
       allowed_backends:
-        - "cli:codex"
+        - "cli:codex-host"
 
 net_allowed: []
 cmd_allowed: []

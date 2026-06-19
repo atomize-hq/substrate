@@ -283,7 +283,7 @@ fn config_set_workspace_accepts_new_llm_and_agents_keys() {
             "llm.enabled=true",
             "llm.gateway.enabled=true",
             "llm.gateway.mode=in_world",
-            "llm.routing.default_backend=cli:codex",
+            "llm.routing.default_backend=cli:codex-host",
             "agents.enabled=true",
             "agents.defaults.execution.scope=host",
             "agents.defaults.cli.mode=per_request",
@@ -315,7 +315,7 @@ fn config_set_workspace_accepts_new_llm_and_agents_keys() {
     assert_eq!(
         json.pointer("/llm/routing/default_backend")
             .and_then(|v| v.as_str()),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert_eq!(
         json.pointer("/agents/enabled").and_then(|v| v.as_bool()),

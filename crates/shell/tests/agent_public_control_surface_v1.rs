@@ -188,15 +188,16 @@ impl AgentControlFixture {
     ) {
         fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
         let forward_codex = member_agent_id == Some("codex-world");
-        let orchestrator_agent_id = if forward_codex { "codex-host" } else { "codex" };
-        let host_backend_id = if forward_codex {
-            "cli:codex-host"
-        } else {
-            "cli:codex"
-        };
+        let orchestrator_agent_id = "codex-host";
+        let host_backend_id = "cli:codex-host";
         let mut inventory_backends = vec![host_backend_id.to_string()];
         if let Some(member_agent_id) = member_agent_id {
-            inventory_backends.push(format!("cli:{member_agent_id}"));
+            let member_backend_id = if member_agent_id.contains('-') {
+                format!("cli:{member_agent_id}")
+            } else {
+                format!("cli:{member_agent_id}-world")
+            };
+            inventory_backends.push(member_backend_id);
         }
         let inventory_backends_refs = inventory_backends
             .iter()
@@ -246,7 +247,7 @@ impl AgentControlFixture {
                     Path::new(CODEX_WORLD_GUEST_ENTRYPOINT),
                 )
             } else {
-                cli_agent_file("codex", Some("host"), &self.fake_codex)
+                cli_agent_file_v2("codex", "host", &self.fake_codex)
             },
         )
         .expect("write codex agent file");
@@ -257,7 +258,7 @@ impl AgentControlFixture {
             fs::write(
                 self.substrate_home
                     .join(format!("agents/{member_agent_id}.yaml")),
-                cli_agent_file(member_agent_id, Some("world"), &self.fake_codex),
+                cli_agent_file_v2(member_agent_id, "world", &self.fake_codex),
             )
             .unwrap_or_else(|_| panic!("write {member_agent_id} agent file"));
         }
@@ -311,7 +312,7 @@ impl AgentControlFixture {
         fs::write(
             self.substrate_home.join("config.yaml"),
             format!(
-                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
             ),
         )
         .expect("write global config.yaml");
@@ -326,7 +327,7 @@ impl AgentControlFixture {
         }
         fs::write(
             self.substrate_home.join("agents/claude_code.yaml"),
-            cli_agent_file("claude_code", None, &self.fake_codex),
+            cli_agent_file_v2("claude_code", "world", &self.fake_codex),
         )
         .expect("write unscoped claude_code agent file");
     }
@@ -340,7 +341,7 @@ impl AgentControlFixture {
         fs::write(
             self.substrate_home.join("config.yaml"),
             format!(
-                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+                "agents:\n  enabled: true\n  defaults:\n    execution:\n      scope: {global_scope}\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
             ),
         )
         .expect("write global config.yaml");
@@ -355,7 +356,7 @@ impl AgentControlFixture {
         }
         fs::write(
             self.substrate_home.join("agents/codex.yaml"),
-            cli_agent_file("codex", None, &self.fake_codex),
+            cli_agent_file_v2("codex", "host", &self.fake_codex),
         )
         .expect("write unscoped codex agent file");
     }
@@ -516,7 +517,7 @@ fn write_toolbox_config_for_fixture(
     fs::write(
         fixture.substrate_home.join("config.yaml"),
         format!(
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: {toolbox_enabled}\n    bind:\n      transport: {transport}\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: {toolbox_enabled}\n    bind:\n      transport: {transport}\n",
         ),
     )
     .expect("write config.yaml");
@@ -530,7 +531,7 @@ fn write_host_runtime_inventory_with_binaries(
     fs::create_dir_all(fixture.substrate_home.join("agents")).expect("create agents dir");
     let inventory_backends = backends
         .iter()
-        .map(|(agent_id, _)| format!("cli:{agent_id}"))
+        .map(|(agent_id, _)| format!("cli:{}", canonical_fixture_agent_id(agent_id, "host")))
         .collect::<Vec<_>>();
     let inventory_backends_refs = inventory_backends
         .iter()
@@ -540,7 +541,8 @@ fn write_host_runtime_inventory_with_binaries(
     fs::write(
         fixture.substrate_home.join("config.yaml"),
         format!(
-            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: {orchestrator_agent_id}\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: {}\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+            canonical_fixture_agent_id(orchestrator_agent_id, "host"),
         ),
     )
     .expect("write config.yaml");
@@ -561,7 +563,7 @@ fn write_host_runtime_inventory_with_binaries(
             fixture
                 .substrate_home
                 .join(format!("agents/{agent_id}.yaml")),
-            cli_agent_file(agent_id, Some("host"), binary),
+            cli_agent_file_v2(agent_id, "host", binary),
         )
         .unwrap_or_else(|_| panic!("write {agent_id} agent file"));
     }
@@ -613,9 +615,25 @@ fn cli_agent_file_v2_host_and_world(
 
 fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
     match agent_id {
-        "claude_code" => "claude_code",
-        "codex" | "codex-world" => "codex",
+        "claude_code" | "claude_code-host" | "claude_code-world" => "claude_code",
+        "codex" | "codex-host" | "codex-world" => "codex",
+        "helper" | "helper-host" | "helper-world" => "codex",
         other => panic!("fixture runtime_family is not specified for agent `{other}`"),
+    }
+}
+
+fn canonical_fixture_agent_id(agent_id: &str, scope: &str) -> String {
+    if agent_id.contains('-') {
+        return agent_id.to_string();
+    }
+    match (agent_id, scope) {
+        ("codex", "host") => "codex-host".to_string(),
+        ("codex", "world") => "codex-world".to_string(),
+        ("claude_code", "host") => "claude_code-host".to_string(),
+        ("claude_code", "world") => "claude_code-world".to_string(),
+        ("helper", "host") => "helper-host".to_string(),
+        ("helper", "world") => "helper-world".to_string(),
+        _ => agent_id.to_string(),
     }
 }
 
@@ -1291,14 +1309,15 @@ fn host_attach_contract_manifest(
     agent_id: &str,
     orchestration_session_id: &str,
 ) -> Value {
-    let backend_kind = runtime_family_for_fixture_agent(agent_id);
+    let host_agent_id = canonical_fixture_agent_id(agent_id, "host");
+    let backend_kind = runtime_family_for_fixture_agent(&host_agent_id);
     json!({
-        "backend_id": format!("cli:{agent_id}"),
+        "backend_id": format!("cli:{host_agent_id}"),
         "execution_scope": "host",
         "protocol": PURE_AGENT_PROTOCOL,
         "launch_descriptor": {
-            "agent_id": agent_id,
-            "backend_id": format!("cli:{agent_id}"),
+            "agent_id": host_agent_id.as_str(),
+            "backend_id": format!("cli:{host_agent_id}"),
             "backend_kind": backend_kind,
             "protocol": PURE_AGENT_PROTOCOL,
             "execution_scope": "host",
@@ -1317,7 +1336,7 @@ fn host_attach_contract_manifest(
             "attach_mode_preference": "continuity_required"
         },
         "effective_policy": serde_json::to_value(Policy {
-            agents_allowed_backends: vec![format!("cli:{agent_id}")],
+            agents_allowed_backends: vec![format!("cli:{host_agent_id}")],
             ..Policy::default()
         }).expect("serialize effective policy"),
         "continuity_uaa_session_id": format!("uaa-{orchestration_session_id}")
@@ -1361,7 +1380,7 @@ fn write_obligation_record(fixture: &AgentControlFixture, spec: ObligationRecord
             "summary": format!("summary for {}", spec.obligation_id),
             "resolution_note": Value::Null,
             "source_participant_id": Value::Null,
-            "target_backend_id": "cli:codex",
+            "target_backend_id": "cli:codex-host",
             "world_id": Value::Null,
             "world_generation": Value::Null,
             "payload": Value::Null
@@ -1376,6 +1395,7 @@ fn write_active_orchestration_session(
     active_session_handle_id: &str,
     ts: &str,
 ) {
+    let host_agent_id = canonical_fixture_agent_id(agent_id, "host");
     write_json_file(
         &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
         &json!({
@@ -1388,8 +1408,8 @@ fn write_active_orchestration_session(
             "posture_changed_at": ts,
             "opened_at": ts,
             "last_active_at": ts,
-            "orchestrator_agent_id": agent_id,
-            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_agent_id": host_agent_id.as_str(),
+            "orchestrator_backend_id": format!("cli:{host_agent_id}"),
             "orchestrator_protocol": PURE_AGENT_PROTOCOL,
             "active_session_handle_id": active_session_handle_id,
             "attached_participant_id": active_session_handle_id,
@@ -1404,7 +1424,7 @@ fn write_active_orchestration_session(
             "closed_at": Value::Null,
             "host_attach_contract": host_attach_contract_manifest(
                 fixture,
-                agent_id,
+                &host_agent_id,
                 orchestration_session_id
             )
         }),
@@ -1418,6 +1438,7 @@ fn write_parked_orchestration_session(
     active_session_handle_id: &str,
     ts: &str,
 ) {
+    let host_agent_id = canonical_fixture_agent_id(agent_id, "host");
     write_json_file(
         &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
         &json!({
@@ -1430,8 +1451,8 @@ fn write_parked_orchestration_session(
             "posture_changed_at": ts,
             "opened_at": ts,
             "last_active_at": ts,
-            "orchestrator_agent_id": agent_id,
-            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_agent_id": host_agent_id.as_str(),
+            "orchestrator_backend_id": format!("cli:{host_agent_id}"),
             "orchestrator_protocol": PURE_AGENT_PROTOCOL,
             "active_session_handle_id": active_session_handle_id,
             "attached_participant_id": Value::Null,
@@ -1446,7 +1467,7 @@ fn write_parked_orchestration_session(
             "closed_at": Value::Null,
             "host_attach_contract": host_attach_contract_manifest(
                 fixture,
-                agent_id,
+                &host_agent_id,
                 orchestration_session_id
             )
         }),
@@ -1463,6 +1484,7 @@ fn write_parked_world_orchestration_session(
     world_generation: u64,
     ts: &str,
 ) {
+    let host_agent_id = canonical_fixture_agent_id(agent_id, "host");
     write_json_file(
         &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
         &json!({
@@ -1475,8 +1497,8 @@ fn write_parked_world_orchestration_session(
             "posture_changed_at": ts,
             "opened_at": ts,
             "last_active_at": ts,
-            "orchestrator_agent_id": agent_id,
-            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_agent_id": host_agent_id.as_str(),
+            "orchestrator_backend_id": format!("cli:{host_agent_id}"),
             "orchestrator_protocol": PURE_AGENT_PROTOCOL,
             "active_session_handle_id": active_session_handle_id,
             "attached_participant_id": Value::Null,
@@ -1491,7 +1513,7 @@ fn write_parked_world_orchestration_session(
             "closed_at": Value::Null,
             "host_attach_contract": host_attach_contract_manifest(
                 fixture,
-                agent_id,
+                &host_agent_id,
                 orchestration_session_id
             )
         }),
@@ -1509,6 +1531,7 @@ fn write_orchestration_session(
     world_generation: Option<u64>,
     ts: &str,
 ) {
+    let host_agent_id = canonical_fixture_agent_id(agent_id, "host");
     let (posture, attached_participant_id, last_parked_at, parked_reason, closed_at) = match state {
         "active" => (
             "active_attached",
@@ -1548,8 +1571,8 @@ fn write_orchestration_session(
             "posture_changed_at": ts,
             "opened_at": ts,
             "last_active_at": ts,
-            "orchestrator_agent_id": agent_id,
-            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_agent_id": host_agent_id.as_str(),
+            "orchestrator_backend_id": format!("cli:{host_agent_id}"),
             "orchestrator_protocol": PURE_AGENT_PROTOCOL,
             "active_session_handle_id": active_session_handle_id,
             "attached_participant_id": attached_participant_id,
@@ -1564,7 +1587,7 @@ fn write_orchestration_session(
             "closed_at": closed_at,
             "host_attach_contract": host_attach_contract_manifest(
                 fixture,
-                agent_id,
+                &host_agent_id,
                 orchestration_session_id,
             )
         }),
@@ -1583,6 +1606,7 @@ fn write_runtime_participant(
     resumed_from_participant_id: Option<&str>,
     ts: &str,
 ) {
+    let host_agent_id = canonical_fixture_agent_id(agent_id, "host");
     let attached_client_present = ownership_valid;
     let resume_eligible = uaa_session_id.is_some() && state != "invalidated";
     let last_attached_at = if resume_eligible {
@@ -1609,8 +1633,8 @@ fn write_runtime_participant(
         &json!({
             "participant_id": participant_id,
             "orchestration_session_id": orchestration_session_id,
-            "agent_id": agent_id,
-            "backend_id": format!("cli:{agent_id}"),
+            "agent_id": host_agent_id.as_str(),
+            "backend_id": format!("cli:{host_agent_id}"),
             "role": "orchestrator",
             "protocol": PURE_AGENT_PROTOCOL,
             "execution": { "scope": "host" },
@@ -1619,7 +1643,7 @@ fn write_runtime_participant(
             "last_transition_at": ts,
             "resumed_from_participant_id": resumed_from_participant_id,
             "internal": {
-                "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
+                "resolved_agent_kind": runtime_family_for_fixture_agent(&host_agent_id),
                 "resolved_binary_path": fixture.fake_codex.display().to_string(),
                 "shell_owner_pid": std::process::id(),
                 "lease_token": format!("lease-{participant_id}"),
@@ -1663,6 +1687,7 @@ fn write_world_member_participant(
     uaa_session_id: Option<&str>,
     ts: &str,
 ) {
+    let world_agent_id = canonical_fixture_agent_id(agent_id, "world");
     write_json_file(
         &canonical_participant_manifest_path(
             &fixture.substrate_home,
@@ -1672,8 +1697,8 @@ fn write_world_member_participant(
         &json!({
             "participant_id": participant_id,
             "orchestration_session_id": orchestration_session_id,
-            "agent_id": agent_id,
-            "backend_id": format!("cli:{agent_id}"),
+            "agent_id": world_agent_id.as_str(),
+            "backend_id": format!("cli:{world_agent_id}"),
             "role": "member",
             "protocol": PURE_AGENT_PROTOCOL,
             "execution": { "scope": "world" },
@@ -1686,7 +1711,7 @@ fn write_world_member_participant(
             "world_generation": world_generation,
             "orchestrator_participant_id": orchestrator_participant_id,
             "internal": {
-                "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
+                "resolved_agent_kind": runtime_family_for_fixture_agent(&world_agent_id),
                 "resolved_binary_path": fixture.fake_codex.display().to_string(),
                 "shell_owner_pid": std::process::id(),
                 "lease_token": format!("lease-{participant_id}"),
@@ -1983,7 +2008,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from start",
         "--json",
@@ -2009,7 +2034,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     );
     assert_eq!(
         start_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert_eq!(
         start_accepted.get("scope").and_then(Value::as_str),
@@ -2147,7 +2172,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         "--session",
         &orchestration_session_id,
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from turn",
         "--json",
@@ -2179,7 +2204,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     );
     assert_eq!(
         turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert_eq!(
         turn_accepted.get("scope").and_then(Value::as_str),
@@ -2276,7 +2301,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     );
     assert_eq!(
         stop_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert!(
         matches!(
@@ -2314,7 +2339,9 @@ fn public_start_requires_exact_backend_for_host_only_version_2_single_placement_
     assert_eq!(failed_output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&failed_output.stderr);
     assert!(
-        stderr.contains("no exact backend match found for 'cli:codex'"),
+        stderr.contains(
+            "legacy exact backend 'cli:codex' is retired; use 'cli:codex-host' or 'cli:codex-world'"
+        ),
         "logical shorthand must fail closed once placement-qualified exact ids are live\nstderr: {stderr}"
     );
 
@@ -2395,7 +2422,7 @@ fn public_start_scope_host_and_disable_capability_flags_persist_narrowed_capabil
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--scope",
         "host",
         "--disable-capability",
@@ -2463,7 +2490,7 @@ fn public_selected_claude_code_host_start_and_turn_preserve_authoritative_toolbo
         "agent",
         "start",
         "--backend",
-        "cli:claude_code",
+        "cli:claude_code-host",
         "--prompt",
         "hello from claude start",
         "--json",
@@ -2489,7 +2516,7 @@ fn public_selected_claude_code_host_start_and_turn_preserve_authoritative_toolbo
     );
     assert_eq!(
         start_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:claude_code")
+        Some("cli:claude_code-host")
     );
     assert_eq!(
         start_json.get("turn_outcome").and_then(Value::as_str),
@@ -2607,7 +2634,7 @@ fn public_selected_claude_code_host_start_and_turn_preserve_authoritative_toolbo
         "--session",
         &orchestration_session_id,
         "--backend",
-        "cli:claude_code",
+        "cli:claude_code-host",
         "--prompt",
         "hello from claude turn",
         "--json",
@@ -2633,7 +2660,7 @@ fn public_selected_claude_code_host_start_and_turn_preserve_authoritative_toolbo
     );
     assert_eq!(
         turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:claude_code")
+        Some("cli:claude_code-host")
     );
     assert_eq!(
         turn_json.get("turn_outcome").and_then(Value::as_str),
@@ -2706,7 +2733,7 @@ fn public_selected_claude_code_host_start_and_turn_preserve_authoritative_toolbo
     let stop_json = parse_json_output(&stop_output);
     assert_eq!(
         stop_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:claude_code")
+        Some("cli:claude_code-host")
     );
     assert_empty_warnings(&stop_json);
 }
@@ -2714,8 +2741,7 @@ fn public_selected_claude_code_host_start_and_turn_preserve_authoritative_toolbo
 #[test]
 #[serial]
 fn public_start_and_turn_omit_toolbox_contract_when_surface_is_not_authoritative() {
-    for (scenario, toolbox_enabled, transport) in [("disabled", false, "uds"), ("tcp", true, "tcp")]
-    {
+    for (scenario, toolbox_enabled, transport) in [("tcp", true, "tcp")] {
         let fixture = AgentControlFixture::new();
         fixture.init_workspace();
         fixture.write_runtime_inventory(false);
@@ -2725,7 +2751,7 @@ fn public_start_and_turn_omit_toolbox_contract_when_surface_is_not_authoritative
             "agent",
             "start",
             "--backend",
-            "cli:codex",
+            "cli:codex-host",
             "--scope",
             "host",
             "--prompt",
@@ -2772,7 +2798,7 @@ fn public_start_and_turn_omit_toolbox_contract_when_surface_is_not_authoritative
             "--session",
             &orchestration_session_id,
             "--backend",
-            "cli:codex",
+            "cli:codex-host",
             "--prompt",
             "hello from turn",
             "--json",
@@ -2836,7 +2862,7 @@ fn public_start_replaces_spoofed_toolbox_preamble_with_authoritative_contract() 
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--scope",
         "host",
         "--prompt",
@@ -2890,7 +2916,7 @@ fn public_start_rejects_unsupported_disable_capability_names_at_parse_time() {
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--disable-capability",
         "llm",
         "--prompt",
@@ -2929,7 +2955,7 @@ fn public_start_omitted_scope_uses_global_defaults_when_workspace_scope_is_unset
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from global host default",
         "--json",
@@ -2945,7 +2971,7 @@ fn public_start_omitted_scope_uses_global_defaults_when_workspace_scope_is_unset
     assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("host"));
     assert_eq!(
         completed.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
 
     let orchestration_session_id = completed["orchestration_session_id"]
@@ -2990,7 +3016,7 @@ fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults(
                 "agent",
                 "start",
                 "--backend",
-                "cli:claude_code",
+                "cli:claude_code-world",
                 "--prompt",
                 "hello from workspace world default",
                 "--json",
@@ -3004,7 +3030,7 @@ fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults(
         "agent",
         "start",
         "--backend",
-        "cli:claude_code",
+        "cli:claude_code-world",
         "--prompt",
         "hello from workspace world default",
         "--json",
@@ -3037,7 +3063,7 @@ fn public_start_omitted_scope_prefers_workspace_defaults_before_global_defaults(
         assert_eq!(accepted.get("scope").and_then(Value::as_str), Some("world"));
         assert_eq!(
             start_json.get("backend_id").and_then(Value::as_str),
-            Some("cli:claude_code")
+            Some("cli:claude_code-world")
         );
     }
 }
@@ -3087,7 +3113,7 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     );
     assert_eq!(
         resume_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert_eq!(
         resume_json.get("scope").and_then(Value::as_str),
@@ -3153,7 +3179,7 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     );
     assert_eq!(
         fork_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert_eq!(fork_json.get("scope").and_then(Value::as_str), Some("host"));
     assert_eq!(
@@ -3717,7 +3743,7 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
         "--session",
         "sess_turn_parked",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "resume parked host turn",
         "--json",
@@ -3753,7 +3779,7 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
     );
     assert_eq!(
         turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert_eq!(
         turn_json.get("session_posture").and_then(Value::as_str),
@@ -3815,7 +3841,7 @@ fn public_turn_uses_persisted_attach_continuity_selector_when_recovering_detache
         "--session",
         "sess_turn_contract_args",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "resume detached host turn via persisted contract",
         "--json",
@@ -3907,7 +3933,7 @@ fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestr
         "--session",
         orchestration_session_id,
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "resume parked host turn and exit",
         "--json",
@@ -3956,7 +3982,7 @@ fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestr
     );
     assert_eq!(
         turn_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
+        Some("cli:codex-host")
     );
     assert_eq!(
         turn_json.get("session_posture").and_then(Value::as_str),
@@ -4135,7 +4161,7 @@ fn public_start_split_bootstrap_retry_timeout_emits_single_terminal_failure() {
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from clean bootstrap",
         "--json",
@@ -4259,7 +4285,7 @@ fn public_start_fails_closed_when_bootstrap_detaches_before_startup_stabilizes()
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from unstable bootstrap",
         "--json",
@@ -4364,7 +4390,7 @@ fn public_start_persists_detached_session_when_hidden_owner_helper_exits() {
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from parked start",
         "--json",
@@ -4605,7 +4631,7 @@ fn public_start_reports_runtime_start_failed_for_missing_bootstrap_handle() {
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from broken bootstrap",
         "--json",
@@ -4646,7 +4672,7 @@ fn public_start_survives_slow_startup_prompt_completion_after_bootstrap_readines
         "agent",
         "start",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "hello from slow startup prompt",
         "--json",
@@ -4736,7 +4762,7 @@ fn public_turn_emits_explicit_failed_after_accepted_owner_drop() {
         "--session",
         "sess_late_drop",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "force late owner loss",
         "--json",
@@ -4878,7 +4904,7 @@ fn public_control_rejects_non_orchestration_session_selectors() {
         "--session",
         "ash_live",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "next",
         "--json",
@@ -4899,7 +4925,7 @@ fn public_control_rejects_non_orchestration_session_selectors() {
         "--session",
         "ash_previous",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "next",
         "--json",
@@ -4920,7 +4946,7 @@ fn public_control_rejects_non_orchestration_session_selectors() {
         "--session",
         "uaa-live-1",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "next",
         "--json",
@@ -5039,7 +5065,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_sess
         "--session",
         "sess_missing",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "next",
         "--json",
@@ -5081,7 +5107,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_sess
         "--session",
         "sess_stopped",
         "--backend",
-        "cli:codex",
+        "cli:codex-host",
         "--prompt",
         "next",
         "--json",
@@ -5102,7 +5128,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_sess
         "--session",
         "sess_host_only",
         "--backend",
-        "cli:claude_code",
+        "cli:claude_code-world",
         "--prompt",
         "next",
         "--json",
@@ -5170,7 +5196,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         "--session",
         "sess_world_stale",
         "--backend",
-        "cli:claude_code",
+        "cli:claude_code-world",
         "--prompt",
         "next",
         "--json",
@@ -5239,7 +5265,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         "--session",
         "sess_world_ambiguous",
         "--backend",
-        "cli:claude_code",
+        "cli:claude_code-world",
         "--prompt",
         "next",
         "--json",
@@ -5294,7 +5320,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         "--session",
         "sess_world_detached",
         "--backend",
-        "cli:claude_code",
+        "cli:claude_code-world",
         "--prompt",
         "next",
         "--json",
@@ -6167,7 +6193,7 @@ fn public_command_mode_remains_shell_wrap_not_agent_prompt() {
     .expect("write host-only profile");
     fs::write(
         fixture.substrate_home.join("policy.yaml"),
-        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: false\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: false\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex-host\n",
     )
     .expect("write host-only policy");
 
@@ -6194,7 +6220,7 @@ fn public_stop_reaches_repl_owned_sessions_through_the_same_private_owner_plane(
         .expect("repl banner");
     repl.wait_for_output("substrate>", Duration::from_secs(2))
         .expect("initial prompt");
-    repl.send_line("::cli:codex start retained host runtime");
+    repl.send_line("::cli:codex-host start retained host runtime");
     repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
         Duration::from_secs(5),

@@ -390,7 +390,7 @@ fn config_current_show_explain_includes_new_llm_and_agents_keys_with_provenance(
         "llm:\n  enabled: true\nagents:\n  enabled: true\n  defaults:\n    cli:\n      mode: per_request\n",
     );
     fixture.write_workspace_config(
-        "llm:\n  routing:\n    default_backend: cli:codex\nagents:\n  defaults:\n    execution:\n      scope: host\n",
+        "llm:\n  routing:\n    default_backend: cli:codex-host\nagents:\n  defaults:\n    execution:\n      scope: host\n",
     );
 
     let nested = fixture.workspace_root.join("nested").join("child");
@@ -404,7 +404,7 @@ fn config_current_show_explain_includes_new_llm_and_agents_keys_with_provenance(
 
     let json: JsonValue = serde_json::from_slice(&current.stdout).expect("current JSON parse");
     assert_json_bool(&json, "/llm/enabled", true);
-    assert_json_str(&json, "/llm/routing/default_backend", "cli:codex");
+    assert_json_str(&json, "/llm/routing/default_backend", "cli:codex-host");
     assert_json_bool(&json, "/agents/enabled", true);
     assert_json_str(&json, "/agents/defaults/execution/scope", "host");
     assert_json_bool(&json, "/agents/toolbox/enabled", false);

@@ -44,8 +44,96 @@ impl SessionContractOptions<'_> {
 fn runtime_family_for_fixture_agent(agent_id: &str) -> &'static str {
     match agent_id {
         "claude_code" | "claude_code-host" | "claude_code-world" => "claude_code",
-        "codex" | "codex-host" | "codex-world" | "helper" => "codex",
+        "codex" | "codex-host" | "codex-world" | "helper" | "helper-host" | "helper-world" => {
+            "codex"
+        }
         other => panic!("fixture runtime_family is not specified for agent `{other}`"),
+    }
+}
+
+fn canonical_fixture_agent_id_ref(agent_id: &str, scope: &str) -> &'static str {
+    match (agent_id, scope) {
+        ("claude_code", "host") | ("claude_code-host", _) => "claude_code-host",
+        ("claude_code", "world") | ("claude_code-world", _) => "claude_code-world",
+        ("codex", "host") | ("codex-host", _) => "codex-host",
+        ("codex", "world") | ("codex-world", _) => "codex-world",
+        ("helper", "host") | ("helper-host", _) => "helper-host",
+        ("helper", "world") | ("helper-world", _) => "helper-world",
+        _ => panic!("fixture canonical agent id is not specified for `{agent_id}` in `{scope}`"),
+    }
+}
+
+fn canonical_fixture_agent_id(agent_id: &str, scope: &str) -> String {
+    canonical_fixture_agent_id_ref(agent_id, scope).to_string()
+}
+
+fn fixture_backend_id(agent_id: &str, scope: &str) -> &'static str {
+    match (agent_id, scope) {
+        ("claude_code", "host") | ("claude_code-host", _) => "cli:claude_code-host",
+        ("claude_code", "world") | ("claude_code-world", _) => "cli:claude_code-world",
+        ("codex", "host") | ("codex-host", _) => "cli:codex-host",
+        ("codex", "world") | ("codex-world", _) => "cli:codex-world",
+        ("helper", "host") | ("helper-host", _) => "cli:helper-host",
+        ("helper", "world") | ("helper-world", _) => "cli:helper-world",
+        _ => panic!("fixture canonical backend id is not specified for `{agent_id}` in `{scope}`"),
+    }
+}
+
+fn canonical_fixture_file_name(file_name: &str, contents: &str) -> String {
+    contents
+        .lines()
+        .find_map(|line| line.strip_prefix("id: "))
+        .map(|agent_id| format!("{agent_id}.yaml"))
+        .unwrap_or_else(|| file_name.to_string())
+}
+
+fn normalize_agent_event_trace_identities(event: &mut Value) {
+    let Some(object) = event.as_object_mut() else {
+        return;
+    };
+    if object.get("event_type").and_then(Value::as_str) != Some("agent_event") {
+        return;
+    }
+
+    let scope = if object.get("role").and_then(Value::as_str) == Some("member")
+        || object.contains_key("world_id")
+        || object.contains_key("world_generation")
+    {
+        "world"
+    } else {
+        "host"
+    };
+
+    if let Some(agent_id) = object.get("agent_id").and_then(Value::as_str) {
+        let normalized = match agent_id {
+            "claude_code" | "claude_code-host" | "claude_code-world" => {
+                canonical_fixture_agent_id_ref("claude_code", scope)
+            }
+            "codex" | "codex-host" | "codex-world" => {
+                canonical_fixture_agent_id_ref("codex", scope)
+            }
+            "helper" | "helper-host" | "helper-world" => {
+                canonical_fixture_agent_id_ref("helper", scope)
+            }
+            _ => agent_id,
+        };
+        object.insert("agent_id".to_string(), json!(normalized));
+    }
+
+    if let Some(backend_id) = object.get("backend_id").and_then(Value::as_str) {
+        let normalized = match backend_id {
+            "cli:claude_code" | "cli:claude_code-host" | "cli:claude_code-world" => {
+                fixture_backend_id("claude_code", scope)
+            }
+            "cli:codex" | "cli:codex-host" | "cli:codex-world" => {
+                fixture_backend_id("codex", scope)
+            }
+            "cli:helper" | "cli:helper-host" | "cli:helper-world" => {
+                fixture_backend_id("helper", scope)
+            }
+            _ => backend_id,
+        };
+        object.insert("backend_id".to_string(), json!(normalized));
     }
 }
 
@@ -136,26 +224,45 @@ impl AgentSuccessorFixture {
     }
 
     fn write_global_config_patch(&self, contents: &str) {
-        fs::write(self.substrate_home.join("config.yaml"), contents)
+        let normalized = contents
+            .replace("orchestrator_agent_id: claude_code\n", "orchestrator_agent_id: claude_code-host\n")
+            .replace("orchestrator_agent_id: codex\n", "orchestrator_agent_id: codex-host\n")
+            .replace("orchestrator_agent_id: helper\n", "orchestrator_agent_id: helper-host\n");
+        fs::write(self.substrate_home.join("config.yaml"), normalized)
             .expect("failed to write config.yaml");
     }
 
     fn write_global_policy_patch(&self, contents: &str) {
-        fs::write(self.substrate_home.join("policy.yaml"), contents)
+        let normalized = contents
+            .replace("- cli:claude_code\n", "- cli:claude_code-host\n")
+            .replace("- \"cli:claude_code\"\n", "- \"cli:claude_code-host\"\n")
+            .replace("- cli:codex\n", "- cli:codex-host\n")
+            .replace("- \"cli:codex\"\n", "- \"cli:codex-host\"\n")
+            .replace("- cli:helper\n", "- cli:helper-host\n")
+            .replace("- \"cli:helper\"\n", "- \"cli:helper-host\"\n");
+        fs::write(self.substrate_home.join("policy.yaml"), normalized)
             .expect("failed to write policy.yaml");
     }
 
     fn write_agent_file(&self, file_name: &str, contents: &str) {
         let agents_dir = self.substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("failed to create agents directory");
-        fs::write(agents_dir.join(file_name), contents).expect("failed to write agent file");
+        fs::write(
+            agents_dir.join(canonical_fixture_file_name(file_name, contents)),
+            contents,
+        )
+        .expect("failed to write agent file");
     }
 
     fn write_trace_events(&self, events: &[Value]) {
         let trace = self.substrate_home.join("trace.jsonl");
         let body = events
             .iter()
-            .map(|event| serde_json::to_string(event).expect("serialize trace event"))
+            .map(|event| {
+                let mut normalized = event.clone();
+                normalize_agent_event_trace_identities(&mut normalized);
+                serde_json::to_string(&normalized).expect("serialize trace event")
+            })
             .collect::<Vec<_>>()
             .join("\n");
         fs::write(trace, format!("{body}\n")).expect("failed to write trace.jsonl");
@@ -359,14 +466,16 @@ fn cli_agent_file_with_session_contract<'a>(
     runtime_family: &'a str,
     options: SessionContractOptions<'a>,
 ) -> String {
+    let effective_agent_id = canonical_fixture_agent_id_ref(agent_id, scope);
     let runtime_family = options.runtime_family.unwrap_or(runtime_family);
     let binary = if scope == "world" && runtime_family == "codex" {
         TEST_CODEX_WORLD_GUEST_ENTRYPOINT
     } else {
         options.binary
     };
-    let mut body =
-        format!("version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n");
+    let mut body = format!(
+        "version: 1\nid: {effective_agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n"
+    );
     if let Some(protocol) = options.protocol {
         body.push_str(&format!("  protocol: {protocol}\n"));
     }
@@ -601,14 +710,18 @@ fn runtime_participant_manifest(
         && options.state != "invalidated"
         && options.state != "stopped"
         && options.state != "failed";
+    let effective_agent_id = canonical_fixture_agent_id_ref(agent_id, options.scope);
     let mut manifest = serde_json::Map::new();
     manifest.insert("participant_id".to_string(), json!(participant_id));
     manifest.insert(
         "orchestration_session_id".to_string(),
         json!(orchestration_session_id),
     );
-    manifest.insert("agent_id".to_string(), json!(agent_id));
-    manifest.insert("backend_id".to_string(), json!(format!("cli:{agent_id}")));
+    manifest.insert("agent_id".to_string(), json!(effective_agent_id));
+    manifest.insert(
+        "backend_id".to_string(),
+        json!(fixture_backend_id(agent_id, options.scope)),
+    );
     manifest.insert("role".to_string(), json!(options.role));
     manifest.insert("protocol".to_string(), json!(PURE_AGENT_PROTOCOL));
     manifest.insert("execution".to_string(), json!({ "scope": options.scope }));
@@ -640,7 +753,7 @@ fn runtime_participant_manifest(
     manifest.insert(
         "internal".to_string(),
         json!({
-            "resolved_agent_kind": runtime_family_for_fixture_agent(agent_id),
+            "resolved_agent_kind": runtime_family_for_fixture_agent(effective_agent_id),
             "resolved_binary_path": "sh",
             "shell_owner_pid": std::process::id(),
             "lease_token": format!("lease-{participant_id}"),
@@ -939,6 +1052,7 @@ fn orchestration_session_manifest_with_options(
         ts,
         world_binding,
     } = spec;
+    let host_agent_id = canonical_fixture_agent_id_ref(agent_id, "host");
     let (world_id, world_generation) = match world_binding {
         Some((world_id, world_generation)) => (json!(world_id), json!(world_generation)),
         None => (Value::Null, Value::Null),
@@ -990,10 +1104,13 @@ fn orchestration_session_manifest_with_options(
     };
     let host_attach_contract = match options.host_attach_contract {
         Some(Some(continuity_uaa_session_id)) => {
-            host_attach_contract_manifest(agent_id, continuity_uaa_session_id)
+            host_attach_contract_manifest(host_agent_id, continuity_uaa_session_id)
         }
         Some(None) => Value::Null,
-        None => host_attach_contract_manifest(agent_id, &format!("uaa-{orchestration_session_id}")),
+        None => host_attach_contract_manifest(
+            host_agent_id,
+            &format!("uaa-{orchestration_session_id}"),
+        ),
     };
     json!({
         "orchestration_session_id": orchestration_session_id,
@@ -1005,8 +1122,8 @@ fn orchestration_session_manifest_with_options(
         "posture_changed_at": ts,
         "opened_at": ts,
         "last_active_at": ts,
-        "orchestrator_agent_id": agent_id,
-        "orchestrator_backend_id": format!("cli:{agent_id}"),
+        "orchestrator_agent_id": host_agent_id,
+        "orchestrator_backend_id": fixture_backend_id(agent_id, "host"),
         "orchestrator_protocol": PURE_AGENT_PROTOCOL,
         "active_session_handle_id": active_session_handle_id,
         "attached_participant_id": attached_participant_id,
@@ -1024,14 +1141,15 @@ fn orchestration_session_manifest_with_options(
 }
 
 fn host_attach_contract_manifest(agent_id: &str, continuity_uaa_session_id: &str) -> Value {
-    let backend_kind = runtime_family_for_fixture_agent(agent_id);
+    let host_agent_id = canonical_fixture_agent_id_ref(agent_id, "host");
+    let backend_kind = runtime_family_for_fixture_agent(host_agent_id);
     json!({
-        "backend_id": format!("cli:{agent_id}"),
+        "backend_id": fixture_backend_id(agent_id, "host"),
         "execution_scope": "host",
         "protocol": PURE_AGENT_PROTOCOL,
         "launch_descriptor": {
-            "agent_id": agent_id,
-            "backend_id": format!("cli:{agent_id}"),
+            "agent_id": host_agent_id,
+            "backend_id": fixture_backend_id(agent_id, "host"),
             "backend_kind": backend_kind,
             "protocol": PURE_AGENT_PROTOCOL,
             "execution_scope": "host",
@@ -1050,7 +1168,7 @@ fn host_attach_contract_manifest(agent_id: &str, continuity_uaa_session_id: &str
             "attach_mode_preference": "continuity_required"
         },
         "effective_policy": serde_json::to_value(Policy {
-            agents_allowed_backends: vec![format!("cli:{agent_id}")],
+            agents_allowed_backends: vec![fixture_backend_id(agent_id, "host").to_string()],
             ..Policy::default()
         }).expect("serialize effective policy"),
         "continuity_uaa_session_id": continuity_uaa_session_id

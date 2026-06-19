@@ -152,7 +152,7 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `orchestration_session_id`: multi-agent orchestration session id; required on any agent/LLM/workflow/toolbox/router record that participates in orchestration joins.
 - `run_id`: unit-of-work identifier inside an orchestration session; required on structured agent events and other run-scoped families.
 - `agent_id`: actor/principal identifier (`human` for direct operator actions; agent inventory id for agent-driven records).
-- `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`) when a specific backend is involved.
+- `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex-host`, `api:openai`) when a specific backend is involved.
 - `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
 
 Emission rule:
