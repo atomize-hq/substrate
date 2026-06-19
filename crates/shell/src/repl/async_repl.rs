@@ -11971,7 +11971,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
         fs::write(
@@ -12347,7 +12347,7 @@ mod tests {
         fs::create_dir_all(&agents_dir).expect("agents dir");
         fs::write(
             agents_dir.join("codex-host.yaml"),
-            runtime_agent_file("codex", "host", "codex", &fake_orchestrator),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
         )
         .expect("write codex agent file");
 

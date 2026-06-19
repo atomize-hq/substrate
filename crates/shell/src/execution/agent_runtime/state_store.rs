@@ -4280,6 +4280,12 @@ fn retired_public_turn_backend_guidance(backend_id: &str) -> Option<&'static str
         "cli:claude_code" => Some(
             "legacy exact backend 'cli:claude_code' is retired; use 'cli:claude_code-host' or 'cli:claude_code-world'",
         ),
+        "cli:codex_world" => {
+            Some("legacy exact backend 'cli:codex_world' is retired; use 'cli:codex-world'")
+        }
+        "cli:claude_code_world" => Some(
+            "legacy exact backend 'cli:claude_code_world' is retired; use 'cli:claude_code-world'",
+        ),
         _ => None,
     }
 }
@@ -8107,6 +8113,53 @@ mod tests {
             assert_eq!(
                 err.to_string(),
                 "legacy exact backend 'cli:claude_code' is retired; use 'cli:claude_code-host' or 'cli:claude_code-world'"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_rejects_retired_codex_world_exact_selector() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex-host", "sess_public_turn", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_turn_target("sess_public_turn", "cli:codex_world")
+                .expect_err("retired codex world selector must fail closed");
+            assert_eq!(
+                err.to_string(),
+                "legacy exact backend 'cli:codex_world' is retired; use 'cli:codex-world'"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_rejects_retired_claude_code_world_exact_selector() {
+        with_store(|store| {
+            let participant =
+                live_orchestrator("claude_code-host", "sess_public_turn", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_turn_target("sess_public_turn", "cli:claude_code_world")
+                .expect_err("retired claude_code world selector must fail closed");
+            assert_eq!(
+                err.to_string(),
+                "legacy exact backend 'cli:claude_code_world' is retired; use 'cli:claude_code-world'"
             );
         });
     }
