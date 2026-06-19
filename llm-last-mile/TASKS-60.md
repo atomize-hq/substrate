@@ -39,7 +39,7 @@ Session goal:
 - [ ] Task 1.1: Freeze the forward-surface grep wall and historical allowlist
   - Acceptance: the slice names the directories/files that must become legacy-name-free current truth and separately names the historical or negative-test allowlist; implementation no longer has to guess whether a hit is in scope.
   - Boundary contract:
-    - `docs/`, `config/`, and `scripts/` are forward-truth surfaces and must not keep legacy split-entry ids as acceptable history.
+    - `docs/`, `config/`, and `scripts/` are forward-truth surfaces and must not keep legacy split-entry ids or unqualified pre-placement exact selectors such as `cli:codex` / `cli:claude_code` as acceptable history.
     - `llm-last-mile/` planning records may retain old ids only as explicitly historical provenance.
     - temporary Packet `1` allowlist seams are `crates/shell/src/execution/agent_inventory.rs`, `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, `crates/shell/src/execution/agent_runtime/validator.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agent_runtime/host_inbox.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, and `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`.
     - `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy ids only for explicit bridge-removal coverage, persisted-state continuity, or fail-closed retirement assertions; Packet `4` must narrow the remaining hits to those intentional cases.
@@ -47,6 +47,7 @@ Session goal:
   - Verify:
     - manual review of [SPEC-60-post-placement-aware-compatibility-retirement.md](./SPEC-60-post-placement-aware-compatibility-retirement.md), [PLAN-60-post-placement-aware-compatibility-retirement.md](./PLAN-60-post-placement-aware-compatibility-retirement.md), and [TASKS-60.md](./TASKS-60.md)
     - `rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" docs config crates/shell scripts -g '!target'`
+    - `rg -nP "\bcli:(codex|claude_code)\b(?!-)" docs config crates/shell scripts -g '!target'`
   - Files:
     - [`llm-last-mile/SPEC-60-post-placement-aware-compatibility-retirement.md`](../llm-last-mile/SPEC-60-post-placement-aware-compatibility-retirement.md)
     - [`llm-last-mile/PLAN-60-post-placement-aware-compatibility-retirement.md`](../llm-last-mile/PLAN-60-post-placement-aware-compatibility-retirement.md)
@@ -150,10 +151,11 @@ Session goal:
 ### Tasks
 
 - [ ] Task 4.1: Normalize authoritative docs and active scripts to placement-qualified ids
-  - Acceptance: forward operator docs and active smoke helpers no longer present split-entry ids as current valid choices.
+  - Acceptance: forward operator docs and active smoke helpers no longer present split-entry ids or unqualified `cli:codex` / `cli:claude_code` selectors as current valid choices.
   - Verify:
     - manual review of changed docs/scripts
     - `rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" docs scripts -g '!target'`
+    - `rg -nP "\bcli:(codex|claude_code)\b(?!-)" docs scripts -g '!target'`
   - Files:
     - [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md)
     - [`scripts/substrate/dev-fresh-install-gateway-smoke.sh`](../scripts/substrate/dev-fresh-install-gateway-smoke.sh)
@@ -190,7 +192,7 @@ Session goal:
 ### Tasks
 
 - [ ] Task 5.1: Run the final validation wall and forward-truth grep proof
-  - Acceptance: format, lint, targeted shell tests, and the forward-truth grep wall are green; any remaining legacy-name hits are intentional history or negative tests only.
+  - Acceptance: format, lint, targeted shell tests, and the forward-truth grep wall are green; any remaining split-entry-name or unqualified pre-placement selector hits are intentional history or negative tests only.
   - Verify:
     - `cargo fmt --all -- --check`
     - `cargo clippy --workspace --all-targets -- -D warnings`
@@ -202,6 +204,7 @@ Session goal:
     - `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture`
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
     - `rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" docs config crates/shell scripts -g '!target'`
+    - `rg -nP "\bcli:(codex|claude_code)\b(?!-)" docs config crates/shell scripts -g '!target'`
   - Files:
     - no planned source edits; validation only
 

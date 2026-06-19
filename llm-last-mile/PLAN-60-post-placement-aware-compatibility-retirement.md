@@ -94,7 +94,7 @@ Verification checkpoint:
 Phase `1` boundary contract:
 
 1. The forward-truth grep wall remains `docs/`, `config/`, `crates/shell/`, and `scripts/` so the final slice proof stays honest.
-2. `docs/`, `config/`, and `scripts/` are zero-tolerance forward-truth surfaces for legacy split-entry ids.
+2. `docs/`, `config/`, and `scripts/` are zero-tolerance forward-truth surfaces for legacy split-entry ids and unqualified pre-placement exact selectors such as `cli:codex` and `cli:claude_code`.
 3. `llm-last-mile/` remains outside that wall as historical provenance, not active operator truth.
 4. Temporary allowlist seams are limited to:
    - `crates/shell/src/execution/agent_inventory.rs`
@@ -107,8 +107,9 @@ Phase `1` boundary contract:
    - `crates/shell/src/execution/agent_runtime/state_store.rs`
    - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
 5. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only when asserting bridge-removal coverage, persisted-state continuity, or fail-closed retirement behavior; Packet `4` must narrow the remaining hits to those intentional cases.
-6. If implementation discovers a live dependency outside that bounded allowlist, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
-7. If removing an allowlisted hit would reopen Slice `59` runtime semantics, treat that as a reopen condition rather than routine Slice `60` work.
+6. Packet `1` therefore freezes two forward-surface debt classes at once: split-entry names like `codex_world` / `cli:codex_world`, and unqualified pre-placement exact selectors like `cli:codex` / `cli:claude_code`.
+7. If implementation discovers a live dependency outside that bounded allowlist, or any unavoidable old-id hit in `docs/`, `config/`, or `scripts/`, stop and reopen spec/plan/tasks before widening scope.
+8. If removing an allowlisted hit would reopen Slice `59` runtime semantics, treat that as a reopen condition rather than routine Slice `60` work.
 
 ### Phase 2: Retire The Effective-Inventory Compatibility Bridge
 
@@ -187,6 +188,10 @@ Required changes:
 1. update active docs/examples/policies/scripts to placement-qualified exact ids only,
 2. keep negative tests that intentionally mention retired ids clearly negative,
 3. avoid scrubbing historical `llm-last-mile/` records unless clarification is required.
+
+Verification reminder for Phase `4`:
+
+1. the grep proof must cover both split-entry ids and unqualified pre-placement exact selectors so Packet `4` cannot go green while `cli:codex` / `cli:claude_code` still survive in active forward surfaces.
 
 Verification checkpoint:
 

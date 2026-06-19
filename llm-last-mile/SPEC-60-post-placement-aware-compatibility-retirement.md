@@ -94,13 +94,17 @@ Forward-truth grep wall:
 rg -n "\bcodex_world\b|\bclaude_code_world\b|cli:(codex|claude_code)_world\b" \
   docs config crates/shell scripts \
   -g '!target'
+rg -nP "\bcli:(codex|claude_code)\b(?!-)" \
+  docs config crates/shell scripts \
+  -g '!target'
 ```
 
 Packet `1` interpretation of that wall:
 
-1. `docs/`, `config/`, and `scripts/` are forward-truth surfaces. Any legacy-name hit there is in-scope current-truth debt, not acceptable history.
-2. `crates/shell/` stays inside the wall so later packets cannot hide behind a narrower search root, but Packet `1` treats only the explicit allowlisted seams below as packet-owned retirement inventory; any other live `crates/shell/` hit is a reopen condition rather than proof that the old ids remain supported.
+1. `docs/`, `config/`, and `scripts/` are forward-truth surfaces. Any split-entry legacy-name hit or unqualified pre-placement exact-selector hit there is in-scope current-truth debt, not acceptable history.
+2. `crates/shell/` stays inside the wall so later packets cannot hide behind a narrower search root, but Packet `1` treats only the explicit allowlisted seams below as packet-owned retirement inventory; any other live `crates/shell/` hit from either grep is a reopen condition rather than proof that the old ids remain supported.
 3. `llm-last-mile/` is intentionally outside the grep wall because planning provenance may retain old ids when explicitly historical.
+4. The expanded wall is expected to expose active forward-surface Packet `4` debt such as unqualified `cli:codex` / `cli:claude_code` hits in operator docs and platform smoke/provisioning helpers; those hits are not part of the historical allowlist.
 
 Packet `1` historical / retirement allowlist:
 
@@ -116,7 +120,7 @@ Packet `1` historical / retirement allowlist:
    - `crates/shell/src/execution/agent_runtime/state_store.rs`
    - `crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs`
 3. `crates/shell/tests/**` and inline `#[cfg(test)]` coverage may retain legacy names only for explicit bridge-removal coverage, persisted-state continuity coverage, or fail-closed retirement assertions. Packet `4` must shrink those remaining hits to intentional negative/historical coverage only.
-4. Any legacy-name hit outside this bounded allowlist is presumed to be forward-surface scope, not an automatic exception.
+4. Any split-entry legacy-name hit or unqualified pre-placement exact-selector hit outside this bounded allowlist is presumed to be forward-surface scope, not an automatic exception.
 
 Packet `1` reopen conditions:
 
@@ -184,6 +188,7 @@ Conventions:
 - **Unit tests**: inventory materialization, selector derivation, and validator fail-closed behavior.
 - **Integration tests**: public control surfaces, REPL routing, and policy/example surfaces that consume exact backend ids.
 - **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids as live current truth.
+- **Negative grep validation**: prove forward docs/config/scripts/tests no longer present split-entry ids or unqualified pre-placement exact selectors as live current truth.
 - **Regression coverage**: preserve Slice `59` world-runtime truth while retiring old split-entry naming.
 - **Manual diff review**: ensure remaining legacy-name hits are historical records only, not forward product truth.
 
