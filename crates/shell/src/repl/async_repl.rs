@@ -11698,7 +11698,7 @@ mod tests {
                 "expected exactly one live member runtime"
             );
             let member = &live_members[0];
-            assert_eq!(member.handle.agent_id, "codex");
+            assert_eq!(member.handle.agent_id, "codex-world");
             assert_eq!(member.handle.world_id.as_deref(), Some("wld_member_test"));
             assert_eq!(member.handle.world_generation, Some(7));
             assert_eq!(
