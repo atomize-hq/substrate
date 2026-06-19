@@ -35,7 +35,7 @@ So the correct next move is:
 2. remove the live compatibility bridge,
 3. make old split-entry selectors fail closed instead of silently coexisting,
 4. migrate remaining forward surfaces to the final identity model,
-5. prove historical references are either intentional history or explicit negative tests.
+5. prove remaining references are only explicit fail-closed guidance, explicit negative tests, or intentional history.
 
 Do **not** widen this slice into:
 
@@ -213,7 +213,7 @@ Required changes:
 Verification reminder for Phase `4`:
 
 1. the grep proof must cover both split-entry ids and unqualified pre-placement exact selectors so Packet `4` cannot go green while `cli:codex` / `cli:claude_code` still survive in active forward surfaces.
-2. `cargo test -p shell --test world_gateway -- --nocapture` is required when Packet `4` treats `crates/shell/src/builtins/world_gateway.rs` / `crates/shell/tests/world_gateway.rs` as verification surfaces.
+2. Packet `4` must explicitly run `cargo test -p shell --test world_gateway -- --nocapture` whenever it treats `crates/shell/src/builtins/world_gateway.rs` or `crates/shell/tests/world_gateway.rs` as verification surfaces.
 
 Verification checkpoint:
 
