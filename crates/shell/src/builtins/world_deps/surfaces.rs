@@ -1358,6 +1358,30 @@ mod tests {
             script.contains("${stage_dir}/codex-${target_triple}"),
             "expected script to handle the official archive filename layout: {script}"
         );
+        assert!(
+            script.contains("--connect-timeout 15"),
+            "expected script to set an explicit connection timeout: {script}"
+        );
+        assert!(
+            script.contains("--speed-time 30"),
+            "expected script to fail on stalled transfers: {script}"
+        );
+        assert!(
+            script.contains("--speed-limit 1024"),
+            "expected script to detect low-speed stalled transfers: {script}"
+        );
+        assert!(
+            script.contains("--max-time 900"),
+            "expected script to enforce an upper download bound: {script}"
+        );
+        assert!(
+            script.contains("substrate: downloading Codex runtime"),
+            "expected script to emit a download phase marker: {script}"
+        );
+        assert!(
+            script.contains("substrate: installing Codex runtime"),
+            "expected script to emit an install phase marker: {script}"
+        );
     }
 
     #[test]

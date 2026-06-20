@@ -141,6 +141,7 @@ provision_agent_runtime_with_sync() {
   fi
   printf '%s\n' "${add_output}"
   log "Syncing world dependencies via 'substrate world deps current sync' for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}..."
+  log "This step may download the guest runtime inside the world and can take several minutes. Current world-deps script installs return output only after the guest command exits."
   local rc=0
   if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps current sync; then
     return

@@ -265,7 +265,8 @@ fi
 if [ ! -f "${archive_path}" ] || ! echo "${archive_sha256}  ${archive_path}" | sha256sum -c - >/dev/null 2>&1; then
   tmp_archive="${archive_path}.tmp"
   rm -f "${tmp_archive}"
-  curl -fsSL --retry 3 --location "${archive_url}" -o "${tmp_archive}"
+  echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url}" >&2
+  curl -fsSL --retry 3 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 900 --location "${archive_url}" -o "${tmp_archive}"
   echo "${archive_sha256}  ${tmp_archive}" | sha256sum -c -
   mv "${tmp_archive}" "${archive_path}"
 fi
@@ -288,6 +289,7 @@ if [ -z "${resolved_binary}" ]; then
   exit 1
 fi
 
+echo "substrate: installing Codex runtime ${codex_version} for ${target_triple}" >&2
 install -m 0755 "${resolved_binary}" "${installed_binary}"
 "${installed_binary}" --version | grep -F "${codex_version}" >/dev/null
 ln -sf "${installed_binary}" "${world_deps_bin}/codex"
