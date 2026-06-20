@@ -27,10 +27,20 @@ locked wall.
 - planning/docs control `plan-docs-only-phase1-plan/`
 - research/docs control `research-evaluation-wall-summary/`
 
+`SO-2.3D` then adds two semantic-honesty controls:
+
+- `review-implementation-noun-review-intent/` — a review prompt whose goal clause contains the noun
+  "implementation"; `primary_intent` must stay `review`, not `implement` (intent is the request
+  action, not an incidental substring).
+- `orchestration-scaffolding-field-honesty/` — a concise `/goal` review plus a separate developer
+  scaffolding row containing success/deliverable phrasing; `success_conditions` and `deliverables`
+  must stay unknown rather than be pooled from the off-goal-surface boilerplate.
+
 Those controls prove Phase 1 does not overfit to WDAP alone: deliberate `AGENTS.md`, `<skill>`,
 `Available skills`, concise /goal, do not change code, docs-only, and research prompts all stay
-semantically distinct. stretch-external/ remains placeholder-only. The harness must enumerate
-every committed `<case-id>/raw.json` and `<case-id>/expected.json` entry deterministically.
+semantically distinct, and intent/field assembly stays grounded to the active goal surface.
+stretch-external/ remains placeholder-only. The harness must enumerate every committed
+`<case-id>/raw.json` and `<case-id>/expected.json` entry deterministically.
 
 ## Case contract
 

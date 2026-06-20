@@ -395,6 +395,14 @@ pub struct Checkpoint {
     pub turn_context: Option<TurnContext>,
     pub diagnostics: CheckpointDiagnostics,
     pub task_frame: TaskFrame,
+    /// Additive, observation-only projection of the structured objective sidecar produced during
+    /// context assembly. The legacy `task_frame.objective` string remains the compatibility surface;
+    /// this field exposes the richer `StructuredObjective` so downstream validation/smoke can inspect
+    /// intent, target, success/deliverable, and unknown semantics. Optional and serde-defaulted, so
+    /// it is backward/forward compatible and does not change the required-field contract that
+    /// `schema_version` gates (consumers such as `agent-drift-sentinel` ignore it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_objective: Option<StructuredObjective>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_archetype: Option<SessionArchetype>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -415,6 +423,8 @@ struct RawCheckpoint {
     pub turn_context: Option<TurnContext>,
     pub diagnostics: CheckpointDiagnostics,
     pub task_frame: TaskFrame,
+    #[serde(default)]
+    pub structured_objective: Option<StructuredObjective>,
     #[serde(default)]
     pub session_archetype: Option<SessionArchetype>,
     #[serde(default)]
@@ -452,6 +462,7 @@ impl RawCheckpoint {
             turn_context: self.turn_context,
             diagnostics: self.diagnostics,
             task_frame: self.task_frame,
+            structured_objective: self.structured_objective,
             session_archetype: self.session_archetype,
             session_progress: self.session_progress,
             drift_scores: self.drift_scores,

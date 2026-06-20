@@ -1,0 +1,14 @@
+{
+  "case_id": "orchestration-scaffolding-field-honesty",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "thread_goal",
+      "section_kind": "mission",
+      "excerpt_contains": "Review Packet 3.6 only"
+    }
+  ],
+  "required_unknown_fields": ["target", "success_conditions", "deliverables"]
+}

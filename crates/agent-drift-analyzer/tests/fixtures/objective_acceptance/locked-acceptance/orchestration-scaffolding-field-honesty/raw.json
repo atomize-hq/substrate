@@ -1,0 +1,13 @@
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Review Packet 3.6 only, findings-first."
+    },
+    {
+      "kind": "developer_message",
+      "text": "Use memory by default. Keep the suite green and report success. Return with changed files and a recommended commit message."
+    }
+  ]
+}

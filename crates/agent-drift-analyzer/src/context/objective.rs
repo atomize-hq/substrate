@@ -1277,6 +1277,7 @@ fn assemble_structured_objective(
     let constraints = decomposition
         .clauses
         .iter()
+        .filter(|clause| clause_is_on_active_goal_surface(clause, goal_clause))
         .filter(|clause| top_role(clause).map(|role| role.role) == Some(ObjectiveRole::Constraint))
         .map(|clause| ObjectiveConstraint {
             display: clause.text.clone(),
@@ -1289,8 +1290,15 @@ fn assemble_structured_objective(
         .collect::<Vec<_>>();
 
     let success_conditions = success_conditions_from_decomposition(decomposition, goal_clause);
-    let deliverables = deliverables_from_decomposition(decomposition);
-    let unknowns = unknowns_for_objective(goal_clause, target.as_ref(), &evidence_spans);
+    let deliverables = deliverables_from_decomposition(decomposition, goal_clause);
+    let mut unknowns = unknowns_for_objective(goal_clause, target.as_ref(), &evidence_spans);
+    append_weak_field_unknowns(
+        &mut unknowns,
+        decomposition,
+        goal_clause,
+        &success_conditions,
+        &deliverables,
+    );
     let primary_intent = goal_clause
         .map(|clause| intent_for_text(&clause.text))
         .unwrap_or(ObjectiveIntent::OtherTask);
@@ -1394,6 +1402,9 @@ fn success_conditions_from_decomposition(
 ) -> Vec<SuccessCondition> {
     let mut conditions = Vec::new();
     for clause in &decomposition.clauses {
+        if !clause_is_on_active_goal_surface(clause, goal_clause) {
+            continue;
+        }
         let lowered = clause.text.to_ascii_lowercase();
         let verification_role =
             top_role(clause).map(|role| role.role) == Some(ObjectiveRole::Verification);
@@ -1426,10 +1437,12 @@ fn success_conditions_from_decomposition(
 
 fn deliverables_from_decomposition(
     decomposition: &ObjectiveDecomposition,
+    goal_clause: Option<&ObjectiveClause>,
 ) -> Vec<RequestedDeliverable> {
     decomposition
         .clauses
         .iter()
+        .filter(|clause| clause_is_on_active_goal_surface(clause, goal_clause))
         .filter(|clause| {
             matches!(clause.section_kind, ObjectiveSectionKind::Deliverables)
                 || looks_like_deliverable_text(&clause.text.to_ascii_lowercase())
@@ -1464,6 +1477,97 @@ fn unknowns_for_objective(
         });
     }
     unknowns
+}
+
+/// A clause is on the active objective surface only when it is grounded to the selected goal's own
+/// directive row and is not boilerplate/tooling/system scaffolding. Encodes the architecture's
+/// Grounding Rules + "What Counts As Semantic State": success/deliverable/constraint state must come
+/// from the user's goal surface, not from skill/memory/safety/tooling rows that happen to be pooled
+/// into the same decomposition.
+fn clause_is_on_active_goal_surface(
+    clause: &ObjectiveClause,
+    goal_clause: Option<&ObjectiveClause>,
+) -> bool {
+    let Some(goal_clause) = goal_clause else {
+        return false;
+    };
+    clause.candidate_index == goal_clause.candidate_index
+        && !matches!(
+            clause.section_kind,
+            ObjectiveSectionKind::Boilerplate | ObjectiveSectionKind::ToolingInstructions
+        )
+        && !matches!(
+            clause.source_kind,
+            ObjectiveSourceKind::SystemInstruction | ObjectiveSourceKind::ToolOutput
+        )
+}
+
+/// Off-surface clauses whose success/proof phrasing was deliberately rejected, so the field can be
+/// honestly recorded as unknown rather than fabricated ("Unknowns Are Success, Not Failure").
+fn rejected_success_condition_spans(
+    decomposition: &ObjectiveDecomposition,
+    goal_clause: Option<&ObjectiveClause>,
+) -> Vec<ObjectiveEvidenceSpan> {
+    decomposition
+        .clauses
+        .iter()
+        .filter(|clause| !clause_is_on_active_goal_surface(clause, goal_clause))
+        .filter(|clause| {
+            let lowered = clause.text.to_ascii_lowercase();
+            clause_has_role_candidate(clause, ObjectiveRole::Verification)
+                || lowered.contains("green")
+                || lowered.contains("success")
+        })
+        .map(evidence_span_for_clause)
+        .collect()
+}
+
+fn rejected_deliverable_spans(
+    decomposition: &ObjectiveDecomposition,
+    goal_clause: Option<&ObjectiveClause>,
+) -> Vec<ObjectiveEvidenceSpan> {
+    decomposition
+        .clauses
+        .iter()
+        .filter(|clause| !clause_is_on_active_goal_surface(clause, goal_clause))
+        .filter(|clause| {
+            matches!(clause.section_kind, ObjectiveSectionKind::Deliverables)
+                || looks_like_deliverable_text(&clause.text.to_ascii_lowercase())
+        })
+        .map(evidence_span_for_clause)
+        .collect()
+}
+
+/// Record symmetric unknowns when a field's only supporting cue came from off-surface boilerplate /
+/// scaffolding (seen but rejected), instead of fabricating the field. A field with no cue at all
+/// stays simply empty to avoid spurious unknowns.
+fn append_weak_field_unknowns(
+    unknowns: &mut Vec<ObjectiveUnknown>,
+    decomposition: &ObjectiveDecomposition,
+    goal_clause: Option<&ObjectiveClause>,
+    success_conditions: &[SuccessCondition],
+    deliverables: &[RequestedDeliverable],
+) {
+    if success_conditions.is_empty() {
+        let rejected = rejected_success_condition_spans(decomposition, goal_clause);
+        if !rejected.is_empty() {
+            unknowns.push(ObjectiveUnknown {
+                field_name: "success_conditions".to_string(),
+                reason: "success/proof phrasing appeared only in non-goal boilerplate or scaffolding rows, not in a grounded goal-surface clause".to_string(),
+                evidence: rejected.into_iter().take(2).collect(),
+            });
+        }
+    }
+    if deliverables.is_empty() {
+        let rejected = rejected_deliverable_spans(decomposition, goal_clause);
+        if !rejected.is_empty() {
+            unknowns.push(ObjectiveUnknown {
+                field_name: "deliverables".to_string(),
+                reason: "deliverable phrasing appeared only in non-goal boilerplate or scaffolding rows, not in a grounded goal-surface clause".to_string(),
+                evidence: rejected.into_iter().take(2).collect(),
+            });
+        }
+    }
 }
 
 fn objective_confidence(
@@ -1963,33 +2067,63 @@ fn looks_like_explicit_named_target(token: &str) -> bool {
         || (cleaned.contains('-') && cleaned.chars().any(|ch| ch.is_ascii_alphabetic()))
 }
 
+/// Derive `primary_intent` from the selected goal clause's request **action**, not incidental
+/// substrings (architecture "Minimum Semantic Coverage #2" + Stage 4 intent inference). We match
+/// whole action words so the noun "implementation" never trips the verb "implement" and "Planning
+/// Pack" never trips "plan". The clause's leading imperative verb wins first; otherwise we fall back
+/// to a whole-word family scan.
 fn intent_for_text(text: &str) -> ObjectiveIntent {
-    let lowered = text.to_ascii_lowercase();
-    if contains_any(
-        &lowered,
-        &["implement", "add ", "update", "wire", "land ", "build"],
-    ) {
+    let goal = target_display_for_goal(text);
+    let scan = if goal.is_empty() { text } else { goal.as_str() };
+    let tokens = action_word_tokens(scan);
+
+    if let Some(intent) = tokens.first().and_then(|verb| intent_for_action_verb(verb)) {
+        return intent;
+    }
+    intent_from_action_words(&tokens)
+}
+
+fn action_word_tokens(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|token| {
+            token
+                .trim_matches(|c: char| !c.is_ascii_alphanumeric())
+                .to_ascii_lowercase()
+        })
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+fn intent_for_action_verb(verb: &str) -> Option<ObjectiveIntent> {
+    Some(match verb {
+        "implement" | "add" | "update" | "wire" | "land" | "build" | "create" | "refactor"
+        | "migrate" | "integrate" => ObjectiveIntent::Implement,
+        "debug" | "fix" | "troubleshoot" | "repair" | "diagnose" => ObjectiveIntent::Debug,
+        "review" | "inspect" | "audit" | "compare" | "analyze" | "evaluate" | "assess"
+        | "determine" => ObjectiveIntent::Review,
+        "research" | "investigate" | "explore" | "survey" | "study" => ObjectiveIntent::Research,
+        "plan" | "design" | "spec" | "scope" | "draft" => ObjectiveIntent::Plan,
+        "validate" | "verify" | "ensure" | "confirm" => ObjectiveIntent::Validate,
+        "document" | "docs" | "readme" => ObjectiveIntent::Docs,
+        _ => return None,
+    })
+}
+
+fn intent_from_action_words(tokens: &[String]) -> ObjectiveIntent {
+    let has = |needles: &[&str]| tokens.iter().any(|token| needles.contains(&token.as_str()));
+    if has(&["implement", "add", "update", "wire", "land", "build"]) {
         ObjectiveIntent::Implement
-    } else if contains_any(&lowered, &["debug", "fix", "troubleshoot"]) {
+    } else if has(&["debug", "fix", "troubleshoot"]) {
         ObjectiveIntent::Debug
-    } else if contains_any(
-        &lowered,
-        &[
-            "review",
-            "inspect",
-            "determine whether",
-            "compare",
-            "analyze",
-        ],
-    ) {
+    } else if has(&["review", "inspect", "determine", "compare", "analyze"]) {
         ObjectiveIntent::Review
-    } else if contains_any(&lowered, &["research", "look up", "survey"]) {
+    } else if has(&["research", "survey"]) {
         ObjectiveIntent::Research
-    } else if contains_any(&lowered, &["plan", "design", "spec"]) {
+    } else if has(&["plan", "design", "spec"]) {
         ObjectiveIntent::Plan
-    } else if contains_any(&lowered, &["validate", "verify", "ensure", "green", "test"]) {
+    } else if has(&["validate", "verify", "ensure", "green", "test"]) {
         ObjectiveIntent::Validate
-    } else if contains_any(&lowered, &["docs", "document", "readme"]) {
+    } else if has(&["docs", "document", "readme"]) {
         ObjectiveIntent::Docs
     } else {
         ObjectiveIntent::OtherTask

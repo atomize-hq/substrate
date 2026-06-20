@@ -93,6 +93,7 @@ fn checkpoint(
             interval_verification_command_count: 1,
             evidence_item_count,
         },
+        structured_objective: None,
         task_frame: TaskFrame {
             objective: format!(
                 "/goal Complete replay validation for {session_id} checkpoint {ordinal}"

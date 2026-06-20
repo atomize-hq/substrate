@@ -1,6 +1,6 @@
 # R5.75 Map: Sequential Pre-R6 Hardening And Validation
 
-Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout so the map reflects the current active seam and next-packet order honestly.
+Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout, and on 2026-06-20 the `R5.75-1` named smoke gate was re-run but promotion was HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker; active seam stays `R5.75-1`), so the map reflects the current active seam and next-packet order honestly.
 
 ## Objective
 
@@ -13,24 +13,52 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 3. The adapted Hugging Face export corpus remains secondary robustness evidence only; it is useful for hardening but does not redefine native Codex rollout semantics.
 4. `R5.5` landed meaningful improvements, but the validation handoff proved the family is not yet ready to declare “fully landed and R6-ready.”
 
-## Current Live Routing Note (2026-06-18)
+## Current Live Routing Note (2026-06-20)
 
 - `R5.75-0` is landed history.
 - The current active seam is still `R5.75-1`, now routed through
   `docs/specs/r5/R5_75/phase-1/SO/` rather than directly to `R5.75-2`.
+- **Promotion HELD (2026-06-20):** the named promotion smoke was re-run and surfaced a structured-
+  objective failure on a named condensation gate session (`019eb47f`): the structured `Goal` spans
+  anchor to boilerplate (system-instruction rows + the pasted `$code-review-and-quality` skill body),
+  yielding `primary_intent=implement` on a review/eval ask and `success_conditions` pooled from the
+  `AGENTS.md` cargo ladder — the sidecar is worse than the legacy narrowed string beside it. This
+  fails the spirit of the structured-aware gate, so `R5.75-2` does not begin yet. Issue 1/2/3 are
+  pulled forward from tracked follow-on to blocker. See the `R5.75-1` Remaining Bug Ledger and
+  promotion gate below.
 - The live crate already has real section/clause decomposition, preliminary structured assembly,
   and grounding follow-on work through `SO-G6`, so this is no longer just a narrow
   `normalized_objective_text(...)` stopgap.
-- `SO-2.3B-refine` is now landed inside `R5.75-1`: checkpoint narrowing preserves the richer
+- `SO-2.3B-refine` is landed inside `R5.75-1`: checkpoint narrowing preserves the richer
   structured objective, weak goal clauses no longer fabricate `target`, verification-command
   extraction is role-backed, the packet verification wall is green, and the packet closeout notes
   record those facts plus residual risks explicitly.
-- However, `R5.75-1` is still open because `comparison_key` still mirrors display text,
-  compatibility text is not yet rendered from structured state as the semantic authority, and the
-  committed `objective_acceptance` harness/fixture contract is still absent.
-- Therefore the next work is **not** `R5.75-2`. The next work stays inside `R5.75-1`, and the
-  next packet boundary is now `SO-3`, followed by `SO-4` and `SO-5`; only after that promotion
-  gate may `R5.75-2` begin.
+- `SO-3`, `SO-4`, `SO-5`, and `SO-6` are now landed as well (verified against the live crate):
+  `ObjectiveSummary.text` renders from structured state when safe
+  (`compatibility_text_from_structured`), `comparison_key` is derived from structured semantic
+  state (`comparison_key_from_structured`, no longer a display-text echo), and the committed
+  `objective_acceptance` harness + locked-acceptance corpus exist and are green. The earlier
+  bullet wording that called those items "still absent / still mirrors display text" was stale and
+  has been corrected here.
+- Two further packets surfaced by structured-objective validation are now **also landed**:
+  1. **`SO-Observability`** — the promotion-gate smoke previously inspected only the
+     `task_frame.objective` string and was blind to `primary_intent`, `target`, `success_conditions`,
+     `deliverables`, and `unknowns`. This packet exports an additive `structured_objective` on each
+     `Checkpoint`, renders a per-checkpoint objective line in `summary.md`, and rewrote the `R5.75-1`
+     gate to assert structured semantics (see `R5.75-1` gate below).
+  2. **`SO-2.3D`** — fixed the two semantic-honesty defects the now-observable output exposed: review
+     prompts no longer misclassify as `Implement` on the noun "implementation" (`#4`, intent is the
+     request action via whole-word matching), and `success_conditions`/`deliverables` are scoped to the
+     active goal surface with symmetric `unknowns` instead of being pooled from boilerplate (`#6`). The
+     two regressions are live (no longer `#[ignore]`d) and two locked acceptance cases were added.
+- The named promotion smoke (condensation repros `019eb430/47f/98e` + adapted `05a56cc5…` + the
+  `019edd98` structured-stressing session) was re-run on 2026-06-20 against a freshly built pipeline.
+  Most outcomes held (condensation string surface clean on all four; `019edd98` structured semantics
+  clean), but `019eb47f` exposed that the structured objective anchors its goal to boilerplate and
+  pools `intent`/`target`/`success_conditions` from non-goal rows. Root cause is the still-open
+  extraction-scope/pooling/permissive-goal-role seams (Issue 1/2/3; see the Remaining Bug Ledger),
+  which `SO-2.3D` never claimed to fix; they are **promoted from tracked follow-on to blocker** for
+  `R5.75-1` closure. Issue 5 (doc/packet target precedence) remains a non-blocking follow-on.
 
 ## Required Fixes Adopted Into R5.75
 
@@ -239,20 +267,37 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 cargo test -p agent-drift-analyzer -- --nocapture
 ```
 
-### Reconciled Live Status (2026-06-17)
+### Reconciled Live Status (2026-06-19)
 
-The original condensation work is no longer the whole story for `R5.75-1`. The live crate already
+The original condensation work is no longer the whole story for `R5.75-1`. The live crate now
 contains additive structured-objective state, section/clause decomposition, unknown preservation,
-and grounding follow-on work. What remains open inside `R5.75-1` is the semantic honesty and
-acceptance wall around that structure:
+grounding follow-on work, the `SO-2.3B-refine` honesty bridge, and the landed `SO-3`/`SO-4`/`SO-5`
+compatibility + comparison-key + acceptance-wall work. The following items, previously listed as
+open, are now **landed** (verified against the live crate):
 
-- the checkpoint narrowing bridge still overwrites the richer `assemble_context(window)` objective
-  with a compatibility-only summary instead of preserving structured state and using legacy
-  narrowing only as fallback/display layering,
-- `target` assembly still overclaims from weak goal clauses,
-- `comparison_key` still mirrors display text,
-- compatibility text is not yet rendered from structured state as the semantic authority,
-- and the committed `objective_acceptance` harness/fixture contract is still absent.
+- checkpoint narrowing preserves the richer `assemble_context(window)` structured objective and uses
+  legacy narrowing only as fallback/display layering (`SO-2.3B-refine`),
+- `target` assembly leaves weak goal clauses unknown instead of fabricating a target (`SO-2.3B-refine`),
+- `comparison_key` is derived from structured semantic state, not a display-text echo (`SO-3.2`),
+- compatibility text renders from structured state when safe (`SO-3.1`),
+- the committed `objective_acceptance` harness + locked-acceptance corpus exist and are green
+  (`SO-4`/`SO-5`/`SO-6`).
+
+What actually remains open inside `R5.75-1` is narrower and was surfaced by validating the structured
+work against unseen real sessions:
+
+- **Gate observability (landed, `SO-Observability`):** the promotion-gate smoke surfaces
+  (`summary.md`, `checkpoints.jsonl`) previously exported only the `task_frame.objective` string and
+  could not see the structured fields, so a green gate proved nothing about the structured semantics.
+  This packet exports an additive `structured_objective` per `Checkpoint`, renders a per-checkpoint
+  objective line in `summary.md`, and rewrote the gate to assert structured semantics.
+- **Two semantic-honesty defects (fixed, `SO-2.3D`):** review prompts no longer misclassify as
+  `Implement` on the noun "implementation" (`#4`, intent is the request action via whole-word
+  matching), and `success_conditions`/`deliverables` are scoped to the active goal surface with
+  symmetric `unknowns` instead of being pooled from boilerplate (`#6`). The two regressions are live
+  and two locked acceptance cases were added.
+- **What remains for closeout:** re-run the named promotion smoke (condensation repros + `019edd98`)
+  and confirm the structured-aware expected outcomes, then `R5.75-1` closes and `R5.75-2` may begin.
 
 ### Remaining `R5.75-1` Landing Order Before `R5.75-2`
 
@@ -261,16 +306,34 @@ acceptance wall around that structure:
    - kept legacy narrowed text fallback-only and display-only when needed,
    - stopped weak goal clauses from fabricating `target`, and
    - aligned verification-role grounding with verifier-command extraction.
-2. **`SO-3.1` / `SO-3.2`** `[next]`
+2. **`SO-3.1` / `SO-3.2`** `[landed]`
    - render compatibility text from structured state when safe,
    - derive deterministic `comparison_key` from structured semantic state.
-3. **`SO-4.1` / `SO-4.2`** `[blocked on SO-3]`
-   - add `tests/objective_acceptance.rs`,
-   - lock the expected-shape contract for structured fields, grounding, forbidden promotions,
+3. **`SO-4.1` / `SO-4.2`** `[landed]`
+   - added `tests/objective_acceptance.rs`,
+   - locked the expected-shape contract for structured fields, grounding, forbidden promotions,
      compatibility rendering, and unknown-field correctness.
-4. **`SO-5.*`** `[blocked on SO-3]`
-   - seed the locked acceptance corpus: WDAP, preserved boilerplate-target cases, concise `/goal`,
+4. **`SO-5.*`** `[landed]`
+   - seeded the locked acceptance corpus: WDAP, preserved boilerplate-target cases, concise `/goal`,
      review/no-code, and planning/docs families.
+5. **`SO-Observability` (structured-output + structured-aware gate)** `[landed]`
+   - exported an additive optional `structured_objective` on each `Checkpoint`
+     (`checkpoint/schema.rs`, populated in `checkpoint/mod.rs`) and rendered a per-checkpoint objective
+     line in `summary.md` (`checkpoint/export.rs`), without bumping the `v0.6` schema or migrating
+     `TaskFrame`/`infer_task_frame`,
+   - rewrote the `R5.75-1` gate (below) to assert structured semantics and added a structured-stressing
+     smoke session,
+   - captured `#4`/`#6` as committed pending specs in `tests/checkpoints.rs`.
+6. **`SO-2.3D` (semantic-honesty fix)** `[landed]`
+   - fixed `#4` — `intent_for_text` derives intent from the goal clause's request action via whole-word
+     matching (the noun "implementation" no longer trips `Implement`); this also corrected the WDAP
+     fixtures `plan`→`validate` to match the evaluation authority,
+   - fixed `#6` — `success_conditions`/`deliverables`/`constraints` assembly is scoped to the active
+     goal surface (`clause_is_on_active_goal_surface`), with symmetric `unknowns` recorded when an
+     off-surface cue is rejected,
+   - made the two regressions live (no longer `#[ignore]`d) and added the
+     `review-implementation-noun-review-intent` + `orchestration-scaffolding-field-honesty` locked
+     acceptance cases. `R5.75-2` is now unblocked pending the named promotion smoke.
 
 Ordering note: even though earlier local packet docs briefly put `SO-4` ahead of `SO-3`, the
 current architecture and migration authorities make `SO-3` the better prerequisite. Compatibility
@@ -279,21 +342,82 @@ validate, not a stopgap the harness silently defines after the fact.
 
 ### Manual Smoke Check Before Promoting To R5.75-2
 
-Run native smoke on:
+This gate is **structured-aware**: with `structured_objective` now exported per checkpoint and
+rendered in `summary.md` (the `objective:` line per checkpoint), the smoke must inspect the
+structured fields, not just the legacy `task_frame.objective` string. Re-run the analyzer on each
+session after building this packet so the new fields appear.
+
+Run native condensation smoke on:
 
 - `019eb430-6f9a-7a03-9a63-cb451b654795`
 - `019eb47f-0118-7e90-8291-30a1fb93769e`
 - `019eb98e-3c16-7ba0-92f9-0085654b470c`
 
-Run adapted smoke on:
+Run adapted condensation smoke on:
 
 - `05a56cc51632982b`
 
+Run structured-stressing smoke on (review/orchestration shape that exercises intent + field honesty):
+
+- `019edd98-8a79-7b53-a90b-94cd0d32329b`
+
 Expected smoke outcome:
 
-- first-checkpoint objective resolves to the concrete task, not the pasted skill/spec/profile body
-- the adapted `05a56cc51632982b` session condenses to the workspace action request rather than the full pasted skill body
-- explicit user requests to analyze or edit instruction/skill/AGENTS material remain preserved when that is the real target
+- **Condensation (string surface):** first-checkpoint objective resolves to the concrete task, not
+  the pasted skill/spec/profile body; the adapted `05a56cc51632982b` session condenses to the
+  workspace action request; explicit requests to analyze/edit instruction/skill/AGENTS material stay
+  preserved when that is the real target.
+- **Structured semantics (now observable):** for the review-shaped session `019edd98`,
+  `primary_intent` resolves to `review` (not `implement`); `success_conditions` and `deliverables`
+  contain only goal-grounded items, not skill/memory/safety/output-format boilerplate; and `target`
+  is either a grounded anchor or `unknown` with an `ObjectiveUnknown`, never a fabricated conceptual
+  topic.
+
+### Remaining Bug Ledger (Structured Objective)
+
+This is the **single canonical list** of structured-objective bugs for `R5.75-1`. It supersedes the
+former root `STRUCTURED_OBJECTIVE_BUG_MAP.md` (now retired to a pointer). Numbering is unified on
+`Issue 1`–`Issue 8`; the older `#3`–`#7` labels used elsewhere in this map are legacy aliases mapped
+in the table. Statuses are current as of the 2026-06-20 gate re-run. **Promotion is gated on every
+`blocker` row clearing.**
+
+| Issue | Bug (one line) | Legacy alias | Primary code path | Status |
+|-------|----------------|--------------|-------------------|--------|
+| 1 | Extraction runs over the full session compact-row pool instead of an active-objective surface | — | `context/mod.rs::assemble_context` → `extract_objective` | **OPEN — blocker** |
+| 2 | Structured fields assembled by pooling clauses from all candidate rows | — | `context/objective.rs::assemble_structured_objective`, `*_from_decomposition` | **OPEN — blocker** |
+| 3 | Goal-role detection too permissive: boilerplate/system rows receive `Goal` evidence spans | `#3` | `context/objective.rs::role_candidates_for_clause`, `looks_like_goal_text` | **OPEN — blocker** (reclassified 2026-06-20) |
+| 4 | Intent substring-driven (review→implement on the noun "implementation") | `#4` | `context/objective.rs::intent_for_text` | **Landed (SO-2.3D)** — conditional on 1/2/3 |
+| 5 | Target prefers broad repo/dir paths over packet/doc anchors | `#5` | `context/objective.rs::explicit_target_*` | OPEN — non-blocking follow-on |
+| 6 | `success_conditions`/`deliverables` over-upgrade weak/boilerplate evidence | `#6` | `context/objective.rs::success_conditions_from_decomposition`, `deliverables_from_decomposition`, `unknowns_for_objective` | **Landed (SO-2.3D)** — conditional on 1/2/3 |
+| 7 | Legacy narrowing/compat overlay can overwrite good structure with the wrong imperative line; downstream consumers not yet structured-native | `#7` | `checkpoint/mod.rs::narrowed_objective_summary`, `normalized_objective_text`; deferred `SO-X.1`–`X.4` | Deferred — **gated** follow-on |
+| 8 | Acceptance corpus lacks real orchestration-shaped session shapes | — | `tests/objective_acceptance.rs`, `tests/fixtures/objective_acceptance/**` | OPEN — pairs with the 1/2/3 fix |
+
+**Blocker set for `R5.75-1` closure:** Issues 1, 2, 3 (with Issue 8 alongside, to lock the fix into
+the corpus). Issue 7 is *gated* — it must not land until 1/2/3 are fixed, because it wires the
+sidecar into the drift/progress signal. Issue 5 is the only purely non-blocking follow-on.
+
+Notes:
+
+- **Issue 4 / Issue 6 are "conditional", not unconditionally done.** `SO-2.3D` fixed the narrow
+  defects (whole-word intent derivation; active-goal-surface field scoping with symmetric
+  `unknowns`) and they hold on the locked corpus and on `019edd98`. They do **not** survive a wrong
+  goal anchor: on `019eb47f` the goal anchors to boilerplate, so intent reverts to `implement` and
+  `success_conditions` re-fill from the `AGENTS.md` cargo ladder. 4/6 are therefore only as good as
+  1/2/3. Landed regressions (live, not `#[ignore]`d) in `tests/checkpoints.rs`:
+  `so_2_3d_review_prompt_with_implementation_noun_stays_review_intent`,
+  `so_2_3d_boilerplate_scaffolding_does_not_populate_success_or_deliverables`; locked acceptance
+  cases `review-implementation-noun-review-intent`, `orchestration-scaffolding-field-honesty`.
+- **Core diagnosis.** The extractor treats a broad *session text soup* as the surface; the design
+  wants *grounded extraction from the active mission surface* with conservative unknowns. Issue 1
+  (scope) + Issue 2 (pooling) are the spine; 3/4/5/6 are largely symptoms that fall out once
+  anchoring is correct.
+- **Suggested fix order.** (1) prove/limit candidate-row + clause scope on a failing session,
+  (2) anchor the goal before field assembly and constrain fields to that surface, (3) re-run the
+  named gate on `019eb47f` + `019edd98`, (4) extend the acceptance corpus (Issue 8) with the
+  minimized failing shapes.
+- **Evidence sessions.** `019eb47f` — boilerplate goal anchor → `implement` intent +
+  cargo-ladder `success_conditions` (Issues 1/2/3, surfacing 4/6); `019eddaa` — wrong imperative
+  "optional nit" line wins (Issue 7); `019edd98` — passes, the shape where 4/6 hold.
 
 ### Promotion Gate
 
@@ -302,11 +426,54 @@ Do not begin `R5.75-2` until all of the following are true:
 - the named condensation smoke repros still resolve to the true concrete task instead of pasted
   scaffold bodies,
 - preserved-boilerplate targets still hold in targeted regressions,
-- checkpoint narrowing no longer erases the structured sidecar,
-- weak target evidence stays unknown instead of being fabricated into `target`,
-- `SO-3.1` / `SO-3.2` land so compatibility text and `comparison_key` come from structured state,
-- `SO-4.1` / `SO-4.2` land so `objective_acceptance` becomes a committed wall,
-- `SO-5` seeds the locked acceptance families required for `R5.75-1` closeout.
+- checkpoint narrowing no longer erases the structured sidecar (landed, `SO-2.3B-refine`),
+- weak target evidence stays unknown instead of being fabricated into `target` (landed, `SO-2.3B-refine`),
+- compatibility text and `comparison_key` come from structured state (landed, `SO-3`),
+- `objective_acceptance` is a committed, green wall (landed, `SO-4`/`SO-5`),
+- the exported checkpoint surfaces `structured_objective` and the gate smoke asserts structured
+  semantics (landed, `SO-Observability`),
+- the `SO-2.3D` semantic-honesty fix is landed so Issue 4/Issue 6 are fixed and their live regressions
+  plus the structured-stressing smoke are green (landed, but conditional on Issue 1/2/3 — see ledger),
+- **[OPEN — blocking as of 2026-06-20]** the structured objective is correct on every named
+  condensation gate session, not only `019edd98`: the goal anchors to the real ask with no
+  boilerplate-pooled `intent`/`target`/`success_conditions` (Issues 1/2/3; see the Remaining Bug
+  Ledger above). This is **not** satisfied on `019eb47f`; see the held decision below.
+
+The operational gate was re-run on 2026-06-20 against a freshly built structured-aware pipeline
+(`cargo test -p agent-drift-analyzer` and `-p agent-drift-sentinel` both green; all five smoke
+pipelines compactor→analyzer→sentinel clean). Recorded outcomes:
+
+- **Condensation (string surface) — pass:** all four first-checkpoint objectives resolve to the
+  concrete task ask, not a pasted scaffold body. `019eb430` → the `/goal Review the already-landed
+  Packet R5-7 …` ask; `019eb47f` → `use the $code-review-and-quality skill to evaluate if what was
+  implemented landed correctly and completely`; `019eb98e` → `review what landed … and
+  validate/invalidate …`; adapted `05a56cc5…` → `add this skill to @shared-cab-app` (grounded
+  `repo_slice` target).
+- **Structured semantics (`019edd98`) — pass:** `primary_intent=review` on every checkpoint,
+  goal-scoped `success_conditions`/`deliverables` (empty, with symmetric `ObjectiveUnknown`s), and a
+  grounded `file_or_directory` target, never a fabricated conceptual topic.
+- **Structured semantics (`019eb47f`) — FAIL:** the structured objective anchors its `Goal` evidence
+  spans to boilerplate (system-instruction rows + the pasted `$code-review-and-quality` skill body),
+  producing `primary_intent=implement` on a review/eval ask, `target=/run/substrate.sock` (a
+  pasted-body line), and `success_conditions` pooled from the `AGENTS.md` cargo ladder. The sidecar
+  is strictly worse than the legacy narrowed string beside it.
+
+**Promotion decision: HELD (2026-06-20).** `SO-Observability`'s purpose is that a green structured-
+aware gate proves structured semantics; a named condensation gate session (`019eb47f`) still fails
+them. Root cause is the still-open extraction-scope / pooled-field-assembly / permissive-goal-role
+seams — **Issue 1/2/3** (see the Remaining Bug Ledger above), which `SO-2.3D` never claimed to fix. Those are hereby **promoted
+from tracked follow-on to a blocker** for `R5.75-1` closure: the gate must be re-run and pass on
+`019eb47f` (goal anchored to the real ask, no boilerplate-pooled `intent`/`target`/`success_conditions`)
+before `R5.75-2` may begin — and certainly before the deferred Issue 7 migration wires the sidecar into
+drift output. The earlier rationale for Issue 3 (`#3`) being non-blocking ("does not change the
+selected goal or the scoped fields") is contradicted by `019eb47f`, where boilerplate `Goal` spans
+*are* the goal surface and *do* drive the scoped fields.
+
+Why this is observability-only today (not yet a live drift regression): Phase 1 is additive — the
+sidecar is not yet read by the downstream drift/progress path, which still runs off the legacy
+`TaskFrame`/working-set bridge. `019eb47f` reports `flagged=no`, `progress=stalled`, drift cleared.
+The risk goes live the moment Issue 7 consumes the sidecar, so the Issue 1/2/3 fix is a hard
+prerequisite for Issue 7.
 
 ## R5.75-2: Sparse Readable Session Fail-Open
 

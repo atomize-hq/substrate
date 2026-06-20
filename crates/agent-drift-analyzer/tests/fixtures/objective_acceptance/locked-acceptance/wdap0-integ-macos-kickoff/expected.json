@@ -1,7 +1,7 @@
 {
   "case_id": "wdap0-integ-macos-kickoff",
   "objective_class": "task_statement",
-  "primary_intent": "plan",
+  "primary_intent": "validate",
   "verification_commands": [
     "cargo clippy --workspace --all-targets -- -D warnings",
     "cargo build --bin substrate && export PATH=\\\\\\\"$PWD/target/debug:$PATH\\\\\\\" && bash \\\\\\\"docs/project_management/packs/draft/world-deps-apt-provisioning/smoke/macos-smoke.sh\\\\\\",
@@ -52,7 +52,7 @@
     "acceptable_any_of": [
       "Ensure the slice is green for macos in the way required by the Planning Pack."
     ],
-    "comparison_key": "plan|unknown_target|green"
+    "comparison_key": "validate|unknown_target|green"
   },
   "required_unknown_fields": [
     "target"

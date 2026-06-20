@@ -9,8 +9,8 @@ use time::OffsetDateTime;
 use super::checkpoint_analyses;
 use crate::checkpoint::{
     Checkpoint, Confidence, DriftClass, ProgressDimension, ProgressStatus, SessionArchetype,
-    SessionArchetypeLabel, SessionProgress, TaskFrame, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    SessionArchetypeLabel, SessionProgress, StructuredObjective, TaskFrame, TurnActivityMix,
+    TurnContext, TurnExecutionMode,
 };
 use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
 use crate::input::BundleSession;
@@ -526,6 +526,10 @@ fn render_summary(sessions: &[BundleSession], checkpoints: &[Checkpoint]) -> Str
                 "  progress: `{}`",
                 format_checkpoint_progress(checkpoint.session_progress.as_ref())
             ));
+            lines.push(format!(
+                "  objective: `{}`",
+                format_checkpoint_objective(checkpoint.structured_objective.as_ref())
+            ));
         }
         lines.push(String::new());
     }
@@ -1014,6 +1018,34 @@ fn format_checkpoint_progress(progress: Option<&SessionProgress>) -> String {
         format_confidence(progress.confidence),
         format_progress_support(progress),
         format_progress_evidence(&progress.counter_evidence)
+    )
+}
+
+fn format_checkpoint_objective(structured: Option<&StructuredObjective>) -> String {
+    let Some(structured) = structured else {
+        return "unavailable".to_string();
+    };
+
+    let target = match &structured.target {
+        Some(target) => format!("{:?}:{}", target.kind, target.display),
+        None => "unknown".to_string(),
+    };
+    let unknown_fields = structured
+        .unknowns
+        .iter()
+        .map(|unknown| unknown.field_name.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    format!(
+        "class={:?} intent={:?} target={} success_conditions={} deliverables={} verification={} unknowns=[{}]",
+        structured.objective_class,
+        structured.primary_intent,
+        target,
+        structured.success_conditions.len(),
+        structured.deliverables.len(),
+        structured.verification_commands.len(),
+        unknown_fields
     )
 }
 

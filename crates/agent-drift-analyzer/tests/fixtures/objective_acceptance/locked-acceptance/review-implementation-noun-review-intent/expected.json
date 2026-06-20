@@ -1,0 +1,18 @@
+{
+  "case_id": "review-implementation-noun-review-intent",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "target": {
+    "kind": "spec_or_design_doc",
+    "display_contains": ["cutover-tasks.md"]
+  },
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "thread_goal",
+      "section_kind": "mission",
+      "excerpt_contains": "Review the landed Packet 3.6 implementation"
+    }
+  ],
+  "forbidden_unknown_fields": ["target"]
+}

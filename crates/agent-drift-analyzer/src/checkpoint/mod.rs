@@ -406,6 +406,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         turn_context: Some(analysis.turn_context.clone()),
         diagnostics,
         task_frame: task_frame.clone(),
+        structured_objective: analysis.current.context.objective.structured.clone(),
         session_archetype: Some(session_archetype),
         session_progress: Some(session_progress),
         flagged: drift_scores.iter().any(|score| score.flagged),

@@ -1211,6 +1211,7 @@ fn fixture_checkpoint(
         },
         turn_context: None,
         diagnostics,
+        structured_objective: None,
         task_frame: TaskFrame {
             objective: format!("Objective {}", session.session_id),
             confidence,

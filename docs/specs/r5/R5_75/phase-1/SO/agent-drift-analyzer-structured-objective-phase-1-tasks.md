@@ -232,6 +232,34 @@ implementation backlog.
     - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-plan.md`
     - `docs/specs/r5/R5_75/phase-1/SO/agent-drift-analyzer-structured-objective-phase-1-tasks.md`
 
+## Post-SO-6 R5.75-1 Follow-On (tracked in `docs/specs/r5/R5_75/MAP.md`)
+
+`SO-1` through `SO-6` are landed, and the two additional `R5.75-1` packets below are now landed too.
+`R5.75-1` closes once the named promotion smoke is re-run; the MAP routing note and `R5.75-1` gate are
+the live authority. The remaining open R5.75 work is `R5.75-2` onward.
+
+- [x] Task SO-Observability: Make the structured objective observable in analyzer output and rewrite
+      the `R5.75-1` gate to assert structured semantics.
+  - Acceptance: each exported `Checkpoint` carries an additive optional `structured_objective`
+    (`checkpoint/schema.rs`, populated in `checkpoint/mod.rs`), `summary.md` renders a per-checkpoint
+    `objective:` line (`checkpoint/export.rs`), the `v0.6` schema is **not** bumped and no consumer is
+    migrated, and the `R5.75-1` gate smoke asserts intent/target/success/deliverable/unknown semantics.
+  - Note: this exports a Checkpoint-level projection only. It is **distinct from** `SO-X.1` below,
+    which migrates `TaskFrame` itself (`objective_key` / `structured_objective`) plus its consumers
+    and stays deferred.
+  - Verify: `cargo test -p agent-drift-analyzer -- --nocapture`;
+    `cargo test -p agent-drift-sentinel warning_policy live_end_to_end -- --nocapture`.
+- [x] Task SO-2.3D: Semantic-honesty fix for `#4` (intent classification) and `#6`
+      (success/deliverable pooling + asymmetric unknowns).
+  - Acceptance: review prompts no longer classify as `Implement` on the noun "implementation"
+    (`intent_for_text` derives intent from the request action via whole-word matching; this also
+    corrected the WDAP fixtures `plan`→`validate` to match the evaluation authority);
+    `success_conditions`/`deliverables`/`constraints` are scoped to the active goal surface
+    (`clause_is_on_active_goal_surface`) with symmetric `unknowns` when off-surface cues are rejected;
+    the two regressions are live (no longer `#[ignore]`d); and the `review-implementation-noun-review-intent`
+    + `orchestration-scaffolding-field-honesty` locked acceptance cases were added.
+  - Verify: `cargo test -p agent-drift-analyzer -- --nocapture` (including the now-live regressions).
+
 ## Deferred / Ask-First (Not Phase 1)
 
 - [ ] Task SO-X.1: Add `TaskFrame.objective_key` and `structured_objective` only after the phase-1

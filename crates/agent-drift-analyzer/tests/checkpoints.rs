@@ -5,9 +5,9 @@ mod support;
 use std::fs;
 
 use agent_drift_analyzer::{
-    AnalyzeRequest, AnalyzeResult, Confidence, ObjectiveRole, ObjectiveSectionKind,
-    ObjectiveTargetKind, ProgressDimension, ProgressSignalCode, ProgressStatus,
-    SessionArchetypeLabel,
+    AnalyzeRequest, AnalyzeResult, Confidence, ObjectiveClass, ObjectiveIntent, ObjectiveRole,
+    ObjectiveSectionKind, ObjectiveTargetKind, ProgressDimension, ProgressSignalCode,
+    ProgressStatus, SessionArchetypeLabel,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -131,6 +131,120 @@ fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_6() {
         serde_json::from_value(serde_json::to_value(&checkpoint).expect("serialize checkpoint"))
             .expect("v0.6 checkpoint with progress should round-trip");
     assert_eq!(round_tripped, checkpoint);
+}
+
+#[test]
+fn checkpoints_export_surfaces_structured_objective_for_smoke_observability() {
+    // R5.75-1 gate-observability fix: the exported Checkpoint must carry the structured objective
+    // sidecar so checkpoints.jsonl / summary.md smoke can inspect intent, target, success/deliverable,
+    // and unknown semantics. Previously only the `task_frame.objective` string was exported, leaving
+    // the promotion-gate smoke blind to the structured fields where the real deviations live.
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only and return findings.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,40p' crates/agent-drift-analyzer/src/context/objective.rs","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+    ]);
+    let checkpoint = result.sessions[0]
+        .checkpoints
+        .first()
+        .expect("at least one checkpoint");
+    let structured = checkpoint
+        .structured_objective
+        .as_ref()
+        .expect("exported structured objective");
+    assert_eq!(structured.objective_class, ObjectiveClass::TaskStatement);
+
+    let value = serde_json::to_value(checkpoint).expect("serialize checkpoint");
+    assert!(
+        value.get("structured_objective").is_some(),
+        "exported checkpoint must surface structured_objective"
+    );
+    assert!(
+        value["structured_objective"]
+            .get("primary_intent")
+            .is_some(),
+        "structured_objective must surface primary_intent"
+    );
+
+    let round_tripped: agent_drift_analyzer::Checkpoint =
+        serde_json::from_value(value).expect("checkpoint round-trips with structured objective");
+    assert!(round_tripped.structured_objective.is_some());
+}
+
+// SO-2.3D semantic-honesty regressions (landed): `primary_intent` is the request action, not an
+// incidental substring (the noun "implementation" must not yield Implement), and success/deliverable
+// assembly stays scoped to the active goal surface instead of pooling non-goal boilerplate. These
+// ran as `#[ignore]`d pending specs during the observability packet; SO-2.3D makes them live.
+
+#[test]
+fn so_2_3d_review_prompt_with_implementation_noun_stays_review_intent() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Review the already-landed Packet 3.6 implementation in docs/research/cutover-tasks.md, findings-first, do not change code.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,80p' docs/research/cutover-tasks.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+    ]);
+    let structured = result.sessions[0]
+        .checkpoints
+        .first()
+        .and_then(|checkpoint| checkpoint.structured_objective.as_ref())
+        .expect("exported structured objective");
+    assert_eq!(
+        structured.primary_intent,
+        ObjectiveIntent::Review,
+        "findings-first review prompt must classify as Review, not Implement"
+    );
+}
+
+#[test]
+fn so_2_3d_boilerplate_scaffolding_does_not_populate_success_or_deliverables() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", "/goal Review Packet 3.6 only, findings-first."),
+        developer_row(
+            1,
+            "turn-001",
+            "Use memory by default. Keep the suite green and report success. Return with changed files and a recommended commit message.",
+        ),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,80p' docs/research/packet-3-6.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 0"),
+    ]);
+    let structured = result.sessions[0]
+        .checkpoints
+        .first()
+        .and_then(|checkpoint| checkpoint.structured_objective.as_ref())
+        .expect("exported structured objective");
+    assert!(
+        structured.success_conditions.is_empty(),
+        "boilerplate scaffolding must not populate success_conditions: {:?}",
+        structured.success_conditions
+    );
+    assert!(
+        structured.deliverables.is_empty(),
+        "boilerplate scaffolding must not populate deliverables: {:?}",
+        structured.deliverables
+    );
 }
 
 #[test]

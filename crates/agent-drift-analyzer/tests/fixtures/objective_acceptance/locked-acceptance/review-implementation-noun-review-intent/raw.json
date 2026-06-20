@@ -1,0 +1,9 @@
+{
+  "rows": [
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Review the landed Packet 3.6 implementation in docs/research/cutover-tasks.md only, findings-first."
+    }
+  ]
+}
